@@ -1,8 +1,36 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-base:        #F0F2F5;
+  --bg-surface:     #FFFFFF;
+  --bg-elevated:    #F8F9FC;
+  --bg-hover:       #F1F3F8;
+
+  --sidebar-bg:     #FFFFFF;
+  --sidebar-active: #EBF0FF;
+
+  --border:         #E5E8EF;
+  --border-subtle:  #F0F2F5;
+
+  --text-primary:   #111827;
+  --text-secondary: #6B7280;
+  --text-muted:     #9CA3AF;
+
+  --accent:         #3B82F6;
+  --accent-hover:   #2563EB;
+  --accent-light:   #EBF0FF;
+
+  --success:        #10B981;
+  --success-light:  #D1FAE5;
+  --warning:        #F59E0B;
+  --warning-light:  #FEF3C7;
+  --danger:         #EF4444;
+  --danger-light:   #FEE2E2;
+  --purple:         #8B5CF6;
+  --purple-light:   #EDE9FE;
+
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
 }
 
 @theme inline {
@@ -12,15 +40,23 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  aside { display: none !important; }
+  main  { padding: 14px !important; }
+  header { padding: 0 14px !important; }
 }

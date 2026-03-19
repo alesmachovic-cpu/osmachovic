@@ -1,0 +1,184 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import type { Klient, Nehnutelnost } from "@/lib/database.types";
+
+interface Match {
+  klient: Klient;
+  nehnutelnost: Nehnutelnost;
+  score: number;
+  reasons: string[];
+}
+
+function calcMatch(k: Klient, n: Nehnutelnost): { score: number; reasons: string[] } {
+  let score = 0;
+  const reasons: string[] = [];
+
+  // Typ
+  if (k.typ && k.typ === n.typ) {
+    score += 40;
+    reasons.push("✓ Typ nehnuteľnosti sedí");
+  }
+
+  // Rozpočet
+  if (k.rozpocet_max && n.cena != null && n.cena <= k.rozpocet_max) {
+    score += 35;
+    reasons.push("✓ Cena je v rozpočte");
+  } else if (k.rozpocet_max && n.cena != null && n.cena <= k.rozpocet_max * 1.1) {
+    score += 15;
+    reasons.push("~ Cena mierne nad rozpočtom (+10%)");
+  }
+
+  // Lokalita - partial match
+  if (k.lokalita && n.lokalita) {
+    const kWords = k.lokalita.toLowerCase().split(/[\s,]+/);
+    const nWords = n.lokalita.toLowerCase().split(/[\s,]+/);
+    const overlap = kWords.some(w => nWords.some(nw => nw.includes(w) || w.includes(nw)));
+    if (overlap) {
+      score += 25;
+      reasons.push("✓ Lokalita zodpovedá");
+    }
+  }
+
+  return { score: Math.min(score, 100), reasons };
+}
+
+export default function MatchingPage() {
+  const [klienti, setKlienti] = useState<Klient[]>([]);
+  const [nehnutelnosti, setNehnutelnosti] = useState<Nehnutelnost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [minScore, setMinScore] = useState(50);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const [{ data: k }, { data: n }] = await Promise.all([
+        supabase.from("klienti").select("*").not("typ", "is", null),
+        supabase.from("nehnutelnosti").select("*"),
+      ]);
+      const ks = k ?? [];
+      const ns = n ?? [];
+      setKlienti(ks);
+      setNehnutelnosti(ns);
+
+      const result: Match[] = [];
+      for (const klient of ks) {
+        for (const neh of ns) {
+          const { score, reasons } = calcMatch(klient, neh);
+          if (score > 0) result.push({ klient, nehnutelnost: neh, score, reasons });
+        }
+      }
+      result.sort((a, b) => b.score - a.score);
+      setMatches(result);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const filtered = matches.filter(m => m.score >= minScore);
+
+  function scoreColor(s: number) {
+    if (s >= 80) return { color: "#065F46", bg: "#D1FAE5", bar: "#10B981" };
+    if (s >= 50) return { color: "#1D4ED8", bg: "#DBEAFE", bar: "#3B82F6" };
+    return { color: "#92400E", bg: "#FEF3C7", bar: "#F59E0B" };
+  }
+
+  return (
+    <div style={{ maxWidth: "1000px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+        <div>
+          <h2 style={{ fontSize: "20px", fontWeight: "700", margin: "0 0 3px", color: "var(--text-primary)" }}>Matching Engine</h2>
+          <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: 0 }}>
+            {klienti.length} klientov · {nehnutelnosti.length} nehnuteľností · {filtered.length} zhôd
+          </p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <label style={{ fontSize: "12.5px", color: "var(--text-secondary)" }}>Min. zhoda:</label>
+          <select value={minScore} onChange={e => setMinScore(Number(e.target.value))}
+            style={{ padding: "7px 10px", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", background: "var(--bg-surface)", color: "var(--text-primary)", outline: "none" }}>
+            <option value={30}>30%+</option>
+            <option value={50}>50%+</option>
+            <option value={70}>70%+</option>
+            <option value={90}>90%+</option>
+          </select>
+        </div>
+      </div>
+
+      {loading && <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Počítam zhody...</div>}
+
+      {!loading && klienti.length === 0 && (
+        <div style={{ padding: "50px", textAlign: "center", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", color: "var(--text-muted)" }}>
+          <div style={{ fontSize: "32px", marginBottom: "10px" }}>🔗</div>
+          Najprv pridaj klientov s typom nehnuteľnosti a nehnuteľnosti do portfólia.
+        </div>
+      )}
+
+      {!loading && klienti.length > 0 && nehnutelnosti.length === 0 && (
+        <div style={{ padding: "50px", textAlign: "center", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", color: "var(--text-muted)" }}>
+          <div style={{ fontSize: "32px", marginBottom: "10px" }}>🏠</div>
+          Pridaj nehnuteľnosti do portfólia pre výpočet zhôd.
+        </div>
+      )}
+
+      {!loading && filtered.length === 0 && klienti.length > 0 && nehnutelnosti.length > 0 && (
+        <div style={{ padding: "50px", textAlign: "center", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", color: "var(--text-muted)" }}>
+          Žiadne zhody pri minimálnom skóre {minScore}%. Skús znížiť filter.
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "16px" }}>
+        {filtered.map((m, i) => {
+          const sc = scoreColor(m.score);
+          return (
+            <div key={i} style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "16px 20px", display: "flex", gap: "16px", alignItems: "center" }}>
+              {/* Score */}
+              <div style={{ textAlign: "center", minWidth: "64px" }}>
+                <div style={{ fontSize: "22px", fontWeight: "800", color: sc.color }}>{m.score}%</div>
+                <div style={{ height: "5px", background: "var(--border)", borderRadius: "3px", marginTop: "4px" }}>
+                  <div style={{ width: `${m.score}%`, height: "100%", background: sc.bar, borderRadius: "3px" }} />
+                </div>
+                <div style={{ fontSize: "10.5px", color: "var(--text-muted)", marginTop: "3px" }}>zhoda</div>
+              </div>
+
+              {/* Klient */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "3px" }}>Klient</div>
+                <div style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-primary)" }}>{m.klient.meno}</div>
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                  {[m.klient.mobil, m.klient.typ, m.klient.lokalita].filter(Boolean).join(" · ")}
+                </div>
+              </div>
+
+              {/* Arrow */}
+              <div style={{ fontSize: "18px", color: "var(--text-muted)", flexShrink: 0 }}>↔</div>
+
+              {/* Nehnuteľnosť */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "3px" }}>Nehnuteľnosť</div>
+                <div style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-primary)" }}>{m.nehnutelnost.nazov}</div>
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                  {m.nehnutelnost.cena != null ? `${m.nehnutelnost.cena.toLocaleString("sk")} €` : "—"} · {m.nehnutelnost.lokalita}
+                </div>
+              </div>
+
+              {/* Reasons */}
+              <div style={{ minWidth: "160px" }}>
+                {m.reasons.map(r => (
+                  <div key={r} style={{ fontSize: "11.5px", color: r.startsWith("✓") ? "#065F46" : "#92400E", marginBottom: "2px" }}>{r}</div>
+                ))}
+              </div>
+
+              {/* Action */}
+              <button style={{ padding: "7px 14px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: "7px", fontSize: "12.5px", fontWeight: "600", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}>
+                Kontaktovať
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
