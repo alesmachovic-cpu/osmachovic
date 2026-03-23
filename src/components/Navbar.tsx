@@ -25,7 +25,7 @@ function FlipDigit({ value }: { value: string }) {
   const [cur, setCur] = useState(value);
   const [prev, setPrev] = useState(value);
   const [flipping, setFlipping] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
     if (value !== cur) {
