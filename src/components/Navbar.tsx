@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import SystemSearch from "@/components/SystemSearch";
 import { useAuth } from "@/components/AuthProvider";
 
@@ -20,90 +20,58 @@ function greeting(hour: number) {
   return "Dobrý večer";
 }
 
-/* ── Flip digit — subtle style ── */
+/* ── Simple flip card digit ── */
 function FlipDigit({ value }: { value: string }) {
-  const [cur, setCur] = useState(value);
-  const [prev, setPrev] = useState(value);
-  const [flipping, setFlipping] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const [display, setDisplay] = useState(value);
+  const [animate, setAnimate] = useState(false);
 
   useEffect(() => {
-    if (value !== cur) {
-      setPrev(cur);
-      setCur(value);
-      setFlipping(true);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => setFlipping(false), 450);
+    if (value !== display) {
+      setAnimate(true);
+      const t = setTimeout(() => {
+        setDisplay(value);
+        setAnimate(false);
+      }, 200);
+      return () => clearTimeout(t);
     }
-  }, [value, cur]);
-
-  const S = 26;
-  const half = S / 2;
-  const BG = "var(--bg-elevated, #F0F0F2)";
-  const FG = "var(--text-secondary, #86868B)";
-
-  const cardStyle: React.CSSProperties = {
-    width: "18px", height: `${S}px`, position: "relative", overflow: "hidden",
-    borderRadius: "5px", background: BG,
-    border: "1px solid var(--border, #E8E8ED)",
-    fontSize: "14px", fontWeight: "700", color: FG,
-    fontFamily: "var(--font-geist-mono), monospace",
-    display: "inline-flex", flexShrink: 0,
-  };
-  const topHalf: React.CSSProperties = {
-    position: "absolute", top: 0, left: 0, right: 0, height: `${half}px`,
-    overflow: "hidden", display: "flex", alignItems: "flex-end", justifyContent: "center",
-    lineHeight: `${S}px`,
-  };
-  const bottomHalf: React.CSSProperties = {
-    position: "absolute", bottom: 0, left: 0, right: 0, height: `${half}px`,
-    overflow: "hidden", display: "flex", alignItems: "flex-start", justifyContent: "center",
-    lineHeight: `${S}px`,
-  };
-  const divider: React.CSSProperties = {
-    position: "absolute", top: "50%", left: 0, right: 0, height: "1px",
-    background: "rgba(0,0,0,0.06)", zIndex: 5,
-  };
+  }, [value, display]);
 
   return (
-    <span className="flip-digit" style={cardStyle}>
-      <span style={{ ...bottomHalf, zIndex: 1 }}><span style={{ transform: `translateY(-${half}px)` }}>{cur}</span></span>
-      <span style={{ ...topHalf, zIndex: 1 }}>{cur}</span>
-
-      {flipping && (
-        <span className="flip-top" style={{
-          ...topHalf, zIndex: 3, background: BG, borderRadius: "5px 5px 0 0",
-          transformOrigin: "bottom center",
-        }}>{prev}</span>
-      )}
-      {flipping && (
-        <span className="flip-bottom" style={{
-          ...bottomHalf, zIndex: 2, background: BG, borderRadius: "0 0 5px 5px",
-          transformOrigin: "top center",
-        }}><span style={{ transform: `translateY(-${half}px)` }}>{cur}</span></span>
-      )}
-
-      <span style={divider} />
+    <span style={{
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      width: "20px", height: "28px",
+      background: "#F0F0F2", border: "1px solid #E5E5EA",
+      borderRadius: "6px",
+      fontSize: "15px", fontWeight: "700", color: "#6B7280",
+      fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+      position: "relative", overflow: "hidden",
+      transition: "transform 0.2s ease",
+      transform: animate ? "scaleY(0.6)" : "scaleY(1)",
+    }}>
+      {/* Horizontal line in middle */}
+      <span style={{
+        position: "absolute", top: "50%", left: "2px", right: "2px",
+        height: "1px", background: "rgba(0,0,0,0.06)",
+      }} />
+      {display}
     </span>
   );
 }
 
 function FlipClock({ time, blink }: { time: string; blink: boolean }) {
-  const chars = time.split("");
+  const digits = time.replace(":", "").split("");
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
-      {chars.map((c, i) =>
-        c === ":" ? (
-          <span key={i} style={{
-            fontSize: "12px", fontWeight: "600", color: "var(--text-muted)",
-            lineHeight: 1, margin: "0 1px",
-            opacity: blink ? 1 : 0.2,
-            transition: "opacity 0.3s",
-          }}>:</span>
-        ) : (
-          <FlipDigit key={i} value={c} />
-        )
-      )}
+      <FlipDigit value={digits[0] || "0"} />
+      <FlipDigit value={digits[1] || "0"} />
+      <span style={{
+        fontSize: "14px", fontWeight: "700", color: "#AEAEB2",
+        lineHeight: 1, margin: "0 1px",
+        opacity: blink ? 1 : 0.15,
+        transition: "opacity 0.4s ease",
+      }}>:</span>
+      <FlipDigit value={digits[2] || "0"} />
+      <FlipDigit value={digits[3] || "0"} />
     </span>
   );
 }

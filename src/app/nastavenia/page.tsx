@@ -396,51 +396,42 @@ export default function NastaveniaPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {/* Gmail */}
-          <div>
-            <div style={labelSt}>Gmail účet</div>
-            <input
-              type="email" style={inputSt} placeholder="tvoj@gmail.com"
-              value={gmail} onChange={e => setGmail(e.target.value)}
-            />
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
-              Email pre kalendárové udalosti a notifikácie
-            </div>
-          </div>
-
-          {/* Google Calendar Token */}
-          <div>
-            <div style={labelSt}>Google Calendar API Token</div>
-            <input
-              type="password" style={inputSt} placeholder="Vlož token..."
-              value={calToken} onChange={e => setCalToken(e.target.value)}
-            />
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
-              Pre automatickú synchronizáciu stretnutí s klientmi
-            </div>
-          </div>
-
-          {/* Status */}
-          <div style={{
-            padding: "12px 16px", borderRadius: "10px",
-            background: calToken ? "#F0FDF4" : "#FEF3C7",
-            border: calToken ? "1px solid #BBF7D0" : "1px solid #FDE68A",
-            display: "flex", alignItems: "center", gap: "10px",
-          }}>
-            <span style={{ fontSize: "16px" }}>{calToken ? "✓" : "⚠️"}</span>
-            <div>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: calToken ? "#065F46" : "#92400E" }}>
-                {calToken ? "Kalendár je prepojený" : "Kalendár nie je prepojený"}
-              </div>
-              <div style={{ fontSize: "11px", color: calToken ? "#047857" : "#A16207" }}>
-                {calToken ? "Stretnutia sa budú automaticky synchronizovať" : "Zadaj Gmail a token pre aktiváciu kalendára"}
-              </div>
-            </div>
-          </div>
+        {/* Gmail */}
+        <div style={{ marginBottom: "16px" }}>
+          <div style={labelSt}>Gmail účet</div>
+          <input
+            type="email" style={inputSt} placeholder="tvoj@gmail.com"
+            value={gmail} onChange={e => setGmail(e.target.value)}
+          />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "20px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
+        {/* Jednoduché prepojenie */}
+        <div style={{
+          padding: "16px", borderRadius: "12px",
+          background: gmail ? "#F0FDF4" : "var(--bg-elevated)",
+          border: gmail ? "1px solid #BBF7D0" : "1px solid var(--border)",
+          display: "flex", flexDirection: "column", gap: "12px",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "18px" }}>{gmail ? "✅" : "📅"}</span>
+            <div>
+              <div style={{ fontSize: "13px", fontWeight: "600", color: gmail ? "#065F46" : "var(--text-primary)" }}>
+                {gmail ? `Pripojený: ${gmail}` : "Pripoj Google účet"}
+              </div>
+              <div style={{ fontSize: "11px", color: gmail ? "#047857" : "var(--text-muted)", marginTop: "2px" }}>
+                {gmail ? "Obhliadky a stretnutia sa zobrazia v kalendári" : "Automaticky naplánuj obhliadky a stretnutia"}
+              </div>
+            </div>
+          </div>
+
+          {!gmail && (
+            <div style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+              Zadaj Gmail adresu a systém ti bude automaticky pridávať obhliadky do Google Calendar.
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "16px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
           <button onClick={handleSaveGoogle} style={{
             padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
             borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
