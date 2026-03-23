@@ -20,7 +20,7 @@ function greeting(hour: number) {
   return "Dobrý večer";
 }
 
-/* ── Flip digit ── */
+/* ── Flip digit — subtle style ── */
 function FlipDigit({ value }: { value: string }) {
   const [cur, setCur] = useState(value);
   const [prev, setPrev] = useState(value);
@@ -33,16 +33,20 @@ function FlipDigit({ value }: { value: string }) {
       setCur(value);
       setFlipping(true);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => setFlipping(false), 500);
+      timeoutRef.current = setTimeout(() => setFlipping(false), 450);
     }
   }, [value, cur]);
 
-  const S = 28;
+  const S = 26;
   const half = S / 2;
+  const BG = "var(--bg-elevated, #F0F0F2)";
+  const FG = "var(--text-secondary, #86868B)";
+
   const cardStyle: React.CSSProperties = {
-    width: "20px", height: `${S}px`, position: "relative", overflow: "hidden",
-    borderRadius: "4px", background: "#1F2937",
-    fontSize: "15px", fontWeight: "800", color: "#fff",
+    width: "18px", height: `${S}px`, position: "relative", overflow: "hidden",
+    borderRadius: "5px", background: BG,
+    border: "1px solid var(--border, #E8E8ED)",
+    fontSize: "14px", fontWeight: "700", color: FG,
     fontFamily: "var(--font-geist-mono), monospace",
     display: "inline-flex", flexShrink: 0,
   };
@@ -58,27 +62,23 @@ function FlipDigit({ value }: { value: string }) {
   };
   const divider: React.CSSProperties = {
     position: "absolute", top: "50%", left: 0, right: 0, height: "1px",
-    background: "rgba(0,0,0,0.3)", zIndex: 5,
+    background: "rgba(0,0,0,0.06)", zIndex: 5,
   };
 
   return (
     <span className="flip-digit" style={cardStyle}>
-      {/* Static bottom — new value */}
       <span style={{ ...bottomHalf, zIndex: 1 }}><span style={{ transform: `translateY(-${half}px)` }}>{cur}</span></span>
-      {/* Static top — new value */}
       <span style={{ ...topHalf, zIndex: 1 }}>{cur}</span>
 
-      {/* Flipping top — old value flipping down */}
       {flipping && (
         <span className="flip-top" style={{
-          ...topHalf, zIndex: 3, background: "#1F2937", borderRadius: "4px 4px 0 0",
+          ...topHalf, zIndex: 3, background: BG, borderRadius: "5px 5px 0 0",
           transformOrigin: "bottom center",
         }}>{prev}</span>
       )}
-      {/* Flipping bottom — new value flipping up */}
       {flipping && (
         <span className="flip-bottom" style={{
-          ...bottomHalf, zIndex: 2, background: "#1F2937", borderRadius: "0 0 4px 4px",
+          ...bottomHalf, zIndex: 2, background: BG, borderRadius: "0 0 5px 5px",
           transformOrigin: "top center",
         }}><span style={{ transform: `translateY(-${half}px)` }}>{cur}</span></span>
       )}
@@ -89,15 +89,14 @@ function FlipDigit({ value }: { value: string }) {
 }
 
 function FlipClock({ time }: { time: string }) {
-  // time = "23:28"
   const chars = time.split("");
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
       {chars.map((c, i) =>
         c === ":" ? (
           <span key={i} style={{
-            fontSize: "14px", fontWeight: "800", color: "#1F2937",
-            lineHeight: 1, margin: "0 1px", opacity: 0.5,
+            fontSize: "12px", fontWeight: "600", color: "var(--text-muted)",
+            lineHeight: 1, margin: "0 1px",
           }}>:</span>
         ) : (
           <FlipDigit key={i} value={c} />
