@@ -88,7 +88,7 @@ function FlipDigit({ value }: { value: string }) {
   );
 }
 
-function FlipClock({ time }: { time: string }) {
+function FlipClock({ time, blink }: { time: string; blink: boolean }) {
   const chars = time.split("");
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
@@ -97,6 +97,8 @@ function FlipClock({ time }: { time: string }) {
           <span key={i} style={{
             fontSize: "12px", fontWeight: "600", color: "var(--text-muted)",
             lineHeight: 1, margin: "0 1px",
+            opacity: blink ? 1 : 0.2,
+            transition: "opacity 0.3s",
           }}>:</span>
         ) : (
           <FlipDigit key={i} value={c} />
@@ -110,6 +112,7 @@ export default function Navbar() {
   const { user } = useAuth();
   const now = useTime();
   const hour = now.getHours();
+  const secs = now.getSeconds();
   const timeStr = now.toLocaleTimeString("sk", { hour: "2-digit", minute: "2-digit" });
   return (
     <header
@@ -149,7 +152,7 @@ export default function Navbar() {
           <h1 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: 0, whiteSpace: "nowrap" }}>
             {greeting(hour)}, {user?.name.split(" ")[0] || "Aleš"} 👋
           </h1>
-          <FlipClock time={timeStr} />
+          <FlipClock time={timeStr} blink={secs % 2 === 0} />
         </div>
       </div>
 
