@@ -1,33 +1,44 @@
 @import "tailwindcss";
 
 :root {
-  --bg-base:        #F0F2F5;
+  --bg-base:        #F5F5F7;
   --bg-surface:     #FFFFFF;
-  --bg-elevated:    #F8F9FC;
-  --bg-hover:       #F1F3F8;
+  --bg-elevated:    #FAFAFA;
+  --bg-hover:       #F0F0F2;
+  --bg-main:        #F5F5F7;
 
-  --sidebar-bg:     #FFFFFF;
-  --sidebar-active: #EBF0FF;
+  --sidebar-bg:     #FBFBFD;
+  --sidebar-active: #F0F0F5;
 
-  --border:         #E5E8EF;
-  --border-subtle:  #F0F2F5;
+  --border:         #E8E8ED;
+  --border-subtle:  #F0F0F5;
 
-  --text-primary:   #111827;
-  --text-secondary: #6B7280;
-  --text-muted:     #9CA3AF;
+  --text-primary:   #1D1D1F;
+  --text-secondary: #86868B;
+  --text-muted:     #AEAEB2;
 
-  --accent:         #3B82F6;
-  --accent-hover:   #2563EB;
-  --accent-light:   #EBF0FF;
+  --accent:         #007AFF;
+  --accent-hover:   #0056CC;
+  --accent-light:   #EDF4FF;
 
-  --success:        #10B981;
-  --success-light:  #D1FAE5;
-  --warning:        #F59E0B;
-  --warning-light:  #FEF3C7;
-  --danger:         #EF4444;
-  --danger-light:   #FEE2E2;
-  --purple:         #8B5CF6;
-  --purple-light:   #EDE9FE;
+  --success:        #34C759;
+  --success-light:  #E8F9ED;
+  --warning:        #FF9500;
+  --warning-light:  #FFF4E5;
+  --danger:         #FF3B30;
+  --danger-light:   #FFEDEC;
+  --purple:         #AF52DE;
+  --purple-light:   #F5EDFB;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
+  --shadow-card: 0 0.5px 1px rgba(0,0,0,0.04), 0 2px 6px rgba(0,0,0,0.04);
 
   --background: var(--bg-base);
   --foreground: var(--text-primary);
@@ -40,23 +51,137 @@
   --font-mono: var(--font-geist-mono);
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 
 body {
   background: var(--bg-base);
   color: var(--text-primary);
-  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", var(--font-geist-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+
+input, select, textarea, button {
+  font-family: inherit;
+  letter-spacing: inherit;
+  font-size: 16px; /* Prevent iOS auto-zoom on focus */
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(0,122,255,0.12) !important;
+  outline: none;
+}
+
+::selection {
+  background: rgba(0,122,255,0.2);
+}
 
 /* Mobile responsive */
 @media (max-width: 768px) {
-  aside { display: none !important; }
-  main  { padding: 14px !important; }
-  header { padding: 0 14px !important; }
+  /* Sidebar: hidden by default, shown as overlay when .sidebar-open is on body */
+  .sidebar-desktop { display: none !important; }
+  .sidebar-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 90;
+    background: rgba(0,0,0,0.4);
+  }
+  body.sidebar-open .sidebar-overlay { display: block; }
+  body.sidebar-open .sidebar-mobile {
+    display: flex !important;
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 100;
+    width: 260px;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+  }
+
+  main { padding: 16px !important; }
+  header { padding: 0 12px !important; }
+
+  /* Navbar: hide search, show hamburger */
+  .navbar-search { display: none !important; }
+  .navbar-avatar { display: none !important; }
+  .hamburger-btn { display: flex !important; }
+
+  /* Bottom tab bar */
+  .bottom-tabs { display: flex !important; }
+  /* Add padding at bottom for tab bar */
+  main { padding-bottom: 80px !important; }
+
+  /* Dashboard grids: stack on mobile */
+  .dash-grid { grid-template-columns: 1fr !important; }
+
+  /* Nastavenia: stack goal inputs */
+  .goals-grid { grid-template-columns: 1fr !important; }
+
+  /* Naber form: single column */
+  .naber-grid { grid-template-columns: 1fr !important; }
+
+  /* Klienti/portfolio: 2-column on mobile */
+  .cards-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Modals: full-width on mobile */
+  .modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Table: simplified on mobile */
+  .table-header { display: none !important; }
+  .table-row {
+    grid-template-columns: 1fr auto !important;
+    gap: 4px !important;
+    padding: 12px 14px !important;
+  }
+  .table-cell-hide { display: none !important; }
+
+  /* Portfolio list view: stack on mobile */
+  .portfolio-list-header { display: none !important; }
+  .portfolio-list-row {
+    grid-template-columns: 1fr auto !important;
+    gap: 4px !important;
+    padding: 12px 14px !important;
+  }
+  .portfolio-list-row .list-hide { display: none !important; }
+
+  /* Stepper: compact on mobile */
+  .stepper-line { display: none !important; }
+  .stepper-label { font-size: 11px !important; }
+}
+
+@media (min-width: 769px) {
+  .hamburger-btn { display: none !important; }
+  .bottom-tabs { display: none !important; }
+  .sidebar-mobile { display: none !important; }
+  .sidebar-overlay { display: none !important; }
+}
+
+/* ── Flip clock animations ── */
+.flip-digit {
+  perspective: 80px;
+}
+.flip-top {
+  animation: flipDown 0.5s cubic-bezier(0.35, 0, 0.25, 1) forwards;
+}
+.flip-bottom {
+  animation: flipUp 0.5s cubic-bezier(0.35, 0, 0.25, 1) forwards;
+}
+@keyframes flipDown {
+  0%   { transform: rotateX(0deg); }
+  100% { transform: rotateX(-90deg); }
+}
+@keyframes flipUp {
+  0%   { transform: rotateX(90deg); }
+  100% { transform: rotateX(0deg); }
 }

@@ -1,23 +1,91 @@
-export type TypNehnutelnosti = "byt" | "dom" | "pozemok";
-export type Priorita = "vysoka" | "stredna" | "nizka";
-export type StavNehnutelnosti = "nova" | "rekonstruovana" | "povodny_stav" | "novostavba";
-export type StatusKlienta =
-  | "novy_kontakt"
-  | "dohodnuty_naber"
-  | "volat_neskor"
-  | "nedovolal"
-  | "nechce_rk"
-  | "uz_predal"
-  | "realna_kancelaria";
+/* ── Typy pre Supabase tabuľky ── */
 
-export const STATUS_LABELS: Record<StatusKlienta, string> = {
-  novy_kontakt:      "Nový kontakt",
-  dohodnuty_naber:   "Dohodnutý naber",
-  volat_neskor:      "Volať neskôr",
-  nedovolal:         "Nedovolal",
-  nechce_rk:         "Nechce RK",
-  uz_predal:         "Už predal",
-  realna_kancelaria: "Realitná Kancelária",
+export type TypNehnutelnosti = string; // Dynamic - all Vianema categories
+export type StavNehnutelnosti = "novostavba" | "rekonstruovana" | "povodny_stav";
+export type KlientStatus = "novy" | "novy_kontakt" | "aktivny" | "dohodnuty_naber" | "nabrany" | "pasivny" | "volat_neskor" | "nedovolal" | "nechce_rk" | "uz_predal" | "realitna_kancelaria" | "uzavrety" | "caka_na_schvalenie";
+
+export type TypInzercie = "inkognito" | "online_web" | "online" | "vyhradne";
+
+export interface Nehnutelnost {
+  id: string;
+  nazov: string;
+  typ: TypNehnutelnosti;
+  lokalita: string;
+  cena: number;
+  plocha: number | null;
+  izby: number | null;
+  poschodie: number | null;
+  stav: StavNehnutelnosti | null;
+  popis: string | null;
+  intro: string | null;
+  text_popis: string | null;
+  url_inzercia: string | null;
+  zobrazovat_cenu: boolean;
+  zobrazovat_mapu: boolean;
+  zobrazovat_hypoteku: boolean;
+  so_zmluvou: boolean;
+  projekt: boolean;
+  specialne_oznacenie: string | null;
+  seo_keywords: string | null;
+  stat: string;
+  kraj: string | null;
+  okres: string | null;
+  obec: string | null;
+  ulica_privatna: string | null;
+  makler: string | null;
+  interne_id: string | null;
+  provizia_hodnota: number | null;
+  provizia_typ: string;
+  poznamka_interna: string | null;
+  orientacia: string | null;
+  pripojenie: Record<string, boolean>;
+  typ_ceny: string | null;
+  tagy: string | null;
+  vlastnictvo: string | null;
+  text_k_cene: string | null;
+  cena_za_energie: string | null;
+  exkluzivne: boolean;
+  url_virtualka: string | null;
+  vhodne_pre_studentov: boolean;
+  video_url: string | null;
+  kategoria: string | null;
+  export_portaly: Record<string, boolean>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Klient {
+  id: string;
+  meno: string;
+  telefon: string | null;
+  email: string | null;
+  lokalita: string | null;
+  typ: "kupujuci" | "predavajuci" | "oboje";
+  status: KlientStatus;
+  makler_id: string | null;
+  priorita: string | null;
+  zdroj: string | null;
+  datum_kontaktu: string | null;
+  poznamka: string | null;
+  proviziaeur: number | null;
+  rozpocet_max: number | null;
+  created_at: string;
+}
+
+export const STATUS_LABELS: Record<KlientStatus, string> = {
+  novy: "Nový",
+  novy_kontakt: "Nový kontakt",
+  aktivny: "Aktívny",
+  dohodnuty_naber: "Dohodnutý náber",
+  nabrany: "Nabraný",
+  pasivny: "Pasívny",
+  volat_neskor: "Volať neskôr",
+  nedovolal: "Nedovolal",
+  nechce_rk: "Nechce RK",
+  uz_predal: "Už predal",
+  realitna_kancelaria: "Realitná kancelária",
+  uzavrety: "Uzavretý",
+  caka_na_schvalenie: "Čaká na schválenie",
 };
 
 export const KRAJE = [
@@ -30,71 +98,3 @@ export const KRAJE = [
   "Prešovský kraj",
   "Košický kraj",
 ];
-
-export interface Klient {
-  id: string;
-  meno: string;
-  mobil: string | null;
-  email: string | null;
-  status: StatusKlienta;
-  typ: TypNehnutelnosti | null;
-  lokalita: string | null;
-  ulica: string | null;
-  datum_stretnutia: string | null;
-  rozpocet_min: number | null;
-  rozpocet_max: number | null;
-  priorita: Priorita;
-  poznamka: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Nehnutelnost {
-  id: string;
-  nazov: string;
-  typ: TypNehnutelnosti;
-  lokalita: string;
-  cena: number;
-  plocha: number | null;
-  izby: number | null;
-  poschodie: number | null;
-  popis: string | null;
-  stav: StavNehnutelnosti | null;
-  ai_skore: number | null;
-  ai_analyza: string | null;
-  url_inzercia: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Log {
-  id: string;
-  typ: string;
-  popis: string;
-  klient_id: string | null;
-  nehnutelnost_id: string | null;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
-}
-
-export interface Database {
-  public: {
-    Tables: {
-      klienti: {
-        Row: Klient;
-        Insert: Omit<Klient, "id" | "created_at" | "updated_at">;
-        Update: Partial<Omit<Klient, "id" | "created_at" | "updated_at">>;
-      };
-      nehnutelnosti: {
-        Row: Nehnutelnost;
-        Insert: Omit<Nehnutelnost, "id" | "created_at" | "updated_at">;
-        Update: Partial<Omit<Nehnutelnost, "id" | "created_at" | "updated_at">>;
-      };
-      logy: {
-        Row: Log;
-        Insert: Omit<Log, "id" | "created_at">;
-        Update: never;
-      };
-    };
-  };
-}

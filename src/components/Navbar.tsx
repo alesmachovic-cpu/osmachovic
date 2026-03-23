@@ -1,6 +1,117 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
+import SystemSearch from "@/components/SystemSearch";
+import { useAuth } from "@/components/AuthProvider";
+
+function useTime() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function greeting(hour: number) {
+  if (hour < 5) return "Dobrú noc";
+  if (hour < 12) return "Dobré ráno";
+  if (hour < 18) return "Dobrý deň";
+  return "Dobrý večer";
+}
+
+/* ── Flip digit ── */
+function FlipDigit({ value }: { value: string }) {
+  const [cur, setCur] = useState(value);
+  const [prev, setPrev] = useState(value);
+  const [flipping, setFlipping] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (value !== cur) {
+      setPrev(cur);
+      setCur(value);
+      setFlipping(true);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => setFlipping(false), 500);
+    }
+  }, [value, cur]);
+
+  const S = 28;
+  const half = S / 2;
+  const cardStyle: React.CSSProperties = {
+    width: "20px", height: `${S}px`, position: "relative", overflow: "hidden",
+    borderRadius: "4px", background: "#1F2937",
+    fontSize: "15px", fontWeight: "800", color: "#fff",
+    fontFamily: "var(--font-geist-mono), monospace",
+    display: "inline-flex", flexShrink: 0,
+  };
+  const topHalf: React.CSSProperties = {
+    position: "absolute", top: 0, left: 0, right: 0, height: `${half}px`,
+    overflow: "hidden", display: "flex", alignItems: "flex-end", justifyContent: "center",
+    lineHeight: `${S}px`,
+  };
+  const bottomHalf: React.CSSProperties = {
+    position: "absolute", bottom: 0, left: 0, right: 0, height: `${half}px`,
+    overflow: "hidden", display: "flex", alignItems: "flex-start", justifyContent: "center",
+    lineHeight: `${S}px`,
+  };
+  const divider: React.CSSProperties = {
+    position: "absolute", top: "50%", left: 0, right: 0, height: "1px",
+    background: "rgba(0,0,0,0.3)", zIndex: 5,
+  };
+
+  return (
+    <span className="flip-digit" style={cardStyle}>
+      {/* Static bottom — new value */}
+      <span style={{ ...bottomHalf, zIndex: 1 }}><span style={{ transform: `translateY(-${half}px)` }}>{cur}</span></span>
+      {/* Static top — new value */}
+      <span style={{ ...topHalf, zIndex: 1 }}>{cur}</span>
+
+      {/* Flipping top — old value flipping down */}
+      {flipping && (
+        <span className="flip-top" style={{
+          ...topHalf, zIndex: 3, background: "#1F2937", borderRadius: "4px 4px 0 0",
+          transformOrigin: "bottom center",
+        }}>{prev}</span>
+      )}
+      {/* Flipping bottom — new value flipping up */}
+      {flipping && (
+        <span className="flip-bottom" style={{
+          ...bottomHalf, zIndex: 2, background: "#1F2937", borderRadius: "0 0 4px 4px",
+          transformOrigin: "top center",
+        }}><span style={{ transform: `translateY(-${half}px)` }}>{cur}</span></span>
+      )}
+
+      <span style={divider} />
+    </span>
+  );
+}
+
+function FlipClock({ time }: { time: string }) {
+  // time = "23:28"
+  const chars = time.split("");
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "2px" }}>
+      {chars.map((c, i) =>
+        c === ":" ? (
+          <span key={i} style={{
+            fontSize: "14px", fontWeight: "800", color: "#1F2937",
+            lineHeight: 1, margin: "0 1px", opacity: 0.5,
+          }}>:</span>
+        ) : (
+          <FlipDigit key={i} value={c} />
+        )
+      )}
+    </span>
+  );
+}
+
 export default function Navbar() {
+  const { user } = useAuth();
+  const now = useTime();
+  const hour = now.getHours();
+  const timeStr = now.toLocaleTimeString("sk", { hour: "2-digit", minute: "2-digit" });
   return (
     <header
       style={{
@@ -17,95 +128,64 @@ export default function Navbar() {
         flexShrink: 0,
       }}
     >
-      {/* Greeting */}
-      <h1 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>
-        Dobrý deň, Peter 👋
-      </h1>
-
-      {/* Right: search + actions */}
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        {/* Search */}
-        <div
+      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        {/* Hamburger — visible only on mobile */}
+        <button
+          className="hamburger-btn"
+          onClick={() => document.body.classList.toggle("sidebar-open")}
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            background: "var(--bg-elevated)",
-            border: "1px solid var(--border)",
-            borderRadius: "9px",
-            padding: "7px 14px",
-            width: "260px",
+            display: "none",
+            width: "36px", height: "36px", borderRadius: "9px",
+            background: "var(--bg-elevated)", border: "1px solid var(--border)",
+            alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: "var(--text-primary)", flexShrink: 0,
           }}
         >
-          <svg width="14" height="14" fill="none" stroke="var(--text-muted)" strokeWidth="2" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+          <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round">
+            <path d="M3 6h18M3 12h18M3 18h18" />
           </svg>
-          <input
-            type="text"
-            placeholder="Hľadať nehnuteľnosti, klientov..."
-            style={{
-              background: "transparent",
-              border: "none",
-              outline: "none",
-              fontSize: "13px",
-              color: "var(--text-primary)",
-              width: "100%",
-            }}
-          />
+        </button>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <h1 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: 0, whiteSpace: "nowrap" }}>
+            {greeting(hour)}, {user?.name.split(" ")[0] || "Aleš"} 👋
+          </h1>
+          <FlipClock time={timeStr} />
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div className="navbar-search" style={{ width: "280px" }}>
+          <SystemSearch />
         </div>
 
-        {/* Notification bell */}
         <button
           style={{
-            width: "36px",
-            height: "36px",
-            borderRadius: "9px",
-            background: "var(--bg-elevated)",
-            border: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            color: "var(--text-secondary)",
-            position: "relative",
+            width: "36px", height: "36px", borderRadius: "9px",
+            background: "var(--bg-elevated)", border: "1px solid var(--border)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: "var(--text-secondary)", position: "relative",
+            flexShrink: 0,
           }}
         >
           <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
-          <span
-            style={{
-              position: "absolute",
-              top: "7px",
-              right: "7px",
-              width: "7px",
-              height: "7px",
-              background: "var(--danger)",
-              borderRadius: "50%",
-              border: "1.5px solid var(--bg-surface)",
-            }}
-          />
+          <span style={{
+            position: "absolute", top: "7px", right: "7px",
+            width: "7px", height: "7px", background: "var(--danger)",
+            borderRadius: "50%", border: "1.5px solid var(--bg-surface)",
+          }} />
         </button>
 
-        {/* Avatar */}
-        <div
-          style={{
-            width: "36px",
-            height: "36px",
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, #3B82F6, #6366F1)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "12px",
-            fontWeight: "700",
-            color: "#fff",
-            cursor: "pointer",
-            flexShrink: 0,
-          }}
-        >
-          PM
+        <div className="navbar-avatar" style={{
+          width: "36px", height: "36px", borderRadius: "50%",
+          background: "#374151", display: "flex", alignItems: "center",
+          justifyContent: "center", fontSize: "12px", fontWeight: "700",
+          color: "#fff", cursor: "pointer", flexShrink: 0,
+        }}>
+          {user?.initials || "AM"}
         </div>
       </div>
     </header>

@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
+import BottomTabs from "@/components/BottomTabs";
+import SidebarOverlay from "@/components/SidebarOverlay";
+import AuthProvider from "@/components/AuthProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,23 +29,42 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="sk">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <script dangerouslySetInnerHTML={{ __html: `
+          document.addEventListener('dragover', function(e) { e.preventDefault(); });
+          document.addEventListener('drop', function(e) { e.preventDefault(); });
+        `}} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-          <Sidebar />
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <Navbar />
-            <main
-              style={{
-                flex: 1,
-                overflow: "auto",
-                background: "var(--bg-base)",
-                padding: "24px 28px",
-              }}
-            >
-              {children}
-            </main>
+        <AuthProvider>
+          <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+            {/* Desktop sidebar */}
+            <div className="sidebar-desktop">
+              <Sidebar />
+            </div>
+            {/* Mobile sidebar overlay + drawer */}
+            <SidebarOverlay />
+            <div className="sidebar-mobile" style={{ display: "none" }}>
+              <Sidebar />
+            </div>
+
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+              <Navbar />
+              <main
+                style={{
+                  flex: 1,
+                  overflow: "auto",
+                  background: "var(--bg-base)",
+                  padding: "24px 28px",
+                }}
+              >
+                {children}
+              </main>
+            </div>
           </div>
-        </div>
+          <BottomTabs />
+        </AuthProvider>
       </body>
     </html>
   );

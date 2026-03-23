@@ -1,302 +1,537 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Nehnutelnost, TypNehnutelnosti, StavNehnutelnosti } from "@/lib/database.types";
+import InzeratForm from "@/components/InzeratForm";
 
-const LABEL: React.CSSProperties = { fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "5px", display: "block" };
-const INPUT: React.CSSProperties = { width: "100%", padding: "9px 11px", background: "#fff", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "13.5px", color: "var(--text-primary)", outline: "none" };
-
-const emptyForm = {
-  nazov: "", typ: "byt" as TypNehnutelnosti,
-  lokalita: "", cena: "",
-  plocha: "", izby: "", poschodie: "",
-  stav: "" as StavNehnutelnosti | "",
-  popis: "", url_inzercia: "",
-};
-
-function scoreColor(s: number | null) {
-  if (!s) return { bg: "#F3F4F6", text: "#9CA3AF" };
-  if (s >= 8.5) return { bg: "#D1FAE5", text: "#065F46" };
-  if (s >= 7.0) return { bg: "#FEF3C7", text: "#92400E" };
-  return { bg: "#FEE2E2", text: "#991B1B" };
+/* ── Typy podľa skutočnej DB schémy ── */
+interface DBNehnutelnost {
+  id: string;
+  nazov: string;
+  lokalita: string;
+  ulica: string;
+  typ_transakcie: string;
+  typ_nehnutelnosti: string;
+  cena: number | null;
+  plocha: number | null;
+  izby: number | null;
+  poschodie: number | null;
+  stav: string | null;
+  balkon: boolean;
+  garaz: boolean;
+  vytah: boolean;
+  url: string;
+  stav_inzeratu: string;
+  created_at: string;
+  status_kolizie: string | null;
+  kolizia_poznamka: string | null;
+  makler_id: string | null;
+  makler_email: string | null;
 }
 
-export default function PortfolioPage() {
-  const [items, setItems] = useState<Nehnutelnost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(false);
-  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [filter, setFilter] = useState<"all" | "byt" | "dom" | "pozemok">("all");
+type SortKey = "created_at" | "nazov" | "cena";
+type ViewMode = "cards" | "list";
 
-  async function fetch() {
+const TYP_LABELS: Record<string, string> = {
+  "byt": "Byt", "dom": "Dom", "pozemok": "Pozemok",
+  "garsonka": "Garsónka", "1-izbovy": "1i byt", "2-izbovy": "2i byt",
+  "3-izbovy": "3i byt", "4-izbovy": "4i byt", "rodinny-dom": "Rodinný dom",
+  "chata": "Chata", "komercny": "Komerčný",
+};
+
+const STAV_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  "aktívny": { bg: "#E5E7EB", text: "#374151", label: "Aktívny" },
+  "aktivna": { bg: "#E5E7EB", text: "#374151", label: "Aktívna" },
+  "pripravujeme": { bg: "#F3F4F6", text: "#374151", label: "Pripravujeme" },
+  "pozastaveny": { bg: "#F3F4F6", text: "#6B7280", label: "Pozastavený" },
+  "predany": { bg: "#F9FAFB", text: "#6B7280", label: "Predaný" },
+  "archiv": { bg: "#F9FAFB", text: "#9CA3AF", label: "Archív" },
+};
+
+function formatCena(cena: number | null): string {
+  if (!cena) return "Cena na vyžiadanie";
+  return cena.toLocaleString("sk") + " €";
+}
+
+function typLabel(typ: string): string {
+  return TYP_LABELS[typ] || typ || "—";
+}
+
+export default function Portfolio() {
+  const [items, setItems] = useState<DBNehnutelnost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sort, setSort] = useState<SortKey>("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [view, setView] = useState<ViewMode>("cards");
+  const [search, setSearch] = useState("");
+  const [filterTyp, setFilterTyp] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<Record<string, { stav: string; eurM2: number; benchmark: number; odchylka: number; komentar: string }>>({});
+  const [deepDive, setDeepDive] = useState<DBNehnutelnost | null>(null);
+  const [deepResult, setDeepResult] = useState<Record<string, unknown> | null>(null);
+  const [deepLoading, setDeepLoading] = useState(false);
+  const [singleAnalyzing, setSingleAnalyzing] = useState<Record<string, boolean>>({});
+
+  useEffect(() => { loadItems(); }, [sort, sortDir]);
+
+  async function loadItems() {
     setLoading(true);
-    const q = supabase.from("nehnutelnosti").select("*").order("created_at", { ascending: false });
-    const { data } = await q;
-    setItems(data ?? []);
+    const { data } = await supabase
+      .from("nehnutelnosti")
+      .select("*")
+      .order(sort, { ascending: sortDir === "asc" });
+    setItems((data as DBNehnutelnost[]) ?? []);
     setLoading(false);
   }
 
-  useEffect(() => { fetch(); }, []);
-
-  function set(k: string, v: string) { setForm(f => ({ ...f, [k]: v })); }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.nazov.trim() || !form.lokalita.trim() || !form.cena) { setError("Názov, lokalita a cena sú povinné"); return; }
-    setSaving(true);
-    const { error: err } = await supabase.from("nehnutelnosti").insert({
-      nazov: form.nazov.trim(),
-      typ: form.typ,
-      lokalita: form.lokalita.trim(),
-      cena: Number(form.cena),
-      plocha: form.plocha ? Number(form.plocha) : null,
-      izby: form.izby ? Number(form.izby) : null,
-      poschodie: form.poschodie ? Number(form.poschodie) : null,
-      stav: (form.stav || null) as StavNehnutelnosti | null,
-      popis: form.popis || null,
-      url_inzercia: form.url_inzercia || null,
-      ai_skore: null, ai_analyza: null,
-    });
-    setSaving(false);
-    if (err) { setError(err.message); return; }
-    setModal(false);
-    setForm(emptyForm);
-    fetch();
+  function toggleSort(key: SortKey) {
+    if (sort === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSort(key); setSortDir("desc"); }
   }
 
-  async function analyzeNehnutelnost(n: Nehnutelnost) {
-    setAnalyzingId(n.id);
+  async function runBatchAnalysis() {
+    setAnalyzing(true);
     try {
-      const res = await fetch("/api/ai-analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nazov: n.nazov, typ: n.typ, lokalita: n.lokalita, cena: n.cena, plocha: n.plocha, izby: n.izby, stav: n.stav, popis: n.popis }),
+      const res = await fetch("/api/analyze", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "batch", items }),
       });
       const data = await res.json();
-      if (!data.error) {
-        await supabase.from("nehnutelnosti").update({ ai_skore: data.skore, ai_analyza: data.analyza }).eq("id", n.id);
-        fetch();
+      if (data.results) {
+        const map: typeof analysis = {};
+        data.results.forEach((r: { id?: string; idx?: number; stav: string; eurM2: number; benchmark: number; odchylka: number; komentar: string }) => {
+          const id = r.id || items[r.idx ?? -1]?.id;
+          if (id) map[id] = r;
+        });
+        setAnalysis(map);
       }
     } catch { /* silent */ }
-    setAnalyzingId(null);
+    setAnalyzing(false);
   }
 
-  function whatsappShare(n: Nehnutelnost) {
-    const text = `🏠 *${n.nazov}*\n📍 ${n.lokalita}${n.plocha ? `\n📐 ${n.plocha} m²` : ""}${n.izby ? ` · ${n.izby} izby` : ""}\n💰 *${n.cena != null ? n.cena.toLocaleString("sk") + " €" : "—"}*\n\nKontakt: Aleš Machovič, Vianema`;
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, "_blank");
+  async function runSingleAnalysis(item: DBNehnutelnost) {
+    setSingleAnalyzing(prev => ({ ...prev, [item.id]: true }));
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "batch", items: [item] }),
+      });
+      const data = await res.json();
+      if (data.results?.[0]) {
+        const r = data.results[0];
+        setAnalysis(prev => ({ ...prev, [item.id]: r }));
+      }
+    } catch { /* silent */ }
+    setSingleAnalyzing(prev => ({ ...prev, [item.id]: false }));
   }
 
-  const filtered = filter === "all" ? items : items.filter(i => i.typ === filter);
+  async function runDeepDive(item: DBNehnutelnost) {
+    setDeepDive(item);
+    setDeepLoading(true);
+    setDeepResult(null);
+    try {
+      const res = await fetch("/api/analyze", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "deep", item }),
+      });
+      const data = await res.json();
+      setDeepResult(data);
+    } catch { /* silent */ }
+    setDeepLoading(false);
+  }
+
+  const filtered = items.filter(n => {
+    if (search) {
+      const q = search.toLowerCase();
+      const hay = `${n.nazov} ${n.lokalita} ${n.ulica} ${n.typ_nehnutelnosti}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (filterTyp && n.typ_transakcie !== filterTyp) return false;
+    return true;
+  });
+
+  if (showForm) {
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+          <button onClick={() => setShowForm(false)} style={{
+            padding: "8px 16px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+            borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: "6px",
+          }}>← Späť na portfólio</button>
+        </div>
+        <InzeratForm
+          onSaved={() => { setShowForm(false); loadItems(); }}
+          onCancel={() => setShowForm(false)}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: "1100px" }}>
+    <div>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
         <div>
-          <h2 style={{ fontSize: "20px", fontWeight: "700", margin: "0 0 3px", color: "var(--text-primary)" }}>Portfólio</h2>
-          <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: 0 }}>{items.length} nehnuteľností v databáze</p>
+          <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>Portfólio</h1>
+          <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "4px 0 0" }}>
+            {filtered.length} {filtered.length === 1 ? "nehnuteľnosť" : filtered.length < 5 ? "nehnuteľnosti" : "nehnuteľností"} v ponuke
+          </p>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          {/* Filter tabs */}
-          <div style={{ display: "flex", gap: "4px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "3px" }}>
-            {(["all","byt","dom","pozemok"] as const).map(t => (
-              <button key={t} onClick={() => setFilter(t)}
-                style={{ padding: "5px 12px", borderRadius: "6px", fontSize: "12.5px", fontWeight: "500", border: "none", cursor: "pointer", background: filter === t ? "var(--accent)" : "transparent", color: filter === t ? "#fff" : "var(--text-secondary)" }}>
-                {t === "all" ? "Všetky" : t.charAt(0).toUpperCase() + t.slice(1) + "y"}
-              </button>
-            ))}
+        <button onClick={() => setShowForm(true)} style={{
+          padding: "10px 20px", background: "#374151", color: "#fff", borderRadius: "10px",
+          fontSize: "13px", fontWeight: "600", border: "none", cursor: "pointer",
+          display: "flex", alignItems: "center", gap: "6px",
+        }}>+ Nový inzerát</button>
+      </div>
+
+      {/* Toolbar */}
+      <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "16px", flexWrap: "wrap" }}>
+        <div style={{ position: "relative", flex: 1, minWidth: "200px", maxWidth: "360px" }}>
+          <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px", color: "var(--text-muted)", pointerEvents: "none" }}>&#x1F50D;</span>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Hľadať podľa názvu, lokality..."
+            style={{ width: "100%", padding: "9px 14px 9px 36px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", outline: "none" }} />
+        </div>
+        <select value={filterTyp} onChange={e => setFilterTyp(e.target.value)} style={{
+          padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
+          appearance: "none" as const, backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+        }}>
+          <option value="">Všetky typy</option>
+          <option value="predaj">Na predaj</option>
+          <option value="prenajom">Na prenájom</option>
+        </select>
+
+        <button onClick={runBatchAnalysis} disabled={analyzing || items.length === 0} style={{
+          padding: "8px 16px", fontSize: "12px", fontWeight: "600", borderRadius: "8px", cursor: analyzing ? "wait" : "pointer",
+          background: Object.keys(analysis).length > 0 ? "#E5E7EB" : "#374151",
+          color: Object.keys(analysis).length > 0 ? "#374151" : "#fff",
+          border: "none", display: "flex", alignItems: "center", gap: "6px", opacity: analyzing ? 0.6 : 1, whiteSpace: "nowrap",
+        }}>
+          {analyzing ? "⏳ Analyzujem..." : Object.keys(analysis).length > 0 ? "✅ Preanalyzované" : "🤖 Analyzovať"}
+        </button>
+
+        <div style={{ display: "flex", gap: "4px", marginLeft: "auto" }}>
+          {([["created_at", "Najnovšie"], ["cena", "Cena"], ["nazov", "Názov"]] as [SortKey, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => toggleSort(key)} style={{
+              padding: "7px 14px", fontSize: "12px", fontWeight: sort === key ? "600" : "400",
+              color: sort === key ? "#fff" : "var(--text-secondary)",
+              background: sort === key ? "#374151" : "var(--bg-surface)",
+              border: sort === key ? "none" : "1px solid var(--border)", borderRadius: "7px", cursor: "pointer",
+            }}>{label} {sort === key && (sortDir === "desc" ? "↓" : "↑")}</button>
+          ))}
+          <div style={{ display: "flex", marginLeft: "8px", border: "1px solid var(--border)", borderRadius: "7px", overflow: "hidden" }}>
+            <button onClick={() => setView("cards")} style={{ padding: "7px 10px", fontSize: "14px", border: "none", cursor: "pointer", background: view === "cards" ? "#374151" : "var(--bg-surface)", color: view === "cards" ? "#fff" : "var(--text-muted)" }}>▦</button>
+            <button onClick={() => setView("list")} style={{ padding: "7px 10px", fontSize: "14px", border: "none", cursor: "pointer", background: view === "list" ? "#374151" : "var(--bg-surface)", color: view === "list" ? "#fff" : "var(--text-muted)" }}>☰</button>
           </div>
-          <button onClick={() => { setModal(true); setError(""); }}
-            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 18px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: "9px", fontSize: "13.5px", fontWeight: "600", cursor: "pointer" }}>
-            + Pridať
-          </button>
         </div>
       </div>
 
-      {/* Grid */}
-      {loading && <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Načítavam...</div>}
+      {/* Loading */}
+      {loading && <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-muted)", fontSize: "14px" }}>Načítavam...</div>}
+
+      {/* Empty */}
       {!loading && filtered.length === 0 && (
-        <div style={{ padding: "60px", textAlign: "center", color: "var(--text-muted)", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
-          <div style={{ fontSize: "36px", marginBottom: "10px" }}>🏠</div>
-          Žiadne nehnuteľnosti. Klikni na <strong>+ Pridať</strong>.
+        <div style={{ textAlign: "center", padding: "80px 20px", background: "var(--bg-surface)", borderRadius: "16px", border: "1px solid var(--border)" }}>
+          <div style={{ fontSize: "48px", marginBottom: "16px" }}>🏠</div>
+          <div style={{ fontSize: "16px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "6px" }}>
+            {search ? "Žiadne výsledky" : "Portfólio je prázdne"}
+          </div>
+          <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "20px" }}>
+            {search ? "Skús zmeniť vyhľadávanie" : "Vytvor prvý inzerát a začni budovať ponuku"}
+          </div>
+          {!search && <button onClick={() => setShowForm(true)} style={{ display: "inline-flex", padding: "10px 24px", background: "#374151", color: "#fff", borderRadius: "10px", fontSize: "13px", fontWeight: "600", border: "none", cursor: "pointer" }}>+ Nový inzerát</button>}
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "16px" }}>
-        {filtered.map(n => {
-          const sc = scoreColor(n.ai_skore);
-          return (
-            <div key={n.id} style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
-              {/* Image placeholder */}
-              <div style={{ height: "130px", background: "linear-gradient(135deg, #EBF0FF, #E0E7FF)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "40px", position: "relative" }}>
-                {n.typ === "byt" ? "🏢" : n.typ === "dom" ? "🏡" : "🌿"}
-                {n.ai_skore && (
-                  <div style={{ position: "absolute", top: "10px", right: "10px", padding: "3px 9px", borderRadius: "7px", fontSize: "12px", fontWeight: "800", background: sc.bg, color: sc.text }}>
-                    {n.ai_skore}
-                  </div>
-                )}
-              </div>
-              {/* Info */}
-              <div style={{ padding: "14px 16px" }}>
-                <div style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>{n.nazov}</div>
-                <div style={{ fontSize: "12.5px", color: "var(--text-secondary)", marginBottom: "10px" }}>
-                  {[n.lokalita, n.plocha ? `${n.plocha} m²` : null, n.izby ? `${n.izby} izby` : null].filter(Boolean).join(" · ")}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "17px", fontWeight: "800", color: "var(--accent)" }}>
-                    {n.cena != null ? `${n.cena.toLocaleString("sk")} €` : "—"}
-                  </span>
-                  <div style={{ display: "flex", gap: "6px" }}>
-                    <span style={{ padding: "3px 9px", borderRadius: "20px", fontSize: "11.5px", fontWeight: "600", background: "var(--accent-light)", color: "var(--accent)" }}>
-                      {n.typ.charAt(0).toUpperCase() + n.typ.slice(1)}
+      {/* Cards view */}
+      {!loading && filtered.length > 0 && view === "cards" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
+          {filtered.map(n => {
+            const stavInfo = STAV_COLORS[n.stav_inzeratu] || STAV_COLORS[n.status_kolizie || ""] || { bg: "#F3F4F6", text: "#6B7280", label: n.stav_inzeratu || "—" };
+            return (
+              <div key={n.id} style={{ background: "var(--bg-surface)", borderRadius: "14px", border: "1px solid var(--border)", overflow: "hidden" }}>
+                {/* Photo placeholder */}
+                <div style={{ height: "180px", background: "linear-gradient(135deg, #F3F4F6, #E5E7EB)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                  <span style={{ fontSize: "40px", opacity: 0.3 }}>🏠</span>
+                  {/* Typ transakcie badge */}
+                  {n.typ_transakcie && (
+                    <span style={{ position: "absolute", top: "10px", left: "10px", padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", background: "#374151", color: "#fff" }}>
+                      {n.typ_transakcie === "predaj" ? "NA PREDAJ" : "PRENÁJOM"}
                     </span>
-                    {n.stav && (
-                      <span style={{ padding: "3px 9px", borderRadius: "20px", fontSize: "11.5px", background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-                        {n.stav.replace("_", " ")}
+                  )}
+                  {/* Stav badge */}
+                  <span style={{ position: "absolute", top: "10px", right: "10px", padding: "4px 10px", borderRadius: "6px", fontSize: "10px", fontWeight: "600", background: stavInfo.bg, color: stavInfo.text }}>
+                    {stavInfo.label}
+                  </span>
+                </div>
+
+                {/* Content */}
+                <div style={{ padding: "16px" }}>
+                  <div style={{ fontSize: "20px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "4px" }}>
+                    {formatCena(n.cena)}
+                  </div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px", lineHeight: 1.3 }}>
+                    {n.nazov || `${typLabel(n.typ_nehnutelnosti)}${n.lokalita ? ` — ${n.lokalita}` : ""}`}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>
+                    {[n.lokalita, n.ulica].filter(Boolean).join(" · ") || "—"}
+                  </div>
+
+                  {/* Parametre */}
+                  <div style={{ display: "flex", gap: "16px", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "14px" }}>
+                    {n.typ_nehnutelnosti && (
+                      <span style={{ padding: "3px 8px", background: "#F3F4F6", borderRadius: "5px", fontWeight: "500" }}>
+                        {typLabel(n.typ_nehnutelnosti)}
                       </span>
                     )}
+                    {n.plocha && <span>{n.plocha} m²</span>}
+                    {n.izby && <span>{n.izby}i</span>}
+                    {n.poschodie != null && <span>{n.poschodie}. p.</span>}
+                  </div>
+
+                  {/* Vlastnosti */}
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "14px" }}>
+                    {n.balkon && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#F3F4F6", color: "#374151", borderRadius: "4px" }}>Balkón</span>}
+                    {n.garaz && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#F3F4F6", color: "#374151", borderRadius: "4px" }}>Garáž</span>}
+                    {n.vytah && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#F3F4F6", color: "#374151", borderRadius: "4px" }}>Výťah</span>}
+                    {n.stav && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#F3F4F6", color: "#374151", borderRadius: "4px" }}>{n.stav}</span>}
+                  </div>
+
+                  {/* Analysis section */}
+                  {analysis[n.id] ? (() => {
+                    const a = analysis[n.id];
+                    const cfg = a.stav === "podhodnotene" ? { icon: "✅", bg: "#F3F4F6", text: "#374151", label: "Podhodnotené" }
+                      : a.stav === "nadhodnotene" ? { icon: "⚠️", bg: "#F3F4F6", text: "#374151", label: "Nadhodnotené" }
+                      : { icon: "📊", bg: "#F3F4F6", text: "#374151", label: "Trhová cena" };
+                    return (
+                      <div style={{ padding: "10px 12px", background: cfg.bg, borderRadius: "10px", marginBottom: "12px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                          <span style={{ fontSize: "12px", fontWeight: "600", color: cfg.text }}>{cfg.icon} {cfg.label}</span>
+                          <span style={{ fontSize: "11px", color: cfg.text, fontWeight: "500" }}>{a.odchylka > 0 ? "+" : ""}{a.odchylka}%</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: cfg.text, opacity: 0.8 }}>
+                          <span>{a.eurM2} €/m²</span>
+                          <span>benchmark {a.benchmark} €/m²</span>
+                        </div>
+                        {a.komentar && <div style={{ fontSize: "11px", color: cfg.text, marginTop: "4px", opacity: 0.7 }}>{a.komentar}</div>}
+                        <button onClick={(e) => { e.stopPropagation(); runDeepDive(n); }} style={{
+                          marginTop: "8px", width: "100%", padding: "6px", fontSize: "11px", fontWeight: "600",
+                          background: "rgba(255,255,255,0.6)", border: "none", borderRadius: "6px", cursor: "pointer", color: cfg.text,
+                        }}>🔍 Hĺbková analýza</button>
+                      </div>
+                    );
+                  })() : (
+                    <button onClick={(e) => { e.stopPropagation(); runSingleAnalysis(n); }} disabled={singleAnalyzing[n.id]} style={{
+                      width: "100%", padding: "8px", fontSize: "12px", fontWeight: "600", marginBottom: "12px",
+                      background: singleAnalyzing[n.id] ? "var(--bg-elevated)" : "var(--bg-elevated)",
+                      border: "1px solid var(--border)", borderRadius: "8px", cursor: singleAnalyzing[n.id] ? "wait" : "pointer",
+                      color: singleAnalyzing[n.id] ? "var(--text-muted)" : "var(--text-primary)",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                    }}>
+                      {singleAnalyzing[n.id] ? "⏳ Analyzujem..." : "🤖 Analyzovať nehnuteľnosť"}
+                    </button>
+                  )}
+
+                  {/* Footer */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "12px", borderTop: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontWeight: "700", color: "#fff" }}>AM</div>
+                      <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Aleš Machovič</span>
+                    </div>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{new Date(n.created_at).toLocaleDateString("sk")}</span>
                   </div>
                 </div>
-                {n.ai_analyza && (
-                  <div style={{ marginTop: "10px", padding: "8px 10px", background: "var(--bg-elevated)", borderRadius: "7px", fontSize: "12px", color: "var(--text-secondary)", borderLeft: "3px solid var(--accent)" }}>
-                    {n.ai_analyza}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* List view */}
+      {!loading && filtered.length > 0 && view === "list" && (
+        <div style={{ background: "var(--bg-surface)", borderRadius: "14px", border: "1px solid var(--border)", overflow: "hidden" }}>
+          {/* Header */}
+          <div className="portfolio-list-header" style={{ display: "grid", gridTemplateColumns: `2fr 1fr 80px 80px 140px ${Object.keys(analysis).length > 0 ? "120px " : ""}90px`, padding: "12px 20px", fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", borderBottom: "1px solid var(--border)", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            <span>Nehnuteľnosť</span>
+            <span>Lokácia</span>
+            <span>Výmera</span>
+            <span>Izby</span>
+            <span style={{ textAlign: "right" }}>Cena</span>
+            {Object.keys(analysis).length > 0 && <span style={{ textAlign: "center" }}>Analýza</span>}
+            <span style={{ textAlign: "right" }}>Stav</span>
+          </div>
+          {filtered.map((n, i) => {
+            const stavInfo = STAV_COLORS[n.stav_inzeratu] || STAV_COLORS[n.status_kolizie || ""] || { bg: "#F3F4F6", text: "#6B7280", label: n.stav_inzeratu || "—" };
+            return (
+              <div key={n.id} className="portfolio-list-row" onClick={() => analysis[n.id] ? runDeepDive(n) : undefined} style={{ display: "grid", gridTemplateColumns: `2fr 1fr 80px 80px 140px ${Object.keys(analysis).length > 0 ? "120px " : ""}90px`, padding: "14px 20px", alignItems: "center", borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none", fontSize: "13px", cursor: "pointer", transition: "background 0.1s" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                  <div style={{ width: "40px", height: "40px", borderRadius: "8px", background: "linear-gradient(135deg, #F3F4F6, #E5E7EB)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", flexShrink: 0 }}>🏠</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: "500", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {n.nazov || `${typLabel(n.typ_nehnutelnosti)}${n.lokalita ? ` — ${n.lokalita}` : ""}`}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      {typLabel(n.typ_nehnutelnosti)} · {n.typ_transakcie === "predaj" ? "Predaj" : "Prenájom"} · {new Date(n.created_at).toLocaleDateString("sk")}
+                    </div>
+                  </div>
+                </div>
+                <div className="list-hide" style={{ color: "var(--text-secondary)", fontSize: "12px" }}>{n.lokalita || "—"}</div>
+                <div className="list-hide" style={{ color: "var(--text-secondary)" }}>{n.plocha ? `${n.plocha} m²` : "—"}</div>
+                <div className="list-hide" style={{ color: "var(--text-secondary)" }}>{n.izby ? `${n.izby}i` : "—"}</div>
+                <div style={{ textAlign: "right", fontWeight: "600", color: "var(--text-primary)" }}>{formatCena(n.cena)}</div>
+                {Object.keys(analysis).length > 0 && (
+                  <div className="list-hide" style={{ textAlign: "center" }}>
+                    {analysis[n.id] ? (() => {
+                      const a = analysis[n.id];
+                      const icon = a.stav === "podhodnotene" ? "✅" : a.stav === "nadhodnotene" ? "⚠️" : "📊";
+                      const bg = "#F3F4F6";
+                      const color = "#374151";
+                      return <span style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "5px", fontWeight: "500", background: bg, color }}>{icon} {a.odchylka > 0 ? "+" : ""}{a.odchylka}%</span>;
+                    })() : <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>—</span>}
                   </div>
                 )}
-
-                {/* Actions */}
-                <div style={{ marginTop: "12px", display: "flex", gap: "6px" }}>
-                  <button onClick={() => analyzeNehnutelnost(n)} disabled={analyzingId === n.id}
-                    style={{ flex: 1, padding: "7px", background: analyzingId === n.id ? "#EDE9FE" : "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "7px", fontSize: "11.5px", fontWeight: "600", cursor: analyzingId === n.id ? "not-allowed" : "pointer", color: "var(--purple)" }}>
-                    {analyzingId === n.id ? "✨ Analyzujem..." : "🤖 Analyzuj OS Machovič"}
-                  </button>
-                  <button onClick={() => whatsappShare(n)}
-                    style={{ padding: "7px 10px", background: "#D1FAE5", border: "1px solid #A7F3D0", borderRadius: "7px", fontSize: "13px", cursor: "pointer" }}
-                    title="Poslať cez WhatsApp">
-                    📲
-                  </button>
+                <div style={{ textAlign: "right" }}>
+                  <span style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "5px", fontWeight: "500", background: stavInfo.bg, color: stavInfo.text }}>{stavInfo.label}</span>
                 </div>
               </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Deep Dive Modal */}
+      {deepDive && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={() => { setDeepDive(null); setDeepResult(null); }}>
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} />
+          <div onClick={e => e.stopPropagation()} style={{
+            position: "relative", width: "95%", maxWidth: "640px", maxHeight: "85vh", overflowY: "auto",
+            background: "var(--bg-surface)", borderRadius: "20px", border: "1px solid var(--border)",
+            boxShadow: "0 25px 60px rgba(0,0,0,0.2)", padding: "28px",
+          }}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
+              <div>
+                <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>
+                  🔍 Hĺbková analýza
+                </h2>
+                <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "4px 0 0" }}>
+                  {deepDive.nazov || `${typLabel(deepDive.typ_nehnutelnosti)} — ${deepDive.lokalita}`}
+                </p>
+              </div>
+              <button onClick={() => { setDeepDive(null); setDeepResult(null); }} style={{
+                width: "32px", height: "32px", borderRadius: "50%", border: "none",
+                background: "var(--bg-elevated)", cursor: "pointer", fontSize: "16px", color: "var(--text-muted)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>×</button>
             </div>
-          );
-        })}
-      </div>
 
-      {/* Modal */}
-      {modal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: "20px" }}
-          onClick={e => e.target === e.currentTarget && setModal(false)}>
-          <div style={{ background: "var(--bg-surface)", borderRadius: "12px", border: "1px solid var(--border)", width: "100%", maxWidth: "580px", boxShadow: "0 24px 64px rgba(0,0,0,0.18)", overflow: "hidden" }}>
-            {/* Modal header */}
-            <div style={{ padding: "16px 22px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-elevated)" }}>
-              <span style={{ fontWeight: "700", fontSize: "15px", color: "var(--text-primary)" }}>+ Nová nehnuteľnosť</span>
-              <button onClick={() => setModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "22px", lineHeight: 1 }}>×</button>
-            </div>
-
-            <form onSubmit={handleSubmit} style={{ padding: "20px 22px 22px", maxHeight: "75vh", overflowY: "auto" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-
-                {/* AI Scraper */}
-                <div style={{ padding: "12px 14px", background: "#EBF0FF", border: "1px solid #C7D2FE", borderRadius: "8px" }}>
-                  <div style={{ fontWeight: "700", fontSize: "13px", color: "#3730A3", marginBottom: "6px" }}>✨ AI Scraper</div>
-                  <div style={{ fontSize: "12px", color: "#4338CA", marginBottom: "8px" }}>Vlož link (Bazoš, Nehnutelnosti.sk) a AI vyplní celý formulár.</div>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <input placeholder="https://www.bazos.sk/..." style={{ ...INPUT, flex: 1, fontSize: "12.5px" }} disabled />
-                    <button type="button" disabled style={{ padding: "8px 14px", background: "#6366F1", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12.5px", fontWeight: "600", cursor: "not-allowed", opacity: 0.7 }}>
-                      Spustiť
-                    </button>
-                  </div>
-                  <div style={{ fontSize: "11px", color: "#6366F1", marginTop: "4px" }}>Dostupné po prepojení AI API (Fáza 3)</div>
-                </div>
-
-                {/* Kategória + Typ */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <div>
-                    <label style={LABEL}>Kategória *</label>
-                    <select style={INPUT} value={form.typ} onChange={e => set("typ", e.target.value)}>
-                      <option value="byt">Byty</option>
-                      <option value="dom">Domy</option>
-                      <option value="pozemok">Pozemky</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={LABEL}>Stav</label>
-                    <select style={INPUT} value={form.stav} onChange={e => set("stav", e.target.value)}>
-                      <option value="">— vyber —</option>
-                      <option value="novostavba">Novostavba</option>
-                      <option value="rekonstruovana">Rekonštruovaná</option>
-                      <option value="nova">Nová</option>
-                      <option value="povodny_stav">Pôvodný stav</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Názov */}
-                <div>
-                  <label style={LABEL}>Názov *</label>
-                  <input style={INPUT} placeholder="napr. 3-izbový byt, Bratislava III" value={form.nazov} onChange={e => set("nazov", e.target.value)} />
-                </div>
-
-                {/* Cena + Výmera */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <div>
-                    <label style={LABEL}>Cena (€) *</label>
-                    <input style={INPUT} type="number" placeholder="150 000" value={form.cena} onChange={e => set("cena", e.target.value)} />
-                  </div>
-                  <div>
-                    <label style={LABEL}>Výmera (m²)</label>
-                    <input style={INPUT} type="number" placeholder="65" value={form.plocha} onChange={e => set("plocha", e.target.value)} />
-                  </div>
-                </div>
-
-                {/* Izby + Poschodie */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <div>
-                    <label style={LABEL}>Počet izieb</label>
-                    <input style={INPUT} type="number" placeholder="3" value={form.izby} onChange={e => set("izby", e.target.value)} />
-                  </div>
-                  <div>
-                    <label style={LABEL}>Poschodie</label>
-                    <input style={INPUT} type="number" placeholder="3" value={form.poschodie} onChange={e => set("poschodie", e.target.value)} />
-                  </div>
-                </div>
-
-                {/* Lokalita */}
-                <div>
-                  <label style={LABEL}>Lokalita *</label>
-                  <input style={INPUT} placeholder="napr. Bratislava III, Ružinov" value={form.lokalita} onChange={e => set("lokalita", e.target.value)} />
-                </div>
-
-                {/* URL */}
-                <div>
-                  <label style={LABEL}>URL Inzerátu</label>
-                  <input style={INPUT} placeholder="https://..." value={form.url_inzercia} onChange={e => set("url_inzercia", e.target.value)} />
-                </div>
-
-                {/* Popis */}
-                <div>
-                  <label style={LABEL}>Popis</label>
-                  <textarea style={{ ...INPUT, resize: "none", height: "80px" }} placeholder="Krátky popis..." value={form.popis} onChange={e => set("popis", e.target.value)} />
-                </div>
+            {deepLoading && (
+              <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)", fontSize: "14px" }}>
+                <div style={{ fontSize: "32px", marginBottom: "12px", animation: "pulse 1.5s infinite" }}>🤖</div>
+                AI analyzuje nehnuteľnosť...
               </div>
+            )}
 
-              {error && <div style={{ marginTop: "12px", padding: "10px 12px", background: "#FEE2E2", borderRadius: "7px", fontSize: "13px", color: "#991B1B" }}>{error}</div>}
+            {deepResult && (() => {
+              const z = (deepResult as { zaklad?: { cena?: number; plocha?: number; eurM2?: number; benchmark?: number; odchylka?: number; stav?: string } }).zaklad;
+              const h = (deepResult as { hypoteka?: { istina?: number; mesacnaSplatka?: number; celkovaNakup?: number; hotovost?: number; potrebnyPrijem?: number; ltv?: string; urok?: string; roky?: number } }).hypoteka;
+              const ai = (deepResult as { ai?: { verdikt?: string; silne_stranky?: string[]; slabe_stranky?: string[]; odporucanie?: string; cielova_skupina?: string; cas_predaja?: string } }).ai;
 
-              <div style={{ display: "flex", gap: "10px", marginTop: "18px" }}>
-                <button type="button" onClick={() => setModal(false)}
-                  style={{ flex: 1, padding: "10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13.5px", fontWeight: "500", cursor: "pointer", color: "var(--text-secondary)" }}>
-                  Zrušiť
-                </button>
-                <button type="submit" disabled={saving}
-                  style={{ flex: 2, padding: "10px", background: saving ? "#93C5FD" : "var(--accent)", border: "none", borderRadius: "8px", fontSize: "13.5px", fontWeight: "600", cursor: saving ? "not-allowed" : "pointer", color: "#fff" }}>
-                  {saving ? "Ukladám..." : "Uložiť a publikovať"}
-                </button>
-              </div>
-            </form>
+              const verdiktCfg = z?.stav === "podhodnotene" ? { icon: "✅", bg: "#F3F4F6", text: "#374151", label: "Podhodnotené" }
+                : z?.stav === "nadhodnotene" ? { icon: "⚠️", bg: "#F3F4F6", text: "#374151", label: "Nadhodnotené" }
+                : { icon: "📊", bg: "#F3F4F6", text: "#374151", label: "Trhová cena" };
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  {/* Verdikt */}
+                  <div style={{ padding: "16px", background: verdiktCfg.bg, borderRadius: "14px", textAlign: "center" }}>
+                    <div style={{ fontSize: "28px", marginBottom: "4px" }}>{verdiktCfg.icon}</div>
+                    <div style={{ fontSize: "16px", fontWeight: "700", color: verdiktCfg.text }}>{verdiktCfg.label}</div>
+                    <div style={{ fontSize: "13px", color: verdiktCfg.text, marginTop: "4px" }}>
+                      {z?.eurM2?.toLocaleString("sk")} €/m² vs benchmark {z?.benchmark?.toLocaleString("sk")} €/m² ({z?.odchylka != null && z.odchylka > 0 ? "+" : ""}{z?.odchylka}%)
+                    </div>
+                  </div>
+
+                  {/* Základné čísla */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                    {[
+                      { label: "Cena", value: z?.cena ? z.cena.toLocaleString("sk") + " €" : "—" },
+                      { label: "Plocha", value: z?.plocha ? z.plocha + " m²" : "—" },
+                      { label: "€/m²", value: z?.eurM2 ? z.eurM2.toLocaleString("sk") + " €" : "—" },
+                    ].map(item => (
+                      <div key={item.label} style={{ padding: "12px", background: "var(--bg-elevated)", borderRadius: "10px", textAlign: "center" }}>
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>{item.label}</div>
+                        <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Hypotéka */}
+                  {h && (
+                    <div style={{ padding: "16px", background: "var(--bg-elevated)", borderRadius: "14px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "12px" }}>🏦 Hypotekárny model</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "13px" }}>
+                        <div>
+                          <span style={{ color: "var(--text-muted)" }}>Mesačná splátka</span>
+                          <div style={{ fontWeight: "700", fontSize: "18px", color: "var(--text-primary)", marginTop: "2px" }}>{h.mesacnaSplatka?.toLocaleString("sk")} €</div>
+                        </div>
+                        <div>
+                          <span style={{ color: "var(--text-muted)" }}>Potrebný príjem</span>
+                          <div style={{ fontWeight: "700", fontSize: "18px", color: "var(--text-primary)", marginTop: "2px" }}>{h.potrebnyPrijem?.toLocaleString("sk")} €</div>
+                        </div>
+                        <div style={{ color: "var(--text-secondary)" }}>
+                          <span style={{ color: "var(--text-muted)" }}>Úver (istina)</span>
+                          <div style={{ fontWeight: "600", marginTop: "2px" }}>{h.istina?.toLocaleString("sk")} €</div>
+                        </div>
+                        <div style={{ color: "var(--text-secondary)" }}>
+                          <span style={{ color: "var(--text-muted)" }}>Hotovosť potrebná</span>
+                          <div style={{ fontWeight: "600", marginTop: "2px" }}>{h.hotovost?.toLocaleString("sk")} €</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: "12px", marginTop: "12px", fontSize: "11px", color: "var(--text-muted)" }}>
+                        <span>LTV: {h.ltv}</span>
+                        <span>Úrok: {h.urok}</span>
+                        <span>{h.roky} rokov</span>
+                        <span>Celkom: {h.celkovaNakup?.toLocaleString("sk")} €</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Komentár */}
+                  {ai && (
+                    <div style={{ padding: "16px", background: "var(--bg-elevated)", borderRadius: "14px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "12px" }}>🤖 AI Hodnotenie</div>
+                      {ai.silne_stranky && ai.silne_stranky.length > 0 && (
+                        <div style={{ marginBottom: "10px" }}>
+                          <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>Silné stránky</div>
+                          {ai.silne_stranky.map((s, i) => <div key={i} style={{ fontSize: "12px", color: "var(--text-secondary)", paddingLeft: "12px" }}>+ {s}</div>)}
+                        </div>
+                      )}
+                      {ai.slabe_stranky && ai.slabe_stranky.length > 0 && (
+                        <div style={{ marginBottom: "10px" }}>
+                          <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>Slabé stránky</div>
+                          {ai.slabe_stranky.map((s, i) => <div key={i} style={{ fontSize: "12px", color: "var(--text-secondary)", paddingLeft: "12px" }}>− {s}</div>)}
+                        </div>
+                      )}
+                      {ai.odporucanie && (
+                        <div style={{ fontSize: "12px", color: "var(--text-primary)", padding: "10px", background: "var(--bg-surface)", borderRadius: "8px", marginBottom: "8px" }}>
+                          <strong>Odporúčanie:</strong> {ai.odporucanie}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: "16px", fontSize: "11px", color: "var(--text-muted)", marginTop: "8px" }}>
+                        {ai.cielova_skupina && <span>👤 {ai.cielova_skupina}</span>}
+                        {ai.cas_predaja && <span>⏱ Predaj: {ai.cas_predaja}</span>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

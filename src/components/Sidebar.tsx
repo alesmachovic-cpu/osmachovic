@@ -2,39 +2,53 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
 
 const mainNav = [
   { label: "Prehľad",      href: "/",           icon: "📊" },
-  { label: "Portfólio",    href: "/portfolio",  icon: "🏠", badge: 12, badgeColor: "var(--accent)" },
-  { label: "Klienti",      href: "/klienti",    icon: "👥", badge: 3,  badgeColor: "var(--success)" },
-  { label: "Kupujúci",     href: "/kupujuci",   icon: "🔍", badge: 7,  badgeColor: "var(--warning)" },
+  { label: "Portfólio",    href: "/portfolio",  icon: "🏠", badge: 12 },
+  { label: "Klienti",      href: "/klienti",    icon: "👥", badge: 3 },
+  { label: "Kupujúci",     href: "/kupujuci",   icon: "🔍", badge: 7 },
 ];
 
 const toolsNav = [
-  { label: "AI Writer",       href: "/ai-writer",  icon: "✍️" },
-  { label: "Tvorba inzerátu", href: "/inzerat",    icon: "📝" },
+  { label: "Náberový list",   href: "/naber",      icon: "📝" },
+  { label: "Inzerát",         href: "/inzerat",    icon: "📰" },
   { label: "Analýza trhu",    href: "/analyzy",    icon: "📈" },
   { label: "Kalkulátor",      href: "/kalkulator", icon: "🧮" },
   { label: "Matching",        href: "/matching",   icon: "🔗" },
 ];
 
 const systemNav = [
-  { label: "Export portály", href: "/export",     icon: "📤" },
+  { label: "Plán systému",   href: "/plan",       icon: "🗺️" },
   { label: "Nastavenia",     href: "/nastavenia", icon: "⚙️" },
+  { label: "Notifikácie",    href: "/notifikacie", icon: "🔔", badge: 2 },
   { label: "System Log",     href: "/log",        icon: "📋" },
 ];
 
-type NavItem = { label: string; href: string; icon: string; badge?: number; badgeColor?: string };
+type NavItem = { label: string; href: string; icon: string; badge?: number };
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
-    <Link href={item.href} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 10px", borderRadius: "7px", fontSize: "13px", fontWeight: active ? "600" : "400", color: active ? "var(--accent)" : "var(--text-secondary)", background: active ? "var(--accent-light)" : "transparent", textDecoration: "none" }}>
-      <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <span style={{ fontSize: "14px", lineHeight: 1 }}>{item.icon}</span>
+    <Link href={item.href} onClick={() => document.body.classList.remove("sidebar-open")} style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "8px 12px", borderRadius: "8px", fontSize: "13px",
+      fontWeight: active ? "600" : "400",
+      color: active ? "var(--accent)" : "var(--text-primary)",
+      background: active ? "var(--sidebar-active)" : "transparent",
+      textDecoration: "none", transition: "all 0.15s ease",
+    }}>
+      <span style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <span style={{ fontSize: "15px", lineHeight: 1, width: "20px", textAlign: "center" }}>{item.icon}</span>
         {item.label}
       </span>
       {item.badge !== undefined && (
-        <span style={{ fontSize: "11px", fontWeight: "700", color: "#fff", background: item.badgeColor, borderRadius: "10px", padding: "1px 7px" }}>
+        <span style={{
+          fontSize: "11px", fontWeight: "600",
+          color: active ? "var(--accent)" : "var(--text-muted)",
+          background: active ? "rgba(0,122,255,0.1)" : "var(--bg-elevated)",
+          borderRadius: "10px", padding: "2px 8px", minWidth: "24px", textAlign: "center",
+        }}>
           {item.badge}
         </span>
       )}
@@ -44,7 +58,10 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 
 function SectionLabel({ label }: { label: string }) {
   return (
-    <div style={{ fontSize: "10px", fontWeight: "700", color: "var(--text-muted)", letterSpacing: "0.08em", padding: "12px 10px 3px", textTransform: "uppercase" }}>
+    <div style={{
+      fontSize: "11px", fontWeight: "600", color: "var(--text-muted)",
+      letterSpacing: "0.02em", padding: "16px 12px 4px",
+    }}>
       {label}
     </div>
   );
@@ -52,42 +69,67 @@ function SectionLabel({ label }: { label: string }) {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
 
   return (
-    <aside style={{ width: "205px", minWidth: "205px", height: "100vh", background: "var(--sidebar-bg)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", position: "sticky", top: 0 }}>
+    <aside style={{
+      width: "220px", minWidth: "220px", height: "100vh",
+      background: "var(--sidebar-bg)", borderRight: "1px solid var(--border)",
+      display: "flex", flexDirection: "column", position: "sticky", top: 0,
+    }}>
       {/* Logo */}
-      <div style={{ padding: "16px 14px 12px", borderBottom: "1px solid var(--border-subtle)" }}>
+      <div style={{ padding: "20px 16px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ width: "32px", height: "32px", background: "linear-gradient(135deg, #3B82F6, #6366F1)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "15px", flexShrink: 0 }}>
+          <div style={{
+            width: "34px", height: "34px",
+            background: "#374151",
+            borderRadius: "10px", display: "flex", alignItems: "center",
+            justifyContent: "center", fontSize: "16px", flexShrink: 0,
+          }}>
             🏢
           </div>
           <div>
-            <div style={{ fontWeight: "700", fontSize: "13px", color: "var(--text-primary)", lineHeight: 1.2 }}>Machovič CRM</div>
-            <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "1px" }}>v9.6 · Realitný systém</div>
+            <div style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-primary)", lineHeight: 1.2 }}>Machovič CRM</div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>v9.6 · Realitný systém</div>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: "4px 8px", overflowY: "auto" }}>
-        <SectionLabel label="Hlavné" />
-        {mainNav.map(item => <NavLink key={item.href} item={item} active={pathname === item.href} />)}
-        <SectionLabel label="Nástroje" />
-        {toolsNav.map(item => <NavLink key={item.href} item={item} active={pathname === item.href} />)}
-        <SectionLabel label="Systém" />
-        {systemNav.map(item => <NavLink key={item.href} item={item} active={pathname === item.href} />)}
+      <nav style={{ flex: 1, padding: "0 8px", overflowY: "auto" }}>
+        <SectionLabel label="HLAVNÉ" />
+        {mainNav.map(item => <NavLink key={item.href} item={item} active={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)} />)}
+        <SectionLabel label="NÁSTROJE" />
+        {toolsNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
+        <SectionLabel label="SYSTÉM" />
+        {systemNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
       </nav>
 
       {/* User */}
-      <div style={{ padding: "10px 8px 14px", borderTop: "1px solid var(--border-subtle)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "9px", padding: "8px 10px", borderRadius: "8px", background: "var(--bg-elevated)" }}>
-          <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "linear-gradient(135deg, #3B82F6, #6366F1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: "700", color: "#fff", flexShrink: 0 }}>
-            N
+      <div style={{ padding: "12px 8px 16px", borderTop: "1px solid var(--border)" }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: "10px",
+          padding: "10px 12px", borderRadius: "10px",
+        }}>
+          <div style={{
+            width: "32px", height: "32px", borderRadius: "50%",
+            background: "#374151",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "12px", fontWeight: "700", color: "#fff", flexShrink: 0,
+          }}>
+            {user?.initials || "AM"}
           </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Aleš Machovič</div>
-            <div style={{ fontSize: "10.5px", color: "var(--text-muted)" }}>Maklér · Vianema</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>{user?.name || "Aleš Machovič"}</div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{user?.role || "Maklér · Vianema"}</div>
           </div>
+          <button onClick={logout} title="Odhlásiť" style={{
+            width: "28px", height: "28px", borderRadius: "50%",
+            border: "1px solid var(--border)", background: "var(--bg-elevated)",
+            cursor: "pointer", fontSize: "12px", color: "var(--text-muted)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}>↪</button>
         </div>
       </div>
     </aside>
