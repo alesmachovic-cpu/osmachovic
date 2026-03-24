@@ -17,7 +17,7 @@ interface ActivityItem {
   sub: string;
 }
 
-type TileKey = "overenie" | "vyhladavanie" | "ciele" | "prehlad" | "aktivita" | "kalendar" | "pipeline";
+type TileKey = "overenie" | "vyhladavanie" | "ciele" | "prehlad" | "aktivita";
 
 interface TileConfig {
   key: TileKey;
@@ -30,182 +30,10 @@ const ALL_TILES: TileConfig[] = [
   { key: "vyhladavanie", label: "Vyhľadávanie", icon: "🔍" },
   { key: "ciele", label: "Mesačné ciele", icon: "🎯" },
   { key: "prehlad", label: "Prehľad", icon: "📊" },
-  { key: "kalendar", label: "Kalendár", icon: "📅" },
-  { key: "pipeline", label: "Pipeline", icon: "📈" },
   { key: "aktivita", label: "Posledná aktivita", icon: "⏱" },
 ];
 
-const DEFAULT_TILES: TileKey[] = ["overenie", "vyhladavanie", "ciele", "prehlad", "kalendar", "pipeline", "aktivita"];
-
-interface CalEvent {
-  id: string;
-  summary: string;
-  location?: string;
-  start: string;
-  end: string;
-  allDay: boolean;
-  source?: string;
-}
-
-function parseCalEvents(): CalEvent[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem("gcal_events");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch { /* ignore */ }
-  return [];
-}
-
-async function fetchCalendarEvents(): Promise<CalEvent[]> {
-  try {
-    const res = await fetch("/api/calendar/events");
-    if (res.ok) {
-      const data = await res.json();
-      if (data.events && data.events.length > 0) {
-        const events: CalEvent[] = data.events.map((e: { id: string; summary: string; location?: string; start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string } }) => ({
-          id: e.id,
-          summary: e.summary,
-          location: e.location,
-          start: e.start.dateTime || e.start.date || "",
-          end: e.end.dateTime || e.end.date || "",
-          allDay: !e.start.dateTime,
-          source: "gcal",
-        }));
-        localStorage.setItem("gcal_events", JSON.stringify(events));
-        return events;
-      }
-    }
-  } catch { /* fallback to localStorage */ }
-  return parseCalEvents();
-}
-
-function CalendarWidget() {
-  const [events, setEvents] = useState<CalEvent[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>("");
-
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setSelectedDate(new Date().toISOString().slice(0, 10));
-    // Najprv zobraz z localStorage cache, potom fetch čerstvé
-    const cached = parseCalEvents();
-    if (cached.length > 0) setEvents(cached);
-    fetchCalendarEvents().then(fresh => {
-      setEvents(fresh);
-      setLoading(false);
-    });
-  }, []);
-
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
-
-  // Generate 7 days (current week Mon-Sun)
-  const days: Date[] = [];
-  const startOfWeek = new Date(today);
-  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + 1); // Monday
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(startOfWeek);
-    d.setDate(d.getDate() + i);
-    days.push(d);
-  }
-
-  const dayNames = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
-
-  function fmtTime(iso: string) {
-    const d = new Date(iso);
-    return d.toLocaleTimeString("sk", { hour: "2-digit", minute: "2-digit" });
-  }
-
-  function eventsForDay(date: Date) {
-    const ds = date.toISOString().slice(0, 10);
-    return events.filter(e => e.start.slice(0, 10) === ds);
-  }
-
-  // Events for selected day only, sorted by start time
-  const selectedDayEvents = events
-    .filter(e => e.start.slice(0, 10) === selectedDate)
-    .sort((a, b) => a.start.localeCompare(b.start));
-
-  return (
-    <div>
-      {/* Mini week view — clickable days */}
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
-        {days.map((d, i) => {
-          const ds = d.toISOString().slice(0, 10);
-          const isToday = ds === todayStr;
-          const isSelected = ds === selectedDate;
-          const hasEvents = eventsForDay(d).length > 0;
-          return (
-            <div key={i} style={{ textAlign: "center", flex: 1, cursor: "pointer" }} onClick={() => setSelectedDate(ds)}>
-              <div style={{ fontSize: "10px", color: "var(--text-muted)", fontWeight: "600", marginBottom: "4px" }}>
-                {dayNames[i]}
-              </div>
-              <div style={{
-                width: "32px", height: "32px", borderRadius: "50%", margin: "0 auto",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "13px", fontWeight: isToday || isSelected ? "800" : "500",
-                background: isSelected ? "#374151" : "transparent",
-                color: isSelected ? "#fff" : isToday ? "var(--accent)" : "var(--text-primary)",
-                border: isToday && !isSelected ? "2px solid var(--accent)" : "2px solid transparent",
-                transition: "all 0.15s",
-              }}>
-                {d.getDate()}
-              </div>
-              {hasEvents && (
-                <div style={{
-                  width: "4px", height: "4px", borderRadius: "50%",
-                  background: isSelected ? "#374151" : "var(--accent)",
-                  margin: "3px auto 0",
-                }} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Event list for selected day */}
-      {selectedDayEvents.length > 0 ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {selectedDayEvents.map(e => (
-            <div key={e.id} style={{
-              display: "flex", gap: "10px", alignItems: "flex-start",
-              padding: "8px 10px", borderRadius: "8px",
-              background: "rgba(0,122,255,0.05)",
-              borderLeft: "3px solid var(--accent)",
-            }}>
-              <div style={{ minWidth: "42px", textAlign: "right" }}>
-                <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--accent)" }}>
-                  {fmtTime(e.start)}
-                </div>
-                <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-                  {fmtTime(e.end)}
-                </div>
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: "12.5px", fontWeight: "600", color: "var(--text-primary)" }}>
-                  {e.summary}
-                </div>
-                {e.location && (
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    📍 {e.location.split(",")[0]}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ textAlign: "center", padding: "16px 0", color: "var(--text-muted)", fontSize: "12px" }}>
-          <div style={{ fontSize: "24px", marginBottom: "6px" }}>📅</div>
-          {selectedDate === todayStr ? "Dnes žiadne udalosti" : "Žiadne udalosti v tento deň"}
-        </div>
-      )}
-    </div>
-  );
-}
+const DEFAULT_TILES: TileKey[] = ["overenie", "vyhladavanie", "ciele", "prehlad", "aktivita"];
 
 function loadTiles(): TileKey[] {
   if (typeof window === "undefined") return DEFAULT_TILES;
@@ -234,7 +62,6 @@ export default function Dashboard() {
   const [stats, setStats] = useState({
     klienti: 0, nehnutelnosti: 0,
     mesacnyObrat: 0, rocnyObrat: 0, zmluvy: 0, nabery: 0,
-    naberyTotal: 0, inzeraty: 0, predane: 0, objednavky: 0,
   });
   const [goals, setGoals] = useState({ obrat: 5000, zmluvy: 10, nabery: 20 });
 
@@ -274,7 +101,7 @@ export default function Dashboard() {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
 
-    const [{ count: kCount }, { count: nCount }, { data: recentK }, { data: recentN }, { data: monthlyK }, { data: yearlyK }, { count: naberyCount }, { count: zmluvyCount }, { count: naberyTotal }, { count: inzeratyCount }, { count: predaneCount }, { count: objednavkyCount }] = await Promise.all([
+    const [{ count: kCount }, { count: nCount }, { data: recentK }, { data: recentN }, { data: monthlyK }, { data: yearlyK }, { count: naberyCount }, { count: zmluvyCount }] = await Promise.all([
       supabase.from("klienti").select("*", { count: "exact", head: true }),
       supabase.from("nehnutelnosti").select("*", { count: "exact", head: true }),
       supabase.from("klienti").select("id,meno,status,created_at").order("created_at", { ascending: false }).limit(5),
@@ -283,10 +110,6 @@ export default function Dashboard() {
       supabase.from("klienti").select("proviziaeur").gte("created_at", yearStart),
       supabase.from("naberove_listy").select("*", { count: "exact", head: true }).gte("created_at", monthStart),
       supabase.from("naberove_listy").select("*", { count: "exact", head: true }).gte("created_at", monthStart).eq("zmluva", true),
-      supabase.from("naberove_listy").select("*", { count: "exact", head: true }),
-      supabase.from("nehnutelnosti").select("*", { count: "exact", head: true }).neq("stav", "predane"),
-      supabase.from("nehnutelnosti").select("*", { count: "exact", head: true }).eq("stav", "predane"),
-      supabase.from("objednavky").select("*", { count: "exact", head: true }),
     ]);
 
     const mesacnyObrat = (monthlyK ?? []).reduce((sum, k) => sum + (k.proviziaeur || 0), 0);
@@ -297,8 +120,6 @@ export default function Dashboard() {
     setStats({
       klienti: kCount ?? 0, nehnutelnosti: nCount ?? 0,
       mesacnyObrat, rocnyObrat, zmluvy, nabery,
-      naberyTotal: naberyTotal ?? 0, inzeraty: inzeratyCount ?? 0,
-      predane: predaneCount ?? 0, objednavky: objednavkyCount ?? 0,
     });
 
     const items: ActivityItem[] = [
@@ -491,64 +312,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Calendar */}
-      {has("kalendar") && (
-        <div style={cardSt}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-            <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)" }}>Kalendár</div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
-              {new Date().toLocaleDateString("sk", { weekday: "long", day: "numeric", month: "long" })}
-            </div>
-          </div>
-          <CalendarWidget />
-        </div>
-      )}
-
-      {/* Pipeline funnel */}
-      {has("pipeline") && (
-        <div style={cardSt}>
-          <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px" }}>
-            Pipeline
-          </div>
-          {(() => {
-            const stages = [
-              { label: "Klienti", value: stats.klienti, icon: "👥", color: "#3B82F6", route: "/klienti" },
-              { label: "Nábery", value: stats.naberyTotal, icon: "📝", color: "#8B5CF6", route: "/naber" },
-              { label: "Inzeráty", value: stats.inzeraty, icon: "📰", color: "#0891B2", route: "/portfolio" },
-              { label: "Objednávky", value: stats.objednavky, icon: "📋", color: "#F59E0B", route: "/kupujuci" },
-              { label: "Predané", value: stats.predane, icon: "🏆", color: "#059669", route: "/portfolio" },
-            ];
-            const maxVal = Math.max(...stages.map(s => s.value), 1);
-            return (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {stages.map((s, i) => (
-                  <div key={s.label} onClick={() => router.push(s.route)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: "28px", fontSize: "16px", textAlign: "center", flexShrink: 0 }}>{s.icon}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                        <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>{s.label}</span>
-                        <span style={{ fontSize: "12px", fontWeight: "800", color: s.color }}>{s.value}</span>
-                      </div>
-                      <div style={{ height: "6px", background: "var(--bg-elevated)", borderRadius: "3px", overflow: "hidden" }}>
-                        <div style={{
-                          height: "100%", borderRadius: "3px",
-                          width: `${Math.max((s.value / maxVal) * 100, s.value > 0 ? 8 : 0)}%`,
-                          background: s.color,
-                          transition: "width 0.5s ease",
-                        }} />
-                      </div>
-                    </div>
-                    {i < stages.length - 1 && (
-                      <div style={{ fontSize: "10px", color: "var(--text-muted)", flexShrink: 0, width: "16px", textAlign: "center" }}>→</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-        </div>
-      )}
-
       {/* Activity feed */}
       {has("aktivita") && (
         <div style={cardSt}>
@@ -559,7 +322,7 @@ export default function Dashboard() {
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
             {activity.map(a => (
-              <Link key={a.id + a.type} href={a.type === "klient" ? `/klienti/${a.id}` : `/portfolio`} style={{
+              <Link key={a.id + a.type} href={a.type === "klient" ? `/klienti?edit=${a.id}` : `/portfolio`} style={{
                 display: "flex", gap: "10px", alignItems: "center", textDecoration: "none",
                 padding: "8px 10px", borderRadius: "10px", transition: "background 0.1s", cursor: "pointer",
               }}

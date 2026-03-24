@@ -17,27 +17,13 @@ const toolsNav = [
   { label: "Analýza trhu",    href: "/analyzy",    icon: "📈" },
   { label: "Kalkulátor",      href: "/kalkulator", icon: "🧮" },
   { label: "Matching",        href: "/matching",   icon: "🔗" },
-  { label: "Štatistiky",      href: "/statistiky", icon: "📉" },
-];
-
-const operativaNav = [
-  { label: "Obhliadky",       href: "/obhliadky",           icon: "👁️" },
-  { label: "Náklady",         href: "/naklady",             icon: "💰" },
-  { label: "Produkcia",       href: "/produkcia",           icon: "📦" },
-  { label: "Vyťaženosť tímu", href: "/vytazenost",          icon: "👷" },
-  { label: "Provízie",        href: "/potvrdenie-provizii", icon: "✅" },
 ];
 
 const systemNav = [
-  { label: "Gmail",           href: "/gmail",      icon: "✉️" },
-  { label: "Upozornenia",     href: "/upozornenia", icon: "🔔" },
-  { label: "Tím",             href: "/tim",        icon: "👥" },
-  { label: "Manažér",         href: "/manazer",    icon: "📊" },
-  { label: "Klientská zóna",  href: "/klientska-zona", icon: "🌐" },
-  { label: "Plán systému",    href: "/plan",       icon: "🗺️" },
-  { label: "Nastavenia",      href: "/nastavenia", icon: "⚙️" },
-  { label: "Notifikácie",     href: "/notifikacie", icon: "🔕", badge: 2 },
-  { label: "System Log",      href: "/log",        icon: "📋" },
+  { label: "Plán systému",   href: "/plan",       icon: "🗺️" },
+  { label: "Nastavenia",     href: "/nastavenia", icon: "⚙️" },
+  { label: "Notifikácie",    href: "/notifikacie", icon: "🔔", badge: 2 },
+  { label: "System Log",     href: "/log",        icon: "📋" },
 ];
 
 type NavItem = { label: string; href: string; icon: string; badge?: number };
@@ -104,7 +90,7 @@ export default function Sidebar() {
           </div>
           <div>
             <div style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-primary)", lineHeight: 1.2 }}>Machovič CRM</div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>v10.0 · Realitný systém</div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>v9.6 · Realitný systém</div>
           </div>
         </div>
       </div>
@@ -115,8 +101,6 @@ export default function Sidebar() {
         {mainNav.map(item => <NavLink key={item.href} item={item} active={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)} />)}
         <SectionLabel label="NÁSTROJE" />
         {toolsNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
-        <SectionLabel label="OPERATÍVA" />
-        {operativaNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
         <SectionLabel label="SYSTÉM" />
         {systemNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
       </nav>

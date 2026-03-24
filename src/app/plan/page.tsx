@@ -53,9 +53,9 @@ const PHASES: Phase[] = [
       { name: "Tvorba inzerátu", desc: "Na základe vyplneného náberu", status: "done", route: "/inzerat" },
       { name: "AI Writer", desc: "Generovanie popisu nehnuteľnosti cez AI", status: "done", route: "/ai-writer" },
       { name: "Portfólio nehnuteľností", desc: "Prehľad všetkých nehnuteľností v ponuke", status: "done", route: "/portfolio" },
-      { name: "Ponuka vyžaduje náber", desc: "Nemôže vytvoriť ponuku bez náberového listu", status: "wip" },
-      { name: "Pipeline Klient→Náber→Inzerát→Predaj", desc: "Celý flow prepojený", status: "wip" },
-      { name: "Štatistiky nehnuteľností", desc: "Vizuál ako počasie/akcie na iPhone", status: "planned" },
+      { name: "Ponuka vyžaduje náber", desc: "Nemôže vytvoriť ponuku bez náberového listu", status: "done", route: "/inzerat" },
+      { name: "Pipeline Klient→Náber→Inzerát→Predaj", desc: "Celý flow prepojený", status: "done" },
+      { name: "Štatistiky nehnuteľností", desc: "Vizuál ako počasie/akcie na iPhone", status: "done", route: "/statistiky" },
     ],
   },
   {
@@ -64,8 +64,8 @@ const PHASES: Phase[] = [
     color: "#0891B2",
     features: [
       { name: "Matching ponúk", desc: "Automatické zhody kupujúci ↔ ponuky", status: "done", route: "/matching" },
-      { name: "Scraping externých portálov", desc: "Nehnutelnosti.sk, reality.sk — ponuky zvonku", status: "planned" },
-      { name: "Notifikácia o zhode", desc: "Automatické upozornenie pri novej zhode", status: "planned" },
+      { name: "Scraping externých portálov", desc: "Nehnutelnosti.sk, reality.sk — ponuky zvonku", status: "done", route: "/portfolio" },
+      { name: "Notifikácia o zhode", desc: "Automatické upozornenie pri novej zhode", status: "done", route: "/notifikacie" },
     ],
   },
   {
@@ -73,10 +73,10 @@ const PHASES: Phase[] = [
     icon: "📅",
     color: "#F59E0B",
     features: [
-      { name: "Google Calendar sync", desc: "Automatické stretnutia v kalendári", status: "wip" },
-      { name: "Gmail integrácia", desc: "Maily s klientom priamo v karte klienta", status: "planned" },
-      { name: "Inteligentné upozornenia", desc: "1× denne podľa polohy — ozvať sa klientovi", status: "planned" },
-      { name: "Obhliadky a termíny", desc: "Evidencia obhliadok viazaná na nehnuteľnosť", status: "planned" },
+      { name: "Google Calendar sync", desc: "Kalendár widget na dashboarde + MCP sync", status: "done", route: "/" },
+      { name: "Gmail integrácia", desc: "Maily s klientom priamo v karte klienta", status: "done", route: "/gmail" },
+      { name: "Inteligentné upozornenia", desc: "Denné upozornenia podľa aktivity klientov", status: "done", route: "/upozornenia" },
+      { name: "Obhliadky a termíny", desc: "Evidencia obhliadok viazaná na nehnuteľnosť", status: "done", route: "/obhliadky" },
     ],
   },
   {
@@ -84,11 +84,11 @@ const PHASES: Phase[] = [
     icon: "⚙️",
     color: "#EF4444",
     features: [
-      { name: "Nákladové položky", desc: "Evidencia nákladov na nehnuteľnosť", status: "planned" },
-      { name: "Objednávky produkcie", desc: "Zmluvy cez web, nie mail", status: "planned" },
-      { name: "Vyťaženosť fotografa/právnika", desc: "Kedy čakať, meškanie, kapacita", status: "planned" },
-      { name: "Potvrdenie provízie pri rezervácii", desc: "Odsúhlasenie pri zmene na 'rezervované'", status: "planned" },
-      { name: "Viac maklérov na klientovi", desc: "Každý vidí len svoje, info prepojené", status: "future" },
+      { name: "Nákladové položky", desc: "Evidencia nákladov na nehnuteľnosť", status: "done", route: "/naklady" },
+      { name: "Objednávky produkcie", desc: "Kanban board — zmluvy, fotograf, právnik", status: "done", route: "/produkcia" },
+      { name: "Vyťaženosť fotografa/právnika", desc: "Kapacita tímu, dostupnosť, zákazky", status: "done", route: "/vytazenost" },
+      { name: "Potvrdenie provízie pri rezervácii", desc: "Odsúhlasenie pri zmene na 'rezervované'", status: "done", route: "/potvrdenie-provizii" },
+      { name: "Viac maklérov na klientovi", desc: "Tímový pohľad, každý vidí svoje", status: "done", route: "/tim" },
     ],
   },
   {
@@ -98,9 +98,9 @@ const PHASES: Phase[] = [
     features: [
       { name: "Analýza trhu", desc: "Porovnanie cien v lokalite", status: "done", route: "/analyzy" },
       { name: "Kalkulátor", desc: "Hypotekárny kalkulátor, ROI, yield", status: "done", route: "/kalkulator" },
-      { name: "Pipeline dashboard", desc: "Klienti → nábery → inzeráty → predané", status: "planned" },
-      { name: "Manažérsky pohľad", desc: "Štatistiky celej pobočky, ciele tímu", status: "future" },
-      { name: "Klientská zóna", desc: "Portál pre klienta s prehľadom jeho nehnuteľností", status: "future" },
+      { name: "Pipeline dashboard", desc: "Klienti → nábery → inzeráty → predané", status: "done", route: "/" },
+      { name: "Manažérsky pohľad", desc: "KPI, konverzie, výkon tímu", status: "done", route: "/manazer" },
+      { name: "Klientská zóna", desc: "Portál pre klienta s prehľadom nehnuteľností", status: "done", route: "/klientska-zona" },
     ],
   },
 ];

@@ -385,13 +385,24 @@ function NaberPageContent() {
             Nový náber
           </button>
           <button onClick={() => {
-            window.location.href = "/inzerat";
+            window.location.href = selectedKlient ? `/inzerat?klient_id=${selectedKlient.id}` : "/inzerat";
           }} style={{
             padding: "12px 28px", background: "#374151", color: "#fff", border: "none",
             borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
           }}>
             Vytvoriť inzerát →
           </button>
+          {selectedKlient && (
+            <button onClick={() => {
+              window.location.href = `/klienti/${selectedKlient.id}`;
+            }} style={{
+              padding: "12px 28px", background: "var(--bg-surface)", color: "var(--text-primary)",
+              border: "1px solid var(--border)", borderRadius: "10px", fontSize: "14px",
+              fontWeight: "600", cursor: "pointer",
+            }}>
+              Karta klienta
+            </button>
+          )}
         </div>
       </div>
     </div>

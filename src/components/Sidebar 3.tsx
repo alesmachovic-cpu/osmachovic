@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/components/AuthProvider";
 
 const mainNav = [
   { label: "Prehľad",      href: "/",           icon: "📊" },
@@ -13,31 +12,15 @@ const mainNav = [
 
 const toolsNav = [
   { label: "Náberový list",   href: "/naber",      icon: "📝" },
-  { label: "Inzerát",         href: "/inzerat",    icon: "📰" },
   { label: "Analýza trhu",    href: "/analyzy",    icon: "📈" },
   { label: "Kalkulátor",      href: "/kalkulator", icon: "🧮" },
   { label: "Matching",        href: "/matching",   icon: "🔗" },
-  { label: "Štatistiky",      href: "/statistiky", icon: "📉" },
-];
-
-const operativaNav = [
-  { label: "Obhliadky",       href: "/obhliadky",           icon: "👁️" },
-  { label: "Náklady",         href: "/naklady",             icon: "💰" },
-  { label: "Produkcia",       href: "/produkcia",           icon: "📦" },
-  { label: "Vyťaženosť tímu", href: "/vytazenost",          icon: "👷" },
-  { label: "Provízie",        href: "/potvrdenie-provizii", icon: "✅" },
 ];
 
 const systemNav = [
-  { label: "Gmail",           href: "/gmail",      icon: "✉️" },
-  { label: "Upozornenia",     href: "/upozornenia", icon: "🔔" },
-  { label: "Tím",             href: "/tim",        icon: "👥" },
-  { label: "Manažér",         href: "/manazer",    icon: "📊" },
-  { label: "Klientská zóna",  href: "/klientska-zona", icon: "🌐" },
-  { label: "Plán systému",    href: "/plan",       icon: "🗺️" },
-  { label: "Nastavenia",      href: "/nastavenia", icon: "⚙️" },
-  { label: "Notifikácie",     href: "/notifikacie", icon: "🔕", badge: 2 },
-  { label: "System Log",      href: "/log",        icon: "📋" },
+  { label: "Nastavenia",     href: "/nastavenia", icon: "⚙️" },
+  { label: "Notifikácie",    href: "/notifikacie", icon: "🔔", badge: 2 },
+  { label: "System Log",     href: "/log",        icon: "📋" },
 ];
 
 type NavItem = { label: string; href: string; icon: string; badge?: number };
@@ -83,7 +66,6 @@ function SectionLabel({ label }: { label: string }) {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
 
   return (
     <aside style={{
@@ -104,7 +86,7 @@ export default function Sidebar() {
           </div>
           <div>
             <div style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-primary)", lineHeight: 1.2 }}>Machovič CRM</div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>v10.0 · Realitný systém</div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>v9.6 · Realitný systém</div>
           </div>
         </div>
       </div>
@@ -112,13 +94,11 @@ export default function Sidebar() {
       {/* Nav */}
       <nav style={{ flex: 1, padding: "0 8px", overflowY: "auto" }}>
         <SectionLabel label="HLAVNÉ" />
-        {mainNav.map(item => <NavLink key={item.href} item={item} active={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)} />)}
+        {mainNav.map(item => <NavLink key={item.href} item={item} active={pathname === item.href} />)}
         <SectionLabel label="NÁSTROJE" />
-        {toolsNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
-        <SectionLabel label="OPERATÍVA" />
-        {operativaNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
+        {toolsNav.map(item => <NavLink key={item.href} item={item} active={pathname === item.href} />)}
         <SectionLabel label="SYSTÉM" />
-        {systemNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
+        {systemNav.map(item => <NavLink key={item.href} item={item} active={pathname === item.href} />)}
       </nav>
 
       {/* User */}
@@ -133,19 +113,12 @@ export default function Sidebar() {
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: "12px", fontWeight: "700", color: "#fff", flexShrink: 0,
           }}>
-            {user?.initials || "AM"}
+            AM
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>{user?.name || "Aleš Machovič"}</div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{user?.role || "Maklér · Vianema"}</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>Aleš Machovič</div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Maklér · Vianema</div>
           </div>
-          <button onClick={logout} title="Odhlásiť" style={{
-            width: "28px", height: "28px", borderRadius: "50%",
-            border: "1px solid var(--border)", background: "var(--bg-elevated)",
-            cursor: "pointer", fontSize: "12px", color: "var(--text-muted)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>↪</button>
         </div>
       </div>
     </aside>

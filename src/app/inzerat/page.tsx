@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import InzeratForm from "@/components/InzeratForm";
@@ -101,5 +101,5 @@ function InzeratPageContent() {
   }
 
   // Ak má náber alebo nie je klient — zobraz formulár
-  return <InzeratForm prefilledData={naberData} />;
+  return <InzeratForm prefilledData={naberData} onSaved={() => router.push("/portfolio")} />;
 }

@@ -73,7 +73,6 @@ body {
 input, select, textarea, button {
   font-family: inherit;
   letter-spacing: inherit;
-  font-size: 16px; /* Prevent iOS auto-zoom on focus */
 }
 
 input:focus, select:focus, textarea:focus {
@@ -145,19 +144,6 @@ input:focus, select:focus, textarea:focus {
     padding: 12px 14px !important;
   }
   .table-cell-hide { display: none !important; }
-
-  /* Portfolio list view: stack on mobile */
-  .portfolio-list-header { display: none !important; }
-  .portfolio-list-row {
-    grid-template-columns: 1fr auto !important;
-    gap: 4px !important;
-    padding: 12px 14px !important;
-  }
-  .portfolio-list-row .list-hide { display: none !important; }
-
-  /* Stepper: compact on mobile */
-  .stepper-line { display: none !important; }
-  .stepper-label { font-size: 11px !important; }
 }
 
 @media (min-width: 769px) {
@@ -166,4 +152,3 @@ input:focus, select:focus, textarea:focus {
   .sidebar-mobile { display: none !important; }
   .sidebar-overlay { display: none !important; }
 }
-

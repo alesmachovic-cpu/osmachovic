@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/inzerat)",
+      "Bash(npx next:*)",
+      "Bash(npm install:*)",
+      "Bash(curl -s -X POST http://localhost:3000/api/parse-lv -H \"Content-Type: application/json\" -d '{\"\"lv_text\"\":\"\"List vlastníctva č. 1234 Okres Bratislava V Obec Bratislava - mestská časť Petržalka k.ú. Petržalka Parcela 1234/5 Súpisné číslo 4567 Byt č.12 na 3. poschodí vchod Námestie Hraničiarov 2 Podlahová plocha bytu 68.50 m2 Spoluvlastnícky podiel 6850/123456 Vlastník: Ján Novák Záložné právo v prospech VÚB banka\"\"}')",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs kill:*)",
+      "Bash(curl -s -X POST http://localhost:3000/api/parse-lv -H \"Content-Type: application/json\" -d '{\"\"lv_text\"\":\"\"List vlastníctva č. 1234 Okres Bratislava V Obec Bratislava - mestská časť Petržalka k.ú. Petržalka Parcela 1234/5 Súpisné číslo 4567 Byt č.12 na 3. poschodí vchod Námestie Hraničiarov 2 Podlahová plocha bytu 68.50 m2 Vlastník: Ján Novák Záložné právo v prospech VÚB banka\"\"}')",
+      "Bash(npx tsc:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx supabase:*)",
+      "Bash(vercel --yes)",
+      "Bash(vercel env:*)",
+      "Bash(vercel --yes --prod)",
+      "Bash(WORKTREE=/Users/alesmachovic/Desktop/os-machovic/.claude/worktrees/funny-stonebraker)",
+      "Bash(MAIN=/Users/alesmachovic/Desktop/os-machovic)",
+      "Bash(for f:*)",
+      "Bash(do cp:*)",
+      "Bash(done)",
+      "Bash(cp \"$WORKTREE/src/app/layout.tsx\" \"$MAIN/src/app/layout.tsx\")",
+      "Bash(cp \"$WORKTREE/src/components/SidebarOverlay.tsx\" \"$MAIN/src/components/SidebarOverlay.tsx\")",
+      "Bash(brew install:*)",
+      "Bash(node -e \":*)"
+    ]
+  }
+}
