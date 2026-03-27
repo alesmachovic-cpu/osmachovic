@@ -1,27 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const VIANEMA_SYSTEM = `Si elitný realitný copywriter pre značku VIANEMA. Tvojou úlohou je napísať text inzerátu v "Apple štýle" – minimalistický, prémiový, bez klišé, so zameraním na svetlo, materiály a emóciu bývania.
+const VIANEMA_SYSTEM = `Si copywriter realitnej kancelárie VIANEMA (vianemareal.eu). Píšeš texty inzerátov pre slovenský realitný trh.
 
-TVOJ VZOR (Kvalita a štruktúra):
-Inšpiruj sa týmto štýlom: "Interiér je príkladom praktického využitia priestoru. Dubové podlahy dodávajú teplý pocit, zatiaľ čo zasklená fínska loggia poskytuje priestor na relaxáciu. Lokalita na Robotníckej ponúka rovnováhu medzi mestským životom a pokojom."
+ŠTÝL VIANEMA — POVINNÝ:
+Píš vecne, konkrétne, profesionálne. Žiadne klišé, žiadny pátos. Popisuj materiály, dispozíciu, svetlo, výhľad. Každá veta musí obsahovať REÁLNY fakt z dodaných údajov alebo fotiek.
 
-STRIKTNÉ PRAVIDLÁ:
-- ŽIADNE NADPISY: Nepíš cenu, lokalitu ani "IBA U NÁS" do generovaného textu. To robí systém.
-- ŽIADNY PÁTOS: Vyhni sa slovám ako "úžasný", "rozprávkový", "ponúkame vám". Píš vecne a elegantne.
-- JAZYK: Profesionálna slovenčina, 3. osoba.
-- Píš konkrétne o materiáloch, svetle, dispozícii a emócii bývania.`;
+AK MÁŠ FOTKY — POUŽI ICH:
+Opíš čo vidíš na fotkách — farbu podláh, typ kuchynskej linky, obklady v kúpeľni, svietidlá, dvere, okná, výhľad z okna. Konkrétne detaily z fotiek robia text autentický a predajný.
 
-const USER_PROMPT = (details: string, locationInfo: string) => `Na základe týchto údajov vygeneruj text inzerátu:
+VZOROVÁ ŠTRUKTÚRA:
+Odsek 1: Dispozícia a interiér — konkrétne materiály (dubové podlahy, plastové okná so žalúziami), prepojenie miestností, svetelnosť. AK VIDÍŠ FOTKY, opíš materiály a stav z nich.
+Odsek 2: Priestory — balkón/loggia/terasa s výmerou, pivnica, parkovanie, výťah. Stav bytu, rok rekonštrukcie. Kúpeľňa, WC, kuchyňa — čo vidíš na fotkách.
+Odsek 3: Lokalita — PRESNÁ ULICA a číslo domu, mestská časť. Čo je v okolí TEJTO KONKRÉTNEJ ULICE: konkrétne názvy obchodov, škôl, MHD zastávok, parkov. POUŽI INFO Z PRIESKUMU LOKALITY.
 
+Potom bodový zoznam (odrážky "–"):
+– Konkrétny fakt (napr. "Kompletná rekonštrukcia")
+– Konkrétny materiál/vlastnosť z fotiek alebo dokumentov
+– Konkrétny benefit lokality (názov parku, školy, obchodu)
+– Ďalší fakt
+
+NAJDÔLEŽITEJŠIE PRAVIDLÁ:
+1. DOKUMENTY (LV, zmluvy, posudky) majú VŽDY PREDNOSŤ pred formulárom. Ak zmluva hovorí "2-izbový" a formulár "3-izbový" — POUŽI údaj z dokumentu!
+2. POČET IZIEB: Ak v texte dokumentu (zmluva, LV, posudok) nájdeš presný počet izieb — použi TEN, nie číslo z formulára. Hľadaj: "X-izbový", "X izbový", "byt č. X", dispozíciu.
+3. VÝMERY: Použi presné výmery z dokumentov (zmluva, LV). Ak dokument uvádza inú plochu ako formulár, použi údaj z dokumentu.
+4. ADRESA: Použi PRESNÚ adresu z LV/zmluvy vrátane čísla domu. Nikdy nepíš len mestskú časť.
+5. NEPÍŠ generické frázy. Žiadne "elegantné spojenie", "moderné bývanie", "ideálne miesto". Len fakty.
+6. NIKDY nepíš cenu ani "IBA U NÁS" — to robí systém.
+7. JAZYK: Profesionálna slovenčina, 3. osoba, bez oslovenia čitateľa.
+8. Ak máš údaje o právnych ťarchách (záložné právo banky) — NESPOMÍNAJ v texte inzerátu.
+9. AK MÁŠ PRIESKUM LOKALITY — použi konkrétne názvy (Lidl, Billa, ZŠ Mierová, zastávka Ružinovská...), nie všeobecné "v blízkosti sa nachádzajú obchody".`;
+
+const USER_PROMPT = (details: string, locationInfo: string) => `VŠETKY DOSTUPNÉ ÚDAJE O NEHNUTEĽNOSTI:
+═══════════════════════════════════════
 ${details}
+═══════════════════════════════════════
 
-${locationInfo ? `INFORMÁCIE O LOKALITE (z prieskumu):\n${locationInfo}\n` : ""}
-POVINNÁ ŠTRUKTÚRA — vráť IBA JSON v tomto formáte:
+${locationInfo ? `PRIESKUM LOKALITY (z internetu):\n${locationInfo}\n` : ""}
+⚠️ DÔLEŽITÉ: Ak texty dokumentov (LV, zmluva, posudok) uvádzajú INÝ počet izieb, plochu alebo adresu než formulárové polia — VŽDY použi údaj Z DOKUMENTU. Dokumenty sú autoritatívne.
+
+⚠️ FOTKY: Ak boli priložené fotky, opíš v texte čo na nich REÁLNE vidíš — materiály, farby, stav. Neopíš len "moderný interiér" — buď konkrétny.
+
+ÚLOHA: Napíš kompletný inzerát podľa štýlu VIANEMA. Použi VŠETKY dostupné údaje — dokumenty, prieskum lokality, fotky.
+
+Vráť IBA JSON:
 {
-  "nazov": "Krátky, výstižný názov inzerátu max 60 znakov. Formát: typ nehnuteľnosti + hlavný benefit + lokalita. Napr: '3-izbový byt s terasou, Ružinov' alebo 'Moderný rodinný dom, Koliba'. BEZ ceny, BEZ 'na predaj'.",
-  "emotivny": "TRI ODSEKY: 1) Interiér (materiály, svetelnosť, dispozícia) 2) Bytový dom/Budova (stav, atmosféra, pridaná hodnota) 3) Lokalita (poloha, vybavenosť, okolie — POUŽI údaje z prieskumu lokality ak sú k dispozícii). Potom 4 odrážky s kľúčovými benefitmi. Na konci: SEP_SEO [5 slov] a SEP_TAGS [5 hashtagov]. Elegantný Apple štýl, 150-200 slov.",
-  "technicky": "Technický text so zameraním na parametre, rekonštrukciu, výmery, orientáciu, energetiku. Konkrétne fakty a čísla. 100-150 slov.",
-  "kratky": "Max 3 vety pre Facebook/Instagram. Výrazný, minimalistický, prémiový tón."
+  "nazov": "Formát: 'X-izbový byt BENEFIT, Mestská časť' Max 60 znakov. BEZ ceny. Počet izieb BER Z DOKUMENTOV ak sú k dispozícii.",
+  "emotivny": "3 odseky podľa štruktúry VIANEMA (interiér z fotiek+dokumentov, priestory+stav, lokalita s PRESNOU ulicou a konkrétnymi názvami z prieskumu) + odrážky '– fakt'. 200-300 slov. Na konci: SEP_SEO [5 slov] SEP_TAGS [5 hashtagov].",
+  "technicky": "Všetky technické parametre: presné výmery z dokumentov, materiál, poschodie, rok výstavby, energetika, vykurovanie, parkovanie, náklady. 100-150 slov.",
+  "kratky": "2-3 vety pre sociálne siete. Hlavný benefit + presná ulica + 1 detail z fotky."
 }`;
 
 function extractJSON(raw: string): Record<string, string> {
@@ -42,15 +68,14 @@ async function researchLocation(lokalita: string): Promise<string> {
         body: JSON.stringify({
           contents: [{
             parts: [{
-              text: `Si realitný analytik. Pre lokalitu "${lokalita}" na Slovensku napíš stručný prehľad občianskej vybavenosti a okolia. Zahrň:
-- Doprava (MHD, zastávky, diaľnica, vlak)
-- Školy a škôlky v okolí
-- Obchody a nákupné centrá
-- Zdravotníctvo (nemocnica, poliklinika, lekáreň)
-- Šport a relax (parky, ihriská, fitness)
-- Reštaurácie a kaviarne
-- Celkový charakter lokality (tichá/rušná, rodinná, mestská)
+              text: `Si realitný analytik. Mám nehnuteľnosť na adrese "${lokalita}". Napíš KONKRÉTNY prehľad okolia TEJTO ULICE/ADRESY:
+- Čo je v bezprostrednom okolí (do 500m) — konkrétne názvy obchodov, škôl, reštaurácií
+- Doprava — najbližšia zastávka MHD (meno), vzdialenosť do centra
+- Charakter ulice a okolia — tichá/rušná, zeleň, parky v okolí (konkrétne názvy)
+- Najbližšie nákupné centrum (názov)
+- Zdravotníctvo v okolí
 
+DÔLEŽITÉ: Píš o konkrétnej ulici/adrese "${lokalita}", nie o celej mestskej časti všeobecne.
 Píš stručne, konkrétne fakty, max 150 slov. Slovenčina.`
             }]
           }],
@@ -73,7 +98,7 @@ async function researchLocationGPT(lokalita: string): Promise<string> {
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
         model: "gpt-4o", temperature: 0.3, max_tokens: 500,
-        messages: [{ role: "user", content: `Si realitný analytik. Pre lokalitu "${lokalita}" na Slovensku napíš stručný prehľad občianskej vybavenosti (doprava, školy, obchody, zdravotníctvo, šport, charakter). Max 150 slov, slovenčina.` }],
+        messages: [{ role: "user", content: `Si realitný analytik. Pre KONKRÉTNU adresu "${lokalita}" napíš čo je v bezprostrednom okolí tejto ulice — konkrétne názvy obchodov, škôl, MHD zastávok, parkov. Charakter ulice. Max 150 slov, slovenčina.` }],
       }),
     });
     if (!res.ok) return "";
@@ -82,17 +107,35 @@ async function researchLocationGPT(lokalita: string): Promise<string> {
   } catch { return ""; }
 }
 
-/* ── Claude: generate text ── */
-async function generateClaude(details: string, locationInfo: string): Promise<Record<string, string>> {
+/* ── Claude: generate text (with optional photos) ── */
+async function generateClaude(details: string, locationInfo: string, images?: { data: string; mimeType: string }[]): Promise<Record<string, string>> {
   if (!process.env.ANTHROPIC_API_KEY) return {};
   try {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    // Build multimodal content if photos available
+    const content: Array<{ type: string; source?: { type: string; media_type: string; data: string }; text?: string }> = [];
+    if (images && images.length > 0) {
+      for (const img of images) {
+        content.push({
+          type: "image",
+          source: { type: "base64", media_type: img.mimeType, data: img.data },
+        });
+      }
+      content.push({
+        type: "text",
+        text: `Vyššie sú REÁLNE fotky nehnuteľnosti. Opíš v texte KONKRÉTNE čo vidíš — materiály, farby, stav.\n\n${USER_PROMPT(details, locationInfo)}`,
+      });
+    } else {
+      content.push({ type: "text", text: USER_PROMPT(details, locationInfo) });
+    }
+
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 2000,
       system: VIANEMA_SYSTEM,
-      messages: [{ role: "user", content: USER_PROMPT(details, locationInfo) }],
+      messages: [{ role: "user", content: content as never }],
     });
     const raw = (msg.content[0] as { type: string; text: string }).text.trim();
     return extractJSON(raw);
@@ -127,10 +170,22 @@ async function generateGPT(details: string, locationInfo: string): Promise<Recor
   }
 }
 
-/* ── Gemini: generate text (fallback) ── */
-async function generateGemini(details: string, locationInfo: string): Promise<Record<string, string>> {
+/* ── Gemini: generate text (with optional photos) ── */
+async function generateGemini(details: string, locationInfo: string, images?: { data: string; mimeType: string }[]): Promise<Record<string, string>> {
   if (!process.env.GEMINI_API_KEY) return {};
   try {
+    // Build parts: text + optional images
+    const parts: Record<string, unknown>[] = [];
+    // Add photos first so Gemini "sees" them
+    if (images && images.length > 0) {
+      for (const img of images) {
+        parts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+      }
+      parts.push({ text: `Vyššie sú REÁLNE FOTKY tejto nehnuteľnosti. MUSÍŠ ich použiť v texte:\n- Opíš KONKRÉTNE čo vidíš: farbu a typ podláh, kuchynskú linku (farba, materiál), obklady v kúpeľni, typ dverí, okien, svietidiel\n- Ak vidíš výhľad z okna — opíš ho\n- Ak vidíš stav rekonštrukcie — opíš konkrétne materiály\n- NEPÍŠ "moderný interiér" — píš "biela kuchynská linka s drevenou pracovnou doskou" ak to vidíš\n\n${USER_PROMPT(details, locationInfo)}` });
+    } else {
+      parts.push({ text: USER_PROMPT(details, locationInfo) });
+    }
+
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
@@ -138,7 +193,7 @@ async function generateGemini(details: string, locationInfo: string): Promise<Re
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: VIANEMA_SYSTEM }] },
-          contents: [{ parts: [{ text: USER_PROMPT(details, locationInfo) }] }],
+          contents: [{ parts }],
           generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
         }),
       }
@@ -215,29 +270,45 @@ async function combineBest(
 
 /* ══════ MAIN HANDLER ══════ */
 export async function POST(req: NextRequest) {
-  const { nazov, typ, lokalita, cena, plocha, izby, stav, popis } = await req.json();
+  const { nazov, typ, lokalita, cena, plocha, izby, stav, popis, photos } = await req.json();
 
+  // popis teraz obsahuje KOMPLETNÝ kontext vrátane LV textu, dokumentov, vybavenia, vykurovania atď.
   const details = [
+    `── FORMULÁROVÉ ÚDAJE (môžu byť nepresné, dokumenty majú prednosť) ──`,
     nazov && `Nehnuteľnosť: ${nazov}`,
     typ && `Typ: ${typ}`,
     lokalita && `Lokalita: ${lokalita}`,
     cena && `Cena: ${cena} €`,
-    plocha && `Plocha: ${plocha} m²`,
-    izby && `Izby: ${izby}`,
+    plocha && `Plocha (formulár): ${plocha} m²`,
+    izby && `Izby (formulár): ${izby} — POZOR: ak dokumenty nižšie uvádzajú iný počet, použi údaj z dokumentov!`,
     stav && `Stav: ${stav}`,
-    popis && `Detaily:\n${popis}`,
+    `── DOKUMENTY A KONTEXT (AUTORITATÍVNE ÚDAJE — majú prednosť) ──`,
+    popis && `\n${popis}`,
+    (photos?.length > 0) && `\n── FOTKY: ${photos.length} ks priložených — AI MUSÍ opísať čo na nich vidí (materiály, farby, stav interiéru) ──`,
   ].filter(Boolean).join("\n");
+
+  // Fotky ako base64 pre Gemini multimodal
+  const photoImages: { data: string; mimeType: string }[] = [];
+  if (Array.isArray(photos)) {
+    for (const p of photos.slice(0, 5)) {
+      if (typeof p === "string" && p.startsWith("data:image/")) {
+        const [header, b64] = p.split(",");
+        const mime = header.match(/data:(image\/[^;]+)/)?.[1] || "image/jpeg";
+        photoImages.push({ data: b64, mimeType: mime });
+      }
+    }
+  }
 
   try {
     // Step 1: Research location (Gemini → GPT fallback)
     let locationInfo = await researchLocation(lokalita);
     if (!locationInfo) locationInfo = await researchLocationGPT(lokalita);
 
-    // Step 2: Generate text with all available AIs in parallel
+    // Step 2: Generate text with all available AIs in parallel (Gemini gets photos)
     const [claude, gpt, gemini] = await Promise.all([
-      generateClaude(details, locationInfo),
+      generateClaude(details, locationInfo, photoImages),
       generateGPT(details, locationInfo),
-      generateGemini(details, locationInfo),
+      generateGemini(details, locationInfo, photoImages),
     ]);
 
     console.log(`[ai-writer] Results — Claude: ${!!claude.emotivny}, GPT: ${!!gpt.emotivny}, Gemini: ${!!gemini.emotivny}`);

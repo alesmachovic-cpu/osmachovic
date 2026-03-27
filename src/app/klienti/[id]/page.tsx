@@ -235,16 +235,20 @@ export default function KlientDetailPage() {
               </span>
             )}
           </div>
-          {(klient as unknown as Record<string, string | null>).odkaz && (
-            <div style={{ marginTop: "6px" }}>
-              <a href={String((klient as unknown as Record<string, string | null>).odkaz)} target="_blank" rel="noopener" style={{
-                fontSize: "12px", color: "#3B82F6", textDecoration: "none",
-                display: "flex", alignItems: "center", gap: "4px",
-              }}>
-                🔗 {String((klient as unknown as Record<string, string | null>).odkaz).substring(0, 60)}...
-              </a>
-            </div>
-          )}
+          {(() => {
+            const odkazMatch = klient.poznamka?.match(/Odkaz:\s*(https?:\/\/\S+)/);
+            if (!odkazMatch) return null;
+            return (
+              <div style={{ marginTop: "6px" }}>
+                <a href={odkazMatch[1]} target="_blank" rel="noopener" style={{
+                  fontSize: "12px", color: "#3B82F6", textDecoration: "none",
+                  display: "flex", alignItems: "center", gap: "4px",
+                }}>
+                  🔗 {odkazMatch[1].substring(0, 60)}...
+                </a>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Status + Typ badges */}
@@ -266,7 +270,7 @@ export default function KlientDetailPage() {
 
       {/* Rýchle akcie */}
       <div style={{
-        display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px",
+        display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "10px", marginBottom: "20px",
       }} className="cards-grid">
         <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
           padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
@@ -311,6 +315,41 @@ export default function KlientDetailPage() {
         >
           <div style={{ fontSize: "22px", marginBottom: "4px" }}>📞</div>
           <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Zavolať</div>
+        </button>
+        <button onClick={async () => {
+          const datum = prompt("Dátum a čas (napr. 2026-04-01 14:00):");
+          if (!datum) return;
+          const adresa = nabery.length > 0
+            ? [nabery[0].ulica, nabery[0].cislo_orientacne, nabery[0].obec, nabery[0].okres].filter(Boolean).map(String).join(", ")
+            : klient.lokalita || "";
+          try {
+            await fetch("/api/calendar-sync", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: `${klient.meno} — ${adresa || "stretnutie"}`,
+                datetime: new Date(datum).toISOString(),
+                description: [
+                  adresa && `Adresa: ${adresa}`,
+                  klient.telefon && `Tel: ${klient.telefon}`,
+                  klient.email && `Email: ${klient.email}`,
+                  nabery.length > 0 && `Náber: ${nabery[0].typ_nehnutelnosti}`,
+                ].filter(Boolean).join("\n"),
+                telefon: klient.telefon,
+              }),
+            });
+            alert("Pridané do kalendára");
+          } catch { alert("Nepodarilo sa pridať do kalendára"); }
+        }} style={{
+          padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderRadius: "12px", cursor: "pointer", textAlign: "center",
+          transition: "border-color 0.15s",
+        }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
+          onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
+        >
+          <div style={{ fontSize: "22px", marginBottom: "4px" }}>📅</div>
+          <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Kalendár</div>
         </button>
       </div>
 
@@ -423,32 +462,62 @@ export default function KlientDetailPage() {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {nabery.map((n: Record<string, unknown>) => (
-                <div key={n.id as string} style={{
-                  display: "flex", alignItems: "center", gap: "14px",
-                  padding: "14px 16px", borderRadius: "10px", background: "var(--bg-elevated)",
-                  border: "1px solid var(--border)",
-                }}>
-                  <div style={{
-                    width: "40px", height: "40px", borderRadius: "10px",
-                    background: "#F5F3FF", display: "flex", alignItems: "center",
-                    justifyContent: "center", fontSize: "18px", flexShrink: 0,
-                  }}>📝</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
-                      {String(n.typ_nehnutelnosti || "—")}
+              {nabery.map((n: Record<string, unknown>) => {
+                const adresa = [n.ulica, n.cislo_orientacne, n.obec, n.okres].filter(Boolean).map(String).join(", ");
+                return (
+                  <div key={n.id as string} style={{
+                    display: "flex", alignItems: "center", gap: "14px",
+                    padding: "14px 16px", borderRadius: "10px", background: "var(--bg-elevated)",
+                    border: "1px solid var(--border)",
+                  }}>
+                    <div style={{
+                      width: "40px", height: "40px", borderRadius: "10px",
+                      background: "#F5F3FF", display: "flex", alignItems: "center",
+                      justifyContent: "center", fontSize: "18px", flexShrink: 0,
+                    }}>📝</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
+                        {String(n.typ_nehnutelnosti || "—")}
+                        {n.plocha ? <span style={{ fontWeight: "400", color: "var(--text-muted)" }}> · {String(n.plocha)} m²</span> : ""}
+                      </div>
+                      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                        {adresa || "—"}
+                      </div>
+                      {!!n.predajna_cena && (
+                        <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)", marginTop: "2px" }}>
+                          {Number(n.predajna_cena).toLocaleString("sk")} €
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                      {[n.obec, n.okres].filter(Boolean).map(String).join(", ") || "—"}
-                      {n.plocha ? ` · ${n.plocha} m²` : ""}
-                      {n.predajna_cena ? ` · ${Number(n.predajna_cena).toLocaleString("sk")} €` : ""}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                        {new Date(n.created_at as string).toLocaleDateString("sk")}
+                      </div>
+                      <button onClick={async () => {
+                        const datum = prompt("Pridať do kalendára — dátum a čas:");
+                        if (!datum) return;
+                        await fetch("/api/calendar-sync", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            title: `${klient.meno} — ${adresa || String(n.typ_nehnutelnosti)}`,
+                            datetime: new Date(datum).toISOString(),
+                            description: `Adresa: ${adresa}\nTel: ${klient.telefon || "—"}`,
+                            telefon: klient.telefon,
+                          }),
+                        });
+                        alert("Pridané do kalendára");
+                      }} style={{
+                        padding: "3px 8px", background: "#F5F3FF", border: "1px solid #DDD6FE",
+                        borderRadius: "6px", fontSize: "10px", fontWeight: "600", color: "#7C3AED",
+                        cursor: "pointer",
+                      }}>
+                        📅 Kalendár
+                      </button>
                     </div>
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                    {new Date(n.created_at as string).toLocaleDateString("sk")}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

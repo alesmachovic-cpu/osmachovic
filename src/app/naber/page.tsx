@@ -42,6 +42,9 @@ function NaberPageContent() {
   const [selectedType, setSelectedType] = useState<TypNaber | null>(null);
   const [submittedAt, setSubmittedAt] = useState("");
   const [savedNaberId, setSavedNaberId] = useState<string | null>(null);
+  const [naberDatum, setNaberDatum] = useState("");
+  const [showDatumPicker, setShowDatumPicker] = useState(false);
+  const [calendarSynced, setCalendarSynced] = useState(false);
 
   // Klient search
   const [klienti, setKlienti] = useState<Klient[]>([]);
@@ -70,6 +73,63 @@ function NaberPageContent() {
     }
 
     setLoading(false);
+  }
+
+  // Výber klienta → zmena statusu na dohodnuty_naber + výber dátumu
+  async function handleSelectKlient(k: Klient) {
+    setSelectedKlient(k);
+    if (k.status !== "dohodnuty_naber" && k.status !== "nabrany") {
+      await supabase.from("klienti").update({ status: "dohodnuty_naber" }).eq("id", k.id);
+      setKlienti(prev => prev.map(kl => kl.id === k.id ? { ...kl, status: "dohodnuty_naber" as Klient["status"] } : kl));
+    }
+    setShowDatumPicker(true);
+  }
+
+  function handleDatumConfirm() {
+    setShowDatumPicker(false);
+    setStep("typ");
+  }
+
+  // Po uložení náberu → sync do kalendára
+  async function handleNaberSubmit(data: { id: string }) {
+    setSavedNaberId(data.id);
+    setSubmittedAt(new Date().toLocaleString("sk", {
+      day: "numeric", month: "long", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    }));
+
+    if (selectedKlient) {
+      const adresa = [selectedKlient.lokalita].filter(Boolean).join(", ");
+      const datum = naberDatum || new Date().toISOString();
+      try {
+        const { data: naberData } = await supabase
+          .from("naberove_listy").select("*").eq("id", data.id).single();
+
+        const naberAdresa = naberData
+          ? [naberData.ulica, naberData.cislo_orientacne, naberData.obec, naberData.okres].filter(Boolean).join(", ")
+          : adresa;
+
+        await fetch("/api/calendar-sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: `Náber — ${selectedKlient.meno}`,
+            datetime: datum,
+            description: [
+              naberAdresa && `Adresa: ${naberAdresa}`,
+              selectedKlient.telefon && `Tel: ${selectedKlient.telefon}`,
+              naberData?.typ_nehnutelnosti && `Typ: ${naberData.typ_nehnutelnosti}`,
+              naberData?.plocha && `Plocha: ${naberData.plocha} m²`,
+              naberData?.predajna_cena && `Cena: ${Number(naberData.predajna_cena).toLocaleString("sk")} €`,
+            ].filter(Boolean).join("\n"),
+            telefon: selectedKlient.telefon,
+          }),
+        });
+        setCalendarSynced(true);
+      } catch { /* kalendár zlyhá ticho */ }
+    }
+
+    setStep("hotovo");
   }
 
   // Filtrovanie — len predávajúci a oboje, dohodnutý náber navrchu
@@ -101,6 +161,63 @@ function NaberPageContent() {
 
   function renderStepper() {
     return <Stepper steps={STEPS} currentStep={step} onStepClick={handleStepClick} />;
+  }
+
+  // Dátum picker modal
+  if (showDatumPicker && selectedKlient) {
+    return (
+      <div style={{ maxWidth: "720px" }}>
+        {renderStepper()}
+        <div style={{
+          background: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderRadius: "20px", padding: "32px", textAlign: "center",
+        }}>
+          <div style={{
+            width: "56px", height: "56px", borderRadius: "50%", background: "#F5F3FF",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "24px", margin: "0 auto 16px", border: "2px solid #DDD6FE",
+          }}>📅</div>
+          <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 4px" }}>
+            Kedy bude náber?
+          </h2>
+          <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px" }}>
+            Zvol dátum a čas pre <strong style={{ color: "var(--text-primary)" }}>{selectedKlient.meno}</strong>
+          </p>
+          <input
+            type="datetime-local"
+            value={naberDatum ? naberDatum.slice(0, 16) : ""}
+            onChange={e => setNaberDatum(e.target.value ? new Date(e.target.value).toISOString() : "")}
+            style={{
+              width: "100%", maxWidth: "300px", padding: "14px 16px",
+              background: "var(--bg-elevated)", border: "2px solid var(--border)",
+              borderRadius: "12px", fontSize: "15px", color: "var(--text-primary)",
+              outline: "none", textAlign: "center",
+            }}
+          />
+          <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "24px" }}>
+            <button onClick={() => { setShowDatumPicker(false); setSelectedKlient(null); }} style={{
+              padding: "10px 24px", background: "var(--bg-elevated)",
+              color: "var(--text-secondary)", border: "1px solid var(--border)",
+              borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            }}>
+              ← Späť
+            </button>
+            <button onClick={handleDatumConfirm} style={{
+              padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
+              borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            }}>
+              {naberDatum ? "Pokračovať →" : "Bez dátumu →"}
+            </button>
+          </div>
+          {selectedKlient.telefon && (
+            <div style={{ marginTop: "16px", fontSize: "12px", color: "var(--text-muted)" }}>
+              📱 {selectedKlient.telefon}
+              {selectedKlient.lokalita && <span> · 📍 {selectedKlient.lokalita}</span>}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   // KROK 1: Výber klienta
@@ -152,7 +269,7 @@ function NaberPageContent() {
               {dohodnuti.map(k => {
                 const initials = k.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
                 return (
-                  <button key={k.id} onClick={() => { setSelectedKlient(k); setStep("typ"); }} style={{
+                  <button key={k.id} onClick={() => handleSelectKlient(k)} style={{
                     display: "flex", alignItems: "center", gap: "12px",
                     padding: "16px", background: "var(--bg-surface)",
                     border: "2px solid #374151",
@@ -205,7 +322,7 @@ function NaberPageContent() {
               {ostatni.slice(0, 20).map(k => {
                 const initials = k.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
                 return (
-                  <button key={k.id} onClick={() => { setSelectedKlient(k); setStep("typ"); }} style={{
+                  <button key={k.id} onClick={() => handleSelectKlient(k)} style={{
                     display: "flex", alignItems: "center", gap: "12px",
                     padding: "12px 16px", background: "var(--bg-surface)",
                     border: "1px solid var(--border)",
@@ -336,14 +453,7 @@ function NaberPageContent() {
           typ={selectedType}
           klient={selectedKlient}
           onBack={() => setStep("typ")}
-          onSubmit={(data) => {
-            setSavedNaberId(data.id as string || null);
-            setSubmittedAt(new Date().toLocaleString("sk", {
-              day: "numeric", month: "long", year: "numeric",
-              hour: "2-digit", minute: "2-digit",
-            }));
-            setStep("hotovo");
-          }}
+          onSubmit={handleNaberSubmit}
         />
       </div>
     );
@@ -368,14 +478,33 @@ function NaberPageContent() {
         <p style={{ fontSize: "14px", color: "var(--text-muted)", margin: "0 0 4px" }}>
           Klient <strong style={{ color: "var(--text-primary)" }}>{selectedKlient?.meno}</strong> bol presunutý do statusu „Nabraný".
         </p>
-        <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 36px" }}>
+        <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 12px" }}>
           {submittedAt}
         </p>
+
+        {/* Kalendár info */}
+        {naberDatum && (
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: "6px",
+            padding: "6px 14px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
+            background: calendarSynced ? "#ECFDF5" : "#FEF3C7",
+            color: calendarSynced ? "#059669" : "#D97706",
+            border: `1px solid ${calendarSynced ? "#BBF7D0" : "#FDE68A"}`,
+            marginBottom: "24px",
+          }}>
+            {calendarSynced ? "✓ V kalendári" : "⏳ Čaká na sync"} — {new Date(naberDatum).toLocaleString("sk", {
+              day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+            })}
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
           <button onClick={() => {
             setStep("klient");
             setSelectedKlient(null);
             setSelectedType(null);
+            setNaberDatum("");
+            setCalendarSynced(false);
             loadKlienti();
           }} style={{
             padding: "12px 28px", background: "var(--bg-surface)", color: "var(--text-primary)",

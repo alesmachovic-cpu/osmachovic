@@ -65,71 +65,112 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   // Typ inzercie
   const [typInzercie, setTypInzercie] = useState<TypInzercie>("online");
 
-  // Location
-  const [kraj, setKraj] = useState("");
-  const [okres, setOkres] = useState("");
-  const [obec, setObec] = useState(klient.lokalita || "");
-  const [castObce, setCastObce] = useState("");
-  const [katUzemie, setKatUzemie] = useState("");
-  const [ulica, setUlica] = useState("");
-  const [supisneCislo, setSupisneCislo] = useState("");
-  const [cisloOrientacne, setCisloOrientacne] = useState("");
+  // ── Parsovanie údajov z poznámky klienta ──
+  const klientNotes = klient.poznamka || "";
+  function parseNote(patterns: RegExp[]): string {
+    for (const p of patterns) { const m = klientNotes.match(p); if (m) return m[1].trim(); }
+    return "";
+  }
+  function parseNoteBool(patterns: RegExp[]): boolean {
+    for (const p of patterns) { const m = klientNotes.match(p); if (m) return /áno|ano|yes|1|true/i.test(m[1]); }
+    return false;
+  }
 
-  // Property common
-  const [plocha, setPlocha] = useState("");
-  const [stav, setStav] = useState("");
-  const [poznamkyVybavenie, setPoznamkyVybavenie] = useState("");
+  // Location — auto-detect z lokality + poznámky
+  const [kraj, setKraj] = useState(() => {
+    const lok = (klient.lokalita || "").trim().toLowerCase();
+    if (!lok) return "";
+    const all: { kraj: string; okres: string }[] = [];
+    for (const [k, okresy] of Object.entries(OKRESY)) for (const o of okresy) all.push({ kraj: k, okres: o });
+    all.sort((a, b) => b.okres.length - a.okres.length);
+    return (all.find(x => lok === x.okres.toLowerCase()) || all.find(x => lok.includes(x.okres.toLowerCase())))?.kraj || "";
+  });
+  const [okres, setOkres] = useState(() => {
+    const lok = (klient.lokalita || "").trim().toLowerCase();
+    if (!lok) return "";
+    const all: string[] = []; for (const o of Object.values(OKRESY)) all.push(...o);
+    all.sort((a, b) => b.length - a.length);
+    return all.find(x => lok === x.toLowerCase()) || all.find(x => lok.includes(x.toLowerCase())) || "";
+  });
+  const [obec, setObec] = useState(() => parseNote([/Obec:\s*(.+)/i, /Mesto:\s*(.+)/i]) || klient.lokalita || "");
+  const [castObce, setCastObce] = useState(() => parseNote([/Časť obce:\s*(.+)/i, /Mestská časť:\s*(.+)/i, /MČ:\s*(.+)/i]));
+  const [katUzemie, setKatUzemie] = useState(() => parseNote([/Kat(?:astrálne)?\s*územie:\s*(.+)/i, /KÚ:\s*(.+)/i]));
+  const [ulica, setUlica] = useState(() => parseNote([/Ulica:\s*(.+)/i, /Adresa:\s*(.+)/i]));
+  const [supisneCislo, setSupisneCislo] = useState(() => parseNote([/Súpisné\s*č(?:íslo)?\.?:\s*(.+)/i]));
+  const [cisloOrientacne, setCisloOrientacne] = useState(() => parseNote([/Orientačné\s*č(?:íslo)?\.?:\s*(.+)/i]));
 
-  // Byt-specific
-  const [pocetIzieb, setPocetIzieb] = useState("");
-  const [vlastnictvo, setVlastnictvo] = useState("osobne");
+  // Property common — z poznámky
+  const [plocha, setPlocha] = useState(() => parseNote([/Plocha:\s*(\d+[\.,]?\d*)/i, /(\d+)\s*m[²2]/i]));
+  const [stav, setStav] = useState(() => {
+    const s = parseNote([/Stav:\s*(.+)/i]); if (!s) return "";
+    const found = STAV_OPTIONS.find(o => o.label.toLowerCase().includes(s.toLowerCase()));
+    return found?.value || "";
+  });
+  const [poznamkyVybavenie, setPoznamkyVybavenie] = useState(() => parseNote([/Vybavenie:\s*(.+)/i]));
+
+  // Byt-specific — z poznámky
+  const [pocetIzieb, setPocetIzieb] = useState(() => parseNote([/(?:Počet izieb|Izby|izieb):\s*(\d+)/i]) || parseNote([/(\d+)\s*-?\s*izb/i]));
+  const [vlastnictvo, setVlastnictvo] = useState(() => {
+    const v = parseNote([/Vlastníctvo:\s*(.+)/i]);
+    return /družstevn/i.test(v) ? "druzstevne" : "osobne";
+  });
   const [druzstvo, setDruzstvo] = useState("");
-  const [typDomu, setTypDomu] = useState("");
-  const [bytCislo, setBytCislo] = useState("");
-  const [poschodie, setPoschodie] = useState("");
-  const [zKolko, setZKolko] = useState("");
-  const [kurenie, setKurenie] = useState("");
-  const [typPodlahy, setTypPodlahy] = useState("");
-  const [anuita, setAnuita] = useState("");
-  const [vyhlad, setVyhlad] = useState("");
-  const [mesacnePoplatky, setMesacnePoplatky] = useState("");
+  const [typDomu, setTypDomu] = useState(() => parseNote([/Typ\s*domu:\s*(.+)/i, /Konštrukcia:\s*(.+)/i, /Materiál:\s*(.+)/i]));
+  const [bytCislo, setBytCislo] = useState(() => parseNote([/Byt\s*č(?:íslo)?\.?:\s*(.+)/i, /Číslo bytu:\s*(.+)/i]));
+  const [poschodie, setPoschodie] = useState(() => parseNote([/Poschodie:\s*(\d+)/i]));
+  const [zKolko, setZKolko] = useState(() => parseNote([/[Zz]\s*(?:celkom|kolko):\s*(\d+)/i, /(?:celkom|spolu)\s*(\d+)\s*poscho/i]));
+  const [kurenie, setKurenie] = useState(() => parseNote([/[Kk]úrenie:\s*(.+)/i, /[Vv]ykurovanie:\s*(.+)/i]));
+  const [typPodlahy, setTypPodlahy] = useState(() => parseNote([/Podlah[ay]:\s*(.+)/i, /Typ podlahy:\s*(.+)/i]));
+  const [anuita, setAnuita] = useState(() => parseNote([/Anuita:\s*(.+)/i, /Hypotéka:\s*(.+)/i]));
+  const [vyhlad, setVyhlad] = useState(() => parseNote([/Výhľad:\s*(.+)/i]));
+  const [mesacnePoplatky, setMesacnePoplatky] = useState(() => parseNote([/Mesačné\s*(?:poplatky|náklady):\s*(\d+[\.,]?\d*)/i]));
 
   // Dom-specific
-  const [pocetPodlazi, setPocetPodlazi] = useState("");
-  const [rokVystavby, setRokVystavby] = useState("");
-  const [pozemokPlocha, setPozemokPlocha] = useState("");
-  const [zahrada, setZahrada] = useState(false);
+  const [pocetPodlazi, setPocetPodlazi] = useState(() => parseNote([/Počet podlaží:\s*(\d+)/i, /Podlaží:\s*(\d+)/i]));
+  const [rokVystavby, setRokVystavby] = useState(() => parseNote([/Rok\s*(?:výstavby|kolaudácie):\s*(\d{4})/i]));
+  const [pozemokPlocha, setPozemokPlocha] = useState(() => parseNote([/Pozemok\s*(?:plocha)?:\s*(\d+)/i]));
+  const [zahrada, setZahrada] = useState(() => parseNoteBool([/Záhrada:\s*(\S+)/i]));
 
   // Pozemok-specific
-  const [druhPozemku, setDruhPozemku] = useState("");
-  const [pristupovaCesta, setPristupovaCesta] = useState(false);
-  const [siete, setSiete] = useState({ voda: false, plyn: false, elektrina: false, kanal: false });
-  const [ucelovyUrcenie, setUcelovyUrcenie] = useState("");
+  const [druhPozemku, setDruhPozemku] = useState(() => parseNote([/Druh pozemku:\s*(.+)/i]));
+  const [pristupovaCesta, setPristupovaCesta] = useState(() => parseNoteBool([/Prístupová cesta:\s*(\S+)/i]));
+  const [siete, setSiete] = useState(() => ({
+    voda: /\bvoda\b/i.test(klientNotes), plyn: /\bplyn\b/i.test(klientNotes),
+    elektrina: /elektr/i.test(klientNotes), kanal: /kanal/i.test(klientNotes),
+  }));
+  const [ucelovyUrcenie, setUcelovyUrcenie] = useState(() => parseNote([/Účel(?:ové určenie)?:\s*(.+)/i]));
 
   // Označenie
   const [oznacenie, setOznacenie] = useState("ziadne");
 
-  // Vybavenie
-  const [vybavenie, setVybavenie] = useState<Record<string, boolean>>({});
-  const [zariadeny, setZariadeny] = useState("");
+  // Vybavenie — auto-detect z poznámky
+  const [vybavenie, setVybavenie] = useState<Record<string, boolean>>(() => {
+    const v: Record<string, boolean> = {};
+    const map: Record<string, RegExp> = { "Výťah": /výťah/i, "Balkón": /balkón/i, "Lodžia": /lodžia|loggia/i, "Garáž": /garáž/i, "Pivnica": /pivnic/i, "Parking": /parking|parkov/i };
+    for (const [key, regex] of Object.entries(map)) if (regex.test(klientNotes)) v[key] = true;
+    return v;
+  });
+  const [zariadeny, setZariadeny] = useState(() => parseNote([/Zariadený:\s*(.+)/i]));
 
   // Majiteľ — auto-fill z klienta
   const [majitel, setMajitel] = useState(klient.meno || "");
-  const [konatel, setKonatel] = useState("");
-  const [jednatel, setJednatel] = useState("");
+  const [konatel, setKonatel] = useState(() => parseNote([/Konateľ:\s*(.+)/i]));
+  const [jednatel, setJednatel] = useState(() => parseNote([/Jednateľ:\s*(.+)/i]));
   const [kontaktMajitel, setKontaktMajitel] = useState(klient.telefon || "");
-  const [uzivatel, setUzivatel] = useState("");
-  const [kontaktUzivatel, setKontaktUzivatel] = useState("");
+  const [uzivatel, setUzivatel] = useState(() => parseNote([/Užívateľ:\s*(.+)/i, /Nájomca:\s*(.+)/i]));
+  const [kontaktUzivatel, setKontaktUzivatel] = useState(() => parseNote([/Kontakt užívateľ:\s*(.+)/i]));
 
-  // Predaj
-  const [predajnaCena, setPredajnaCena] = useState("");
+  // Predaj — z klienta.proviziaeur a rozpocet_max
+  const [predajnaCena, setPredajnaCena] = useState(() =>
+    parseNote([/(?:Predajná )?[Cc]ena:\s*([\d\s.,]+)/i]) || (klient.rozpocet_max ? String(klient.rozpocet_max) : "")
+  );
   const [makler, setMakler] = useState("Aleš Machovič");
   const [zmluva, setZmluva] = useState(false);
   const [typZmluvy, setTypZmluvy] = useState("exkluzivna");
   const [datumPodpisu, setDatumPodpisu] = useState("");
   const [zmluvaDo, setZmluvaDo] = useState("");
-  const [provizia, setProvizia] = useState("");
-  const [popis, setPopis] = useState("");
+  const [provizia, setProvizia] = useState(() => klient.proviziaeur ? String(klient.proviziaeur) : parseNote([/Provízia:\s*(.+)/i]));
+  const [popis, setPopis] = useState(() => parseNote([/Popis:\s*(.+)/i]) || "");
 
   // Podpis
   const [podpisData, setPodpisData] = useState<string | null>(null);

@@ -105,8 +105,31 @@ const defaultForm = {
 export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSaved?: () => void; onCancel?: () => void; prefilledData?: Record<string, unknown> | null } = {}) {
   const [f, setF] = useState(() => {
     if (!prefilledData) return defaultForm;
-    // Prefill z náberu
+    // Prefill z náberu — mapuj VŠETKY dostupné polia
     const d = prefilledData;
+    const params = (d.parametre || {}) as Record<string, unknown>;
+    const vyb = (d.vybavenie || {}) as Record<string, unknown>;
+
+    // Mapuj amenity z náberu na toggle polia
+    const hasAmenity = (name: string) => {
+      if (!vyb) return false;
+      // NaberyForm ukladá vybavenie ako {Balkón: true, Výťah: true, ...}
+      return !!vyb[name];
+    };
+
+    // Vykurovanie z parametrov
+    const vykurovanie = { ...defaultForm.vykurovanie };
+    const kurenie = String(params.kurenie || "").toLowerCase();
+    if (kurenie.includes("centrál")) vykurovanie.centralne = true;
+    if (kurenie.includes("podlah")) vykurovanie.podlahove = true;
+    if (kurenie.includes("lokál")) vykurovanie.lokalne = true;
+    if (kurenie.includes("kozub") || kurenie.includes("krb")) vykurovanie.kozub = true;
+
+    // Pripojenie z amenít
+    const pripojenie = { ...defaultForm.pripojenie };
+    if (hasAmenity("Telefón")) pripojenie.telefon = true;
+    if (hasAmenity("Kábel") || hasAmenity("Satelit")) { pripojenie.kablova_tv = true; pripojenie.satelit = true; }
+
     return {
       ...defaultForm,
       typ: (String(d.typ_nehnutelnosti || "") || defaultForm.typ) as TypNehnutelnosti,
@@ -114,8 +137,54 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       okres: String(d.okres || defaultForm.okres),
       obec: String(d.obec || defaultForm.obec),
       lokalita: String(d.obec || defaultForm.lokalita),
+      ulica_verejna: String(d.ulica || defaultForm.ulica_verejna),
       plocha: String(d.plocha || defaultForm.plocha),
       cena: String(d.predajna_cena || defaultForm.cena),
+      stav: (() => {
+        const raw = String(d.stav || "").toLowerCase();
+        const map: Record<string, string> = {
+          "novostavba": "novostavba", "povodny_stav": "povodny-stav",
+          "kompletna_rekonstrukcia": "kompletna-rekonstrukcia",
+          "ciastocna_rekonstrukcia": "ciastocne-prerobeny",
+          "velmi_dobry": "uplne-prerobeny", "dobry": "ciastocne-prerobeny",
+          "zly": "povodny-stav", "schatralý": "urcene-na-demolaciu",
+          "vystavba": "vo-vystavbe",
+        };
+        return map[raw] || raw || defaultForm.stav;
+      })(),
+      izby: String(params.pocet_izieb || defaultForm.izby),
+      poschodie: String(params.poschodie || defaultForm.poschodie),
+      poschodia_vyssie: String(params.z_kolko || defaultForm.poschodia_vyssie),
+      vlastnictvo: String(params.vlastnictvo || vyb.vlastnictvo || defaultForm.vlastnictvo),
+      typ_budovy: String(params.typ_domu || defaultForm.typ_budovy),
+      rok_vystavby: String(params.rok_vystavby || defaultForm.rok_vystavby),
+      mesacne_naklady: String(params.mesacne_poplatky || defaultForm.mesacne_naklady),
+      provizia_hodnota: String(d.provizia || defaultForm.provizia_hodnota),
+      poznamka_interna: String(d.popis || defaultForm.poznamka_interna),
+      makler: String(d.makler || defaultForm.makler),
+      // Priestory z amenít náberu
+      balkon: hasAmenity("Balkón"),
+      loggia: hasAmenity("Lodžia"),
+      terasa: hasAmenity("Terasa"),
+      garaz: hasAmenity("Garáž"),
+      pivnica: hasAmenity("Pivnica"),
+      vytah: hasAmenity("Výťah"),
+      verejne_parkovanie: hasAmenity("Parking"),
+      spajza: hasAmenity("Špajza") || hasAmenity("Komora"),
+      // Kategória / typ ponuky z náberu
+      kategoria: (() => {
+        const typ = String(d.typ_obchodu || d.typ_ponuky || "").toLowerCase();
+        if (typ.includes("predaj") || typ.includes("kúp")) return "na-predaj";
+        if (typ.includes("nájom") || typ.includes("prenáj")) return "na-najom";
+        // Ak máme predajnú cenu, je to predaj
+        if (d.predajna_cena) return "na-predaj";
+        return defaultForm.kategoria;
+      })(),
+      // Vykurovanie a pripojenie
+      vykurovanie,
+      pripojenie,
+      // Výhľad
+      orientacia: String(params.vyhlad || defaultForm.orientacia),
     };
   });
   const [saving, setSaving] = useState(false);
@@ -286,9 +355,14 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   };
   const stavMap: Record<string, string> = {
     "novostavba": "novostavba", "povodny-stav": "povodny-stav", "pôvodný stav": "povodny-stav",
+    "povodny_stav": "povodny-stav",
+    "kompletna_rekonstrukcia": "kompletna-rekonstrukcia", "kompletná rekonštrukcia": "kompletna-rekonstrukcia",
+    "ciastocna_rekonstrukcia": "ciastocne-prerobeny", "čiastočná rekonštrukcia": "ciastocne-prerobeny",
     "uplne-prerobeny": "uplne-prerobeny", "úplne prerobený": "uplne-prerobeny",
+    "velmi_dobry": "uplne-prerobeny", "dobry": "ciastocne-prerobeny",
     "ciastocne-prerobeny": "ciastocne-prerobeny", "čiastočne prerobený": "ciastocne-prerobeny",
     "vo-vystavbe": "vo-vystavbe", "vo výstavbe": "vo-vystavbe",
+    "vystavba": "vo-vystavbe", "zly": "povodny-stav", "schatralý": "urcene-na-demolaciu",
   };
 
   /* ── Spoločná funkcia na vyplnenie formulára z AI dát ── */
@@ -443,20 +517,58 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   /* ── AI context ── */
   function buildContext(): string {
     const l: string[] = [];
+    l.push("═══ FORMULÁROVÉ ÚDAJE (orientačné — dokumenty nižšie majú PREDNOSŤ) ═══");
     if (f.kategoria) l.push(`Ponuka: ${f.kategoria}`);
     if (f.typ) l.push(`Typ: ${f.typ}`);
-    if (f.izby) l.push(`Izby: ${f.izby}`);
+    if (f.izby) l.push(`Izby (formulár): ${f.izby}`);
     if (f.stav) l.push(`Stav: ${f.stav}`);
     if (f.cena) l.push(`Cena: ${f.cena} €`);
-    if (f.plocha) l.push(`Plocha: ${f.plocha} m²`);
+    if (f.plocha) l.push(`Plocha (formulár): ${f.plocha} m²`);
+    if (f.uzitkova_plocha) l.push(`Úžitková plocha: ${f.uzitkova_plocha} m²`);
+    if (f.zastavana_plocha) l.push(`Zastavaná plocha: ${f.zastavana_plocha} m²`);
     if (f.poschodie) l.push(`Poschodie: ${f.poschodie}`);
-    const lok = [f.obec, f.okres, f.kraj].filter(Boolean).join(", ");
+    if (f.poschodia_vyssie) l.push(`Z celkom poschodí: ${f.poschodia_vyssie}`);
+    const lok = [f.ulica_verejna, f.obec, f.okres, f.kraj].filter(Boolean).join(", ");
     if (lok) l.push(`Lokalita: ${lok}`);
     if (f.orientacia) l.push(`Orientácia: ${f.orientacia}`);
     if (f.vlastnictvo) l.push(`Vlastníctvo: ${f.vlastnictvo}`);
-    if (f.popis) l.push(`Poznámka: ${f.popis}`);
-    if (f.lv_text) l.push(`\nList vlastníctva:\n${f.lv_text}`);
-    if (lvParsed) { l.push("\nExtrahované z LV:"); Object.entries(lvParsed).forEach(([k, v]) => l.push(`${k}: ${v}`)); }
+    if (f.typ_budovy) l.push(`Typ budovy: ${f.typ_budovy}`);
+    if (f.rok_vystavby) l.push(`Rok výstavby: ${f.rok_vystavby}`);
+    if (f.rok_rekonstrukcie) l.push(`Rok rekonštrukcie: ${f.rok_rekonstrukcie}`);
+    if (f.energeticky_certifikat) l.push(`Energetický certifikát: ${f.energeticky_certifikat}`);
+    if (f.mesacne_naklady) l.push(`Mesačné náklady: ${f.mesacne_naklady} €`);
+    if (f.cena_za_energie) l.push(`Energie: ${f.cena_za_energie} €/mes`);
+    // Vybavenie
+    const vyb: string[] = [];
+    if (f.balkon) vyb.push(`Balkón${f.balkon_plocha ? ` ${f.balkon_plocha} m²` : ""}`);
+    if (f.loggia) vyb.push(`Loggia${f.loggia_plocha ? ` ${f.loggia_plocha} m²` : ""}`);
+    if (f.terasa) vyb.push(`Terasa${f.terasa_plocha ? ` ${f.terasa_plocha} m²` : ""}`);
+    if (f.garaz) vyb.push("Garáž");
+    if (f.pivnica) vyb.push(`Pivnica${f.pivnica_plocha ? ` ${f.pivnica_plocha} m²` : ""}`);
+    if (f.vytah) vyb.push("Výťah");
+    if (f.spajza) vyb.push("Špajza");
+    if (f.verejne_parkovanie) vyb.push("Verejné parkovanie");
+    if (f.sukromne_parkovanie) vyb.push("Súkromné parkovanie");
+    if (vyb.length > 0) l.push(`Vybavenie: ${vyb.join(", ")}`);
+    // Vykurovanie
+    const vyk = Object.entries(f.vykurovanie).filter(([, v]) => v).map(([k]) => k);
+    if (vyk.length > 0) l.push(`Vykurovanie: ${vyk.join(", ")}`);
+    // Pripojenie
+    const prip = Object.entries(f.pripojenie).filter(([, v]) => v).map(([k]) => k);
+    if (prip.length > 0) l.push(`Pripojenie: ${prip.join(", ")}`);
+    if (f.popis) l.push(`Poznámka makléra: ${f.popis}`);
+
+    l.push("\n═══ DOKUMENTY (AUTORITATÍVNE — tieto údaje majú PREDNOSŤ pred formulárom) ═══");
+    l.push("⚠️ Ak dokumenty uvádzajú iný počet izieb, plochu alebo adresu než formulár — POUŽI ÚDAJ Z DOKUMENTOV!");
+    // Dokumenty — texty z PDF
+    if (f.lv_text) l.push(`\n--- LIST VLASTNÍCTVA (AUTORITATÍVNY) ---\n${f.lv_text}`);
+    if (lvParsed) { l.push("\n--- EXTRAHOVANÉ Z LV (AUTORITATÍVNE) ---"); Object.entries(lvParsed).forEach(([k, v]) => l.push(`${k}: ${v}`)); }
+    if (docs.length > 0) {
+      docs.forEach(d => {
+        if (d.text) l.push(`\n--- DOKUMENT: ${d.name} (${d.type}) — AUTORITATÍVNY ---\n${d.text}`);
+      });
+    }
+    if (f.pravne_vady) l.push(`\nPrávne ťarchy (NESPOMÍNAJ v inzeráte): ${f.pravne_vady}`);
     return l.join("\n");
   }
 
@@ -465,13 +577,36 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     if (!ctx.trim()) return;
     setGenerating(true);
     try {
+      // Konvertuj fotky na base64 (max 5 fotiek, max 800px)
+      const photoB64: string[] = [];
+      for (const p of photos.slice(0, 5)) {
+        try {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = p.url; });
+          const canvas = document.createElement("canvas");
+          const maxW = 800;
+          const scale = Math.min(1, maxW / img.width);
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          const ctxC = canvas.getContext("2d");
+          ctxC?.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          photoB64.push(dataUrl);
+        } catch { /* skip */ }
+      }
+
+      // Lokalita — priorita: ulica > obec > okres
+      const lokalitaFull = [f.ulica_verejna, f.obec, f.okres, f.kraj].filter(Boolean).join(", ");
+
       const res = await globalThis.fetch("/api/ai-writer", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nazov: `${f.typ} ${[f.obec, f.okres].filter(Boolean).join(", ")}`.trim(),
-          typ: f.typ, lokalita: [f.obec, f.okres, f.kraj].filter(Boolean).join(", "),
+          typ: f.typ, lokalita: lokalitaFull,
           cena: Number(f.cena) || 0, plocha: Number(f.plocha) || null,
           izby: Number(f.izby) || null, stav: f.stav, popis: ctx,
+          photos: photoB64,
         }),
       });
       const data = await res.json();
@@ -508,14 +643,33 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     if (!msg) return;
     setChatInput(""); setGenerating(true);
     try {
+      // Konvertuj fotky aj pri refine (aby AI videlo fotky)
+      const photoB64: string[] = [];
+      for (const p of photos.slice(0, 5)) {
+        try {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = p.url; });
+          const canvas = document.createElement("canvas");
+          const maxW = 800;
+          const scale = Math.min(1, maxW / img.width);
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          const ctxC = canvas.getContext("2d");
+          ctxC?.drawImage(img, 0, 0, canvas.width, canvas.height);
+          photoB64.push(canvas.toDataURL("image/jpeg", 0.7));
+        } catch { /* skip */ }
+      }
+
       const res = await globalThis.fetch("/api/ai-writer", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nazov: f.nazov || "Úprava", typ: f.typ,
-          lokalita: [f.obec, f.okres, f.kraj].filter(Boolean).join(", "),
+          lokalita: [f.ulica_verejna, f.obec, f.okres, f.kraj].filter(Boolean).join(", "),
           cena: Number(f.cena) || 0, plocha: Number(f.plocha) || null,
           izby: Number(f.izby) || null, stav: f.stav,
           popis: `${buildContext()}\n\nPožiadavka: ${msg}\n\nAktuálny text:\n${f.text_popis}`,
+          photos: photoB64,
         }),
       });
       const data = await res.json();
@@ -725,6 +879,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
                 <select style={s.select} value={f.stav} onChange={e => set("stav", e.target.value)}>
                   <option value="">—</option>
                   <option value="novostavba">Novostavba</option>
+                  <option value="kompletna-rekonstrukcia">Kompletná rekonštrukcia</option>
                   <option value="uplne-prerobeny">Úplne prerobený</option>
                   <option value="ciastocne-prerobeny">Čiastočne prerobený</option>
                   <option value="povodny-stav">Pôvodný stav</option>
