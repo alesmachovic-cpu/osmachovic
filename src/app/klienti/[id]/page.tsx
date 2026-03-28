@@ -21,7 +21,7 @@ interface TimelineEvent {
 const STATUS_COLORS: Record<string, string> = {
   aktivny: "#059669",
   novy_kontakt: "#3B82F6",
-  dohodnuty_naber: "#8B5CF6",
+  dohodnuty_naber: "#059669",
   nabrany: "#0891B2",
   volat_neskor: "#F59E0B",
   nedovolal: "#EF4444",
