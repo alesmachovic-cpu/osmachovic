@@ -170,12 +170,13 @@ function KlientiContent() {
       {/* Table */}
       {!loading && filtered.length > 0 && (
         <div style={{ background: "var(--bg-surface)", borderRadius: "14px", border: "1px solid var(--border)", overflow: "hidden" }}>
-          <div className="table-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 120px 100px", padding: "12px 20px", fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", borderBottom: "1px solid var(--border)", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+          <div className="table-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 120px 130px 60px", padding: "12px 20px", fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", borderBottom: "1px solid var(--border)", textTransform: "uppercase", letterSpacing: "0.03em" }}>
             <span>Klient</span>
             <span>Kontakt</span>
             <span>Rozpočet</span>
             <span>Typ</span>
-            <span style={{ textAlign: "right" }}>Status</span>
+            <span>Status</span>
+            <span></span>
           </div>
           {filtered.map((k, i) => {
             const sc = statusColors[k.status] ?? statusColors.novy;
@@ -184,7 +185,7 @@ function KlientiContent() {
             const isInactive = k.status === "caka_na_schvalenie";
             return (
               <div key={k.id} className="table-row" style={{
-                display: "grid", gridTemplateColumns: "2fr 1fr 1fr 120px 100px",
+                display: "grid", gridTemplateColumns: "2fr 1fr 1fr 120px 130px 60px",
                 padding: "14px 20px", alignItems: "center",
                 borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none",
                 fontSize: "13px", cursor: "pointer", transition: "background 0.1s",
@@ -229,13 +230,48 @@ function KlientiContent() {
                   {typLabels[k.typ] || k.typ || "—"}
                 </div>
                 {/* Status */}
-                <div style={{ textAlign: "right" }}>
-                  <span style={{
-                    fontSize: "11px", padding: "3px 10px", borderRadius: "20px", fontWeight: "600",
-                    color: sc.color, background: sc.bg,
-                  }}>
-                    {STATUS_LABELS[k.status] || k.status}
-                  </span>
+                <div onClick={e => e.stopPropagation()}>
+                  <select
+                    value={k.status}
+                    onChange={async (e) => {
+                      e.stopPropagation();
+                      const { error } = await supabase.from("klienti").update({ status: e.target.value }).eq("id", k.id);
+                      if (error) console.error("[status-update]", JSON.stringify(error));
+                      fetchKlienti();
+                    }}
+                    style={{
+                      fontSize: "11px", padding: "3px 24px 3px 8px", borderRadius: "20px", fontWeight: "600",
+                      color: sc.color, background: sc.bg, border: "none", cursor: "pointer",
+                      appearance: "none", outline: "none",
+                      backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+                      backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
+                    }}
+                  >
+                    {[
+                      { value: "aktivny", label: "Aktívny" },
+                      { value: "novy_kontakt", label: "Nový kontakt" },
+                      { value: "dohodnuty_naber", label: "Dohod. náber" },
+                      { value: "nabrany", label: "Nabraný" },
+                      { value: "volat_neskor", label: "Volať neskôr" },
+                      { value: "nedovolal", label: "Nedovolal" },
+                      { value: "nechce_rk", label: "Nechce RK" },
+                      { value: "uz_predal", label: "Už predal" },
+                      { value: "realitna_kancelaria", label: "Realitná kanc." },
+                    ].map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                {/* Upraviť */}
+                <div style={{ textAlign: "center" }} onClick={e => e.stopPropagation()}>
+                  <button onClick={() => { setEditingKlient(k); setModal(true); }} style={{
+                    padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "600",
+                    background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)",
+                    cursor: "pointer", transition: "all 0.15s",
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-elevated)"; e.currentTarget.style.color = "var(--text-primary)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
+                  >
+                    ✏️
+                  </button>
                 </div>
               </div>
             );

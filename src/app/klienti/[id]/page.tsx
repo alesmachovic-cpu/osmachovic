@@ -253,12 +253,34 @@ export default function KlientDetailPage() {
 
         {/* Status + Typ badges */}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
-          <span style={{
-            padding: "6px 14px", borderRadius: "20px", fontSize: "12px", fontWeight: "700",
-            background: `${statusColor}15`, color: statusColor, border: `1px solid ${statusColor}30`,
-          }}>
-            {STATUS_LABELS[klient.status] || klient.status}
-          </span>
+          <select
+            value={klient.status}
+            onChange={async (e) => {
+              const newStatus = e.target.value;
+              await supabase.from("klienti").update({ status: newStatus }).eq("id", klient.id);
+              loadAll();
+            }}
+            style={{
+              padding: "6px 28px 6px 14px", borderRadius: "20px", fontSize: "12px", fontWeight: "700",
+              background: `${statusColor}15`, color: statusColor, border: `1px solid ${statusColor}30`,
+              cursor: "pointer", appearance: "none",
+              backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+              backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+              outline: "none",
+            }}
+          >
+            {[
+              { value: "aktivny", label: "Aktívny" },
+              { value: "novy_kontakt", label: "Nový kontakt" },
+              { value: "dohodnuty_naber", label: "Dohodnutý náber" },
+              { value: "nabrany", label: "Nabraný" },
+              { value: "volat_neskor", label: "Volať neskôr" },
+              { value: "nedovolal", label: "Nedovolal" },
+              { value: "nechce_rk", label: "Nechce RK" },
+              { value: "uz_predal", label: "Už predal" },
+              { value: "realitna_kancelaria", label: "Realitná kancelária" },
+            ].map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
           <span style={{
             padding: "4px 12px", borderRadius: "20px", fontSize: "11px", fontWeight: "600",
             background: "#F3F4F6", color: "#374151",
@@ -595,6 +617,8 @@ export default function KlientDetailPage() {
       {/* Edit modal */}
       {editModal && (
         <NewKlientModal
+          open
+          showTypKlienta
           editKlient={{
             id: klient.id,
             meno: klient.meno,

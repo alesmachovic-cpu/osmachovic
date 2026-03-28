@@ -331,7 +331,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  if (!open) return null;
+  if (open === false) return null;
 
   // Smart locality search
   const normalizedInput = normalizeSearch(lokalitaInput);
@@ -359,18 +359,15 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
     setSaving(true);
     setSaveError("");
 
-    // TODO: Po SQL migrácii zmeniť na: dupLevel === "critical" ? "caka_na_schvalenie" : status
-    const finalStatus = "aktivny"; // Dočasne — DB constraint povoľuje len "aktivny"
-
     const payload = {
       meno: meno.trim(),
       telefon: normalizePhone(telefon),
       email: email.trim() || null,
-      status: isEdit ? status : finalStatus,
+      status: dupLevel === "critical" ? "caka_na_schvalenie" : status,
       typ: typKlienta,
       lokalita: lokalitaValue || lokalitaInput.trim() || null,
-      odkaz: odkaz.trim() || null,
       poznamka: isEdit ? (poznamka.trim() || null) : ([
+        odkaz.trim() ? `Odkaz: ${odkaz.trim()}` : "",
         ulica ? `Ulica: ${ulica}` : "",
         typNehnutelnosti ? `Typ nehnuteľnosti: ${typNehnutelnosti}` : "",
         datumStretnutia ? `Stretnutie: ${datumStretnutia}` : "",

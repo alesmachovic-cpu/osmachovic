@@ -198,12 +198,22 @@ export default function KupujuciPage() {
                         <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                           {new Date(obj.created_at as string).toLocaleDateString("sk")}
                         </span>
-                        <button style={{
-                          padding: "5px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
-                          background: "#F3F4F6", color: "#374151", border: "none", cursor: "pointer",
-                        }}>
-                          Hľadať zhody →
-                        </button>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          {klient && (
+                            <button onClick={() => window.location.href = `/klienti/${klient.id}`} style={{
+                              padding: "5px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                              background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)", cursor: "pointer",
+                            }}>
+                              Karta klienta
+                            </button>
+                          )}
+                          <button onClick={() => window.location.href = "/matching"} style={{
+                            padding: "5px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                            background: "#F3F4F6", color: "#374151", border: "none", cursor: "pointer",
+                          }}>
+                            Hľadať zhody →
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -276,7 +286,7 @@ export default function KupujuciPage() {
           </>
         )}
 
-        {modal && <NewKlientModal defaultTyp="kupujuci" showTypKlienta onClose={() => setModal(false)} onSaved={() => { loadData(); setModal(false); }} />}
+        {modal && <NewKlientModal open defaultTyp="kupujuci" showTypKlienta onClose={() => setModal(false)} onSaved={() => { loadData(); setModal(false); }} />}
       </div>
     );
   }
@@ -376,7 +386,7 @@ export default function KupujuciPage() {
           </div>
         )}
 
-        {modal && <NewKlientModal onClose={() => setModal(false)} onSaved={() => { loadData(); setModal(false); }} />}
+        {modal && <NewKlientModal open onClose={() => setModal(false)} onSaved={() => { loadData(); setModal(false); }} />}
       </div>
     );
   }
