@@ -30,6 +30,8 @@ const operativaNav = [
 
 const systemNav = [
   { label: "Gmail",           href: "/gmail",      icon: "✉️" },
+  { label: "Kalendár",        href: "/kalendar",   icon: "📅" },
+  { label: "Google Disk",     href: "/disk",       icon: "💾" },
   { label: "Upozornenia",     href: "/upozornenia", icon: "🔔" },
   { label: "Tím",             href: "/tim",        icon: "👥" },
   { label: "Manažér",         href: "/manazer",    icon: "📊" },
