@@ -614,11 +614,21 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       const text = (data.emotivny || data.technicky || "").replace(/SEP_SEO\s*\[[^\]]*\]/g, "").replace(/SEP_TAGS\s*\[[^\]]*\]/g, "").trim();
       const seoMatch = (data.emotivny || "").match(/SEP_SEO\s*\[([^\]]+)\]/);
       const tagMatch = (data.emotivny || "").match(/SEP_TAGS\s*\[([^\]]+)\]/);
-      setF(prev => ({
-        ...prev, nazov: data.nazov || prev.nazov, text_popis: text, intro: data.kratky || prev.intro,
-        seo_keywords: seoMatch ? seoMatch[1].trim() : generateSEO(prev),
-        tagy: tagMatch ? tagMatch[1].trim() : prev.tagy,
-      }));
+      setF(prev => {
+        const updates: Partial<typeof prev> = {
+          nazov: data.nazov || prev.nazov,
+          text_popis: text,
+          intro: data.kratky || prev.intro,
+          seo_keywords: seoMatch ? seoMatch[1].trim() : generateSEO(prev),
+          tagy: tagMatch ? tagMatch[1].trim() : prev.tagy,
+        };
+        // Baťovská cena z AI
+        if (data.cena_batova && data.cena_batova.trim()) {
+          const cenaCislo = data.cena_batova.replace(/[^\d]/g, "");
+          if (cenaCislo) updates.cena = cenaCislo;
+        }
+        return { ...prev, ...updates };
+      });
       setTimeout(() => aiRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
     } catch { setError("Generovanie zlyhalo."); }
     setGenerating(false);
