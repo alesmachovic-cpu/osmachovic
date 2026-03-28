@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     console.error("[google-callback] Error:", e);
     const msg = e instanceof Error ? e.message : "unknown";
-    return NextResponse.redirect(new URL(`/nastavenia?google=error&detail=${encodeURIComponent(msg)}`, req.nextUrl.origin));
+    // Return JSON error so we can see it directly
+    return NextResponse.json({ error: msg, userId, hasCode: !!code }, { status: 500 });
   }
 }
