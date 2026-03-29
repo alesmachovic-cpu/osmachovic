@@ -95,10 +95,20 @@ function CalendarWidget({ userId }: { userId?: string }) {
     // Najprv zobraz z localStorage cache, potom fetch čerstvé
     const cached = parseCalEvents();
     if (cached.length > 0) setEvents(cached);
-    fetchCalendarEvents(userId).then(fresh => {
-      setEvents(fresh);
-      setLoading(false);
-    });
+
+    function refresh() {
+      fetchCalendarEvents(userId).then(fresh => {
+        setEvents(fresh);
+        setLoading(false);
+      });
+    }
+    refresh();
+
+    // Auto-refresh every 30s + on tab focus
+    const interval = setInterval(refresh, 30000);
+    function onVisibility() { if (document.visibilityState === "visible") refresh(); }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisibility); };
   }, [userId]);
 
   const today = new Date();

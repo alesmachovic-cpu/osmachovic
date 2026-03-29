@@ -338,7 +338,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   }
 
   return (
-    <div style={{ maxWidth: "700px" }}>
+    <div style={{ maxWidth: "700px" }} spellCheck autoCorrect="on">
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
         <button onClick={onBack} style={{
