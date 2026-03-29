@@ -38,14 +38,25 @@ Predajné ceny (NIE nájom) zaokrúhli tak, aby končili na 900 alebo 99 900.
 Príklad: 150 200 € → 150 900 €, 85 000 € → 84 900 €, 200 000 € → 199 900 €
 
 ══ KRITICKÉ PRAVIDLÁ ══
-1. DOKUMENTY (LV, zmluvy, posudky) majú VŽDY PREDNOSŤ pred formulárom. Ak zmluva hovorí "2-izbový" a formulár "3-izbový" — POUŽI údaj z dokumentu!
-2. POČET IZIEB: Ak dokument EXPLICITNE uvádza "X-izbový byt" alebo dispozíciu, použi údaj z dokumentu. Ak dokumenty NEOBSAHUJÚ počet izieb, POUŽI údaj z formulára (pole "Izby (formulár)")! NIKDY nehádaj počet izieb — ak máš z formulára "3", píš "3-izbový".
+1. DOKUMENTY (LV, zmluvy, posudky) majú VŽDY PREDNOSŤ pred formulárom pre VÝMERY a ADRESY. Ak zmluva uvádza inú plochu alebo adresu — POUŽI údaj z dokumentu!
+2. POČET IZIEB: Použi hodnotu z poľa "Izby (formulár)". Iba ak dokument EXPLICITNE uvádza "X-izbový byt" s INÝM číslom, použi údaj z dokumentu. NIKDY nehádaj a NIKDY nepíš 1-izbový ak formulár hovorí 3!
 3. VÝMERY: Použi presné výmery z dokumentov. Dokument > formulár.
 4. ADRESA: Použi PRESNÚ adresu z LV/zmluvy vrátane čísla domu.
 5. AK MÁŠ FOTKY — opíš KONKRÉTNE čo vidíš: materiály, farby, stav, vybavenie. Nie "moderný interiér".
 6. AK MÁŠ PRIESKUM LOKALITY — použi konkrétne názvy (Lidl, ZŠ Mierová, zastávka Ružinovská...).
 7. Ak máš údaje o právnych ťarchách (záložné právo) — NESPOMÍNAJ v texte.
-8. JAZYK: Profesionálna slovenčina, prehľadný a štruktúrovaný text.`;
+8. JAZYK: Profesionálna slovenčina, prehľadný a štruktúrovaný text.
+
+══ ZÁVER TEXTU (POVINNÝ) ══
+Na konci textu VŽDY pridaj:
+"Cena: [CENA] € vrátane kompletného realitného servisu spoločnosti Vianema.
+Dohodnite si obhliadku, radi vám nehnuteľnosť ukážeme.
+Kontakt: [MENO MAKLÉRA] [TELEFÓN] [EMAIL]
+VIANEMA. Komplexné služby pre váš Projekt Bývanie a Investície pod jednou strechou."
+Údaje makléra nájdeš v kontexte nižšie. Ak nie sú, použi placeholder [kontakt makléra].
+
+══ VZOROVÉ INZERÁTY ══
+Ak sú priložené vzorové inzeráty, DRŽÍ SA ICH ŠTÝLU — tón, dĺžka, formátovanie. Píš ROVNAKO.`;
 
 const USER_PROMPT = (details: string, locationInfo: string) => `VŠETKY DOSTUPNÉ ÚDAJE O NEHNUTEĽNOSTI:
 ═══════════════════════════════════════
@@ -288,7 +299,7 @@ async function combineBest(
 
 /* ══════ MAIN HANDLER ══════ */
 export async function POST(req: NextRequest) {
-  const { nazov, typ, lokalita, cena, plocha, izby, stav, popis, photos } = await req.json();
+  const { nazov, typ, lokalita, cena, plocha, izby, stav, popis, photos, maklerMeno, maklerTelefon, maklerEmail, vzorovyInzerat } = await req.json();
 
   // popis teraz obsahuje KOMPLETNÝ kontext vrátane LV textu, dokumentov, vybavenia, vykurovania atď.
   const details = [
@@ -298,7 +309,9 @@ export async function POST(req: NextRequest) {
     lokalita && `Lokalita: ${lokalita}`,
     cena && `Cena: ${cena} €`,
     plocha && `Plocha (formulár): ${plocha} m²`,
-    izby && `Izby (formulár): ${izby} — POZOR: ak dokumenty nižšie uvádzajú iný počet, použi údaj z dokumentov!`,
+    izby && `Izby (formulár): ${izby} — POUŽI TÚTO HODNOTU pre počet izieb! Iba ak dokument EXPLICITNE uvádza INÝ počet, použi dokument.`,
+    maklerMeno && `Kontakt makléra: ${maklerMeno}${maklerTelefon ? ` ${maklerTelefon}` : ""}${maklerEmail ? ` ${maklerEmail}` : ""}`,
+    vzorovyInzerat && `\n── VZOROVÝ INZERÁT (drž sa tohto štýlu) ──\n${vzorovyInzerat}`,
     stav && `Stav: ${stav}`,
     `── DOKUMENTY A KONTEXT (AUTORITATÍVNE ÚDAJE — majú prednosť) ──`,
     popis && `\n${popis}`,

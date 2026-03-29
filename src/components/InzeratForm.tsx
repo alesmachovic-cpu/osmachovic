@@ -665,6 +665,23 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       // Lokalita — priorita: ulica > obec > okres
       const lokalitaFull = [f.ulica_verejna, f.obec, f.okres, f.kraj].filter(Boolean).join(", ");
 
+      // Load makler profile from settings
+      let maklerMeno = "", maklerTelefon = "", maklerEmail = "", vzorovyInzerat = "";
+      try {
+        const mp = localStorage.getItem("makler_profile");
+        if (mp) {
+          const p = JSON.parse(mp);
+          maklerMeno = p.meno || "";
+          maklerTelefon = p.telefon || "";
+          maklerEmail = p.email || "";
+        }
+        const vi = localStorage.getItem("vzorove_inzeraty");
+        if (vi) {
+          const links = JSON.parse(vi) as string[];
+          vzorovyInzerat = links.filter(Boolean).join("\n");
+        }
+      } catch { /* ignore */ }
+
       const res = await globalThis.fetch("/api/ai-writer", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -673,6 +690,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
           cena: Number(f.cena) || 0, plocha: Number(f.plocha) || null,
           izby: Number(f.izby) || null, stav: f.stav, popis: ctx,
           photos: photoB64,
+          maklerMeno, maklerTelefon, maklerEmail, vzorovyInzerat,
         }),
       });
       const data = await res.json();
@@ -737,6 +755,13 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         } catch { /* skip */ }
       }
 
+      // Load makler profile for refine too
+      let rMeno = "", rTel = "", rEmail = "";
+      try {
+        const mp = localStorage.getItem("makler_profile");
+        if (mp) { const p = JSON.parse(mp); rMeno = p.meno || ""; rTel = p.telefon || ""; rEmail = p.email || ""; }
+      } catch { /* ignore */ }
+
       const res = await globalThis.fetch("/api/ai-writer", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -746,6 +771,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
           izby: Number(f.izby) || null, stav: f.stav,
           popis: `${buildContext()}\n\nPožiadavka: ${msg}\n\nAktuálny text:\n${f.text_popis}`,
           photos: photoB64,
+          maklerMeno: rMeno, maklerTelefon: rTel, maklerEmail: rEmail,
         }),
       });
       const data = await res.json();
