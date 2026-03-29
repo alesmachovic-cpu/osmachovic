@@ -370,6 +370,7 @@ export default function Dashboard() {
   const cardSt: React.CSSProperties = {
     background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px", padding: "20px",
   };
+  const tileClass = showTileEditor ? "tile-editing" : "";
 
   const has = (key: TileKey) => tiles.includes(key);
 
@@ -435,7 +436,7 @@ export default function Dashboard() {
       {topRow.length > 0 && (
         <div className="dash-grid" style={{ display: "grid", gridTemplateColumns: topRow.length === 2 ? "1fr 1fr" : "1fr", gap: "20px" }}>
           {has("overenie") && (
-            <div style={cardSt}>
+            <div className={tileClass} style={cardSt}>
               <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Overenie čísla</div>
               <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Automatické overenie pri zadaní čísla</div>
               <div style={{ position: "relative" }}>
@@ -478,7 +479,7 @@ export default function Dashboard() {
           )}
 
           {has("vyhladavanie") && (
-            <div style={cardSt}>
+            <div className={tileClass} style={cardSt}>
               <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Vyhľadávanie</div>
               <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Klienti, nehnuteľnosti, funkcie</div>
               <SystemSearch />
@@ -491,7 +492,7 @@ export default function Dashboard() {
       {midRow.length > 0 && (
         <div className="dash-grid" style={{ display: "grid", gridTemplateColumns: midRow.length === 2 ? "1fr 1fr" : "1fr", gap: "20px" }}>
           {has("ciele") && (
-            <div style={cardSt}>
+            <div className={tileClass} style={cardSt}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                 <Link href="/nastavenia" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Mesačné ciele →</Link>
               </div>
@@ -504,7 +505,7 @@ export default function Dashboard() {
           )}
 
           {has("prehlad") && (
-            <div style={cardSt}>
+            <div className={tileClass} style={cardSt}>
               <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Prehľad →</Link>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 {[
@@ -528,7 +529,7 @@ export default function Dashboard() {
 
       {/* Calendar */}
       {has("kalendar") && (
-        <div style={cardSt}>
+        <div className={tileClass} style={cardSt}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
             <Link href="/kalendar" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Kalendár →</Link>
             <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
@@ -541,7 +542,7 @@ export default function Dashboard() {
 
       {/* Pipeline funnel */}
       {has("pipeline") && (
-        <div style={cardSt}>
+        <div className={tileClass} style={cardSt}>
           <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Pipeline →</Link>
           {(() => {
             const stages = [
@@ -584,7 +585,7 @@ export default function Dashboard() {
 
       {/* Activity feed */}
       {has("aktivita") && (
-        <div style={cardSt}>
+        <div className={tileClass} style={cardSt}>
           <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px", display: "block", textDecoration: "none" }}>Posledná aktivita →</Link>
           {loadingActivity && <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px 0" }}>Načítavam...</div>}
           {!loadingActivity && activity.length === 0 && (

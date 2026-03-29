@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
 
 /* ─── Types ─── */
 interface CalEvent {
@@ -63,32 +64,36 @@ function hashColor(id: string) {
 }
 
 /* ─── Fetch ─── */
-async function fetchEvents(): Promise<CalEvent[]> {
+async function fetchEvents(userId?: string): Promise<CalEvent[]> {
+  // Najprv skús per-user OAuth
+  if (userId) {
+    try {
+      const res = await fetch(`/api/google/calendar?userId=${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.events?.length > 0) {
+          const events: CalEvent[] = data.events.map((e: { id: string; summary: string; description?: string; location?: string; start: string; end: string }) => ({
+            id: e.id,
+            summary: e.summary,
+            description: e.description || "",
+            location: e.location || "",
+            start: e.start || "",
+            end: e.end || "",
+            allDay: !e.start.includes("T"),
+            source: "gcal",
+          }));
+          localStorage.setItem("gcal_events", JSON.stringify(events));
+          return events;
+        }
+      }
+    } catch { /* fallback */ }
+  }
+  // Fallback na localStorage cache
   try {
     const cached = localStorage.getItem("gcal_events");
     if (cached) {
       const parsed = JSON.parse(cached);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch { /* ignore */ }
-  try {
-    const res = await fetch("/api/calendar/events");
-    if (res.ok) {
-      const data = await res.json();
-      if (data.events?.length > 0) {
-        const events: CalEvent[] = data.events.map((e: { id: string; summary: string; description?: string; location?: string; start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string } }) => ({
-          id: e.id,
-          summary: e.summary,
-          description: e.description,
-          location: e.location,
-          start: e.start.dateTime || e.start.date || "",
-          end: e.end.dateTime || e.end.date || "",
-          allDay: !e.start.dateTime,
-          source: "gcal",
-        }));
-        localStorage.setItem("gcal_events", JSON.stringify(events));
-        return events;
-      }
     }
   } catch { /* ignore */ }
   return [];
@@ -405,6 +410,7 @@ function DayColumn({ date, events, onEventClick, onSlotClick }: {
 /* ─── Main Calendar Page ─── */
 export default function KalendarPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>("week");
@@ -417,11 +423,11 @@ export default function KalendarPage() {
   const todayStr = toDateStr(new Date());
 
   useEffect(() => {
-    fetchEvents().then(evts => {
+    fetchEvents(user?.id).then(evts => {
       setEvents(evts);
       setLoading(false);
     });
-  }, []);
+  }, [user?.id]);
 
   // Scroll to 7am on mount
   useEffect(() => {

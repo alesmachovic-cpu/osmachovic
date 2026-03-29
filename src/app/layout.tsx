@@ -34,6 +34,18 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: `
           document.addEventListener('dragover', function(e) { e.preventDefault(); });
           document.addEventListener('drop', function(e) { e.preventDefault(); });
+          (function() {
+            function applyTheme() {
+              var h = new Date().getHours();
+              if (h >= 20 || h < 6) {
+                document.documentElement.classList.add('dark');
+              } else {
+                document.documentElement.classList.remove('dark');
+              }
+            }
+            applyTheme();
+            setInterval(applyTheme, 60000);
+          })();
         `}} />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>

@@ -118,7 +118,7 @@ export default function Navbar() {
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <h1 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: 0, whiteSpace: "nowrap" }}>
-            {greeting(hour)}, {user?.name.split(" ")[0] || "Aleš"} 👋
+            {greeting(hour)}, {user?.name.split(" ")[0] || "Aleš"}
           </h1>
           <FlipClock time={timeStr} blink={secs % 2 === 0} />
         </div>
