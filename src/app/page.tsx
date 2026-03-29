@@ -9,6 +9,7 @@ import { STATUS_LABELS } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import ActivityRings from "@/components/ActivityRings";
 import SystemSearch from "@/components/SystemSearch";
+import { useAuth } from "@/components/AuthProvider";
 
 interface ActivityItem {
   id: string;
@@ -59,19 +60,20 @@ function parseCalEvents(): CalEvent[] {
   return [];
 }
 
-async function fetchCalendarEvents(): Promise<CalEvent[]> {
+async function fetchCalendarEvents(userId?: string): Promise<CalEvent[]> {
+  if (!userId) return parseCalEvents();
   try {
-    const res = await fetch("/api/calendar/events");
+    const res = await fetch(`/api/google/calendar?userId=${userId}`);
     if (res.ok) {
       const data = await res.json();
       if (data.events && data.events.length > 0) {
-        const events: CalEvent[] = data.events.map((e: { id: string; summary: string; location?: string; start: { dateTime?: string; date?: string }; end: { dateTime?: string; date?: string } }) => ({
+        const events: CalEvent[] = data.events.map((e: { id: string; summary: string; location?: string; start: string; end: string }) => ({
           id: e.id,
           summary: e.summary,
-          location: e.location,
-          start: e.start.dateTime || e.start.date || "",
-          end: e.end.dateTime || e.end.date || "",
-          allDay: !e.start.dateTime,
+          location: e.location || "",
+          start: e.start || "",
+          end: e.end || "",
+          allDay: !e.start.includes("T"),
           source: "gcal",
         }));
         localStorage.setItem("gcal_events", JSON.stringify(events));
@@ -82,7 +84,7 @@ async function fetchCalendarEvents(): Promise<CalEvent[]> {
   return parseCalEvents();
 }
 
-function CalendarWidget() {
+function CalendarWidget({ userId }: { userId?: string }) {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>("");
 
@@ -93,11 +95,11 @@ function CalendarWidget() {
     // Najprv zobraz z localStorage cache, potom fetch čerstvé
     const cached = parseCalEvents();
     if (cached.length > 0) setEvents(cached);
-    fetchCalendarEvents().then(fresh => {
+    fetchCalendarEvents(userId).then(fresh => {
       setEvents(fresh);
       setLoading(false);
     });
-  }, []);
+  }, [userId]);
 
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
@@ -221,6 +223,7 @@ function loadTiles(): TileKey[] {
 
 export default function Dashboard() {
   const router = useRouter();
+  const { user } = useAuth();
   const [phone, setPhone] = useState("");
   const [checking, setChecking] = useState(false);
   const [found, setFound] = useState<Klient | null | "none">(null);
@@ -241,6 +244,7 @@ export default function Dashboard() {
   // Tile customization
   const [tiles, setTiles] = useState<TileKey[]>(DEFAULT_TILES);
   const [showTileEditor, setShowTileEditor] = useState(false);
+  const [dragTile, setDragTile] = useState<TileKey | null>(null);
 
   useEffect(() => { setTiles(loadTiles()); }, []);
 
@@ -250,6 +254,29 @@ export default function Dashboard() {
       localStorage.setItem("dashboard_tiles", JSON.stringify(next));
       return next;
     });
+  }
+
+  function handleDragStart(key: TileKey) {
+    setDragTile(key);
+  }
+
+  function handleDragOver(e: React.DragEvent, targetKey: TileKey) {
+    e.preventDefault();
+    if (!dragTile || dragTile === targetKey) return;
+    setTiles(prev => {
+      const next = [...prev];
+      const fromIdx = next.indexOf(dragTile);
+      const toIdx = next.indexOf(targetKey);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, dragTile);
+      localStorage.setItem("dashboard_tiles", JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function handleDragEnd() {
+    setDragTile(null);
   }
 
   // Load goals from localStorage
@@ -346,9 +373,9 @@ export default function Dashboard() {
 
   const has = (key: TileKey) => tiles.includes(key);
 
-  // Build grid rows from active tiles
-  const topRow = [has("overenie") && "overenie", has("vyhladavanie") && "vyhladavanie"].filter(Boolean) as TileKey[];
-  const midRow = [has("ciele") && "ciele", has("prehlad") && "prehlad"].filter(Boolean) as TileKey[];
+  // Build grid rows from active tiles (respecting order)
+  const topRow = tiles.filter(k => k === "overenie" || k === "vyhladavanie");
+  const midRow = tiles.filter(k => k === "ciele" || k === "prehlad");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -369,22 +396,37 @@ export default function Dashboard() {
       {/* Tile editor */}
       {showTileEditor && (
         <div style={{ ...cardSt, padding: "16px 20px" }}>
-          <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "12px" }}>
-            Vyber dlaždice na dashboarde
+          <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>
+            Zapni/vypni dlaždice
+          </div>
+          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "12px" }}>
+            Potiahni dlaždicu pre zmenu poradia
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            {ALL_TILES.map(t => (
-              <button key={t.key} onClick={() => toggleTile(t.key)} style={{
-                padding: "8px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "500",
-                cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
-                background: tiles.includes(t.key) ? "#374151" : "var(--bg-elevated)",
-                color: tiles.includes(t.key) ? "#fff" : "var(--text-secondary)",
-                border: tiles.includes(t.key) ? "1px solid #111" : "1px solid var(--border)",
-                transition: "all 0.15s",
-              }}>
-                <span>{t.icon}</span> {t.label}
-              </button>
-            ))}
+            {ALL_TILES.map(t => {
+              const isActive = tiles.includes(t.key);
+              const isDragging = dragTile === t.key;
+              return (
+                <button key={t.key}
+                  draggable={isActive}
+                  onDragStart={() => handleDragStart(t.key)}
+                  onDragOver={e => handleDragOver(e, t.key)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => toggleTile(t.key)}
+                  style={{
+                    padding: "8px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "500",
+                    cursor: isActive ? "grab" : "pointer", display: "flex", alignItems: "center", gap: "6px",
+                    background: isActive ? "#374151" : "var(--bg-elevated)",
+                    color: isActive ? "#fff" : "var(--text-secondary)",
+                    border: isActive ? "1px solid #111" : "1px solid var(--border)",
+                    opacity: isDragging ? 0.5 : 1,
+                    transition: "all 0.15s",
+                  }}>
+                  {isActive && <span style={{ fontSize: "10px", opacity: 0.6 }}>⠿</span>}
+                  <span>{t.icon}</span> {t.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -451,14 +493,7 @@ export default function Dashboard() {
           {has("ciele") && (
             <div style={cardSt}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)" }}>Mesačné ciele</div>
-                <button onClick={() => router.push("/nastavenia")} style={{
-                  padding: "4px 10px", background: "var(--bg-elevated)", border: "1px solid var(--border)",
-                  borderRadius: "6px", fontSize: "11px", color: "var(--text-muted)", cursor: "pointer",
-                  fontWeight: "500",
-                }}>
-                  Upraviť
-                </button>
+                <Link href="/nastavenia" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Mesačné ciele →</Link>
               </div>
               <ActivityRings
                 obrat={{ current: stats.mesacnyObrat, target: goals.obrat }}
@@ -470,7 +505,7 @@ export default function Dashboard() {
 
           {has("prehlad") && (
             <div style={cardSt}>
-              <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px" }}>Prehľad</div>
+              <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Prehľad →</Link>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 {[
                   { label: "Mesačný obrat", value: `${stats.mesacnyObrat.toLocaleString("sk")} €` },
@@ -495,21 +530,19 @@ export default function Dashboard() {
       {has("kalendar") && (
         <div style={cardSt}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-            <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)" }}>Kalendár</div>
+            <Link href="/kalendar" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Kalendár →</Link>
             <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
               {new Date().toLocaleDateString("sk", { weekday: "long", day: "numeric", month: "long" })}
             </div>
           </div>
-          <CalendarWidget />
+          <CalendarWidget userId={user?.id} />
         </div>
       )}
 
       {/* Pipeline funnel */}
       {has("pipeline") && (
         <div style={cardSt}>
-          <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px" }}>
-            Pipeline
-          </div>
+          <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Pipeline →</Link>
           {(() => {
             const stages = [
               { label: "Klienti", value: stats.klienti, icon: "👥", color: "#3B82F6", route: "/klienti" },
@@ -552,7 +585,7 @@ export default function Dashboard() {
       {/* Activity feed */}
       {has("aktivita") && (
         <div style={cardSt}>
-          <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px" }}>Posledná aktivita</div>
+          <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px", display: "block", textDecoration: "none" }}>Posledná aktivita →</Link>
           {loadingActivity && <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px 0" }}>Načítavam...</div>}
           {!loadingActivity && activity.length === 0 && (
             <div style={{ color: "var(--text-muted)", fontSize: "13px", textAlign: "center", padding: "20px 0" }}>Zatiaľ žiadna aktivita</div>

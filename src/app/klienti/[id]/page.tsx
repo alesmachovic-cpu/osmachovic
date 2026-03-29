@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { STATUS_LABELS } from "@/lib/database.types";
 import type { Klient } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
+import { useAuth } from "@/components/AuthProvider";
 
 // Typy pre timeline
 interface TimelineEvent {
@@ -38,9 +39,19 @@ const TYP_LABELS: Record<string, string> = {
   oboje: "Predávajúci aj kupujúci",
 };
 
+// Workflow kroky
+const WORKFLOW_STEPS = [
+  { key: "novy_kontakt", label: "Kontakt", icon: "📞", statuses: ["novy", "novy_kontakt", "aktivny"] },
+  { key: "dohodnuty_naber", label: "Dohodnutý", icon: "🤝", statuses: ["dohodnuty_naber"] },
+  { key: "nabrany", label: "Nabraný", icon: "📝", statuses: ["nabrany"] },
+  { key: "inzerovany", label: "Inzerovaný", icon: "📰", statuses: [] },
+  { key: "predany", label: "Predaný", icon: "✅", statuses: ["uzavrety"] },
+];
+
 export default function KlientDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const id = params.id as string;
 
   const [klient, setKlient] = useState<Klient | null>(null);
@@ -49,7 +60,12 @@ export default function KlientDetailPage() {
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
+  const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
   const [activeTab, setActiveTab] = useState<"timeline" | "nabery" | "objednavky" | "dokumenty">("timeline");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [naberDatum, setNaberDatum] = useState("");
+  const [calendarSyncing, setCalendarSyncing] = useState(false);
 
   useEffect(() => {
     if (id) loadAll();
@@ -59,15 +75,17 @@ export default function KlientDetailPage() {
     setLoading(true);
 
     // Paralelné načítanie
-    const [klientRes, naberyRes, objednavkyRes] = await Promise.all([
+    const [klientRes, naberyRes, objednavkyRes, inzeratyRes] = await Promise.all([
       supabase.from("klienti").select("*").eq("id", id).single(),
       supabase.from("naberove_listy").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
       supabase.from("objednavky").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
+      supabase.from("nehnutelnosti").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
     ]);
 
     if (klientRes.data) setKlient(klientRes.data);
     setNabery(naberyRes.data ?? []);
     setObjednavky(objednavkyRes.data ?? []);
+    setInzeraty(inzeratyRes.data ?? []);
 
     // Zostavenie timeline
     const events: TimelineEvent[] = [];
@@ -146,8 +164,95 @@ export default function KlientDetailPage() {
     );
   }
 
+  // Status change handler s automatickým workflow
+  async function handleStatusChange(newStatus: string) {
+    if (!klient) return;
+    if (
+      (newStatus === "dohodnuty_naber" && klient.status !== "dohodnuty_naber") ||
+      (newStatus === "volat_neskor")
+    ) {
+      // Otvor datetime picker pre dohodnutie termínu náberu alebo volať neskôr
+      setPendingStatus(newStatus);
+      setShowDatePicker(true);
+      return;
+    }
+    // Pre ostatné statusy — len update
+    await supabase.from("klienti").update({ status: newStatus }).eq("id", klient.id);
+    loadAll();
+  }
+
+  // Po potvrdení dátumu — vytvor calendar event + update status + redirect
+  async function handleDateConfirm() {
+    if (!klient) return;
+    setCalendarSyncing(true);
+
+    const isVolatNeskor = pendingStatus === "volat_neskor";
+    const isDohodnutyNaber = pendingStatus === "dohodnuty_naber" || !pendingStatus;
+
+    // 1. Update status a dátum
+    const updates: Record<string, unknown> = { status: pendingStatus || "dohodnuty_naber" };
+    if (naberDatum && !isVolatNeskor) updates.datum_naberu = new Date(naberDatum).toISOString();
+    await supabase.from("klienti").update(updates).eq("id", klient.id);
+
+    // 2. Vytvor Google Calendar event cez user OAuth
+    if (naberDatum && user?.id) {
+      try {
+        const startDt = new Date(naberDatum).toISOString();
+        const adresa = klient.lokalita || "";
+        const summary = isVolatNeskor
+          ? `Zavolať — ${klient.meno}`
+          : `Náber — ${klient.meno}`;
+        const res = await fetch("/api/google/calendar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            summary,
+            start: startDt,
+            description: [
+              adresa && `Adresa: ${adresa}`,
+              klient.telefon && `Tel: ${klient.telefon}`,
+              klient.email && `Email: ${klient.email}`,
+            ].filter(Boolean).join("\n"),
+            location: isVolatNeskor ? "" : adresa,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.event?.id) {
+            await supabase.from("klienti").update({ calendar_event_id: data.event.id }).eq("id", klient.id);
+          }
+        }
+      } catch { /* kalendár zlyhá ticho */ }
+    }
+
+    setCalendarSyncing(false);
+    setShowDatePicker(false);
+    setPendingStatus(null);
+    setNaberDatum("");
+
+    if (isVolatNeskor) {
+      // Len reload, žiaden redirect
+      loadAll();
+    } else {
+      // Redirect na náber
+      router.push(`/naber?klient_id=${klient.id}`);
+    }
+  }
+
+  // Workflow progress — v akom kroku je klient
+  function getWorkflowStep(): number {
+    if (!klient) return 0;
+    if (klient.status === "uzavrety") return 4;
+    if (inzeraty.length > 0) return 3;
+    if (klient.status === "nabrany" || nabery.length > 0) return 2;
+    if (klient.status === "dohodnuty_naber") return 1;
+    return 0;
+  }
+
   const initials = klient.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
   const statusColor = STATUS_COLORS[klient.status] || "#6B7280";
+  const workflowStep = getWorkflowStep();
 
   const cardSt: React.CSSProperties = {
     background: "var(--bg-surface)", border: "1px solid var(--border)",
@@ -255,11 +360,7 @@ export default function KlientDetailPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
           <select
             value={klient.status}
-            onChange={async (e) => {
-              const newStatus = e.target.value;
-              await supabase.from("klienti").update({ status: newStatus }).eq("id", klient.id);
-              loadAll();
-            }}
+            onChange={(e) => handleStatusChange(e.target.value)}
             style={{
               padding: "6px 28px 6px 14px", borderRadius: "20px", fontSize: "12px", fontWeight: "700",
               background: `${statusColor}15`, color: statusColor, border: `1px solid ${statusColor}30`,
@@ -289,6 +390,77 @@ export default function KlientDetailPage() {
           </span>
         </div>
       </div>
+
+      {/* Workflow progress */}
+      {(klient.typ === "predavajuci" || klient.typ === "oboje") && (
+        <div style={{
+          ...cardSt, marginBottom: "20px", padding: "16px 20px",
+        }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Pipeline predávajúceho
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0" }}>
+            {WORKFLOW_STEPS.map((ws, i) => {
+              const isCompleted = i < workflowStep;
+              const isCurrent = i === workflowStep;
+              return (
+                <div key={ws.key} style={{ display: "flex", alignItems: "center", flex: 1 }}>
+                  <div style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", flex: 1,
+                  }}>
+                    <div style={{
+                      width: "36px", height: "36px", borderRadius: "50%",
+                      background: isCompleted ? "#059669" : isCurrent ? "#374151" : "var(--bg-elevated)",
+                      color: isCompleted || isCurrent ? "#fff" : "var(--text-muted)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: isCompleted ? "14px" : "16px", fontWeight: "700",
+                      border: isCurrent ? "2px solid #374151" : isCompleted ? "2px solid #059669" : "2px solid var(--border)",
+                      transition: "all 0.2s",
+                    }}>
+                      {isCompleted ? "✓" : ws.icon}
+                    </div>
+                    <span style={{
+                      fontSize: "10px", fontWeight: isCurrent ? "700" : "500",
+                      color: isCompleted ? "#059669" : isCurrent ? "var(--text-primary)" : "var(--text-muted)",
+                    }}>{ws.label}</span>
+                  </div>
+                  {i < WORKFLOW_STEPS.length - 1 && (
+                    <div style={{
+                      height: "2px", flex: "0 0 100%", maxWidth: "40px",
+                      background: isCompleted ? "#059669" : "var(--border)",
+                      marginBottom: "18px",
+                    }} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {/* Akčné tlačidlo podľa kroku */}
+          {workflowStep === 0 && (
+            <button onClick={() => handleStatusChange("dohodnuty_naber")} style={{
+              marginTop: "12px", width: "100%", padding: "10px", background: "#374151", color: "#fff",
+              border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            }}>🤝 Dohodnúť náber</button>
+          )}
+          {workflowStep === 1 && (
+            <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
+              marginTop: "12px", width: "100%", padding: "10px", background: "#374151", color: "#fff",
+              border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            }}>📝 Vyplniť náberový list</button>
+          )}
+          {workflowStep === 2 && (
+            <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
+              marginTop: "12px", width: "100%", padding: "10px", background: "#374151", color: "#fff",
+              border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            }}>📰 Vytvoriť inzerát</button>
+          )}
+          {klient.datum_naberu && (
+            <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
+              📅 Termín náberu: {new Date(klient.datum_naberu).toLocaleString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Rýchle akcie */}
       <div style={{
@@ -338,30 +510,9 @@ export default function KlientDetailPage() {
           <div style={{ fontSize: "22px", marginBottom: "4px" }}>📞</div>
           <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Zavolať</div>
         </button>
-        <button onClick={async () => {
-          const datum = prompt("Dátum a čas (napr. 2026-04-01 14:00):");
-          if (!datum) return;
-          const adresa = nabery.length > 0
-            ? [nabery[0].ulica, nabery[0].cislo_orientacne, nabery[0].obec, nabery[0].okres].filter(Boolean).map(String).join(", ")
-            : klient.lokalita || "";
-          try {
-            await fetch("/api/calendar-sync", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                title: `${klient.meno} — ${adresa || "stretnutie"}`,
-                datetime: new Date(datum).toISOString(),
-                description: [
-                  adresa && `Adresa: ${adresa}`,
-                  klient.telefon && `Tel: ${klient.telefon}`,
-                  klient.email && `Email: ${klient.email}`,
-                  nabery.length > 0 && `Náber: ${nabery[0].typ_nehnutelnosti}`,
-                ].filter(Boolean).join("\n"),
-                telefon: klient.telefon,
-              }),
-            });
-            alert("Pridané do kalendára");
-          } catch { alert("Nepodarilo sa pridať do kalendára"); }
+        <button onClick={() => {
+          setPendingStatus(null);
+          setShowDatePicker(true);
         }} style={{
           padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
           borderRadius: "12px", cursor: "pointer", textAlign: "center",
@@ -382,7 +533,7 @@ export default function KlientDetailPage() {
         {[
           { label: "Nábery", value: nabery.length, icon: "📝", bg: "#F5F3FF" },
           { label: "Objednávky", value: objednavky.length, icon: "📋", bg: "#ECFDF5" },
-          { label: "Inzeráty", value: 0, icon: "📰", bg: "#EFF6FF" },
+          { label: "Inzeráty", value: inzeraty.length, icon: "📰", bg: "#EFF6FF" },
           { label: "Obhliadky", value: 0, icon: "👁️", bg: "#FEF3C7" },
         ].map(s => (
           <div key={s.label} style={{
@@ -515,20 +666,9 @@ export default function KlientDetailPage() {
                       <div style={{ fontSize: "11px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                         {new Date(n.created_at as string).toLocaleDateString("sk")}
                       </div>
-                      <button onClick={async () => {
-                        const datum = prompt("Pridať do kalendára — dátum a čas:");
-                        if (!datum) return;
-                        await fetch("/api/calendar-sync", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            title: `${klient.meno} — ${adresa || String(n.typ_nehnutelnosti)}`,
-                            datetime: new Date(datum).toISOString(),
-                            description: `Adresa: ${adresa}\nTel: ${klient.telefon || "—"}`,
-                            telefon: klient.telefon,
-                          }),
-                        });
-                        alert("Pridané do kalendára");
+                      <button onClick={() => {
+                        setPendingStatus(null);
+                        setShowDatePicker(true);
                       }} style={{
                         padding: "3px 8px", background: "#F5F3FF", border: "1px solid #DDD6FE",
                         borderRadius: "6px", fontSize: "10px", fontWeight: "600", color: "#7C3AED",
@@ -610,6 +750,87 @@ export default function KlientDetailPage() {
           </div>
           <div style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: "1.6", whiteSpace: "pre-wrap" }}>
             {klient.poznamka}
+          </div>
+        </div>
+      )}
+
+      {/* Datetime picker modal */}
+      {showDatePicker && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
+        }} onClick={() => { setShowDatePicker(false); setPendingStatus(null); setNaberDatum(""); }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "var(--bg-surface)", borderRadius: "20px", padding: "32px",
+            maxWidth: "400px", width: "100%", textAlign: "center",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+          }}>
+            <div style={{
+              width: "56px", height: "56px", borderRadius: "50%", background: "#F5F3FF",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "24px", margin: "0 auto 16px", border: "2px solid #DDD6FE",
+            }}>📅</div>
+            <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 4px" }}>
+              {pendingStatus === "dohodnuty_naber" ? "Kedy bude náber?" : pendingStatus === "volat_neskor" ? "Kedy zavolať?" : "Pridať do kalendára"}
+            </h2>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px" }}>
+              {pendingStatus === "dohodnuty_naber"
+                ? <>Termín stretnutia s <strong style={{ color: "var(--text-primary)" }}>{klient.meno}</strong></>
+                : pendingStatus === "volat_neskor"
+                ? <>Pripomienka na zavolanie <strong style={{ color: "var(--text-primary)" }}>{klient.meno}</strong></>
+                : <>Nová udalosť pre <strong style={{ color: "var(--text-primary)" }}>{klient.meno}</strong></>
+              }
+            </p>
+            <input
+              type="datetime-local"
+              value={naberDatum ? naberDatum.slice(0, 16) : ""}
+              onChange={e => setNaberDatum(e.target.value || "")}
+              style={{
+                width: "100%", maxWidth: "300px", padding: "14px 16px",
+                background: "var(--bg-elevated)", border: "2px solid var(--border)",
+                borderRadius: "12px", fontSize: "15px", color: "var(--text-primary)",
+                outline: "none", textAlign: "center",
+              }}
+            />
+            <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "24px" }}>
+              <button onClick={() => { setShowDatePicker(false); setPendingStatus(null); setNaberDatum(""); }} style={{
+                padding: "10px 24px", background: "var(--bg-elevated)",
+                color: "var(--text-secondary)", border: "1px solid var(--border)",
+                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Zrušiť</button>
+              <button disabled={calendarSyncing} onClick={async () => {
+                if (pendingStatus === "dohodnuty_naber" || pendingStatus === "volat_neskor") {
+                  await handleDateConfirm();
+                } else {
+                  // Len pridať do kalendára
+                  if (naberDatum && user?.id) {
+                    setCalendarSyncing(true);
+                    try {
+                      await fetch("/api/google/calendar", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          userId: user.id,
+                          summary: `${klient.meno} — stretnutie`,
+                          start: new Date(naberDatum).toISOString(),
+                          description: [klient.lokalita && `Adresa: ${klient.lokalita}`, klient.telefon && `Tel: ${klient.telefon}`].filter(Boolean).join("\n"),
+                          location: klient.lokalita || "",
+                        }),
+                      });
+                    } catch { /* ticho */ }
+                    setCalendarSyncing(false);
+                  }
+                  setShowDatePicker(false);
+                  setNaberDatum("");
+                }
+              }} style={{
+                padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+                opacity: calendarSyncing ? 0.6 : 1,
+              }}>
+                {calendarSyncing ? "Ukladám..." : pendingStatus === "dohodnuty_naber" ? "Potvrdiť a pokračovať →" : pendingStatus === "volat_neskor" ? "Uložiť pripomienku" : "Pridať do kalendára"}
+              </button>
+            </div>
           </div>
         </div>
       )}

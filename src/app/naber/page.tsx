@@ -7,6 +7,7 @@ import type { Klient } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
 import NaberyForm from "@/components/NaberyForm";
 import Stepper from "@/components/Stepper";
+import { useAuth } from "@/components/AuthProvider";
 
 type TypNaber = "byt" | "rodinny_dom" | "pozemok";
 
@@ -36,13 +37,19 @@ export default function NaberPage() {
 function NaberPageContent() {
   const searchParams = useSearchParams();
   const preselectedKlientId = searchParams.get("klient_id");
+  const { user } = useAuth();
 
   const [step, setStep] = useState<Step>("klient");
   const [selectedKlient, setSelectedKlient] = useState<Klient | null>(null);
   const [selectedType, setSelectedType] = useState<TypNaber | null>(null);
   const [submittedAt, setSubmittedAt] = useState("");
   const [savedNaberId, setSavedNaberId] = useState<string | null>(null);
-  const [naberDatum, setNaberDatum] = useState("");
+  const [naberDatum, setNaberDatum] = useState(() => {
+    // Default: teraz (zaokrúhlené na 15 minút dopredu)
+    const now = new Date();
+    now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+    return now.toISOString();
+  });
   const [showDatumPicker, setShowDatumPicker] = useState(false);
   const [calendarSynced, setCalendarSynced] = useState(false);
 
@@ -85,7 +92,29 @@ function NaberPageContent() {
     setShowDatumPicker(true);
   }
 
-  function handleDatumConfirm() {
+  async function handleDatumConfirm() {
+    // Uloží dátum náberu na klienta + pridá do kalendára
+    if (selectedKlient && naberDatum) {
+      await supabase.from("klienti").update({ datum_naberu: new Date(naberDatum).toISOString() }).eq("id", selectedKlient.id);
+      if (user?.id) {
+        try {
+          await fetch("/api/google/calendar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: user.id,
+              summary: `Náber — ${selectedKlient.meno}`,
+              start: new Date(naberDatum).toISOString(),
+              description: [
+                selectedKlient.lokalita && `Adresa: ${selectedKlient.lokalita}`,
+                selectedKlient.telefon && `Tel: ${selectedKlient.telefon}`,
+              ].filter(Boolean).join("\n"),
+              location: selectedKlient.lokalita || "",
+            }),
+          });
+        } catch { /* ticho */ }
+      }
+    }
     setShowDatumPicker(false);
     setStep("typ");
   }
@@ -98,8 +127,7 @@ function NaberPageContent() {
       hour: "2-digit", minute: "2-digit",
     }));
 
-    if (selectedKlient) {
-      const adresa = [selectedKlient.lokalita].filter(Boolean).join(", ");
+    if (selectedKlient && user?.id) {
       const datum = naberDatum || new Date().toISOString();
       try {
         const { data: naberData } = await supabase
@@ -107,14 +135,20 @@ function NaberPageContent() {
 
         const naberAdresa = naberData
           ? [naberData.ulica, naberData.cislo_orientacne, naberData.obec, naberData.okres].filter(Boolean).join(", ")
-          : adresa;
+          : selectedKlient.lokalita || "";
 
-        await fetch("/api/calendar-sync", {
+        // Uloží datum_naberu na náberový list
+        if (datum) {
+          await supabase.from("naberove_listy").update({ datum_naberu: datum }).eq("id", data.id);
+        }
+
+        await fetch("/api/google/calendar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            title: `Náber — ${selectedKlient.meno}`,
-            datetime: datum,
+            userId: user.id,
+            summary: `Náber — ${selectedKlient.meno}`,
+            start: datum,
             description: [
               naberAdresa && `Adresa: ${naberAdresa}`,
               selectedKlient.telefon && `Tel: ${selectedKlient.telefon}`,
@@ -122,7 +156,7 @@ function NaberPageContent() {
               naberData?.plocha && `Plocha: ${naberData.plocha} m²`,
               naberData?.predajna_cena && `Cena: ${Number(naberData.predajna_cena).toLocaleString("sk")} €`,
             ].filter(Boolean).join("\n"),
-            telefon: selectedKlient.telefon,
+            location: naberAdresa,
           }),
         });
         setCalendarSynced(true);
@@ -206,7 +240,7 @@ function NaberPageContent() {
               padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>
-              {naberDatum ? "Pokračovať →" : "Bez dátumu →"}
+              Pokračovať →
             </button>
           </div>
           {selectedKlient.telefon && (
