@@ -235,8 +235,8 @@ export default function KlientDetailPage() {
       // Len reload, žiaden redirect
       loadAll();
     } else {
-      // Redirect na náber
-      router.push(`/naber?klient_id=${klient.id}`);
+      // Zostať v karte klienta, len reload
+      loadAll();
     }
   }
 

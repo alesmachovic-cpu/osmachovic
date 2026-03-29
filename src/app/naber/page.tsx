@@ -75,6 +75,10 @@ function NaberPageContent() {
       const found = data.find(k => k.id === preselectedKlientId);
       if (found) {
         setSelectedKlient(found);
+        // Ak klient už má datum_naberu, použi ho
+        if (found.datum_naberu) {
+          setNaberDatum(new Date(found.datum_naberu).toISOString());
+        }
         setStep("typ");
       }
     }
@@ -88,6 +92,10 @@ function NaberPageContent() {
     if (k.status !== "dohodnuty_naber" && k.status !== "nabrany") {
       await supabase.from("klienti").update({ status: "dohodnuty_naber" }).eq("id", k.id);
       setKlienti(prev => prev.map(kl => kl.id === k.id ? { ...kl, status: "dohodnuty_naber" as Klient["status"] } : kl));
+    }
+    // Ak klient už má dátum, použi ho
+    if (k.datum_naberu) {
+      setNaberDatum(new Date(k.datum_naberu).toISOString());
     }
     setShowDatumPicker(true);
   }
@@ -228,6 +236,19 @@ function NaberPageContent() {
               outline: "none", textAlign: "center",
             }}
           />
+          {selectedKlient?.datum_naberu && (
+            <button onClick={() => {
+              const now = new Date();
+              now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+              setNaberDatum(now.toISOString());
+            }} style={{
+              display: "block", margin: "10px auto 0", padding: "6px 16px",
+              background: "transparent", color: "var(--accent)", border: "1px solid var(--accent)",
+              borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
+            }}>
+              Zmeniť na aktuálny dátum a čas
+            </button>
+          )}
           <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "24px" }}>
             <button onClick={() => { setShowDatumPicker(false); setSelectedKlient(null); }} style={{
               padding: "10px 24px", background: "var(--bg-elevated)",
@@ -534,18 +555,13 @@ function NaberPageContent() {
 
         <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
           <button onClick={() => {
-            setStep("klient");
-            setSelectedKlient(null);
-            setSelectedType(null);
-            setNaberDatum("");
-            setCalendarSynced(false);
-            loadKlienti();
+            window.location.href = "/";
           }} style={{
             padding: "12px 28px", background: "var(--bg-surface)", color: "var(--text-primary)",
             border: "1px solid var(--border)", borderRadius: "10px", fontSize: "14px",
             fontWeight: "600", cursor: "pointer",
           }}>
-            Nový náber
+            🏠 Domov
           </button>
           <button onClick={() => {
             window.location.href = selectedKlient ? `/inzerat?klient_id=${selectedKlient.id}` : "/inzerat";

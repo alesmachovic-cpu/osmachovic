@@ -23,6 +23,7 @@ const STAV_OPTIONS = [
   { value: "velmi_dobry", label: "Veľmi dobrý" },
   { value: "dobry", label: "Dobrý" },
   { value: "zly", label: "Zlý" },
+  { value: "kompletna_rekonstrukcia", label: "Kompletná rekonštrukcia" },
   { value: "novostavba", label: "Novostavba" },
   { value: "schatralý", label: "Schátralý" },
   { value: "invest_zamer", label: "Investičný zámer" },
@@ -657,8 +658,8 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
                     color: "var(--text-secondary)", background: "var(--bg-surface)",
                     border: "1px solid var(--border)", cursor: "pointer",
                   }}>
-                    📷 Odfotiť
-                    <input type="file" accept="image/*" capture="environment" multiple
+                    📎 Pridať súbor
+                    <input type="file" accept="image/*,application/pdf" multiple
                       onChange={e => handleDocFoto(doc.key, e.target.files)}
                       style={{ display: "none" }} />
                   </label>
