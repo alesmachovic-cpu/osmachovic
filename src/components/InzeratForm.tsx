@@ -132,7 +132,21 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
 
     return {
       ...defaultForm,
-      typ: (String(d.typ_nehnutelnosti || "") || defaultForm.typ) as TypNehnutelnosti,
+      typ: (() => {
+        const raw = String(d.typ_nehnutelnosti || "").toLowerCase();
+        const izby = Number((d.parametre as Record<string, unknown>)?.pocet_izieb || 0);
+        if (raw === "byt") {
+          if (izby === 1) return "1-izbovy-byt";
+          if (izby === 2) return "2-izbovy-byt";
+          if (izby === 3) return "3-izbovy-byt";
+          if (izby === 4) return "4-izbovy-byt";
+          if (izby >= 5) return "5-izbovy-byt";
+          return "3-izbovy-byt";
+        }
+        if (raw === "rodinny_dom" || raw === "rodinný dom") return "rodinny-dom";
+        if (raw === "pozemok") return "stavebny-pozemok";
+        return String(d.typ_nehnutelnosti || defaultForm.typ);
+      })() as TypNehnutelnosti,
       kraj: String(d.kraj || defaultForm.kraj),
       okres: String(d.okres || defaultForm.okres),
       obec: String(d.obec || defaultForm.obec),
@@ -159,7 +173,24 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       typ_budovy: String(params.typ_domu || defaultForm.typ_budovy),
       rok_vystavby: String(params.rok_vystavby || defaultForm.rok_vystavby),
       mesacne_naklady: String(params.mesacne_poplatky || defaultForm.mesacne_naklady),
-      provizia_hodnota: String(d.provizia || defaultForm.provizia_hodnota),
+      provizia_hodnota: (() => {
+        const raw = String(d.provizia || "");
+        if (!raw) return defaultForm.provizia_hodnota;
+        // "4%" → calculate from predajna_cena
+        const pctMatch = raw.match(/(\d+(?:[.,]\d+)?)\s*%/);
+        if (pctMatch && d.predajna_cena) {
+          const pct = parseFloat(pctMatch[1].replace(",", "."));
+          return String(Math.round(Number(d.predajna_cena) * pct / 100));
+        }
+        // "5000€" or just number
+        const numMatch = raw.match(/(\d+(?:[.,]\d+)?)/);
+        return numMatch ? numMatch[1].replace(",", ".") : raw;
+      })(),
+      provizia_typ: (() => {
+        const raw = String(d.provizia || "");
+        if (raw.includes("%")) return "%" as const;
+        return "EUR" as const;
+      })(),
       poznamka_interna: String(d.popis || defaultForm.poznamka_interna),
       makler: String(d.makler || defaultForm.makler),
       // Typ výbavy z náberu (zariadený)
@@ -181,9 +212,10 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       spajza: hasAmenity("Špajza") || hasAmenity("Komora"),
       // Kategória / typ ponuky z náberu
       kategoria: (() => {
-        const typ = String(d.typ_obchodu || d.typ_ponuky || "").toLowerCase();
-        if (typ.includes("predaj") || typ.includes("kúp")) return "na-predaj";
-        if (typ.includes("nájom") || typ.includes("prenáj")) return "na-najom";
+        const ozn = String(d.oznacenie || "").toLowerCase();
+        const typZmluvy = String(d.typ_zmluvy || "").toLowerCase();
+        // Ak je výhradná zmluva alebo exkluzívna → IBA U NÁS
+        if (typZmluvy.includes("exkluz") || ozn === "vyhradne" || ozn === "exkluzivne") return "iba-u-nas-predaj";
         // Ak máme predajnú cenu, je to predaj
         if (d.predajna_cena) return "na-predaj";
         return defaultForm.kategoria;
@@ -193,6 +225,31 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       pripojenie,
       // Výhľad
       orientacia: String(params.vyhlad || defaultForm.orientacia),
+      // SEO — auto-fill
+      specialne_oznacenie: (() => {
+        const ozn = String(d.oznacenie || "").toLowerCase();
+        if (ozn === "vyhradne" || ozn === "exkluzivne") return "top";
+        if (d.predajna_cena) return "top";
+        return defaultForm.specialne_oznacenie;
+      })(),
+      seo_keywords: (() => {
+        const parts: string[] = [];
+        const typN = String(d.typ_nehnutelnosti || "").toLowerCase();
+        const izby = Number((d.parametre as Record<string, unknown>)?.pocet_izieb || 0);
+        if (typN === "byt" && izby) parts.push(`${izby}-izbový byt`);
+        else if (typN === "byt") parts.push("Byt");
+        else if (typN === "rodinny_dom") parts.push("Rodinný dom");
+        else if (typN === "pozemok") parts.push("Pozemok");
+        const obec = String(d.obec || "");
+        const okres = String(d.okres || "");
+        if (obec) parts.push(obec);
+        if (okres && okres !== obec) parts.push(okres);
+        if (d.predajna_cena) parts.push("na predaj");
+        const stav = String(d.stav || "");
+        if (stav.includes("rekonstrukcia") || stav.includes("velmi_dobry")) parts.push("po rekonštrukcii");
+        if (stav === "novostavba") parts.push("novostavba");
+        return parts.join(" ") || defaultForm.seo_keywords;
+      })(),
     };
   });
   const [saving, setSaving] = useState(false);
@@ -586,21 +643,21 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     if (!ctx.trim()) return;
     setGenerating(true);
     try {
-      // Konvertuj fotky na base64 (max 5 fotiek, max 800px)
+      // Konvertuj fotky na base64 (max 8 fotiek, max 1200px, kvalita 0.85)
       const photoB64: string[] = [];
-      for (const p of photos.slice(0, 5)) {
+      for (const p of photos.slice(0, 8)) {
         try {
           const img = new Image();
           img.crossOrigin = "anonymous";
           await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = p.url; });
           const canvas = document.createElement("canvas");
-          const maxW = 800;
+          const maxW = 1200;
           const scale = Math.min(1, maxW / img.width);
           canvas.width = img.width * scale;
           canvas.height = img.height * scale;
           const ctxC = canvas.getContext("2d");
           ctxC?.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
           photoB64.push(dataUrl);
         } catch { /* skip */ }
       }

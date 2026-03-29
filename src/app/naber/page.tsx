@@ -101,25 +101,76 @@ function NaberPageContent() {
   }
 
   async function handleDatumConfirm() {
-    // Uloží dátum náberu na klienta + pridá do kalendára
+    // Uloží dátum náberu na klienta + pridá/updatuje do kalendára
     if (selectedKlient && naberDatum) {
-      await supabase.from("klienti").update({ datum_naberu: new Date(naberDatum).toISOString() }).eq("id", selectedKlient.id);
+      const newDatum = new Date(naberDatum).toISOString();
+      await supabase.from("klienti").update({ datum_naberu: newDatum }).eq("id", selectedKlient.id);
       if (user?.id) {
         try {
-          await fetch("/api/google/calendar", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userId: user.id,
-              summary: `Náber — ${selectedKlient.meno}`,
-              start: new Date(naberDatum).toISOString(),
-              description: [
-                selectedKlient.lokalita && `Adresa: ${selectedKlient.lokalita}`,
-                selectedKlient.telefon && `Tel: ${selectedKlient.telefon}`,
-              ].filter(Boolean).join("\n"),
-              location: selectedKlient.lokalita || "",
-            }),
-          });
+          // Ak klient má existujúci calendar event, updatuj ho
+          if (selectedKlient.calendar_event_id) {
+            const patchRes = await fetch("/api/google/calendar", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: user.id,
+                eventId: selectedKlient.calendar_event_id,
+                summary: `Náber — ${selectedKlient.meno}`,
+                start: newDatum,
+                description: [
+                  selectedKlient.lokalita && `Adresa: ${selectedKlient.lokalita}`,
+                  selectedKlient.telefon && `Tel: ${selectedKlient.telefon}`,
+                ].filter(Boolean).join("\n"),
+                location: selectedKlient.lokalita || "",
+              }),
+            });
+            if (patchRes.ok) { /* updated */ }
+            else {
+              // Ak update zlyhal (event neexistuje), vytvor nový
+              const res = await fetch("/api/google/calendar", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId: user.id,
+                  summary: `Náber — ${selectedKlient.meno}`,
+                  start: newDatum,
+                  description: [
+                    selectedKlient.lokalita && `Adresa: ${selectedKlient.lokalita}`,
+                    selectedKlient.telefon && `Tel: ${selectedKlient.telefon}`,
+                  ].filter(Boolean).join("\n"),
+                  location: selectedKlient.lokalita || "",
+                }),
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.event?.id) {
+                  await supabase.from("klienti").update({ calendar_event_id: data.event.id }).eq("id", selectedKlient.id);
+                }
+              }
+            }
+          } else {
+            // Nový event
+            const res = await fetch("/api/google/calendar", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: user.id,
+                summary: `Náber — ${selectedKlient.meno}`,
+                start: newDatum,
+                description: [
+                  selectedKlient.lokalita && `Adresa: ${selectedKlient.lokalita}`,
+                  selectedKlient.telefon && `Tel: ${selectedKlient.telefon}`,
+                ].filter(Boolean).join("\n"),
+                location: selectedKlient.lokalita || "",
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.event?.id) {
+                await supabase.from("klienti").update({ calendar_event_id: data.event.id }).eq("id", selectedKlient.id);
+              }
+            }
+          }
         } catch { /* ticho */ }
       }
     }

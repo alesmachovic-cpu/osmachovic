@@ -589,32 +589,49 @@ export default function KlientDetailPage() {
                 width: "2px", background: "var(--border)",
               }} />
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                {timeline.map(ev => (
-                  <div key={ev.id} style={{ display: "flex", gap: "16px", position: "relative" }}>
-                    <div style={{
-                      width: "40px", height: "40px", borderRadius: "50%",
-                      background: `${ev.color}15`, border: `2px solid ${ev.color}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "16px", flexShrink: 0, zIndex: 1,
-                    }}>{ev.icon}</div>
-                    <div style={{ flex: 1, paddingTop: "4px" }}>
-                      <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
-                        {ev.title}
-                      </div>
-                      {ev.detail && (
-                        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
-                          {ev.detail}
+                {timeline.map(ev => {
+                  const isClickable = ev.type === "naber" || ev.type === "objednavka";
+                  return (
+                    <div key={ev.id}
+                      onClick={() => {
+                        if (ev.type === "naber") setActiveTab("nabery");
+                        else if (ev.type === "objednavka") setActiveTab("objednavky");
+                      }}
+                      style={{
+                        display: "flex", gap: "16px", position: "relative",
+                        cursor: isClickable ? "pointer" : "default",
+                        padding: "8px", margin: "-8px", borderRadius: "10px",
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={e => { if (isClickable) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                    >
+                      <div style={{
+                        width: "40px", height: "40px", borderRadius: "50%",
+                        background: `${ev.color}15`, border: `2px solid ${ev.color}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "16px", flexShrink: 0, zIndex: 1,
+                      }}>{ev.icon}</div>
+                      <div style={{ flex: 1, paddingTop: "4px" }}>
+                        <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                          {ev.title}
+                          {isClickable && <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: "500" }}>Zobraziť →</span>}
                         </div>
-                      )}
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
-                        {new Date(ev.date).toLocaleDateString("sk", {
-                          day: "numeric", month: "long", year: "numeric",
-                          hour: "2-digit", minute: "2-digit",
-                        })}
+                        {ev.detail && (
+                          <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                            {ev.detail}
+                          </div>
+                        )}
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+                          {new Date(ev.date).toLocaleDateString("sk", {
+                            day: "numeric", month: "long", year: "numeric",
+                            hour: "2-digit", minute: "2-digit",
+                          })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

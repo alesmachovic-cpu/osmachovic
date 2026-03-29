@@ -308,7 +308,7 @@ export async function POST(req: NextRequest) {
   // Fotky ako base64 pre Gemini multimodal
   const photoImages: { data: string; mimeType: string }[] = [];
   if (Array.isArray(photos)) {
-    for (const p of photos.slice(0, 5)) {
+    for (const p of photos.slice(0, 8)) {
       if (typeof p === "string" && p.startsWith("data:image/")) {
         const [header, b64] = p.split(",");
         const mime = header.match(/data:(image\/[^;]+)/)?.[1] || "image/jpeg";

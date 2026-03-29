@@ -89,3 +89,61 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "create_failed" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const { userId, eventId } = await req.json();
+  if (!userId || !eventId) return NextResponse.json({ error: "userId and eventId required" }, { status: 400 });
+
+  const token = await getValidAccessToken(userId);
+  if (!token) return NextResponse.json({ error: "not_connected" }, { status: 401 });
+
+  try {
+    await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+      { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+    );
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("[calendar-delete]", e);
+    return NextResponse.json({ error: "delete_failed" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  const { userId, eventId, summary, start, end, description, location } = await req.json();
+  if (!userId || !eventId) return NextResponse.json({ error: "userId and eventId required" }, { status: 400 });
+
+  const token = await getValidAccessToken(userId);
+  if (!token) return NextResponse.json({ error: "not_connected" }, { status: 401 });
+
+  try {
+    const body: Record<string, unknown> = {};
+    if (summary) body.summary = summary;
+    if (start) body.start = { dateTime: start, timeZone: "Europe/Bratislava" };
+    if (end) body.end = { dateTime: end, timeZone: "Europe/Bratislava" };
+    else if (start) body.end = { dateTime: new Date(new Date(start).getTime() + 3600000).toISOString(), timeZone: "Europe/Bratislava" };
+    if (description !== undefined) body.description = description;
+    if (location !== undefined) body.location = location;
+
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+      {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error("[calendar-patch] error:", err);
+      return NextResponse.json({ error: "update_failed" }, { status: 500 });
+    }
+
+    const event = await res.json();
+    return NextResponse.json({ ok: true, event });
+  } catch (e) {
+    console.error("[calendar-patch]", e);
+    return NextResponse.json({ error: "update_failed" }, { status: 500 });
+  }
+}
