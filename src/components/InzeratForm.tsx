@@ -162,6 +162,14 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       provizia_hodnota: String(d.provizia || defaultForm.provizia_hodnota),
       poznamka_interna: String(d.popis || defaultForm.poznamka_interna),
       makler: String(d.makler || defaultForm.makler),
+      // Typ výbavy z náberu (zariadený)
+      typ_vybavy: (() => {
+        const z = String((d.vybavenie as Record<string, unknown>)?.zariadeny || "").toLowerCase();
+        if (z === "ano") return "uplne-zariadeny";
+        if (z === "ciastocne") return "ciastocne-zariadeny";
+        if (z === "nie") return "nezariadeny";
+        return defaultForm.typ_vybavy;
+      })(),
       // Priestory z amenít náberu
       balkon: hasAmenity("Balkón"),
       loggia: hasAmenity("Lodžia"),
@@ -533,6 +541,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     if (f.orientacia) l.push(`Orientácia: ${f.orientacia}`);
     if (f.vlastnictvo) l.push(`Vlastníctvo: ${f.vlastnictvo}`);
     if (f.typ_budovy) l.push(`Typ budovy: ${f.typ_budovy}`);
+    if (f.typ_vybavy) l.push(`Výbava: ${f.typ_vybavy}`);
     if (f.rok_vystavby) l.push(`Rok výstavby: ${f.rok_vystavby}`);
     if (f.rok_rekonstrukcie) l.push(`Rok rekonštrukcie: ${f.rok_rekonstrukcie}`);
     if (f.energeticky_certifikat) l.push(`Energetický certifikát: ${f.energeticky_certifikat}`);
@@ -926,8 +935,8 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
 
           {/* Priestory */}
           <div style={s.card}>
-            <div style={s.title}>Priestory a vybavenie</div>
-            <div style={{ ...s.g2, marginBottom: "12px" }}>
+            <div style={s.title}>Priestory</div>
+            <div style={{ ...s.g2, marginBottom: "16px" }}>
               <div><label style={s.label}>Pozícia bytu</label>
                 <select style={s.select} value={f.pozicia} onChange={e => set("pozicia", e.target.value)}>
                   <option value="">—</option><option value="vyssie-poschodie">Vyššie poschodie</option><option value="stredne-poschodie">Stredné poschodie</option><option value="nizsie-poschodie">Nižšie poschodie</option><option value="prizemia">Prízemie</option><option value="suteren">Suterén</option><option value="mezonet">Mezonet</option>
@@ -935,23 +944,31 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
               </div>
               <div><label style={s.label}>Poschodie</label><input style={s.input} type="number" value={f.poschodie} onChange={e => set("poschodie", e.target.value)} /></div>
             </div>
-            <div style={{ ...s.g3, marginBottom: "12px" }}>
-              {[["balkon","Balkón"],["loggia","Loggia"],["terasa","Terasa"],["garaz","Garáž"],["pivnica","Pivnica"],["vytah","Výťah"]].map(([k,l]) => (
-                <Tog key={k} on={(f as Record<string, unknown>)[k] as boolean} set={v => set(k, v)} label={l} />
-              ))}
-            </div>
-            <div style={{ ...s.g3, marginBottom: "12px" }}>
-              {[["verejne_parkovanie","Verejné park."],["sukromne_parkovanie","Súkromné park."],["spajza","Špajza"],["sklad_toggle","Sklad"],["dielna","Dielňa"]].map(([k,l]) => (
-                <Tog key={k} on={(f as Record<string, unknown>)[k] as boolean} set={v => set(k, v)} label={l} />
-              ))}
-            </div>
 
-            {/* Detail priestorov ak zapnuté */}
-            {(f.balkon || f.loggia || f.terasa || f.pivnica || f.garaz) && (
-              <div style={{ ...s.g2, marginTop: "8px", paddingTop: "12px", borderTop: "1px solid #F3F4F6" }}>
+            {/* Exteriér */}
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: "8px" }}>Exteriér</div>
+            <div style={{ ...s.g3, marginBottom: "4px" }}>
+              {[["balkon","Balkón"],["loggia","Loggia"],["terasa","Terasa"]].map(([k,l]) => (
+                <Tog key={k} on={(f as Record<string, unknown>)[k] as boolean} set={v => set(k, v)} label={l} />
+              ))}
+            </div>
+            {(f.balkon || f.loggia || f.terasa) && (
+              <div style={{ ...s.g2, marginBottom: "8px", paddingLeft: "8px", borderLeft: "2px solid #E5E7EB" }}>
                 {f.balkon && <div><label style={s.label}>Balkón plocha (m²)</label><input style={s.input} type="number" value={f.balkon_plocha} onChange={e => set("balkon_plocha", e.target.value)} /></div>}
                 {f.loggia && <><div><label style={s.label}>Loggia plocha (m²)</label><input style={s.input} type="number" value={f.loggia_plocha} onChange={e => set("loggia_plocha", e.target.value)} /></div><div><label style={s.label}>Počet loggií</label><input style={s.input} type="number" value={f.loggia_pocet} onChange={e => set("loggia_pocet", e.target.value)} /></div></>}
                 {f.terasa && <div><label style={s.label}>Terasa plocha (m²)</label><input style={s.input} type="number" value={f.terasa_plocha} onChange={e => set("terasa_plocha", e.target.value)} /></div>}
+              </div>
+            )}
+
+            {/* Vybavenie budovy */}
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginTop: "12px", marginBottom: "8px" }}>Vybavenie budovy</div>
+            <div style={{ ...s.g3, marginBottom: "4px" }}>
+              {[["vytah","Výťah"],["garaz","Garáž"],["pivnica","Pivnica"]].map(([k,l]) => (
+                <Tog key={k} on={(f as Record<string, unknown>)[k] as boolean} set={v => set(k, v)} label={l} />
+              ))}
+            </div>
+            {(f.pivnica || f.garaz) && (
+              <div style={{ ...s.g2, marginBottom: "8px", paddingLeft: "8px", borderLeft: "2px solid #E5E7EB" }}>
                 {f.pivnica && <><div><label style={s.label}>Pivnica plocha (m²)</label><input style={s.input} type="number" value={f.pivnica_plocha} onChange={e => set("pivnica_plocha", e.target.value)} /></div><div><label style={s.label}>Počet pivníc</label><input style={s.input} type="number" value={f.pivnica_pocet} onChange={e => set("pivnica_pocet", e.target.value)} /></div></>}
                 {f.garaz && <div><label style={s.label}>Typ parkovania</label>
                   <select style={s.select} value={f.parkovanie_typ} onChange={e => set("parkovanie_typ", e.target.value)}>
@@ -960,6 +977,14 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
                 </div>}
               </div>
             )}
+
+            {/* Ostatné */}
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginTop: "12px", marginBottom: "8px" }}>Parkovanie a ostatné</div>
+            <div style={{ ...s.g3 }}>
+              {[["verejne_parkovanie","Verejné park."],["sukromne_parkovanie","Súkromné park."],["spajza","Špajza"],["sklad_toggle","Sklad"],["dielna","Dielňa"]].map(([k,l]) => (
+                <Tog key={k} on={(f as Record<string, unknown>)[k] as boolean} set={v => set(k, v)} label={l} />
+              ))}
+            </div>
           </div>
 
           {/* Roky + poschodia */}
@@ -971,16 +996,23 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
               <div><label style={s.label}>Rok kolaudácie</label><input style={s.input} type="number" value={f.rok_kolaudacie} onChange={e => set("rok_kolaudacie", e.target.value)} /></div>
             </div>
             <div style={s.g2}>
-              <div><label style={s.label}>Poschodia vyššie</label><input style={s.input} type="number" value={f.poschodia_vyssie} onChange={e => set("poschodia_vyssie", e.target.value)} /></div>
-              <div><label style={s.label}>Poschodia nižšie</label><input style={s.input} type="number" value={f.poschodia_nizsie} onChange={e => set("poschodia_nizsie", e.target.value)} /></div>
+              <div><label style={s.label}>Celkom poschodí v budove</label><input style={s.input} type="number" value={f.poschodia_vyssie} onChange={e => set("poschodia_vyssie", e.target.value)} placeholder="napr. 8" /></div>
+              <div><label style={s.label}>Podzemné podlažia</label><input style={s.input} type="number" value={f.poschodia_nizsie} onChange={e => set("poschodia_nizsie", e.target.value)} placeholder="napr. 1" /></div>
             </div>
           </div>
 
           {/* Vykurovanie */}
           <div style={s.card}>
-            <div style={s.title}>Vykurovanie</div>
+            <div style={s.title}>Vykurovanie a klimatizácia</div>
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: "8px" }}>Typ vykurovania</div>
             <div style={s.g3}>
-              {[["centralne","Centrálne"],["podlahove","Podlahové"],["lokalne","Lokálne"],["kozub","Kozub"],["klimatizacia","Klimatizácia"],["emitory","Emitory"],["ine","Iné"]].map(([k,l]) => (
+              {[["centralne","Centrálne"],["podlahove","Podlahové"],["lokalne","Lokálne"],["kozub","Kozub / krb"]].map(([k,l]) => (
+                <Tog key={k} on={f.vykurovanie[k] ?? false} set={v => setVyk(k, v)} label={l} />
+              ))}
+            </div>
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginTop: "12px", marginBottom: "8px" }}>Klimatizácia a ostatné</div>
+            <div style={s.g3}>
+              {[["klimatizacia","Klimatizácia"],["emitory","Emitory / radiátory"],["ine","Iné"]].map(([k,l]) => (
                 <Tog key={k} on={f.vykurovanie[k] ?? false} set={v => setVyk(k, v)} label={l} />
               ))}
             </div>
