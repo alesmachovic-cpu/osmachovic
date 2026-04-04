@@ -8,6 +8,8 @@ import { STATUS_LABELS } from "@/lib/database.types";
 import NaberyForm from "@/components/NaberyForm";
 import Stepper from "@/components/Stepper";
 import { useAuth } from "@/components/AuthProvider";
+import { getMaklerUuid } from "@/lib/maklerMap";
+import { getUserItem } from "@/lib/userStorage";
 
 type TypNaber = "byt" | "rodinny_dom" | "pozemok";
 
@@ -38,6 +40,10 @@ function NaberPageContent() {
   const searchParams = useSearchParams();
   const preselectedKlientId = searchParams.get("klient_id");
   const { user } = useAuth();
+  const isAdmin = user?.id === "ales";
+  const [filterMakler, setFilterMakler] = useState<string>(isAdmin ? "all" : "mine");
+  const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
+  const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
 
   const [step, setStep] = useState<Step>("klient");
   const [selectedKlient, setSelectedKlient] = useState<Klient | null>(null);
@@ -52,6 +58,11 @@ function NaberPageContent() {
   });
   const [showDatumPicker, setShowDatumPicker] = useState(false);
   const [calendarSynced, setCalendarSynced] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [savedNaberData, setSavedNaberData] = useState<any>(null);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState("");
 
   // Klient search
   const [klienti, setKlienti] = useState<Klient[]>([]);
@@ -60,14 +71,16 @@ function NaberPageContent() {
 
   useEffect(() => {
     loadKlienti();
+    supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
   }, []);
 
   async function loadKlienti() {
     setLoading(true);
-    const { data } = await supabase
-      .from("klienti")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // Get my UUID for client-side filter
+    const uuid = user?.id ? await getMaklerUuid(user.id) : null;
+    setMyMaklerUuid(uuid);
+    // Load all clients - filtering by makler is done client-side
+    const { data } = await supabase.from("klienti").select("*").order("created_at", { ascending: false });
     setKlienti(data ?? []);
 
     // Ak prišiel klient_id z URL, preskočí rovno na typ
@@ -192,6 +205,9 @@ function NaberPageContent() {
         const { data: naberData } = await supabase
           .from("naberove_listy").select("*").eq("id", data.id).single();
 
+        // Store naber data for PDF generation
+        setSavedNaberData(naberData);
+
         const naberAdresa = naberData
           ? [naberData.ulica, naberData.cislo_orientacne, naberData.obec, naberData.okres].filter(Boolean).join(", ")
           : selectedKlient.lokalita || "";
@@ -229,6 +245,9 @@ function NaberPageContent() {
   const filtered = klienti.filter(k => {
     // Len predávajúci alebo oboje — kupujúci nepatria do náberu
     if (k.typ === "kupujuci") return false;
+    // Makler filter
+    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid) return false;
+    if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -343,6 +362,32 @@ function NaberPageContent() {
             Zvol klienta pre nový náberový list
           </p>
         </div>
+
+        {/* Makler filter */}
+        {makleri.length > 0 && (
+          <div style={{ display: "flex", gap: "6px", marginBottom: "12px", flexWrap: "wrap" }}>
+            <button onClick={() => setFilterMakler("mine")} style={{
+              padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
+              background: filterMakler === "mine" ? "#374151" : "var(--bg-surface)",
+              color: filterMakler === "mine" ? "#fff" : "var(--text-secondary)",
+              border: "1px solid var(--border)",
+            }}>Moji</button>
+            <button onClick={() => setFilterMakler("all")} style={{
+              padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
+              background: filterMakler === "all" ? "#374151" : "var(--bg-surface)",
+              color: filterMakler === "all" ? "#fff" : "var(--text-secondary)",
+              border: "1px solid var(--border)",
+            }}>Všetci</button>
+            {makleri.map(m => (
+              <button key={m.id} onClick={() => setFilterMakler(m.id)} style={{
+                padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
+                background: filterMakler === m.id ? "#374151" : "var(--bg-surface)",
+                color: filterMakler === m.id ? "#fff" : "var(--text-secondary)",
+                border: "1px solid var(--border)",
+              }}>{m.meno}</button>
+            ))}
+          </div>
+        )}
 
         {/* Vyhľadávanie */}
         <div style={{ position: "relative", marginBottom: "20px" }}>
@@ -565,6 +610,43 @@ function NaberPageContent() {
     );
   }
 
+  // Odoslanie PDF na email klienta
+  async function handleSendEmail() {
+    if (!selectedKlient?.email || !savedNaberId) return;
+    setEmailSending(true);
+    setEmailError("");
+    try {
+      const uid = user?.id || "";
+      const maklerMeno = getUserItem(uid, "makler_name") || savedNaberData?.makler || "VIANEMA";
+
+      const res = await fetch("/api/naber-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          naberId: savedNaberId,
+          to: selectedKlient.email,
+          maklerMeno,
+        }),
+      });
+
+      if (res.ok) {
+        setEmailSent(true);
+      } else {
+        const data = await res.json();
+        setEmailError(data.error || "Odoslanie zlyhalo");
+      }
+    } catch {
+      setEmailError("Chyba pri odosielaní");
+    }
+    setEmailSending(false);
+  }
+
+  // Stiahnutie PDF
+  function handleDownloadPdf() {
+    if (!savedNaberId) return;
+    window.open(`/api/naber-pdf?id=${savedNaberId}`, "_blank");
+  }
+
   // KROK 4: Potvrdenie
   return (
     <div style={{ maxWidth: "720px" }}>
@@ -596,11 +678,76 @@ function NaberPageContent() {
             background: calendarSynced ? "#ECFDF5" : "#FEF3C7",
             color: calendarSynced ? "#059669" : "#D97706",
             border: `1px solid ${calendarSynced ? "#BBF7D0" : "#FDE68A"}`,
-            marginBottom: "24px",
+            marginBottom: "16px",
           }}>
             {calendarSynced ? "✓ V kalendári" : "⏳ Čaká na sync"} — {new Date(naberDatum).toLocaleString("sk", {
               day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
             })}
+          </div>
+        )}
+
+        {/* Email klientovi */}
+        {selectedKlient?.email && savedNaberData && (
+          <div style={{
+            background: "var(--bg-elevated)", border: "1px solid var(--border)",
+            borderRadius: "14px", padding: "20px", marginBottom: "20px", textAlign: "left",
+          }}>
+            <div style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+              Odoslať kópiu klientovi
+            </div>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 12px" }}>
+              PDF náberového listu bude odoslaný na <strong style={{ color: "var(--text-primary)" }}>{selectedKlient.email}</strong>
+            </p>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={handleSendEmail}
+                disabled={emailSending || emailSent}
+                style={{
+                  padding: "10px 20px", background: emailSent ? "#059669" : "#374151",
+                  color: "#fff", border: "none", borderRadius: "10px",
+                  fontSize: "13px", fontWeight: "600", cursor: emailSending || emailSent ? "default" : "pointer",
+                  opacity: emailSending ? 0.7 : 1,
+                  display: "flex", alignItems: "center", gap: "6px",
+                }}
+              >
+                {emailSending ? "Odosielam..." : emailSent ? "✓ Odoslané" : "Odoslať na email"}
+              </button>
+              <button
+                onClick={handleDownloadPdf}
+                style={{
+                  padding: "10px 20px", background: "var(--bg-surface)",
+                  color: "var(--text-primary)", border: "1px solid var(--border)",
+                  borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+                }}
+              >
+                Stiahnuť PDF
+              </button>
+            </div>
+            {emailError && (
+              <p style={{ fontSize: "12px", color: "#DC2626", marginTop: "8px" }}>{emailError}</p>
+            )}
+          </div>
+        )}
+
+        {/* PDF download ak klient nemá email */}
+        {(!selectedKlient?.email) && savedNaberData && (
+          <div style={{
+            background: "var(--bg-elevated)", border: "1px solid var(--border)",
+            borderRadius: "14px", padding: "20px", marginBottom: "20px",
+          }}>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 8px" }}>
+              Klient nemá email — môžete stiahnuť PDF a poslať manuálne
+            </p>
+            <button
+              onClick={handleDownloadPdf}
+              style={{
+                padding: "10px 20px", background: "#374151",
+                color: "#fff", border: "none", borderRadius: "10px",
+                fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}
+            >
+              Stiahnuť PDF
+            </button>
           </div>
         )}
 
@@ -612,7 +759,7 @@ function NaberPageContent() {
             border: "1px solid var(--border)", borderRadius: "10px", fontSize: "14px",
             fontWeight: "600", cursor: "pointer",
           }}>
-            🏠 Domov
+            Domov
           </button>
           <button onClick={() => {
             window.location.href = selectedKlient ? `/inzerat?klient_id=${selectedKlient.id}` : "/inzerat";
@@ -620,7 +767,7 @@ function NaberPageContent() {
             padding: "12px 28px", background: "#374151", color: "#fff", border: "none",
             borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
           }}>
-            Vytvoriť inzerát →
+            Vytvoriť inzerát
           </button>
           {selectedKlient && (
             <button onClick={() => {

@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import type { TypNehnutelnosti, StavNehnutelnosti } from "@/lib/database.types";
 import { KRAJE } from "@/lib/database.types";
+import { useAuth } from "@/components/AuthProvider";
+import { getUserItem } from "@/lib/userStorage";
 
 /* ── Design tokens ── */
 const s = {
@@ -103,6 +105,8 @@ const defaultForm = {
 };
 
 export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSaved?: () => void; onCancel?: () => void; prefilledData?: Record<string, unknown> | null } = {}) {
+  const { user: authUser } = useAuth();
+  const uid = authUser?.id || "";
   const [f, setF] = useState(() => {
     if (!prefilledData) return defaultForm;
     // Prefill z náberu — mapuj VŠETKY dostupné polia
@@ -166,7 +170,15 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         };
         return map[raw] || raw || defaultForm.stav;
       })(),
-      izby: String(params.pocet_izieb || defaultForm.izby),
+      izby: (() => {
+        const fromParams = Number(params.pocet_izieb || 0);
+        if (fromParams > 0) return String(fromParams);
+        // Extract from kategória if available (e.g. "3-izbový byt" → 3)
+        const kat = String(d.kategoria || d.typ_nehnutelnosti || "");
+        const katMatch = kat.match(/(\d+)\s*-?\s*izb/i);
+        if (katMatch) return katMatch[1];
+        return defaultForm.izby;
+      })(),
       poschodie: String(params.poschodie || defaultForm.poschodie),
       poschodia_vyssie: String(params.z_kolko || defaultForm.poschodia_vyssie),
       vlastnictvo: String(params.vlastnictvo || vyb.vlastnictvo || defaultForm.vlastnictvo),
@@ -585,7 +597,10 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     l.push("═══ FORMULÁROVÉ ÚDAJE (orientačné — dokumenty nižšie majú PREDNOSŤ) ═══");
     if (f.kategoria) l.push(`Ponuka: ${f.kategoria}`);
     if (f.typ) l.push(`Typ: ${f.typ}`);
-    if (f.izby) l.push(`Izby (formulár): ${f.izby}`);
+    // Derive izby from typ if typ contains a number (e.g. "3-izbovy-byt" → 3)
+    const typIzbyMatch = f.typ.match(/(\d+)-izb/);
+    const effectiveIzby = typIzbyMatch ? typIzbyMatch[1] : f.izby;
+    if (effectiveIzby) l.push(`Izby (formulár): ${effectiveIzby}`);
     if (f.stav) l.push(`Stav: ${f.stav}`);
     if (f.cena) l.push(`Cena: ${f.cena} €`);
     if (f.plocha) l.push(`Plocha (formulár): ${f.plocha} m²`);
@@ -665,17 +680,17 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       // Lokalita — priorita: ulica > obec > okres
       const lokalitaFull = [f.ulica_verejna, f.obec, f.okres, f.kraj].filter(Boolean).join(", ");
 
-      // Load makler profile from settings
+      // Load makler profile from settings (per-user)
       let maklerMeno = "", maklerTelefon = "", maklerEmail = "", vzorovyInzerat = "";
       try {
-        const mp = localStorage.getItem("makler_profile");
+        const mp = getUserItem(uid, "makler_profile");
         if (mp) {
           const p = JSON.parse(mp);
           maklerMeno = p.meno || "";
           maklerTelefon = p.telefon || "";
           maklerEmail = p.email || "";
         }
-        const vi = localStorage.getItem("vzorove_inzeraty");
+        const vi = getUserItem(uid, "vzorove_inzeraty");
         if (vi) {
           const links = JSON.parse(vi) as string[];
           vzorovyInzerat = links.filter(Boolean).join("\n");
@@ -688,7 +703,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
           nazov: `${f.typ} ${[f.obec, f.okres].filter(Boolean).join(", ")}`.trim(),
           typ: f.typ, lokalita: lokalitaFull,
           cena: Number(f.cena) || 0, plocha: Number(f.plocha) || null,
-          izby: Number(f.izby) || null, stav: f.stav, popis: ctx,
+          izby: Number(f.typ.match(/(\d+)-izb/)?.[1] || f.izby) || null, stav: f.stav, popis: ctx,
           photos: photoB64,
           maklerMeno, maklerTelefon, maklerEmail, vzorovyInzerat,
         }),
@@ -755,10 +770,10 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         } catch { /* skip */ }
       }
 
-      // Load makler profile for refine too
+      // Load makler profile for refine too (per-user)
       let rMeno = "", rTel = "", rEmail = "";
       try {
-        const mp = localStorage.getItem("makler_profile");
+        const mp = getUserItem(uid, "makler_profile");
         if (mp) { const p = JSON.parse(mp); rMeno = p.meno || ""; rTel = p.telefon || ""; rEmail = p.email || ""; }
       } catch { /* ignore */ }
 

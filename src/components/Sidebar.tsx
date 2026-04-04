@@ -3,6 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import { isFeatureEnabled } from "@/lib/featureToggles";
+
+const ROUTE_FEATURE_MAP: Record<string, string> = {
+  "/": "dashboard",
+  "/portfolio": "portfolio",
+  "/klienti": "klienti",
+  "/kupujuci": "kupujuci",
+  "/naber": "nabery",
+  "/inzerat": "ai_writer",
+  "/kalendar": "kalendar",
+  "/nastavenia": "nastavenia",
+};
 
 const mainNav = [
   { label: "Prehľad",      href: "/",           icon: "📊" },
@@ -87,6 +99,12 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
 
+  const filterNav = (items: NavItem[]) =>
+    user ? items.filter(item => {
+      const feat = ROUTE_FEATURE_MAP[item.href];
+      return !feat || isFeatureEnabled(user.id, feat);
+    }) : items;
+
   return (
     <aside style={{
       width: "220px", minWidth: "220px", height: "100vh",
@@ -114,13 +132,13 @@ export default function Sidebar() {
       {/* Nav */}
       <nav style={{ flex: 1, padding: "0 8px", overflowY: "auto" }}>
         <SectionLabel label="HLAVNÉ" />
-        {mainNav.map(item => <NavLink key={item.href} item={item} active={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)} />)}
+        {filterNav(mainNav).map(item => <NavLink key={item.href} item={item} active={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)} />)}
         <SectionLabel label="NÁSTROJE" />
-        {toolsNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
+        {filterNav(toolsNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
         <SectionLabel label="OPERATÍVA" />
-        {operativaNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
+        {filterNav(operativaNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
         <SectionLabel label="SYSTÉM" />
-        {systemNav.map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
+        {filterNav(systemNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
       </nav>
 
       {/* User */}

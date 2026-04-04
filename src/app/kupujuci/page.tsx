@@ -7,6 +7,8 @@ import { STATUS_LABELS } from "@/lib/database.types";
 import ObjednavkaForm from "@/components/ObjednavkaForm";
 import NewKlientModal from "@/components/NewKlientModal";
 import Stepper from "@/components/Stepper";
+import { useAuth } from "@/components/AuthProvider";
+import { getMaklerUuid } from "@/lib/maklerMap";
 
 type Step = "zoznam" | "klient" | "formular" | "hotovo";
 
@@ -17,6 +19,8 @@ const OBJ_STEPS = [
 ];
 
 export default function KupujuciPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.id === "ales";
   const [step, setStep] = useState<Step>("zoznam");
   const [selectedKlient, setSelectedKlient] = useState<Klient | null>(null);
   const [submittedAt, setSubmittedAt] = useState("");
@@ -29,17 +33,23 @@ export default function KupujuciPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"objednavky" | "klienti" | "nova">("objednavky");
+  const [filterMakler, setFilterMakler] = useState<string>("mine");
+  const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
+  const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
+    supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
   }, []);
 
   async function loadData() {
     setLoading(true);
+    const uuid = user?.id ? await getMaklerUuid(user.id) : null;
+    setMyMaklerUuid(uuid);
+    // Load all clients — filtering is done at display level
     const klientiRes = await supabase.from("klienti").select("*").order("created_at", { ascending: false });
     setKlienti(klientiRes.data ?? []);
     const objRes = await supabase.from("objednavky").select("*").order("created_at", { ascending: false });
-    // Ak tabuľka neexistuje, data bude null
     setObjednavky(objRes.data ?? []);
     setLoading(false);
   }
@@ -49,6 +59,9 @@ export default function KupujuciPage() {
   const kupujuciKlienti = klienti.filter(k => k.typ === "kupujuci" || k.typ === "oboje");
 
   const filtered = kupujuciKlienti.filter(k => {
+    // Makler filter
+    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid) return false;
+    if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -312,9 +325,9 @@ export default function KupujuciPage() {
           </div>
         </div>
 
-        {/* Search + nový klient */}
-        <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
-          <div style={{ position: "relative", flex: 1 }}>
+        {/* Search + filter + nový klient */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "20px", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
             <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", fontSize: "15px", color: "var(--text-muted)", pointerEvents: "none" }}>🔍</span>
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Hľadaj meno, telefón..."
@@ -324,6 +337,18 @@ export default function KupujuciPage() {
                 color: "var(--text-primary)", outline: "none",
               }} />
           </div>
+          {makleri.length > 0 && (
+            <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={{
+              padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+              borderRadius: "12px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
+              appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+              backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+            }}>
+              <option value="mine">Moji klienti</option>
+              <option value="all">Všetci</option>
+              {makleri.map(m => <option key={m.id} value={m.id}>{m.meno}</option>)}
+            </select>
+          )}
           <button onClick={() => setModal(true)} style={{
             padding: "0 16px", background: "var(--bg-surface)", border: "1px solid var(--border)",
             borderRadius: "12px", fontSize: "13px", fontWeight: "600", cursor: "pointer",

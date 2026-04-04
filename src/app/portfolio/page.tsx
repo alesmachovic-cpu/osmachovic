@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import InzeratForm from "@/components/InzeratForm";
+import { useAuth } from "@/components/AuthProvider";
+import { getMaklerUuid } from "@/lib/maklerMap";
 
 /* ── Typy podľa skutočnej DB schémy ── */
 interface DBNehnutelnost {
@@ -58,6 +60,8 @@ function typLabel(typ: string): string {
 }
 
 export default function Portfolio() {
+  const { user } = useAuth();
+  const isAdmin = user?.id === "ales";
   const [items, setItems] = useState<DBNehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<SortKey>("created_at");
@@ -77,10 +81,9 @@ export default function Portfolio() {
 
   async function loadItems() {
     setLoading(true);
-    const { data } = await supabase
-      .from("nehnutelnosti")
-      .select("*")
-      .order(sort, { ascending: sortDir === "asc" });
+    // Load all - filtering done client-side
+    const query = supabase.from("nehnutelnosti").select("*").order(sort, { ascending: sortDir === "asc" });
+    const { data } = await query;
     setItems((data as DBNehnutelnost[]) ?? []);
     setLoading(false);
   }

@@ -6,6 +6,8 @@ import { supabase } from "@/lib/supabase";
 import type { Klient } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
+import { useAuth } from "@/components/AuthProvider";
+import { getMaklerUuid } from "@/lib/maklerMap";
 
 const statusColors: Record<string, { color: string; bg: string }> = {
   novy:                { color: "#374151", bg: "#F3F4F6" },
@@ -36,6 +38,8 @@ export default function KlientiPage() {
 }
 
 function KlientiContent() {
+  const { user, accounts } = useAuth();
+  const isAdmin = user?.id === "ales";
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
@@ -43,20 +47,30 @@ function KlientiContent() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("");
   const [filterTyp, setFilterTyp] = useState<FilterTyp>("");
+  const [filterMakler, setFilterMakler] = useState<string>("mine"); // default: my clients
+  const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
+  const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
 
   async function fetchKlienti() {
     setLoading(true);
-    const { data } = await supabase
-      .from("klienti")
-      .select("*")
-      .order("created_at", { ascending: false });
+
+    // Get my makler UUID
+    const uuid = user?.id ? await getMaklerUuid(user.id) : null;
+    setMyMaklerUuid(uuid);
+
+    // Everyone loads ALL clients — filtering is done client-side
+    const { data } = await supabase.from("klienti").select("*").order("created_at", { ascending: false });
     setKlienti((data as Klient[]) ?? []);
     setLoading(false);
   }
 
   const searchParams = useSearchParams();
 
-  useEffect(() => { fetchKlienti(); }, []);
+  useEffect(() => {
+    fetchKlienti();
+    // Load makleri list for all users (for filter dropdown)
+    supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
+  }, []);
 
   // Auto-open edit modal from query param (?edit=ID)
   useEffect(() => {
@@ -68,6 +82,9 @@ function KlientiContent() {
   }, [searchParams, klienti]);
 
   const filtered = klienti.filter(k => {
+    // Makler filter
+    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid) return false;
+    if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
     if (search) {
       const q = search.toLowerCase();
       const hay = `${k.meno} ${k.email || ""} ${k.telefon || ""} ${k.lokalita || ""}`.toLowerCase();
@@ -78,12 +95,19 @@ function KlientiContent() {
     return true;
   });
 
+  // Counts based on filtered list (respects makler filter)
   const counts = {
-    total: klienti.length,
-    novy: klienti.filter(k => k.status === "novy" || k.status === "novy_kontakt").length,
-    aktivny: klienti.filter(k => k.status === "aktivny" || k.status === "dohodnuty_naber").length,
-    cakajuci: klienti.filter(k => k.status === "caka_na_schvalenie").length,
+    total: filtered.length,
+    novy: filtered.filter(k => k.status === "novy" || k.status === "novy_kontakt").length,
+    aktivny: filtered.filter(k => k.status === "aktivny" || k.status === "dohodnuty_naber").length,
+    cakajuci: filtered.filter(k => k.status === "caka_na_schvalenie").length,
   };
+
+  // Assign makler to klient (admin only)
+  async function assignMakler(klientId: string, newMaklerId: string) {
+    await supabase.from("klienti").update({ makler_id: newMaklerId }).eq("id", klientId);
+    fetchKlienti();
+  }
 
   const selectSt: React.CSSProperties = {
     padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)",
@@ -99,7 +123,7 @@ function KlientiContent() {
         <div>
           <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>Klienti</h1>
           <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "4px 0 0" }}>
-            {filtered.length} z {counts.total} klientov
+            {filtered.length} klientov
           </p>
         </div>
         <button onClick={() => { setEditingKlient(null); setModal(true); }} style={{
@@ -146,6 +170,15 @@ function KlientiContent() {
           <option value="predavajuci">Predávajúci</option>
           <option value="oboje">Oboje</option>
         </select>
+        {makleri.length > 0 && (
+          <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={selectSt}>
+            <option value="mine">Moji klienti</option>
+            <option value="all">Všetci</option>
+            {makleri.map(m => (
+              <option key={m.id} value={m.id}>{m.meno}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Loading */}
@@ -170,12 +203,13 @@ function KlientiContent() {
       {/* Table */}
       {!loading && filtered.length > 0 && (
         <div style={{ background: "var(--bg-surface)", borderRadius: "14px", border: "1px solid var(--border)", overflow: "hidden" }}>
-          <div className="table-header" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 120px 130px 60px", padding: "12px 20px", fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", borderBottom: "1px solid var(--border)", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+          <div className="table-header" style={{ display: "grid", gridTemplateColumns: isAdmin ? "2fr 1fr 120px 130px 140px 60px" : "2fr 1fr 1fr 120px 130px 60px", padding: "12px 20px", fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", borderBottom: "1px solid var(--border)", textTransform: "uppercase", letterSpacing: "0.03em" }}>
             <span>Klient</span>
             <span>Kontakt</span>
-            <span>Rozpočet</span>
+            {!isAdmin && <span>Rozpočet</span>}
             <span>Typ</span>
             <span>Status</span>
+            {isAdmin && <span>Makler</span>}
             <span></span>
           </div>
           {filtered.map((k, i) => {
@@ -185,7 +219,7 @@ function KlientiContent() {
             const isInactive = k.status === "caka_na_schvalenie";
             return (
               <div key={k.id} className="table-row" style={{
-                display: "grid", gridTemplateColumns: "2fr 1fr 1fr 120px 130px 60px",
+                display: "grid", gridTemplateColumns: isAdmin ? "2fr 1fr 120px 130px 140px 60px" : "2fr 1fr 1fr 120px 130px 60px",
                 padding: "14px 20px", alignItems: "center",
                 borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none",
                 fontSize: "13px", cursor: "pointer", transition: "background 0.1s",
@@ -221,10 +255,12 @@ function KlientiContent() {
                     {k.email || "—"}
                   </div>
                 </div>
-                {/* Rozpočet */}
-                <div className="table-cell-hide" style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                  {"—"}
-                </div>
+                {/* Rozpočet - only for non-admin */}
+                {!isAdmin && (
+                  <div className="table-cell-hide" style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    {"—"}
+                  </div>
+                )}
                 {/* Typ */}
                 <div className="table-cell-hide" style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                   {typLabels[k.typ] || k.typ || "—"}
@@ -260,6 +296,25 @@ function KlientiContent() {
                     ].map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
+                {/* Admin: Assign makler */}
+                {isAdmin && (
+                  <div onClick={e => e.stopPropagation()}>
+                    <select
+                      value={k.makler_id || ""}
+                      onChange={e => assignMakler(k.id, e.target.value)}
+                      style={{
+                        fontSize: "10px", padding: "3px 20px 3px 6px", borderRadius: "8px", fontWeight: "600",
+                        color: "var(--text-secondary)", background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                        cursor: "pointer", appearance: "none", outline: "none", maxWidth: "130px",
+                        backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+                        backgroundRepeat: "no-repeat", backgroundPosition: "right 6px center",
+                      }}
+                    >
+                      <option value="">—</option>
+                      {makleri.map(m => <option key={m.id} value={m.id}>{m.meno}</option>)}
+                    </select>
+                  </div>
+                )}
                 {/* Upraviť */}
                 <div style={{ textAlign: "center" }} onClick={e => e.stopPropagation()}>
                   <button onClick={() => { setEditingKlient(k); setModal(true); }} style={{

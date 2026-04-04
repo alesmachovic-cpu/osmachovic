@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { KRAJE } from "@/lib/database.types";
 import type { Klient, TypInzercie } from "@/lib/database.types";
 import SignatureCanvas from "@/components/SignatureCanvas";
+import { useAuth } from "@/components/AuthProvider";
+import { getUserItem } from "@/lib/userStorage";
+import { getMaklerUuid } from "@/lib/maklerMap";
 
 const OKRESY: Record<string, string[]> = {
   "Bratislavský kraj": ["Bratislava I","Bratislava II","Bratislava III","Bratislava IV","Bratislava V","Malacky","Pezinok","Senec"],
@@ -60,6 +63,8 @@ interface Props {
 }
 
 export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
+  const { user: authUser } = useAuth();
+  const uid = authUser?.id || "";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -176,16 +181,23 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   // Podpis
   const [podpisData, setPodpisData] = useState<string | null>(null);
 
-  // Cenový odhad
-  const [odhadCenaM2, setOdhadCenaM2] = useState(() => {
-    try { return Number(localStorage.getItem("odhad_cena_m2")) || 2800; } catch { return 2800; }
-  });
-  const [rekonstrukciaM2, setRekonstrukciaM2] = useState(() => {
-    try { return Number(localStorage.getItem("rekonstrukcia_m2")) || 500; } catch { return 500; }
-  });
-  const [marza, setMarza] = useState(() => {
-    try { return Number(localStorage.getItem("marza_percent")) || 15; } catch { return 15; }
-  });
+  // Cenový odhad (per-user)
+  const [odhadCenaM2, setOdhadCenaM2] = useState(2800);
+  const [rekonstrukciaM2, setRekonstrukciaM2] = useState(500);
+  const [marza, setMarza] = useState(15);
+
+  // Load per-user pricing defaults
+  useEffect(() => {
+    if (!uid) return;
+    try {
+      const cm = getUserItem(uid, "odhad_cena_m2");
+      const rm = getUserItem(uid, "rekonstrukcia_m2");
+      const mp = getUserItem(uid, "marza_percent");
+      if (cm) setOdhadCenaM2(Number(cm) || 2800);
+      if (rm) setRekonstrukciaM2(Number(rm) || 500);
+      if (mp) setMarza(Number(mp) || 15);
+    } catch { /* ignore */ }
+  }, [uid]);
   const [potrebujeReko, setPotrebujeReko] = useState(true);
 
   // Dokumenty
@@ -243,7 +255,11 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       });
     }
 
-    const record = {
+    // Get makler UUID for current user
+    const maklerUuid = authUser?.id ? await getMaklerUuid(authUser.id) : null;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const record: Record<string, any> = {
       typ_nehnutelnosti: typ,
       klient_id: klient.id,
       kraj: kraj || null, okres: okres || null, obec: obec || null,
@@ -279,10 +295,12 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       return;
     }
 
-    // Update klient status → nabrany
+    // Update klient status → nabrany + ensure makler_id is set
+    const klientUpdate: Record<string, unknown> = { status: "nabrany" };
+    if (maklerUuid && !klient.makler_id) klientUpdate.makler_id = maklerUuid;
     await supabase
       .from("klienti")
-      .update({ status: "nabrany" })
+      .update(klientUpdate)
       .eq("id", klient.id);
 
     setSaving(false);

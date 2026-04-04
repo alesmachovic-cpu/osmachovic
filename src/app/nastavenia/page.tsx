@@ -3,13 +3,17 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import type { User } from "@/components/AuthProvider";
+import PhoneInput from "@/components/PhoneInput";
+import { ALL_FEATURES, loadFeatureToggles, saveFeatureToggles } from "@/lib/featureToggles";
+import type { FeatureId, FeatureToggles } from "@/lib/featureToggles";
+import { getUserItem, setUserItem } from "@/lib/userStorage";
 
 const DEFAULT_GOALS = { obrat: 5000, zmluvy: 10, nabery: 20 };
 
-function loadGoals() {
-  if (typeof window === "undefined") return DEFAULT_GOALS;
+function loadGoals(userId?: string) {
+  if (typeof window === "undefined" || !userId) return DEFAULT_GOALS;
   try {
-    const raw = localStorage.getItem("makler_goals");
+    const raw = getUserItem(userId, "makler_goals");
     if (raw) return { ...DEFAULT_GOALS, ...JSON.parse(raw) };
   } catch { /* ignore */ }
   return DEFAULT_GOALS;
@@ -27,6 +31,8 @@ export default function NastaveniaPage() {
   const [newUserPw, setNewUserPw] = useState("");
   const [showAddUser, setShowAddUser] = useState(false);
   const [accountSaved, setAccountSaved] = useState(false);
+  const [featureToggles, setFeatureToggles] = useState<FeatureToggles>({});
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; email: string | null }>({ connected: false, email: null });
   const [googleLoading, setGoogleLoading] = useState(true);
   const [cenaM2, setCenaM2] = useState(2800);
@@ -47,32 +53,38 @@ export default function NastaveniaPage() {
   // Active category
   const [activeCategory, setActiveCategory] = useState("profil");
 
+  const uid = authUser?.id || "";
+
   useEffect(() => {
-    setGoals(loadGoals());
+    if (!uid) return;
+    setGoals(loadGoals(uid));
     try {
-      const cm = localStorage.getItem("odhad_cena_m2");
-      const rm = localStorage.getItem("rekonstrukcia_m2");
-      const mp = localStorage.getItem("marza_percent");
+      const cm = getUserItem(uid, "odhad_cena_m2");
+      const rm = getUserItem(uid, "rekonstrukcia_m2");
+      const mp = getUserItem(uid, "marza_percent");
       if (cm) setCenaM2(Number(cm));
       if (rm) setRekoM2(Number(rm));
       if (mp) setMarzaPct(Number(mp));
 
-      // Load makler profile
-      const profile = localStorage.getItem("makler_profile");
+      // Load makler profile (per-user)
+      const profile = getUserItem(uid, "makler_profile");
       if (profile) {
         const p = JSON.parse(profile);
         setMaklerMeno(p.meno || "");
         setMaklerTelefon(p.telefon || "");
         setMaklerEmail(p.email || "");
       } else if (authUser) {
-        // Auto-fill from auth user
+        // Auto-fill from auth user for new accounts
         setMaklerMeno(authUser.name || "");
         setMaklerEmail(authUser.email || "");
       }
 
-      // Load vzorové inzeráty
-      const vi = localStorage.getItem("vzorove_inzeraty");
+      // Load vzorové inzeráty (per-user)
+      const vi = getUserItem(uid, "vzorove_inzeraty");
       if (vi) setVzorLinks(JSON.parse(vi));
+
+      // Load feature toggles (global - admin manages all)
+      setFeatureToggles(loadFeatureToggles());
     } catch { /* ignore */ }
 
     // Check Google connection status
@@ -100,21 +112,24 @@ export default function NastaveniaPage() {
   }, [authUser?.id, authUser?.name, authUser?.email]);
 
   function handleSaveCeny() {
-    localStorage.setItem("odhad_cena_m2", String(cenaM2));
-    localStorage.setItem("rekonstrukcia_m2", String(rekoM2));
-    localStorage.setItem("marza_percent", String(marzaPct));
+    if (!uid) return;
+    setUserItem(uid, "odhad_cena_m2", String(cenaM2));
+    setUserItem(uid, "rekonstrukcia_m2", String(rekoM2));
+    setUserItem(uid, "marza_percent", String(marzaPct));
     setCenoSaved(true);
     setTimeout(() => setCenoSaved(false), 2000);
   }
 
   function handleSaveMakler() {
-    localStorage.setItem("makler_profile", JSON.stringify({ meno: maklerMeno, telefon: maklerTelefon, email: maklerEmail }));
+    if (!uid) return;
+    setUserItem(uid, "makler_profile", JSON.stringify({ meno: maklerMeno, telefon: maklerTelefon, email: maklerEmail }));
     setMaklerSaved(true);
     setTimeout(() => setMaklerSaved(false), 2000);
   }
 
   function handleSaveVzory() {
-    localStorage.setItem("vzorove_inzeraty", JSON.stringify(vzorLinks));
+    if (!uid) return;
+    setUserItem(uid, "vzorove_inzeraty", JSON.stringify(vzorLinks));
     setVzorSaved(true);
     setTimeout(() => setVzorSaved(false), 2000);
   }
@@ -135,7 +150,8 @@ export default function NastaveniaPage() {
   }
 
   function handleSave() {
-    localStorage.setItem("makler_goals", JSON.stringify(goals));
+    if (!uid) return;
+    setUserItem(uid, "makler_goals", JSON.stringify(goals));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     window.dispatchEvent(new Event("goals-updated"));
@@ -211,7 +227,7 @@ export default function NastaveniaPage() {
               </div>
               <div>
                 <div style={labelSt}>Telefón</div>
-                <input style={inputSt} value={maklerTelefon} onChange={e => setMaklerTelefon(e.target.value)} placeholder="+421 9XX XXX XXX" />
+                <PhoneInput value={maklerTelefon} onChange={setMaklerTelefon} placeholder="+421 9XX XXX XXX" />
               </div>
               <div>
                 <div style={labelSt}>Email</div>
@@ -593,57 +609,120 @@ export default function NastaveniaPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {accounts.map(acc => (
               <div key={acc.id} style={{
-                display: "flex", alignItems: "center", gap: "12px",
-                padding: "12px 14px", borderRadius: "10px", background: "var(--bg-elevated)",
-                border: "1px solid var(--border)",
+                borderRadius: "10px", background: "var(--bg-elevated)",
+                border: "1px solid var(--border)", overflow: "hidden",
               }}>
                 <div style={{
-                  width: "38px", height: "38px", borderRadius: "50%",
-                  background: "#374151", color: "#fff",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "13px", fontWeight: "700", flexShrink: 0,
-                }}>{acc.initials}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>
-                    {acc.name} {acc.password ? "🔒" : ""}
+                  display: "flex", alignItems: "center", gap: "12px",
+                  padding: "12px 14px",
+                }}>
+                  <div style={{
+                    width: "38px", height: "38px", borderRadius: "50%",
+                    background: "#374151", color: "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "13px", fontWeight: "700", flexShrink: 0,
+                  }}>{acc.initials}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>
+                      {acc.name} {acc.password ? "🔒" : ""}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      {acc.email} · {acc.role}
+                    </div>
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    {acc.email} · {acc.role}
-                  </div>
+
+                  {editingUser?.id === acc.id ? (
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <input type="password" placeholder="Nové heslo" value={editingUser.password || ""}
+                        onChange={e => setEditingUser({ ...editingUser, password: e.target.value })}
+                        style={{ ...inputSt, width: "140px", padding: "6px 10px", fontSize: "12px" }}
+                      />
+                      <button onClick={() => {
+                        updateAccount(editingUser);
+                        setEditingUser(null);
+                        setAccountSaved(true);
+                        setTimeout(() => setAccountSaved(false), 2000);
+                      }} style={{
+                        padding: "6px 12px", background: "#374151", color: "#fff", border: "none",
+                        borderRadius: "6px", fontSize: "11px", fontWeight: "600", cursor: "pointer",
+                      }}>Uložiť</button>
+                      <button onClick={() => setEditingUser(null)} style={{
+                        padding: "6px 8px", background: "transparent", color: "var(--text-muted)",
+                        border: "none", fontSize: "11px", cursor: "pointer",
+                      }}>✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      {acc.id !== "ales" && (
+                        <button onClick={() => setExpandedUser(expandedUser === acc.id ? null : acc.id)} style={{
+                          padding: "5px 10px", background: expandedUser === acc.id ? "#374151" : "var(--bg-surface)",
+                          color: expandedUser === acc.id ? "#fff" : "var(--text-secondary)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px", fontSize: "11px", cursor: "pointer",
+                        }}>Funkcie</button>
+                      )}
+                      <button onClick={() => setEditingUser({ ...acc })} style={{
+                        padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+                        borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)",
+                      }}>Heslo</button>
+                      {acc.id !== "ales" && (
+                        <button onClick={() => { if (confirm(`Odstrániť účet ${acc.name}?`)) deleteAccount(acc.id); }} style={{
+                          padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+                          borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#EF4444",
+                        }}>Odstrániť</button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {editingUser?.id === acc.id ? (
-                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                    <input type="password" placeholder="Nové heslo" value={editingUser.password || ""}
-                      onChange={e => setEditingUser({ ...editingUser, password: e.target.value })}
-                      style={{ ...inputSt, width: "140px", padding: "6px 10px", fontSize: "12px" }}
-                    />
-                    <button onClick={() => {
-                      updateAccount(editingUser);
-                      setEditingUser(null);
-                      setAccountSaved(true);
-                      setTimeout(() => setAccountSaved(false), 2000);
-                    }} style={{
-                      padding: "6px 12px", background: "#374151", color: "#fff", border: "none",
-                      borderRadius: "6px", fontSize: "11px", fontWeight: "600", cursor: "pointer",
-                    }}>Uložiť</button>
-                    <button onClick={() => setEditingUser(null)} style={{
-                      padding: "6px 8px", background: "transparent", color: "var(--text-muted)",
-                      border: "none", fontSize: "11px", cursor: "pointer",
-                    }}>✕</button>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", gap: "6px" }}>
-                    <button onClick={() => setEditingUser({ ...acc })} style={{
-                      padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-                      borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)",
-                    }}>Heslo</button>
-                    {acc.id !== "ales" && (
-                      <button onClick={() => { if (confirm(`Odstrániť účet ${acc.name}?`)) deleteAccount(acc.id); }} style={{
-                        padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-                        borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#EF4444",
-                      }}>Odstrániť</button>
-                    )}
+                {/* Feature toggles panel */}
+                {expandedUser === acc.id && acc.id !== "ales" && (
+                  <div style={{
+                    padding: "12px 14px", borderTop: "1px solid var(--border)",
+                    background: "var(--bg-surface)",
+                  }}>
+                    <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: "10px" }}>
+                      Povolené funkcie pre {acc.name}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }} className="naber-grid">
+                      {ALL_FEATURES.map(feat => {
+                        const enabled = featureToggles[acc.id]?.[feat.id] !== false;
+                        return (
+                          <button key={feat.id} onClick={() => {
+                            const next = { ...featureToggles };
+                            if (!next[acc.id]) {
+                              next[acc.id] = {} as Record<FeatureId, boolean>;
+                            }
+                            next[acc.id][feat.id] = !enabled;
+                            setFeatureToggles(next);
+                            saveFeatureToggles(next);
+                          }} style={{
+                            display: "flex", alignItems: "center", gap: "8px",
+                            padding: "8px 12px", borderRadius: "8px",
+                            background: enabled ? "#F0FDF4" : "var(--bg-elevated)",
+                            border: `1px solid ${enabled ? "#BBF7D0" : "var(--border)"}`,
+                            cursor: "pointer", fontSize: "12px", fontWeight: "500",
+                            color: enabled ? "#065F46" : "var(--text-muted)",
+                            transition: "all 0.15s",
+                          }}>
+                            <div style={{
+                              width: "32px", height: "18px", borderRadius: "9px",
+                              background: enabled ? "#10B981" : "#D1D5DB",
+                              position: "relative", transition: "background 0.2s", flexShrink: 0,
+                            }}>
+                              <div style={{
+                                width: "14px", height: "14px", borderRadius: "50%",
+                                background: "#fff", position: "absolute", top: "2px",
+                                left: enabled ? "16px" : "2px",
+                                transition: "left 0.2s",
+                                boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                              }} />
+                            </div>
+                            {feat.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>

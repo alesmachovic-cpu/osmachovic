@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import PhoneInput from "@/components/PhoneInput";
+import { useAuth } from "@/components/AuthProvider";
+import { getMaklerUuid } from "@/lib/maklerMap";
 
 interface DuplicateHit {
   id: string;
@@ -241,6 +244,7 @@ function getLastDigits(phone: string, count: number): string {
 }
 
 export default function NewKlientModal({ open, onClose, onCreated, onSaved, initialPhone, showTypKlienta = false, defaultTyp = "predavajuci", editKlient }: Props) {
+  const { user: authUser } = useAuth();
   const isEdit = !!editKlient;
   const [telefon, setTelefon] = useState(editKlient?.telefon || initialPhone || "");
   const [meno, setMeno] = useState(editKlient?.meno || "");
@@ -376,9 +380,13 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
       ].filter(Boolean).join("\n") || null),
     };
 
+    // Get makler UUID for this user
+    const maklerUuid = authUser?.id ? await getMaklerUuid(authUser.id) : null;
+    const insertPayload = !isEdit && maklerUuid ? { ...payload, makler_id: maklerUuid } : payload;
+
     const { error } = isEdit
       ? await supabase.from("klienti").update(payload).eq("id", editKlient!.id)
-      : await supabase.from("klienti").insert(payload);
+      : await supabase.from("klienti").insert(insertPayload);
 
     if (!error && !isEdit && dupLevel !== "none") {
       await supabase.from("logy").insert({
@@ -474,15 +482,15 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
           <div>
             <div style={labelSt}>Telefón *</div>
             <div style={{ position: "relative" }}>
-              <input
-                style={{ ...inputSt, border: checked ? (dupLevel === "none" ? "2px solid #10B981" : dupLevel === "warning" ? "2px solid #F59E0B" : "2px solid #EF4444") : "1px solid var(--border)", paddingRight: "40px" }}
-                placeholder="+421 900 000 000"
+              <PhoneInput
                 value={telefon}
-                onChange={e => setTelefon(e.target.value)}
+                onChange={setTelefon}
                 autoFocus
+                borderOverride={checked ? (dupLevel === "none" ? "2px solid #10B981" : dupLevel === "warning" ? "2px solid #F59E0B" : "2px solid #EF4444") : undefined}
+                placeholder="+421 900 000 000"
               />
-              {checking && <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px" }}>⏳</span>}
-              {checked && !checking && <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px" }}>{dupLevel === "none" ? "✅" : dupLevel === "warning" ? "⚠️" : "🚨"}</span>}
+              {checking && <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px", zIndex: 5 }}>⏳</span>}
+              {checked && !checking && <span style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px", zIndex: 5 }}>{dupLevel === "none" ? "✅" : dupLevel === "warning" ? "⚠️" : "🚨"}</span>}
             </div>
 
             {checked && dupLevel === "none" && (

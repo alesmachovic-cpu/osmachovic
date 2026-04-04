@@ -10,6 +10,8 @@ import NewKlientModal from "@/components/NewKlientModal";
 import ActivityRings from "@/components/ActivityRings";
 import SystemSearch from "@/components/SystemSearch";
 import { useAuth } from "@/components/AuthProvider";
+import { getUserItem } from "@/lib/userStorage";
+import { getMaklerUuid } from "@/lib/maklerMap";
 
 interface ActivityItem {
   id: string;
@@ -289,15 +291,17 @@ export default function Dashboard() {
     setDragTile(null);
   }
 
-  // Load goals from localStorage
+  // Load goals from localStorage (per-user)
+  const uid = user?.id || "";
   useEffect(() => {
+    if (!uid) return;
     try {
-      const raw = localStorage.getItem("makler_goals");
+      const raw = getUserItem(uid, "makler_goals");
       if (raw) setGoals(g => ({ ...g, ...JSON.parse(raw) }));
     } catch { /* ignore */ }
     function onGoalsUpdated() {
       try {
-        const raw = localStorage.getItem("makler_goals");
+        const raw = getUserItem(uid, "makler_goals");
         if (raw) setGoals(g => ({ ...g, ...JSON.parse(raw) }));
       } catch { /* ignore */ }
     }
@@ -310,24 +314,33 @@ export default function Dashboard() {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
+    const isAdmin = user?.id === "ales";
+    const maklerUuid = user?.id ? await getMaklerUuid(user.id) : null;
+
+    // Helper: add makler filter for non-admin users
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const kq = (q: any) => isAdmin || !maklerUuid ? q : q.eq("makler_id", maklerUuid);
+    // nehnutelnosti uses makler_id (UUID), not makler (text)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nq = (q: any) => isAdmin || !maklerUuid ? q : q.eq("makler_id", maklerUuid);
 
     const [{ count: kCount }, { count: nCount }, { data: recentK }, { data: recentN }, { data: monthlyK }, { data: yearlyK }, { count: naberyCount }, { count: zmluvyCount }, { count: naberyTotal }, { count: inzeratyCount }, { count: predaneCount }, { count: objednavkyCount }] = await Promise.all([
-      supabase.from("klienti").select("*", { count: "exact", head: true }),
-      supabase.from("nehnutelnosti").select("*", { count: "exact", head: true }),
-      supabase.from("klienti").select("id,meno,status,created_at").order("created_at", { ascending: false }).limit(5),
-      supabase.from("nehnutelnosti").select("id,nazov,cena,created_at").order("created_at", { ascending: false }).limit(5),
-      supabase.from("klienti").select("proviziaeur").gte("created_at", monthStart),
-      supabase.from("klienti").select("proviziaeur").gte("created_at", yearStart),
+      kq(supabase.from("klienti")).select("*", { count: "exact", head: true }),
+      nq(supabase.from("nehnutelnosti")).select("*", { count: "exact", head: true }),
+      kq(supabase.from("klienti")).select("id,meno,status,created_at").order("created_at", { ascending: false }).limit(5),
+      nq(supabase.from("nehnutelnosti")).select("id,nazov,cena,created_at").order("created_at", { ascending: false }).limit(5),
+      kq(supabase.from("klienti")).select("proviziaeur").gte("created_at", monthStart),
+      kq(supabase.from("klienti")).select("proviziaeur").gte("created_at", yearStart),
       supabase.from("naberove_listy").select("*", { count: "exact", head: true }).gte("created_at", monthStart),
       supabase.from("naberove_listy").select("*", { count: "exact", head: true }).gte("created_at", monthStart).eq("zmluva", true),
       supabase.from("naberove_listy").select("*", { count: "exact", head: true }),
-      supabase.from("nehnutelnosti").select("*", { count: "exact", head: true }).neq("stav", "predane"),
-      supabase.from("nehnutelnosti").select("*", { count: "exact", head: true }).eq("stav", "predane"),
+      nq(supabase.from("nehnutelnosti")).select("*", { count: "exact", head: true }).neq("stav", "predane"),
+      nq(supabase.from("nehnutelnosti")).select("*", { count: "exact", head: true }).eq("stav", "predane"),
       supabase.from("objednavky").select("*", { count: "exact", head: true }),
     ]);
 
-    const mesacnyObrat = (monthlyK ?? []).reduce((sum, k) => sum + (k.proviziaeur || 0), 0);
-    const rocnyObrat = (yearlyK ?? []).reduce((sum, k) => sum + (k.proviziaeur || 0), 0);
+    const mesacnyObrat = (monthlyK ?? []).reduce((sum: number, k: { proviziaeur?: number }) => sum + (k.proviziaeur || 0), 0);
+    const rocnyObrat = (yearlyK ?? []).reduce((sum: number, k: { proviziaeur?: number }) => sum + (k.proviziaeur || 0), 0);
     const zmluvy = zmluvyCount ?? 0;
     const nabery = naberyCount ?? 0;
 
