@@ -99,8 +99,22 @@ function NaberPageContent() {
     setLoading(false);
   }
 
+  // Ownership check — makler can only fill naber for own clients (or admin)
+  function canFillNaber(k: Klient): boolean {
+    if (isAdmin) return true;
+    if (!myMaklerUuid) return false;
+    if (k.makler_id === myMaklerUuid) return true;
+    // Check collaboration
+    if (k.spolupracujuci_makler_id === myMaklerUuid) return true;
+    return false;
+  }
+
   // Výber klienta → zmena statusu na dohodnuty_naber + výber dátumu
   async function handleSelectKlient(k: Klient) {
+    if (!canFillNaber(k)) {
+      alert("Tento klient patrí inému maklerovi. Nemôžete vyplniť jeho náberový list.");
+      return;
+    }
     setSelectedKlient(k);
     if (k.status !== "dohodnuty_naber" && k.status !== "nabrany") {
       await supabase.from("klienti").update({ status: "dohodnuty_naber" }).eq("id", k.id);

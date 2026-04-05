@@ -67,6 +67,9 @@ export default function KlientDetailPage() {
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [naberDatum, setNaberDatum] = useState("");
   const [naberMiesto, setNaberMiesto] = useState("");
+  const [showSpolupracaModal, setShowSpolupracaModal] = useState(false);
+  const [spolupracaMakler, setSpolupracaMakler] = useState("");
+  const [spolupracaPct, setSpolupracaPct] = useState(50);
   const [calendarSyncing, setCalendarSyncing] = useState(false);
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
@@ -418,6 +421,55 @@ export default function KlientDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Spolupráca */}
+      {isOwner && makleri.length > 0 && (
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Spolupráca
+            </div>
+            {!klient.spolupracujuci_makler_id && (
+              <button onClick={() => setShowSpolupracaModal(true)} style={{
+                padding: "4px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "600",
+                background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)",
+                cursor: "pointer",
+              }}>+ Pridať maklera</button>
+            )}
+          </div>
+          {klient.spolupracujuci_makler_id ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px" }}>
+              <div style={{
+                width: "32px", height: "32px", borderRadius: "50%", background: "#E5E7EB",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: "#374151",
+              }}>
+                {(makleri.find(m => m.id === klient.spolupracujuci_makler_id)?.meno || "?").split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>
+                  {makleri.find(m => m.id === klient.spolupracujuci_makler_id)?.meno || "Neznámy"}
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                  Podiel z provízie: {klient.spolupracujuci_provizia_pct ?? 50}%
+                </div>
+              </div>
+              {isOwner && (
+                <button onClick={async () => {
+                  await supabase.from("klienti").update({ spolupracujuci_makler_id: null, spolupracujuci_provizia_pct: null }).eq("id", klient.id);
+                  loadAll();
+                }} style={{
+                  padding: "4px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "700",
+                  background: "#FEE2E2", color: "#991B1B", border: "none", cursor: "pointer",
+                }}>Odstrániť</button>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "8px" }}>
+              Žiadna spolupráca. Pridajte maklera a nastavte podiel z provízie.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Workflow progress */}
       {(klient.typ === "predavajuci" || klient.typ === "oboje") && (
@@ -870,6 +922,64 @@ export default function KlientDetailPage() {
               }}>
                 {calendarSyncing ? "Ukladám..." : pendingStatus === "dohodnuty_naber" ? "Potvrdiť náber" : pendingStatus === "volat_neskor" ? "Uložiť pripomienku" : "Pridať do kalendára"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Spolupráca modal */}
+      {showSpolupracaModal && klient && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+          onClick={() => setShowSpolupracaModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-surface)", borderRadius: "20px", padding: "32px", maxWidth: "400px", width: "100%", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <div style={{ width: "56px", height: "56px", borderRadius: "50%", background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", margin: "0 auto 16px", border: "2px solid #BFDBFE" }}>🤝</div>
+            <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 4px" }}>Pridať spoluprácu</h2>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px" }}>
+              Vyberte maklera a nastavte jeho podiel z provízie
+            </p>
+            <select value={spolupracaMakler} onChange={e => setSpolupracaMakler(e.target.value)} style={{
+              width: "100%", maxWidth: "300px", padding: "12px 16px", marginBottom: "16px",
+              background: "var(--bg-elevated)", border: "2px solid var(--border)",
+              borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)", outline: "none",
+              appearance: "none" as const,
+            }}>
+              <option value="">Vybrať maklera...</option>
+              {makleri.filter(m => m.id !== klient.makler_id).map(m => (
+                <option key={m.id} value={m.id}>{m.meno}</option>
+              ))}
+            </select>
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)", display: "block", marginBottom: "6px" }}>
+                Podiel z provízie: {spolupracaPct}%
+              </label>
+              <input type="range" min={5} max={50} step={5} value={spolupracaPct}
+                onChange={e => setSpolupracaPct(Number(e.target.value))}
+                style={{ width: "100%", maxWidth: "300px" }}
+              />
+              <div style={{ display: "flex", justifyContent: "space-between", maxWidth: "300px", margin: "4px auto 0", fontSize: "11px", color: "var(--text-muted)" }}>
+                <span>5%</span>
+                <span>50%</span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+              <button onClick={() => setShowSpolupracaModal(false)} style={{
+                padding: "10px 24px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Zrušiť</button>
+              <button disabled={!spolupracaMakler} onClick={async () => {
+                await supabase.from("klienti").update({
+                  spolupracujuci_makler_id: spolupracaMakler,
+                  spolupracujuci_provizia_pct: spolupracaPct,
+                }).eq("id", klient.id);
+                setShowSpolupracaModal(false);
+                setSpolupracaMakler("");
+                setSpolupracaPct(50);
+                loadAll();
+              }} style={{
+                padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+                opacity: spolupracaMakler ? 1 : 0.5,
+              }}>Pridať spoluprácu</button>
             </div>
           </div>
         </div>

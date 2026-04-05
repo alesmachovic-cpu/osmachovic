@@ -69,10 +69,6 @@ export interface Klient {
   poznamka: string | null;
   proviziaeur: number | null;
   rozpocet_max: number | null;
-  datum_naberu: string | null;
-  calendar_event_id: string | null;
-  spolupracujuci_makler_id: string | null;
-  spolupracujuci_provizia_pct: number | null;
   created_at: string;
 }
 
