@@ -50,6 +50,11 @@ function KlientiContent() {
   const [filterMakler, setFilterMakler] = useState<string>("mine"); // default: my clients
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
+  // Status change modal state
+  const [statusModal, setStatusModal] = useState<{ klient: Klient; status: string } | null>(null);
+  const [statusDatum, setStatusDatum] = useState("");
+  const [statusMiesto, setStatusMiesto] = useState("");
+  const [statusSaving, setStatusSaving] = useState(false);
 
   async function fetchKlienti() {
     setLoading(true);
@@ -102,6 +107,71 @@ function KlientiContent() {
     aktivny: filtered.filter(k => k.status === "aktivny" || k.status === "dohodnuty_naber").length,
     cakajuci: filtered.filter(k => k.status === "caka_na_schvalenie").length,
   };
+
+  // Status change handler — opens modal for dohodnuty_naber / volat_neskor
+  function handleStatusChange(k: Klient, newStatus: string) {
+    if (newStatus === "dohodnuty_naber" || newStatus === "volat_neskor") {
+      setStatusMiesto(k.lokalita || "");
+      setStatusDatum("");
+      setStatusModal({ klient: k, status: newStatus });
+      return;
+    }
+    // nabrany can't be set manually
+    if (newStatus === "nabrany") return;
+    // Direct update for other statuses
+    supabase.from("klienti").update({ status: newStatus }).eq("id", k.id).then(() => fetchKlienti());
+  }
+
+  // Confirm status change with date/location
+  async function handleStatusConfirm() {
+    if (!statusModal || !statusDatum) return;
+    setStatusSaving(true);
+    const { klient: k, status: newStatus } = statusModal;
+    const isVolat = newStatus === "volat_neskor";
+    const durationMs = isVolat ? 15 * 60000 : 60 * 60000; // 15min vs 1h
+
+    // Update status + datum
+    const updates: Record<string, unknown> = { status: newStatus };
+    if (!isVolat) updates.datum_naberu = new Date(statusDatum).toISOString();
+    await supabase.from("klienti").update(updates).eq("id", k.id);
+
+    // Create calendar event
+    if (user?.id) {
+      try {
+        const startDt = new Date(statusDatum).toISOString();
+        const endDt = new Date(new Date(statusDatum).getTime() + durationMs).toISOString();
+        const summary = isVolat ? `Zavolať — ${k.meno}` : `Náber — ${k.meno}`;
+        const res = await fetch("/api/google/calendar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            summary,
+            start: startDt,
+            end: endDt,
+            description: [
+              !isVolat && statusMiesto && `Adresa: ${statusMiesto}`,
+              k.telefon && `Tel: ${k.telefon}`,
+              k.email && `Email: ${k.email}`,
+            ].filter(Boolean).join("\n"),
+            location: isVolat ? "" : statusMiesto,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.event?.id) {
+            await supabase.from("klienti").update({ calendar_event_id: data.event.id }).eq("id", k.id);
+          }
+        }
+      } catch { /* calendar fails silently */ }
+    }
+
+    setStatusSaving(false);
+    setStatusModal(null);
+    setStatusDatum("");
+    setStatusMiesto("");
+    fetchKlienti();
+  }
 
   // Assign makler to klient (admin only)
   async function assignMakler(klientId: string, newMaklerId: string) {
@@ -271,11 +341,9 @@ function KlientiContent() {
                   <select
                     value={k.status}
                     disabled={!canEdit}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       e.stopPropagation();
-                      const { error } = await supabase.from("klienti").update({ status: e.target.value }).eq("id", k.id);
-                      if (error) console.error("[status-update]", JSON.stringify(error));
-                      fetchKlienti();
+                      handleStatusChange(k, e.target.value);
                     }}
                     style={{
                       fontSize: "11px", padding: "3px 24px 3px 8px", borderRadius: "20px", fontWeight: "600",
@@ -289,7 +357,7 @@ function KlientiContent() {
                       { value: "aktivny", label: "Aktívny" },
                       { value: "novy_kontakt", label: "Nový kontakt" },
                       { value: "dohodnuty_naber", label: "Dohod. náber" },
-                      { value: "nabrany", label: "Nabraný" },
+                      ...(k.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
                       { value: "volat_neskor", label: "Volať neskôr" },
                       { value: "nedovolal", label: "Nedovolal" },
                       { value: "nechce_rk", label: "Nechce RK" },
@@ -317,9 +385,28 @@ function KlientiContent() {
                     </select>
                   </div>
                 )}
-                {/* Upraviť */}
-                <div style={{ textAlign: "center" }} onClick={e => e.stopPropagation()}>
-                  {canEdit ? <button onClick={() => { setEditingKlient(k); setModal(true); }} style={{
+                {/* Upraviť / Schváliť */}
+                <div style={{ textAlign: "center", display: "flex", gap: "4px", justifyContent: "center" }} onClick={e => e.stopPropagation()}>
+                  {isAdmin && k.status === "caka_na_schvalenie" ? (
+                    <>
+                      <button onClick={async () => {
+                        await supabase.from("klienti").update({ status: "aktivny" }).eq("id", k.id);
+                        fetchKlienti();
+                      }} style={{
+                        padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
+                        background: "#D1FAE5", color: "#065F46", border: "none", cursor: "pointer",
+                      }}>✓</button>
+                      <button onClick={async () => {
+                        if (confirm("Odstrániť klienta " + k.meno + "?")) {
+                          await supabase.from("klienti").delete().eq("id", k.id);
+                          fetchKlienti();
+                        }
+                      }} style={{
+                        padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
+                        background: "#FEE2E2", color: "#991B1B", border: "none", cursor: "pointer",
+                      }}>✕</button>
+                    </>
+                  ) : canEdit ? <button onClick={() => { setEditingKlient(k); setModal(true); }} style={{
                     padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "600",
                     background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)",
                     cursor: "pointer", transition: "all 0.15s",
@@ -333,6 +420,67 @@ function KlientiContent() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Status change modal — date/location picker */}
+      {statusModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+          onClick={() => { setStatusModal(null); setStatusDatum(""); setStatusMiesto(""); }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-surface)", borderRadius: "20px", padding: "32px", maxWidth: "400px", width: "100%", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+            <div style={{ width: "56px", height: "56px", borderRadius: "50%", background: statusModal.status === "volat_neskor" ? "#FEF3C7" : "#F5F3FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", margin: "0 auto 16px", border: statusModal.status === "volat_neskor" ? "2px solid #FDE68A" : "2px solid #DDD6FE" }}>
+              {statusModal.status === "volat_neskor" ? "📞" : "📅"}
+            </div>
+            <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 4px" }}>
+              {statusModal.status === "dohodnuty_naber" ? "Kedy a kde bude náber?" : "Kedy zavolať?"}
+            </h2>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px" }}>
+              {statusModal.status === "dohodnuty_naber"
+                ? <>Termín stretnutia s <strong style={{ color: "var(--text-primary)" }}>{statusModal.klient.meno}</strong> (1 hodina)</>
+                : <>Pripomienka na zavolanie <strong style={{ color: "var(--text-primary)" }}>{statusModal.klient.meno}</strong> (15 min)</>
+              }
+            </p>
+            {/* Location — only for dohodnuty_naber */}
+            {statusModal.status === "dohodnuty_naber" && (
+              <input
+                type="text"
+                value={statusMiesto}
+                onChange={e => setStatusMiesto(e.target.value)}
+                placeholder="Adresa / miesto stretnutia"
+                style={{
+                  width: "100%", maxWidth: "300px", padding: "12px 16px", marginBottom: "12px",
+                  background: "var(--bg-elevated)", border: "2px solid var(--border)",
+                  borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)",
+                  outline: "none", textAlign: "center",
+                }}
+              />
+            )}
+            {/* Date/time */}
+            <input
+              type="datetime-local"
+              value={statusDatum}
+              onChange={e => setStatusDatum(e.target.value)}
+              style={{
+                width: "100%", maxWidth: "300px", padding: "14px 16px",
+                background: "var(--bg-elevated)", border: "2px solid var(--border)",
+                borderRadius: "12px", fontSize: "15px", color: "var(--text-primary)",
+                outline: "none", textAlign: "center",
+              }}
+            />
+            <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "24px" }}>
+              <button onClick={() => { setStatusModal(null); setStatusDatum(""); setStatusMiesto(""); }} style={{
+                padding: "10px 24px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Zrušiť</button>
+              <button disabled={!statusDatum || statusSaving} onClick={handleStatusConfirm} style={{
+                padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+                opacity: !statusDatum || statusSaving ? 0.5 : 1,
+              }}>
+                {statusSaving ? "Ukladám..." : statusModal.status === "dohodnuty_naber" ? "Potvrdiť náber" : "Uložiť pripomienku"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
