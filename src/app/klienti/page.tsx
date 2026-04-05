@@ -30,7 +30,7 @@ const typLabels: Record<string, string> = {
   oboje: "Kupujúci + Predávajúci",
 };
 
-type FilterStatus = "" | "novy" | "aktivny" | "pasivny" | "uzavrety" | "caka_na_schvalenie";
+type FilterStatus = "" | "novy" | "aktivny" | "pasivny" | "uzavrety" | "caka_na_schvalenie" | "dohodnuty_naber" | "volat_neskor" | "nabrany" | "novy_kontakt";
 type FilterTyp = "" | "kupujuci" | "predavajuci" | "oboje";
 
 export default function KlientiPage() {
@@ -95,17 +95,35 @@ function KlientiContent() {
       const hay = `${k.meno} ${k.email || ""} ${k.telefon || ""} ${k.lokalita || ""}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    if (filterStatus && k.status !== filterStatus) return false;
+    if (filterStatus) {
+      if (filterStatus === "novy") {
+        if (k.status !== "novy" && k.status !== "novy_kontakt") return false;
+      } else {
+        if (k.status !== filterStatus) return false;
+      }
+    }
     if (filterTyp && k.typ !== filterTyp) return false;
     return true;
   });
 
-  // Counts based on filtered list (respects makler filter)
+  // Counts based on ALL klienti (with makler filter but without status filter)
+  const allForCounts = klienti.filter(k => {
+    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid) return false;
+    if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const hay = `${k.meno} ${k.email || ""} ${k.telefon || ""} ${k.lokalita || ""}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (filterTyp && k.typ !== filterTyp) return false;
+    return true;
+  });
   const counts = {
-    total: filtered.length,
-    novy: filtered.filter(k => k.status === "novy" || k.status === "novy_kontakt").length,
-    aktivny: filtered.filter(k => k.status === "aktivny" || k.status === "dohodnuty_naber").length,
-    cakajuci: filtered.filter(k => k.status === "caka_na_schvalenie").length,
+    total: allForCounts.length,
+    novy: allForCounts.filter(k => k.status === "novy" || k.status === "novy_kontakt").length,
+    dohodnuty_naber: allForCounts.filter(k => k.status === "dohodnuty_naber").length,
+    volat_neskor: allForCounts.filter(k => k.status === "volat_neskor").length,
+    nabrany: allForCounts.filter(k => k.status === "nabrany").length,
   };
 
   // Status change handler — opens modal for dohodnuty_naber / volat_neskor
@@ -204,14 +222,19 @@ function KlientiContent() {
       </div>
 
       {/* Stat cards */}
-      <div className="cards-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "20px" }}>
+      <div className="cards-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px", marginBottom: "20px" }}>
         {[
-          { label: "Celkom", value: counts.total, color: "#374151" },
-          { label: "Noví", value: counts.novy, color: "#374151" },
-          { label: "Aktívni", value: counts.aktivny, color: "#374151" },
-          { label: "Čaká na schválenie", value: counts.cakajuci, color: "#6B7280" },
+          { label: "Celkom", value: counts.total, color: "#374151", filter: "" as FilterStatus },
+          { label: "Nový", value: counts.novy, color: "#374151", filter: "novy" as FilterStatus },
+          { label: "Dohod. náber", value: counts.dohodnuty_naber, color: "#374151", filter: "dohodnuty_naber" as FilterStatus },
+          { label: "Volať neskôr", value: counts.volat_neskor, color: "#6B7280", filter: "volat_neskor" as FilterStatus },
+          { label: "Nabraný", value: counts.nabrany, color: "#374151", filter: "nabrany" as FilterStatus },
         ].map(s => (
-          <div key={s.label} style={{ padding: "16px", background: "var(--bg-surface)", borderRadius: "12px", border: "1px solid var(--border)" }}>
+          <div key={s.label} onClick={() => setFilterStatus(s.filter)} style={{
+            padding: "16px", background: "var(--bg-surface)", borderRadius: "12px",
+            border: filterStatus === s.filter ? "2px solid #374151" : "1px solid var(--border)",
+            cursor: "pointer", transition: "border 0.15s",
+          }}>
             <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", fontWeight: "500" }}>{s.label}</div>
             <div style={{ fontSize: "24px", fontWeight: "700", color: s.color }}>{s.value}</div>
           </div>
@@ -229,9 +252,11 @@ function KlientiContent() {
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as FilterStatus)} style={selectSt}>
           <option value="">Všetky statusy</option>
           <option value="novy">Nový</option>
-          <option value="aktivny">Aktívny</option>
-          <option value="pasivny">Pasívny</option>
-          <option value="uzavrety">Uzavretý</option>
+          <option value="dohodnuty_naber">Dohod. náber</option>
+          <option value="volat_neskor">Volať neskôr</option>
+          <option value="nabrany">Nabraný</option>
+          <option value="nedovolal">Nedovolal</option>
+          <option value="nechce_rk">Nechce RK</option>
           <option value="caka_na_schvalenie">Čaká na schválenie</option>
         </select>
         <select value={filterTyp} onChange={e => setFilterTyp(e.target.value as FilterTyp)} style={selectSt}>
@@ -354,7 +379,6 @@ function KlientiContent() {
                     }}
                   >
                     {[
-                      { value: "aktivny", label: "Aktívny" },
                       { value: "novy_kontakt", label: "Nový kontakt" },
                       { value: "dohodnuty_naber", label: "Dohod. náber" },
                       ...(k.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
@@ -385,37 +409,40 @@ function KlientiContent() {
                     </select>
                   </div>
                 )}
-                {/* Upraviť / Schváliť */}
+                {/* Upraviť / Schváliť / Zmazať */}
                 <div style={{ textAlign: "center", display: "flex", gap: "4px", justifyContent: "center" }} onClick={e => e.stopPropagation()}>
-                  {isAdmin && k.status === "caka_na_schvalenie" ? (
-                    <>
-                      <button onClick={async () => {
-                        await supabase.from("klienti").update({ status: "aktivny" }).eq("id", k.id);
+                  {isAdmin && k.status === "caka_na_schvalenie" && (
+                    <button onClick={async () => {
+                      await supabase.from("klienti").update({ status: "novy_kontakt" }).eq("id", k.id);
+                      fetchKlienti();
+                    }} style={{
+                      padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
+                      background: "#D1FAE5", color: "#065F46", border: "none", cursor: "pointer",
+                    }}>✓</button>
+                  )}
+                  {canEdit && (
+                    <button onClick={() => { setEditingKlient(k); setModal(true); }} style={{
+                      padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "600",
+                      background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)",
+                      cursor: "pointer", transition: "all 0.15s",
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-elevated)"; e.currentTarget.style.color = "var(--text-primary)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
+                    >
+                      ✏️
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button onClick={async () => {
+                      if (confirm("Odstrániť klienta " + k.meno + "?")) {
+                        await supabase.from("klienti").delete().eq("id", k.id);
                         fetchKlienti();
-                      }} style={{
-                        padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
-                        background: "#D1FAE5", color: "#065F46", border: "none", cursor: "pointer",
-                      }}>✓</button>
-                      <button onClick={async () => {
-                        if (confirm("Odstrániť klienta " + k.meno + "?")) {
-                          await supabase.from("klienti").delete().eq("id", k.id);
-                          fetchKlienti();
-                        }
-                      }} style={{
-                        padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
-                        background: "#FEE2E2", color: "#991B1B", border: "none", cursor: "pointer",
-                      }}>✕</button>
-                    </>
-                  ) : canEdit ? <button onClick={() => { setEditingKlient(k); setModal(true); }} style={{
-                    padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "600",
-                    background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)",
-                    cursor: "pointer", transition: "all 0.15s",
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-elevated)"; e.currentTarget.style.color = "var(--text-primary)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
-                  >
-                    ✏️
-                  </button> : null}
+                      }
+                    }} style={{
+                      padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
+                      background: "#FEE2E2", color: "#991B1B", border: "none", cursor: "pointer",
+                    }}>🗑</button>
+                  )}
                 </div>
               </div>
             );
@@ -442,18 +469,23 @@ function KlientiContent() {
             </p>
             {/* Location — only for dohodnuty_naber */}
             {statusModal.status === "dohodnuty_naber" && (
-              <input
-                type="text"
-                value={statusMiesto}
-                onChange={e => setStatusMiesto(e.target.value)}
-                placeholder="Adresa / miesto stretnutia"
-                style={{
-                  width: "100%", maxWidth: "300px", padding: "12px 16px", marginBottom: "12px",
-                  background: "var(--bg-elevated)", border: "2px solid var(--border)",
-                  borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)",
-                  outline: "none", textAlign: "center",
-                }}
-              />
+              <div style={{ marginBottom: "12px" }}>
+                <input
+                  type="text"
+                  value={statusMiesto}
+                  onChange={e => setStatusMiesto(e.target.value)}
+                  placeholder="Ulica a číslo (napr. Hlavná 12, Bratislava)"
+                  style={{
+                    width: "100%", maxWidth: "300px", padding: "12px 16px",
+                    background: "var(--bg-elevated)", border: "2px solid var(--border)",
+                    borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)",
+                    outline: "none", textAlign: "center",
+                  }}
+                />
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
+                  Ak ešte nepoznáte presnú adresu, doplňte neskôr
+                </div>
+              </div>
             )}
             {/* Date/time */}
             <input
