@@ -260,7 +260,7 @@ function NaberPageContent() {
     // Len predávajúci alebo oboje — kupujúci nepatria do náberu
     if (k.typ === "kupujuci") return false;
     // Makler filter
-    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid) return false;
+    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
     if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
@@ -294,6 +294,10 @@ function NaberPageContent() {
     return (
       <div style={{ maxWidth: "720px" }}>
         {renderStepper()}
+        <button onClick={() => { setSelectedKlient(null); setShowDatumPicker(false); }} style={{
+          padding: "8px 16px", background: "none", color: "var(--text-muted)", border: "none",
+          fontSize: "13px", cursor: "pointer", marginBottom: "12px",
+        }}>← Späť na zoznam</button>
         <div style={{
           background: "var(--bg-surface)", border: "1px solid var(--border)",
           borderRadius: "20px", padding: "32px", textAlign: "center",
@@ -320,19 +324,6 @@ function NaberPageContent() {
               outline: "none", textAlign: "center",
             }}
           />
-          {selectedKlient?.datum_naberu && (
-            <button onClick={() => {
-              const now = new Date();
-              now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
-              setNaberDatum(now.toISOString());
-            }} style={{
-              display: "block", margin: "10px auto 0", padding: "6px 16px",
-              background: "transparent", color: "var(--accent)", border: "1px solid var(--accent)",
-              borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
-            }}>
-              Zmeniť na aktuálny dátum a čas
-            </button>
-          )}
           <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "24px" }}>
             <button onClick={() => { setShowDatumPicker(false); setSelectedKlient(null); }} style={{
               padding: "10px 24px", background: "var(--bg-elevated)",

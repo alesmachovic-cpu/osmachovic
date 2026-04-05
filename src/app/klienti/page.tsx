@@ -88,7 +88,7 @@ function KlientiContent() {
 
   const filtered = klienti.filter(k => {
     // Makler filter
-    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid) return false;
+    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
     if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -108,7 +108,7 @@ function KlientiContent() {
 
   // Counts based on ALL klienti (with makler filter but without status filter)
   const allForCounts = klienti.filter(k => {
-    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid) return false;
+    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
     if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
     if (search) {
       const q = search.toLowerCase();

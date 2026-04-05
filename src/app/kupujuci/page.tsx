@@ -60,7 +60,7 @@ export default function KupujuciPage() {
 
   const filtered = kupujuciKlienti.filter(k => {
     // Makler filter
-    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid) return false;
+    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
     if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
