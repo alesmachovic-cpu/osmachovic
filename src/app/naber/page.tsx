@@ -365,27 +365,20 @@ function NaberPageContent() {
 
         {/* Makler filter */}
         {makleri.length > 0 && (
-          <div style={{ display: "flex", gap: "6px", marginBottom: "12px", flexWrap: "wrap" }}>
-            <button onClick={() => setFilterMakler("mine")} style={{
-              padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
-              background: filterMakler === "mine" ? "#374151" : "var(--bg-surface)",
-              color: filterMakler === "mine" ? "#fff" : "var(--text-secondary)",
-              border: "1px solid var(--border)",
-            }}>Moji</button>
-            <button onClick={() => setFilterMakler("all")} style={{
-              padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
-              background: filterMakler === "all" ? "#374151" : "var(--bg-surface)",
-              color: filterMakler === "all" ? "#fff" : "var(--text-secondary)",
-              border: "1px solid var(--border)",
-            }}>Všetci</button>
-            {makleri.map(m => (
-              <button key={m.id} onClick={() => setFilterMakler(m.id)} style={{
-                padding: "6px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
-                background: filterMakler === m.id ? "#374151" : "var(--bg-surface)",
-                color: filterMakler === m.id ? "#fff" : "var(--text-secondary)",
-                border: "1px solid var(--border)",
-              }}>{m.meno}</button>
-            ))}
+          <div style={{ marginBottom: "12px" }}>
+            <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={{
+              padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+              borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
+              appearance: "none" as const,
+              backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+              backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+            }}>
+              <option value="mine">Moji klienti</option>
+              <option value="all">Všetci</option>
+              {makleri.map(m => (
+                <option key={m.id} value={m.id}>{m.meno}</option>
+              ))}
+            </select>
           </div>
         )}
 

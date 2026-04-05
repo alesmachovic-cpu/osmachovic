@@ -7,6 +7,7 @@ import { STATUS_LABELS } from "@/lib/database.types";
 import type { Klient } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import { useAuth } from "@/components/AuthProvider";
+import { getMaklerUuid } from "@/lib/maklerMap";
 
 // Typy pre timeline
 interface TimelineEvent {
@@ -66,9 +67,15 @@ export default function KlientDetailPage() {
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [naberDatum, setNaberDatum] = useState("");
   const [calendarSyncing, setCalendarSyncing] = useState(false);
+  const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
+  const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
+  const isAdmin = user?.id === "ales";
+  const isOwner = isAdmin || (myMaklerUuid && klient?.makler_id === myMaklerUuid);
 
   useEffect(() => {
     if (id) loadAll();
+    if (isAdmin) supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
+    if (user?.id) getMaklerUuid(user.id).then(setMyMaklerUuid);
   }, [id]);
 
   async function loadAll() {
@@ -296,13 +303,15 @@ export default function KlientDetailPage() {
             Všetky informácie a história
           </p>
         </div>
-        <button onClick={() => setEditModal(true)} style={{
-          padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
-          border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
-          fontWeight: "600", cursor: "pointer",
-        }}>
-          ✏️ Upraviť
-        </button>
+        {isOwner && (
+          <button onClick={() => setEditModal(true)} style={{
+            padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
+            border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
+            fontWeight: "600", cursor: "pointer",
+          }}>
+            ✏️ Upraviť
+          </button>
+        )}
       </div>
 
       {/* Klient karta — hlavné info */}
@@ -361,10 +370,12 @@ export default function KlientDetailPage() {
           <select
             value={klient.status}
             onChange={(e) => handleStatusChange(e.target.value)}
+            disabled={!isOwner}
             style={{
               padding: "6px 28px 6px 14px", borderRadius: "20px", fontSize: "12px", fontWeight: "700",
               background: `${statusColor}15`, color: statusColor, border: `1px solid ${statusColor}30`,
-              cursor: "pointer", appearance: "none",
+              cursor: isOwner ? "pointer" : "default", appearance: "none",
+              opacity: isOwner ? 1 : 0.7,
               backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
               backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
               outline: "none",
@@ -388,6 +399,26 @@ export default function KlientDetailPage() {
           }}>
             {TYP_LABELS[klient.typ] || klient.typ}
           </span>
+          {/* Admin: assign makler */}
+          {isAdmin && makleri.length > 0 && (
+            <select
+              value={klient.makler_id || ""}
+              onChange={async (e) => {
+                await supabase.from("klienti").update({ makler_id: e.target.value || null }).eq("id", klient.id);
+                loadAll();
+              }}
+              style={{
+                padding: "4px 24px 4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "600",
+                background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)",
+                cursor: "pointer", appearance: "none", outline: "none",
+                backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+                backgroundRepeat: "no-repeat", backgroundPosition: "right 6px center",
+              }}
+            >
+              <option value="">Bez maklera</option>
+              {makleri.map(m => <option key={m.id} value={m.id}>{m.meno}</option>)}
+            </select>
+          )}
         </div>
       </div>
 

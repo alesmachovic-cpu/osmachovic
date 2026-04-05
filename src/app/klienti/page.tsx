@@ -217,6 +217,7 @@ function KlientiContent() {
             const nameParts = (k.meno || "").split(" ");
             const initials = `${(nameParts[0] || "")[0] || ""}${(nameParts[1] || "")[0] || ""}`.toUpperCase();
             const isInactive = k.status === "caka_na_schvalenie";
+            const canEdit = isAdmin || (myMaklerUuid && k.makler_id === myMaklerUuid);
             return (
               <div key={k.id} className="table-row" style={{
                 display: "grid", gridTemplateColumns: isAdmin ? "2fr 1fr 120px 130px 140px 60px" : "2fr 1fr 1fr 120px 130px 60px",
@@ -269,6 +270,7 @@ function KlientiContent() {
                 <div onClick={e => e.stopPropagation()}>
                   <select
                     value={k.status}
+                    disabled={!canEdit}
                     onChange={async (e) => {
                       e.stopPropagation();
                       const { error } = await supabase.from("klienti").update({ status: e.target.value }).eq("id", k.id);
@@ -277,8 +279,8 @@ function KlientiContent() {
                     }}
                     style={{
                       fontSize: "11px", padding: "3px 24px 3px 8px", borderRadius: "20px", fontWeight: "600",
-                      color: sc.color, background: sc.bg, border: "none", cursor: "pointer",
-                      appearance: "none", outline: "none",
+                      color: sc.color, background: sc.bg, border: "none", cursor: canEdit ? "pointer" : "default",
+                      appearance: "none", outline: "none", opacity: canEdit ? 1 : 0.7,
                       backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
                       backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
                     }}
@@ -317,7 +319,7 @@ function KlientiContent() {
                 )}
                 {/* Upraviť */}
                 <div style={{ textAlign: "center" }} onClick={e => e.stopPropagation()}>
-                  <button onClick={() => { setEditingKlient(k); setModal(true); }} style={{
+                  {canEdit ? <button onClick={() => { setEditingKlient(k); setModal(true); }} style={{
                     padding: "4px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "600",
                     background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)",
                     cursor: "pointer", transition: "all 0.15s",
@@ -326,7 +328,7 @@ function KlientiContent() {
                     onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
                   >
                     ✏️
-                  </button>
+                  </button> : null}
                 </div>
               </div>
             );
