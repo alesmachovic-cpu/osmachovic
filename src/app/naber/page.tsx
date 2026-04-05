@@ -289,62 +289,73 @@ function NaberPageContent() {
     return <Stepper steps={STEPS} currentStep={step} onStepClick={handleStepClick} />;
   }
 
-  // Dátum picker modal
+  // Dátum picker
   if (showDatumPicker && selectedKlient) {
     return (
       <div style={{ maxWidth: "720px" }}>
         {renderStepper()}
-        <button onClick={() => { setSelectedKlient(null); setShowDatumPicker(false); }} style={{
-          padding: "8px 16px", background: "none", color: "var(--text-muted)", border: "none",
-          fontSize: "13px", cursor: "pointer", marginBottom: "12px",
-        }}>← Späť na zoznam</button>
+
+        <div style={{ marginBottom: "24px" }}>
+          <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>
+            Termín náberu
+          </h1>
+          <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "4px 0 0" }}>
+            Kedy sa stretnete s klientom <strong style={{ color: "var(--text-primary)" }}>{selectedKlient.meno}</strong>?
+          </p>
+        </div>
+
+        {/* Klient info */}
         <div style={{
-          background: "var(--bg-surface)", border: "1px solid var(--border)",
-          borderRadius: "20px", padding: "32px", textAlign: "center",
+          display: "flex", alignItems: "center", gap: "12px", padding: "14px 16px",
+          background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px",
+          marginBottom: "16px",
         }}>
           <div style={{
-            width: "56px", height: "56px", borderRadius: "50%", background: "#F5F3FF",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "24px", margin: "0 auto 16px", border: "2px solid #DDD6FE",
-          }}>📅</div>
-          <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 4px" }}>
-            Kedy bude náber?
-          </h2>
-          <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px" }}>
-            Zvol dátum a čas pre <strong style={{ color: "var(--text-primary)" }}>{selectedKlient.meno}</strong>
-          </p>
+            width: "40px", height: "40px", borderRadius: "50%", background: "#374151", color: "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: "700", flexShrink: 0,
+          }}>{selectedKlient.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>{selectedKlient.meno}</div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              {selectedKlient.telefon || "—"}{selectedKlient.lokalita ? ` · ${selectedKlient.lokalita}` : ""}
+            </div>
+          </div>
+        </div>
+
+        {/* Dátum a čas */}
+        <div style={{
+          padding: "20px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderRadius: "12px", marginBottom: "16px",
+        }}>
+          <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", display: "block", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            Dátum a čas stretnutia
+          </label>
           <input
             type="datetime-local"
             value={naberDatum ? naberDatum.slice(0, 16) : ""}
             onChange={e => setNaberDatum(e.target.value ? new Date(e.target.value).toISOString() : "")}
             style={{
-              width: "100%", maxWidth: "300px", padding: "14px 16px",
-              background: "var(--bg-elevated)", border: "2px solid var(--border)",
-              borderRadius: "12px", fontSize: "15px", color: "var(--text-primary)",
-              outline: "none", textAlign: "center",
+              width: "100%", padding: "12px 14px", background: "var(--bg-elevated)",
+              border: "1px solid var(--border)", borderRadius: "10px", fontSize: "15px",
+              color: "var(--text-primary)", outline: "none",
             }}
           />
-          <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "24px" }}>
-            <button onClick={() => { setShowDatumPicker(false); setSelectedKlient(null); }} style={{
-              padding: "10px 24px", background: "var(--bg-elevated)",
-              color: "var(--text-secondary)", border: "1px solid var(--border)",
-              borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-            }}>
-              ← Späť
-            </button>
-            <button onClick={handleDatumConfirm} style={{
-              padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
-              borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-            }}>
-              Pokračovať →
-            </button>
-          </div>
-          {selectedKlient.telefon && (
-            <div style={{ marginTop: "16px", fontSize: "12px", color: "var(--text-muted)" }}>
-              📱 {selectedKlient.telefon}
-              {selectedKlient.lokalita && <span> · 📍 {selectedKlient.lokalita}</span>}
-            </div>
-          )}
+        </div>
+
+        {/* Akcie */}
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button onClick={() => { setShowDatumPicker(false); setSelectedKlient(null); }} style={{
+            padding: "12px 20px", background: "var(--bg-surface)", color: "var(--text-secondary)",
+            border: "1px solid var(--border)", borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
+          }}>
+            ← Späť
+          </button>
+          <button onClick={handleDatumConfirm} style={{
+            flex: 1, padding: "12px 20px", background: "#374151", color: "#fff", border: "none",
+            borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
+          }}>
+            Pokračovať →
+          </button>
         </div>
       </div>
     );
