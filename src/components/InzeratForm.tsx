@@ -6,25 +6,26 @@ import type { TypNehnutelnosti, StavNehnutelnosti } from "@/lib/database.types";
 import { KRAJE } from "@/lib/database.types";
 import { useAuth } from "@/components/AuthProvider";
 import { getUserItem } from "@/lib/userStorage";
+import { saveKlientDokument } from "@/lib/klientDokumenty";
 
 /* ── Design tokens ── */
 const s = {
-  card: { background: "#fff", borderRadius: "16px", padding: "24px", marginBottom: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)" } as React.CSSProperties,
-  input: { width: "100%", padding: "10px 14px", background: "#F9FAFB", border: "1.5px solid #E5E7EB", borderRadius: "10px", fontSize: "14px", color: "#374151", outline: "none", transition: "border-color 0.15s" } as React.CSSProperties,
-  select: { width: "100%", padding: "10px 14px", background: "#F9FAFB", border: "1.5px solid #E5E7EB", borderRadius: "10px", fontSize: "14px", color: "#374151", outline: "none", cursor: "pointer", appearance: "none" as const, backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: "32px" } as React.CSSProperties,
-  label: { fontSize: "12px", fontWeight: "500", color: "#6B7280", marginBottom: "6px", display: "block" } as React.CSSProperties,
-  title: { fontSize: "15px", fontWeight: "600", color: "#374151", marginBottom: "18px", letterSpacing: "-0.01em" } as React.CSSProperties,
+  card: { background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "16px", padding: "24px", marginBottom: "12px" } as React.CSSProperties,
+  input: { width: "100%", padding: "10px 14px", background: "var(--bg-elevated)", border: "1.5px solid var(--border)", borderRadius: "10px", fontSize: "14px", color: "var(--text-primary)", outline: "none", transition: "border-color 0.15s" } as React.CSSProperties,
+  select: { width: "100%", padding: "10px 14px", background: "var(--bg-elevated)", border: "1.5px solid var(--border)", borderRadius: "10px", fontSize: "14px", color: "var(--text-primary)", outline: "none", cursor: "pointer", appearance: "none" as const, backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: "32px" } as React.CSSProperties,
+  label: { fontSize: "12px", fontWeight: "500", color: "var(--text-secondary)", marginBottom: "6px", display: "block" } as React.CSSProperties,
+  title: { fontSize: "15px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "18px", letterSpacing: "-0.01em" } as React.CSSProperties,
   g2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" } as React.CSSProperties,
   g3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" } as React.CSSProperties,
 };
 
 function Tog({ on, set, label }: { on: boolean; set: (v: boolean) => void; label: string }) {
   return (
-    <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", cursor: "pointer" }}>
-      <span style={{ fontSize: "13px", color: "#374151" }}>{label}</span>
-      <div onClick={() => set(!on)} style={{ width: "40px", height: "24px", borderRadius: "12px", background: on ? "#3B82F6" : "#D1D5DB", position: "relative", transition: "background 0.15s", flexShrink: 0 }}>
-        <div style={{ width: "20px", height: "20px", borderRadius: "10px", background: "#fff", position: "absolute", top: "2px", left: on ? "18px" : "2px", transition: "left 0.15s", boxShadow: "0 1px 2px rgba(0,0,0,0.15)" }} />
+    <label onClick={() => set(!on)} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", cursor: "pointer", border: "1px solid var(--border)", borderRadius: "10px", background: on ? "var(--sidebar-active, rgba(59,130,246,0.08))" : "var(--bg-elevated)" }}>
+        <div style={{ width: "36px", height: "22px", borderRadius: "11px", background: on ? "#3B82F6" : "var(--border)", position: "relative", transition: "background 0.15s", flexShrink: 0 }}>
+        <div style={{ width: "18px", height: "18px", borderRadius: "9px", background: "#fff", position: "absolute", top: "2px", left: on ? "16px" : "2px", transition: "left 0.15s", boxShadow: "0 1px 2px rgba(0,0,0,0.15)" }} />
       </div>
+      <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: on ? 600 : 400 }}>{label}</span>
     </label>
   );
 }
@@ -67,7 +68,7 @@ const defaultForm = {
   popis: "", url_inzercia: "", intro: "", text_popis: "", lv_text: "",
   // Zobrazenie
   zobrazovat_cenu: true, zobrazovat_mapu: true, zobrazovat_hypoteku: true,
-  so_zmluvou: false, projekt: false, specialne_oznacenie: "", seo_keywords: "",
+  so_zmluvou: false, projekt: false, specialne_oznacenie: "", seo_keywords: "", meta_description: "", h1: "",
   // Lokácia
   stat: "Slovensko", kraj: "", okres: "", obec: "", ulica_verejna: "", ulica_privatna: "",
   makler: "Aleš Machovič", interne_id: "",
@@ -156,7 +157,15 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       obec: String(d.obec || defaultForm.obec),
       lokalita: String(d.obec || defaultForm.lokalita),
       ulica_verejna: String(d.ulica || defaultForm.ulica_verejna),
-      plocha: String(d.plocha || defaultForm.plocha),
+      plocha: (() => {
+        // Pre byt nepoužívať plochu z LV (je to plocha parcely pod domom, nie podlahová plocha bytu)
+        const rawTyp = String(d.typ_nehnutelnosti || "").toLowerCase();
+        if (rawTyp === "byt") {
+          const podlahova = Number((d.parametre as Record<string, unknown>)?.podlahova_plocha || 0);
+          return podlahova > 0 ? String(podlahova) : defaultForm.plocha;
+        }
+        return String(d.plocha || defaultForm.plocha);
+      })(),
       cena: String(d.predajna_cena || defaultForm.cena),
       stav: (() => {
         const raw = String(d.stav || "").toLowerCase();
@@ -273,7 +282,28 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   const [lvParsed, setLvParsed] = useState<Record<string, string> | null>(null);
   const [dropOver, setDropOver] = useState(false);
   const [photos, setPhotos] = useState<{ name: string; url: string; size: number }[]>([]);
-  const [docs, setDocs] = useState<{ name: string; type: string; size: number; text?: string }[]>([]);
+  const [docs, setDocs] = useState<{ name: string; type: string; size: number; text?: string; pdf_base64?: string }[]>([]);
+  const klientIdForDocs = (prefilledData?.klient_id as string | undefined) || undefined;
+  const [docQuery, setDocQuery] = useState("");
+  const docHits = (() => {
+    const q = docQuery.trim().toLowerCase();
+    if (q.length < 2) return [] as { doc: string; snippet: string }[];
+    const hits: { doc: string; snippet: string }[] = [];
+    for (const d of docs) {
+      if (!d.text) continue;
+      const lower = d.text.toLowerCase();
+      let idx = lower.indexOf(q);
+      let count = 0;
+      while (idx !== -1 && count < 3) {
+        const start = Math.max(0, idx - 60);
+        const end = Math.min(d.text.length, idx + q.length + 80);
+        hits.push({ doc: d.name, snippet: (start > 0 ? "…" : "") + d.text.slice(start, end).replace(/\s+/g, " ") + (end < d.text.length ? "…" : "") });
+        idx = lower.indexOf(q, idx + q.length);
+        count++;
+      }
+    }
+    return hits.slice(0, 8);
+  })();
   const [processingDoc, setProcessingDoc] = useState(-1);
   const [uploadingFile, setUploadingFile] = useState("");
   const aiRef = useRef<HTMLDivElement>(null);
@@ -349,52 +379,144 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
       const isImg = file.type.startsWith("image/") || ["jpg","jpeg","png","webp","gif","heic"].includes(ext);
       const isPdf = file.type === "application/pdf" || ext === "pdf";
+      const isDocx = ext === "docx" || file.type.includes("wordprocessingml");
 
       if (isImg) {
         setPhotos(prev => [...prev, { name: file.name, url: URL.createObjectURL(file), size: file.size }]);
+        if (klientIdForDocs) {
+          file.arrayBuffer().then(buf => {
+            const bytes = new Uint8Array(buf);
+            let bin = ""; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+            saveKlientDokument({ klient_id: klientIdForDocs, name: file.name, type: "Foto", size: file.size, source: "inzerat", mime: file.type, data_base64: btoa(bin) });
+          }).catch(() => {});
+        }
+      } else if (isDocx) {
+        setUploadingFile(file.name);
+        setParsingLV(true);
+        (async () => {
+          try {
+            const fd = new FormData(); fd.append("file", file);
+            console.log("[upload] parse-doc DOCX, size:", file.size);
+            const res = await globalThis.fetch("/api/parse-doc", { method: "POST", body: fd });
+            const parsed = await res.json().catch(() => ({ error: "Neplatná odpoveď" }));
+            console.log("[upload] parse-doc DOCX response:", parsed);
+            setDocs(prev => [...prev, { name: file.name, type: "Zmluva", size: file.size }]);
+            if (klientIdForDocs) {
+              file.arrayBuffer().then(buf => {
+                const bytes = new Uint8Array(buf);
+                let bin = ""; const chunk = 0x8000;
+                for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk) as unknown as number[]);
+                saveKlientDokument({ klient_id: klientIdForDocs, name: file.name, type: "Zmluva", size: file.size, source: "inzerat", mime: file.type, data_base64: btoa(bin) }).catch(()=>{});
+              });
+            }
+            if (parsed && !parsed.error) {
+              fillFormFromAI(parsed as Record<string, string>);
+            } else {
+              setError((parsed?.error as string) || "DOCX parsing zlyhal.");
+            }
+          } catch (e) {
+            console.error("[upload] DOCX failed:", e);
+            setError("Nepodarilo sa spracovať DOCX.");
+          } finally {
+            setParsingLV(false); setUploadingFile("");
+          }
+        })();
       } else if (isPdf) {
         setUploadingFile(file.name);
         setParsingLV(true);
-        // Krok 1: Extrahuj text z PDF
-        const fd = new FormData(); fd.append("file", file);
-        // Súčasne priprav base64 pre priame AI spracovanie
-        const base64Promise = file.arrayBuffer().then(buf => {
-          const bytes = new Uint8Array(buf);
-          let binary = "";
-          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-          return btoa(binary);
-        });
-        globalThis.fetch("/api/parse-pdf", { method: "POST", body: fd })
-          .then(r => r.json())
-          .then(async (data) => {
-            if (data.text) {
-              const docType = detectDocType(data.text, file.name);
-              if (docType === "lv") {
-                set("lv_text", data.text); handleParseLV(data.text);
-              } else {
-                const typeLabel = docType === "posudok" ? "Znalecký posudok" : docType === "zmluva" ? "Zmluva" : "PDF";
-                setDocs(prev => [...prev, { name: file.name, type: typeLabel, size: file.size, text: data.text }]);
-                // Auto-spracovanie — posielame base64 PDF priamo do AI pre lepšiu kvalitu
-                if (docType === "posudok" || docType === "zmluva") {
-                  try {
-                    const b64 = await base64Promise;
-                    const res = await globalThis.fetch("/api/parse-lv", {
-                      method: "POST", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ lv_text: data.text, doc_type: docType, pdf_base64: b64 }),
-                    });
-                    const parsed = await res.json();
-                    if (!parsed.error) {
-                      fillFormFromAI(parsed);
-                      setDocs(prev => prev.map(d => d.name === file.name ? { ...d, type: `${typeLabel} ✓` } : d));
-                    }
-                  } catch { /* manuálne cez ⚡AI tlačidlo */ }
+        (async () => {
+          const SMALL_FILE_LIMIT = 3 * 1024 * 1024; // 3MB — bezpečne pod Vercel JSON body limit
+          const nameLower = file.name.toLowerCase();
+          const docType: "posudok" | "zmluva" | "lv" =
+            nameLower.includes("posudok") || nameLower.includes("znalec") ? "posudok"
+            : nameLower.includes("lv") || nameLower.includes("list vlastn") ? "lv"
+            : "zmluva";
+          const typeLabel = docType === "posudok" ? "Znalecký posudok" : docType === "lv" ? "List vlastníctva" : "Zmluva";
+          try {
+            // 1. Unified parse-doc — multipart ak ≤3.5MB, inak rasterizuj PDF na JPEG-y
+            const MULTIPART_LIMIT = 3.5 * 1024 * 1024;
+            console.log("[upload] parse-doc started, size:", file.size);
+            let parsed: Record<string, unknown> = {};
+            if (file.size <= MULTIPART_LIMIT) {
+              const fd = new FormData(); fd.append("file", file);
+              const res = await globalThis.fetch("/api/parse-doc", { method: "POST", body: fd });
+              parsed = await res.json().catch(() => ({ error: "Neplatná odpoveď" }));
+            } else {
+              // rasterizácia cez pdfjs-dist — stránky → JPEG
+              console.log("[upload] file > 3.5MB, rasterizing...");
+              const pdfjs = await import("pdfjs-dist");
+              pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+              const buf = await file.arrayBuffer();
+              const doc = await pdfjs.getDocument({ data: buf }).promise;
+              const images: string[] = [];
+              const maxPages = Math.min(doc.numPages, 20);
+              const BODY_BUDGET = 3.8 * 1024 * 1024; // pod Vercel limit
+              let totalSize = 0;
+              for (let i = 1; i <= maxPages; i++) {
+                const page = await doc.getPage(i);
+                const viewport = page.getViewport({ scale: 1.0 });
+                const canvas = document.createElement("canvas");
+                canvas.width = viewport.width; canvas.height = viewport.height;
+                const ctx = canvas.getContext("2d")!;
+                await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+                let quality = 0.55;
+                let b64 = canvas.toDataURL("image/jpeg", quality).split(",")[1];
+                // adaptívna kompresia ak sa blížime limitu
+                while (totalSize + b64.length > BODY_BUDGET && quality > 0.25) {
+                  quality -= 0.1;
+                  b64 = canvas.toDataURL("image/jpeg", quality).split(",")[1];
                 }
-                setParsingLV(false);
+                if (totalSize + b64.length > BODY_BUDGET) {
+                  console.warn("[upload] budget full, skipping remaining pages at", i);
+                  break;
+                }
+                images.push(b64);
+                totalSize += b64.length;
               }
-            } else { setDocs(prev => [...prev, { name: file.name, type: "PDF", size: file.size }]); setParsingLV(false); }
+              console.log("[upload] rasterized", images.length, "pages, total b64:", totalSize);
+              const res = await globalThis.fetch("/api/parse-doc", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ filename: file.name, images }),
+              });
+              parsed = await res.json().catch(() => ({ error: "Neplatná odpoveď" }));
+            }
+            console.log("[upload] parse-doc response:", parsed);
+
+            // 2. base64 pre uloženie ku klientovi (ak sa zmestí)
+            let b64: string | undefined;
+            if (file.size <= SMALL_FILE_LIMIT) {
+              try {
+                const bytes = new Uint8Array(await file.arrayBuffer());
+                let binary = ""; const chunk = 0x8000;
+                for (let i = 0; i < bytes.length; i += chunk) {
+                  binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk) as unknown as number[]);
+                }
+                b64 = btoa(binary);
+              } catch (e) { console.warn("[upload] base64 failed:", e); }
+            }
+
+            // 3. Pridaj do docs
+            setDocs(prev => [...prev, { name: file.name, type: typeLabel, size: file.size, pdf_base64: b64 }]);
+
+            // 4. Ulož ku klientovi
+            if (klientIdForDocs) {
+              saveKlientDokument({ klient_id: klientIdForDocs, name: file.name, type: typeLabel, size: file.size, source: "inzerat", mime: file.type, data_base64: b64 }).catch(() => {});
+            }
+
+            if (parsed && !parsed.error) {
+              fillFormFromAI(parsed as Record<string, string>);
+              setDocs(prev => prev.map(d => d.name === file.name ? { ...d, type: `${typeLabel} ✓` } : d));
+            } else {
+              setError((parsed?.error as string) || "AI nevrátila žiadne dáta — skús ⚡AI manuálne.");
+            }
+          } catch (e) {
+            console.error("[upload] PDF processing failed:", e);
+            setError("Nepodarilo sa spracovať PDF.");
+          } finally {
+            setParsingLV(false);
             setUploadingFile("");
-          })
-          .catch(() => { setDocs(prev => [...prev, { name: file.name, type: "PDF", size: file.size }]); setParsingLV(false); setUploadingFile(""); });
+          }
+        })();
       } else if (["txt","doc","docx"].includes(ext)) {
         const reader = new FileReader();
         reader.onload = ev => {
@@ -416,7 +538,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
 
   /* ── Mapovanie typu z AI na hodnotu selectu ── */
   const typMap: Record<string, string> = {
-    "byt": "3-izbovy-byt", "1-izbový byt": "1-izbovy-byt", "2-izbový byt": "2-izbovy-byt",
+    "byt": "2-izbovy-byt", "1-izbový byt": "1-izbovy-byt", "2-izbový byt": "2-izbovy-byt",
     "3-izbový byt": "3-izbovy-byt", "4-izbový byt": "4-izbovy-byt", "5-izbový byt": "5-izbovy-byt",
     "garsónka": "garsonka", "dvojgarsónka": "dvojgarsonka", "mezonet": "mezonet", "loft": "loft",
     "dom": "rodinny-dom", "rodinný dom": "rodinny-dom", "rodinny dom": "rodinny-dom",
@@ -507,13 +629,27 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       next.ulica_verejna = data.ulica || prev.ulica_verejna;
       next.lokalita = lokalitaParts.join(", ") || prev.lokalita;
       next.stat = "Slovensko";
-      next.typ = ((data.typ && typMap[data.typ.toLowerCase()]) || prev.typ) as TypNehnutelnosti;
+      next.typ = ((): TypNehnutelnosti => {
+        const rawTyp = (data.typ || "").toLowerCase().trim();
+        const izbyNum = Number(data.izby) || 0;
+        // Ak je typ len "byt" (bez čísla izieb), odvoď z data.izby
+        if (rawTyp === "byt" && izbyNum > 0) {
+          if (izbyNum === 1) return "1-izbovy-byt" as TypNehnutelnosti;
+          if (izbyNum === 2) return "2-izbovy-byt" as TypNehnutelnosti;
+          if (izbyNum === 3) return "3-izbovy-byt" as TypNehnutelnosti;
+          if (izbyNum === 4) return "4-izbovy-byt" as TypNehnutelnosti;
+          if (izbyNum >= 5) return "5-izbovy-byt" as TypNehnutelnosti;
+        }
+        return ((rawTyp && typMap[rawTyp]) || prev.typ) as TypNehnutelnosti;
+      })();
       next.kategoria = data.kategoria || prev.kategoria;
       next.cena = data.cena || prev.cena;
       next.plocha = data.plocha || prev.plocha;
       next.uzitkova_plocha = data.uzitkova_plocha || prev.uzitkova_plocha;
       next.izby = data.izby || prev.izby;
       next.poschodie = data.poschodie || prev.poschodie;
+      next.poschodia_vyssie = data.poschodia_vyssie || prev.poschodia_vyssie;
+      next.poschodia_nizsie = data.poschodia_nizsie || prev.poschodia_nizsie;
       next.vlastnictvo = data.vlastnictvo || prev.vlastnictvo;
       next.orientacia = data.orientacia || prev.orientacia;
       next.pozicia = pozicia || prev.pozicia;
@@ -575,19 +711,25 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   /* ── Process any document via AI (znalecký posudok, zmluva, etc.) ── */
   async function handleProcessDoc(idx: number, docType?: string) {
     const doc = docs[idx];
-    if (!doc?.text) return;
+    if (!doc?.text && !doc?.pdf_base64) return;
     setProcessingDoc(idx);
     try {
+      const dt = (docType || doc.type?.toLowerCase() || "").replace("✓", "").trim();
+      const normalizedDt = dt.includes("posudok") || dt.includes("znalec") ? "posudok"
+        : dt.includes("zmluva") || dt.includes("doklad") ? "zmluva"
+        : dt.includes("lv") ? "lv" : "zmluva";
+      console.log("[manual-AI] sending", { hasText: !!doc.text, hasPdf: !!doc.pdf_base64, docType: normalizedDt });
       const res = await globalThis.fetch("/api/parse-lv", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lv_text: doc.text, doc_type: docType || doc.type?.toLowerCase() }),
+        body: JSON.stringify({ lv_text: doc.text || "(viď PDF)", doc_type: normalizedDt, pdf_base64: doc.pdf_base64 }),
       });
       const data = await res.json();
+      console.log("[manual-AI] response", data);
       if (data.error) throw new Error(data.error);
       fillFormFromAI(data);
       const label = doc.type?.includes("✓") ? doc.type : `${doc.type} ✓`;
       setDocs(prev => prev.map((d, i) => i === idx ? { ...d, type: label } : d));
-    } catch { setError("Nepodarilo sa spracovať dokument."); }
+    } catch (e) { console.error("[manual-AI] failed", e); setError("Nepodarilo sa spracovať dokument."); }
     setProcessingDoc(-1);
   }
 
@@ -654,28 +796,46 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   }
 
   async function handleGenerate() {
+    if (generating) return; // guard proti dvojitému spusteniu
     const ctx = buildContext();
-    if (!ctx.trim()) return;
+    if (!ctx.trim() && photos.length === 0 && docs.length === 0) {
+      setError("Pridaj aspoň fotky, dokument alebo vyplň základné údaje.");
+      return;
+    }
     setGenerating(true);
     try {
-      // Konvertuj fotky na base64 (max 8 fotiek, max 1200px, kvalita 0.85)
+      // Konvertuj fotky na base64 (max 6 reprezentatívnych, 900px, q 0.6) — pod 3.5MB payload
       const photoB64: string[] = [];
-      for (const p of photos.slice(0, 8)) {
+      // Vyber rovnomerne rozložené fotky (nie len prvých 6)
+      const PHOTO_LIMIT = 6;
+      const step = Math.max(1, Math.floor(photos.length / PHOTO_LIMIT));
+      const sampled = photos.filter((_, i) => i % step === 0).slice(0, PHOTO_LIMIT);
+      let totalBytes = 0;
+      const PHOTO_BUDGET = 3 * 1024 * 1024;
+      for (const p of sampled) {
         try {
           const img = new Image();
           img.crossOrigin = "anonymous";
           await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = p.url; });
           const canvas = document.createElement("canvas");
-          const maxW = 1200;
+          const maxW = 900;
           const scale = Math.min(1, maxW / img.width);
           canvas.width = img.width * scale;
           canvas.height = img.height * scale;
           const ctxC = canvas.getContext("2d");
           ctxC?.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          let q = 0.6;
+          let dataUrl = canvas.toDataURL("image/jpeg", q);
+          while (totalBytes + dataUrl.length > PHOTO_BUDGET && q > 0.3) {
+            q -= 0.1;
+            dataUrl = canvas.toDataURL("image/jpeg", q);
+          }
+          if (totalBytes + dataUrl.length > PHOTO_BUDGET) break;
           photoB64.push(dataUrl);
+          totalBytes += dataUrl.length;
         } catch { /* skip */ }
       }
+      console.log("[ai-writer] sending", photoB64.length, "photos, total:", totalBytes);
 
       // Lokalita — priorita: ulica > obec > okres
       const lokalitaFull = [f.ulica_verejna, f.obec, f.okres, f.kraj].filter(Boolean).join(", ");
@@ -717,9 +877,11 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         const updates: Partial<typeof prev> = {
           nazov: data.nazov || prev.nazov,
           text_popis: text,
-          intro: data.kratky || prev.intro,
+          intro: data.intro || data.kratky || prev.intro,
           seo_keywords: seoMatch ? seoMatch[1].trim() : generateSEO(prev),
           tagy: tagMatch ? tagMatch[1].trim() : prev.tagy,
+          meta_description: data.meta_description || "",
+          h1: data.h1 || data.nazov || prev.nazov,
         };
         // Baťovská cena z AI
         if (data.cena_batova && data.cena_batova.trim()) {
@@ -729,7 +891,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         return { ...prev, ...updates };
       });
       setTimeout(() => aiRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
-    } catch { setError("Generovanie zlyhalo."); }
+    } catch (e) { console.error("[ai-writer] client error:", e); setError(`Generovanie zlyhalo: ${String((e as Error)?.message || e).slice(0,200)}`); }
     setGenerating(false);
   }
 
@@ -854,7 +1016,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         onDragEnter={e => { e.preventDefault(); e.stopPropagation(); setDropOver(true); }}
         onDragLeave={e => { e.preventDefault(); e.stopPropagation(); if (!dropRef.current?.contains(e.relatedTarget as Node)) setDropOver(false); }}
         onDrop={handleDrop}
-        style={{ ...s.card, padding: 0, overflow: "hidden", border: dropOver ? "2px solid #3B82F6" : "2px dashed #E5E7EB", background: dropOver ? "#EFF6FF" : "#fff", transition: "all 0.2s" }}>
+        style={{ ...s.card, padding: 0, overflow: "hidden", border: dropOver ? "2px solid #3B82F6" : "2px dashed var(--border)", background: dropOver ? "var(--bg-elevated)" : "var(--bg-surface)", transition: "all 0.2s" }}>
         <input ref={fileRef} type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt" style={{ display: "none" }}
           onChange={e => { if (e.target.files?.length) handleFiles(e.target.files); e.target.value = ""; }} />
 
@@ -915,7 +1077,25 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
                 ))}
               </div>
             )}
-            <button onClick={() => fileRef.current?.click()} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1.5px dashed #D1D5DB", background: "transparent", fontSize: "13px", color: "#6B7280", cursor: "pointer" }}>+ Pridať súbory</button>
+            <button onClick={() => fileRef.current?.click()} style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1.5px dashed var(--border)", background: "transparent", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>+ Pridať súbory</button>
+            {docs.some(d => d.text) && (
+              <div style={{ marginTop: "12px" }}>
+                <input style={{ ...s.input, fontSize: "12px" }} placeholder="🔍 Hľadať v dokumentoch (napr. balkón, IBAN, parcela…)" value={docQuery} onChange={e => setDocQuery(e.target.value)} />
+                {docHits.length > 0 && (
+                  <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {docHits.map((h, i) => (
+                      <div key={i} style={{ padding: "8px 10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", color: "var(--text-primary)" }}>
+                        <div style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "2px" }}>{h.doc}</div>
+                        {h.snippet}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {docQuery.trim().length >= 2 && docHits.length === 0 && (
+                  <div style={{ marginTop: "6px", fontSize: "11px", color: "var(--text-muted)" }}>Žiadne výsledky v nahratých dokumentoch.</div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1034,52 +1214,28 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
           {/* Priestory */}
           <div style={s.card}>
             <div style={s.title}>Priestory</div>
-            <div style={{ ...s.g2, marginBottom: "16px" }}>
+
+            {/* Poschodia */}
+            <div style={{ ...s.g2, marginBottom: "10px" }}>
+              <div><label style={s.label}>Poschodie bytu</label><input style={s.input} type="number" value={f.poschodie} onChange={e => set("poschodie", e.target.value)} placeholder="napr. 3" /></div>
               <div><label style={s.label}>Pozícia bytu</label>
                 <select style={s.select} value={f.pozicia} onChange={e => set("pozicia", e.target.value)}>
                   <option value="">—</option><option value="vyssie-poschodie">Vyššie poschodie</option><option value="stredne-poschodie">Stredné poschodie</option><option value="nizsie-poschodie">Nižšie poschodie</option><option value="prizemia">Prízemie</option><option value="suteren">Suterén</option><option value="mezonet">Mezonet</option>
                 </select>
               </div>
-              <div><label style={s.label}>Poschodie</label><input style={s.input} type="number" value={f.poschodie} onChange={e => set("poschodie", e.target.value)} /></div>
+              <div><label style={s.label}>Celkom poschodí v budove</label><input style={s.input} type="number" value={f.poschodia_vyssie} onChange={e => set("poschodia_vyssie", e.target.value)} placeholder="napr. 8" /></div>
+              <div><label style={s.label}>Podzemné podlažia</label><input style={s.input} type="number" value={f.poschodia_nizsie} onChange={e => set("poschodia_nizsie", e.target.value)} placeholder="napr. 1" /></div>
             </div>
 
-            {/* Exteriér */}
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: "8px" }}>Exteriér</div>
-            <div style={{ ...s.g3, marginBottom: "4px" }}>
-              {[["balkon","Balkón"],["loggia","Loggia"],["terasa","Terasa"]].map(([k,l]) => (
-                <Tog key={k} on={(f as Record<string, unknown>)[k] as boolean} set={v => set(k, v)} label={l} />
-              ))}
-            </div>
-            {(f.balkon || f.loggia || f.terasa) && (
-              <div style={{ ...s.g2, marginBottom: "8px", paddingLeft: "8px", borderLeft: "2px solid #E5E7EB" }}>
-                {f.balkon && <div><label style={s.label}>Balkón plocha (m²)</label><input style={s.input} type="number" value={f.balkon_plocha} onChange={e => set("balkon_plocha", e.target.value)} /></div>}
-                {f.loggia && <><div><label style={s.label}>Loggia plocha (m²)</label><input style={s.input} type="number" value={f.loggia_plocha} onChange={e => set("loggia_plocha", e.target.value)} /></div><div><label style={s.label}>Počet loggií</label><input style={s.input} type="number" value={f.loggia_pocet} onChange={e => set("loggia_pocet", e.target.value)} /></div></>}
-                {f.terasa && <div><label style={s.label}>Terasa plocha (m²)</label><input style={s.input} type="number" value={f.terasa_plocha} onChange={e => set("terasa_plocha", e.target.value)} /></div>}
-              </div>
-            )}
-
-            {/* Vybavenie budovy */}
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginTop: "12px", marginBottom: "8px" }}>Vybavenie budovy</div>
-            <div style={{ ...s.g3, marginBottom: "4px" }}>
-              {[["vytah","Výťah"],["garaz","Garáž"],["pivnica","Pivnica"]].map(([k,l]) => (
-                <Tog key={k} on={(f as Record<string, unknown>)[k] as boolean} set={v => set(k, v)} label={l} />
-              ))}
-            </div>
-            {(f.pivnica || f.garaz) && (
-              <div style={{ ...s.g2, marginBottom: "8px", paddingLeft: "8px", borderLeft: "2px solid #E5E7EB" }}>
-                {f.pivnica && <><div><label style={s.label}>Pivnica plocha (m²)</label><input style={s.input} type="number" value={f.pivnica_plocha} onChange={e => set("pivnica_plocha", e.target.value)} /></div><div><label style={s.label}>Počet pivníc</label><input style={s.input} type="number" value={f.pivnica_pocet} onChange={e => set("pivnica_pocet", e.target.value)} /></div></>}
-                {f.garaz && <div><label style={s.label}>Typ parkovania</label>
-                  <select style={s.select} value={f.parkovanie_typ} onChange={e => set("parkovanie_typ", e.target.value)}>
-                    <option value="">—</option><option value="garaz">Garáž</option><option value="statie">Parkovacie státie</option><option value="ine">Iné</option>
-                  </select>
-                </div>}
-              </div>
-            )}
-
-            {/* Ostatné */}
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginTop: "12px", marginBottom: "8px" }}>Parkovanie a ostatné</div>
-            <div style={{ ...s.g3 }}>
-              {[["verejne_parkovanie","Verejné park."],["sukromne_parkovanie","Súkromné park."],["spajza","Špajza"],["sklad_toggle","Sklad"],["dielna","Dielňa"]].map(([k,l]) => (
+            {/* Vybavenie — všetko v jednom prehľadnom gride */}
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginTop: "14px", marginBottom: "8px" }}>Vybavenie</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+              {([
+                ["balkon","Balkón"],["loggia","Loggia"],["terasa","Terasa"],
+                ["vytah","Výťah"],["garaz","Garáž"],["pivnica","Pivnica"],
+                ["spajza","Špajza"],["sklad_toggle","Sklad"],["dielna","Dielňa"],
+                ["verejne_parkovanie","Verejné parkovanie"],["sukromne_parkovanie","Súkromné parkovanie"],
+              ] as [string,string][]).map(([k,l]) => (
                 <Tog key={k} on={(f as Record<string, unknown>)[k] as boolean} set={v => set(k, v)} label={l} />
               ))}
             </div>
@@ -1092,10 +1248,6 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
               <div><label style={s.label}>Rok výstavby</label><input style={s.input} type="number" placeholder="1985" value={f.rok_vystavby} onChange={e => set("rok_vystavby", e.target.value)} /></div>
               <div><label style={s.label}>Rok rekonštrukcie</label><input style={s.input} type="number" value={f.rok_rekonstrukcie} onChange={e => set("rok_rekonstrukcie", e.target.value)} /></div>
               <div><label style={s.label}>Rok kolaudácie</label><input style={s.input} type="number" value={f.rok_kolaudacie} onChange={e => set("rok_kolaudacie", e.target.value)} /></div>
-            </div>
-            <div style={s.g2}>
-              <div><label style={s.label}>Celkom poschodí v budove</label><input style={s.input} type="number" value={f.poschodia_vyssie} onChange={e => set("poschodia_vyssie", e.target.value)} placeholder="napr. 8" /></div>
-              <div><label style={s.label}>Podzemné podlažia</label><input style={s.input} type="number" value={f.poschodia_nizsie} onChange={e => set("poschodia_nizsie", e.target.value)} placeholder="napr. 1" /></div>
             </div>
           </div>
 
@@ -1166,20 +1318,20 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
           {/* ═══ AI WRITER — NA SPODKU ═══ */}
           <div ref={aiRef} style={{
             ...s.card, padding: 0, overflow: "hidden",
-            background: generating ? "#F3F4F6" : "#fff", transition: "background 0.3s",
+            background: generating ? "var(--bg-elevated)" : "var(--bg-surface)", transition: "background 0.3s",
           }}>
             <div style={{ padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: f.text_popis ? "1px solid #E5E7EB" : "none" }}>
               <div>
-                <div style={{ fontSize: "15px", fontWeight: "600", color: "#374151", display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ fontSize: "15px", fontWeight: "600", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
                   AI Writer
-                  {generating && <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "500", color: "#3B82F6", background: "#EFF6FF", padding: "2px 10px", borderRadius: "10px" }}><span style={{ width: "8px", height: "8px", borderRadius: "4px", background: "#3B82F6", animation: "pulse 1s ease-in-out infinite" }} />Generujem...</span>}
+                  {generating && <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "500", color: "#3B82F6", background: "rgba(59,130,246,0.12)", padding: "2px 10px", borderRadius: "10px" }}><span style={{ width: "8px", height: "8px", borderRadius: "4px", background: "#3B82F6", animation: "pulse 1s ease-in-out infinite" }} />Generujem...</span>}
                 </div>
-                <div style={{ fontSize: "12px", color: "#9CA3AF", marginTop: "2px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "2px" }}>
                   {[f.typ, f.izby ? `${f.izby}-izb.` : "", f.plocha ? `${f.plocha} m²` : "", f.cena ? `${f.cena} €` : "", [f.obec, f.okres].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "Vyplň údaje vyššie"}
                 </div>
               </div>
               <button onClick={handleGenerate} disabled={generating || !canGenerate}
-                style={{ padding: "8px 18px", borderRadius: "8px", border: "none", background: generating ? "transparent" : "#374151", color: generating ? "transparent" : "#fff", fontSize: "12px", fontWeight: "600", cursor: generating ? "default" : "pointer" }}>
+                style={{ padding: "8px 18px", borderRadius: "8px", border: "none", background: generating ? "transparent" : "var(--text-primary)", color: generating ? "transparent" : "var(--bg-base)", fontSize: "12px", fontWeight: "600", cursor: generating ? "default" : "pointer", opacity: generating ? 0 : 1 }}>
                 {f.text_popis ? "Pregenerovať" : "Napísať text"}
               </button>
             </div>
@@ -1197,8 +1349,8 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
                 <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginBottom: "12px" }}>
                   {[0, 1, 2].map(i => <div key={i} style={{ width: "8px", height: "8px", borderRadius: "4px", background: "#3B82F6", animation: `bounce 1.2s ease-in-out ${i * 0.15}s infinite` }} />)}
                 </div>
-                <div style={{ fontSize: "14px", fontWeight: "500", color: "#374151" }}>AI píše text inzerátu</div>
-                <div style={{ fontSize: "12px", color: "#9CA3AF", marginTop: "4px" }}>Gemini skúma lokalitu · Claude a GPT píšu text</div>
+                <div style={{ fontSize: "14px", fontWeight: "500", color: "var(--text-primary)" }}>AI píše text inzerátu</div>
+                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "4px" }}>Gemini skúma lokalitu · Claude a GPT píšu text</div>
               </div>
             )}
 
@@ -1208,12 +1360,12 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                     <span style={s.label}>Intro</span><span style={{ fontSize: "11px", color: "#D1D5DB" }}>{f.intro.length}/160</span>
                   </div>
-                  <textarea style={{ ...s.input, resize: "none", height: "44px", fontSize: "13px", background: generating ? "#EBEDF0" : "#F9FAFB" }} maxLength={160} value={f.intro} onChange={e => set("intro", e.target.value)} readOnly={generating} />
+                  <textarea style={{ ...s.input, resize: "none", height: "44px", fontSize: "13px", background: "var(--bg-elevated)", color: "var(--text-primary)" }} maxLength={160} value={f.intro} onChange={e => set("intro", e.target.value)} readOnly={generating} />
                 </div>
 
                 <div style={{ padding: "12px 20px 0" }}>
                   <label style={s.label}>Popis inzerátu</label>
-                  <textarea style={{ ...s.input, resize: "vertical", minHeight: "180px", fontSize: "14px", lineHeight: 1.7, background: generating ? "#EBEDF0" : "#F9FAFB" }} value={f.text_popis} onChange={e => set("text_popis", e.target.value)} readOnly={generating} />
+                  <textarea style={{ ...s.input, resize: "vertical", minHeight: "180px", fontSize: "14px", lineHeight: 1.7, background: "var(--bg-elevated)", color: "var(--text-primary)" }} value={f.text_popis} onChange={e => set("text_popis", e.target.value)} readOnly={generating} />
                 </div>
 
                 <div style={{ padding: "12px 20px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -1301,9 +1453,9 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       {saved && <div style={{ margin: "12px 0", padding: "10px 16px", background: "#F0FDF4", borderRadius: "10px", fontSize: "13px", color: "#16A34A" }}>✓ Uložené</div>}
 
       {/* Bottom bar */}
-      <div style={{ position: "sticky", bottom: 0, background: "#fff", borderTop: "1px solid #F3F4F6", padding: "14px 0", marginTop: "20px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-        <button onClick={() => { setF(defaultForm); onCancel?.(); }} style={{ padding: "9px 18px", background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: "8px", fontSize: "13px", color: "#6B7280", cursor: "pointer" }}>Zahodiť</button>
-        <button onClick={() => handleSave(false)} disabled={saving} style={{ padding: "9px 22px", background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "#374151", cursor: "pointer" }}>Uložiť</button>
+      <div style={{ position: "sticky", bottom: 0, background: "var(--bg-surface)", borderTop: "1px solid var(--border)", padding: "14px 0", marginTop: "20px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+        <button onClick={() => { setF(defaultForm); onCancel?.(); }} style={{ padding: "9px 18px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>Zahodiť</button>
+        <button onClick={() => handleSave(false)} disabled={saving} style={{ padding: "9px 22px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>Uložiť</button>
         <button onClick={() => handleSave(true)} disabled={saving} style={{ padding: "9px 24px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>{saving ? "..." : "Publikovať"}</button>
       </div>
     </div>
