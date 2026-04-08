@@ -891,7 +891,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         return { ...prev, ...updates };
       });
       setTimeout(() => aiRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
-    } catch (e) { console.error("[ai-writer] client error:", e); setError(`Generovanie zlyhalo: ${String((e as Error)?.message || e).slice(0,200)}`); }
+    } catch (e) { console.error("[ai-writer] client error:", e); setError(`Generovanie zlyhalo: ${String((e as Error)?.message || e).slice(0,800)}`); }
     setGenerating(false);
   }
 
