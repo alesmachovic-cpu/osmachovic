@@ -434,7 +434,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
           const typeLabel = docType === "posudok" ? "Znalecký posudok" : docType === "lv" ? "List vlastníctva" : "Zmluva";
           try {
             // 1. Unified parse-doc — multipart ak ≤3.5MB, inak rasterizuj PDF na JPEG-y
-            const MULTIPART_LIMIT = 3.5 * 1024 * 1024;
+            const MULTIPART_LIMIT = 0; // vždy rasterizovať PDF client-side (vyhnúť sa Vercel 60s timeout)
             console.log("[upload] parse-doc started, size:", file.size);
             let parsed: Record<string, unknown> = {};
             if (file.size <= MULTIPART_LIMIT) {
