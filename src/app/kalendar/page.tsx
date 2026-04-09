@@ -21,11 +21,20 @@ type ViewMode = "day" | "week" | "3day";
 
 /* ─── Helpers ─── */
 function toDateStr(d: Date) {
-  return d.toISOString().slice(0, 10);
+  // Use local time, not UTC — prevents day shift in CET/CEST timezone
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("sk", { hour: "2-digit", minute: "2-digit" });
+}
+
+function eventDateStr(iso: string) {
+  // Convert event start/end to local date string for comparison
+  return toDateStr(new Date(iso));
 }
 
 function fmtDate(d: Date) {
@@ -354,7 +363,7 @@ function DayColumn({ date, events, onEventClick, onSlotClick }: {
   onSlotClick: (date: string, hour: number) => void;
 }) {
   const dateStr = toDateStr(date);
-  const dayEvents = events.filter(e => !e.allDay && e.start.slice(0, 10) === dateStr)
+  const dayEvents = events.filter(e => !e.allDay && eventDateStr(e.start) === dateStr)
     .sort((a, b) => a.start.localeCompare(b.start));
 
   return (
@@ -460,7 +469,7 @@ export default function KalendarPage() {
   // All-day events for visible range
   const allDayEvents = events.filter(e => {
     if (!e.allDay) return false;
-    return visibleDays.some(d => e.start.slice(0, 10) === toDateStr(d));
+    return visibleDays.some(d => eventDateStr(e.start) === toDateStr(d));
   });
 
   // Navigation
@@ -647,7 +656,7 @@ export default function KalendarPage() {
           display: "flex", gap: "8px", overflowX: "auto",
         }}>
           {events
-            .filter(e => e.start.slice(0, 10) === toDateStr(focusDate) && !e.allDay)
+            .filter(e => eventDateStr(e.start) === toDateStr(focusDate) && !e.allDay)
             .sort((a, b) => a.start.localeCompare(b.start))
             .map(e => {
               const color = e.color || hashColor(e.id);

@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
  * Alternatívne používa Google Calendar MCP ak je dostupný
  */
 export async function POST(req: NextRequest) {
-  const { title, datetime, description, telefon } = await req.json();
+  const { title, datetime, description, telefon, location } = await req.json();
 
   if (!title || !datetime) {
     return NextResponse.json({ error: "Chýba názov alebo dátum" }, { status: 400 });
@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
         start: startDate.toISOString(),
         end: endDate.toISOString(),
         description,
+        location: location || "",
         telefon,
         synced: false,
       },
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           summary: title,
           description: description || "",
+          location: location || "",
           start: {
             dateTime: startDate.toISOString(),
             timeZone: "Europe/Bratislava",

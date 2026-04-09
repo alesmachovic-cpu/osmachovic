@@ -1,28 +1,77 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SYSTEM_LV = `Si precízny analytik realitných dokumentov. Tvojou úlohou je extrahovať dáta BEZ akýchkoľvek predpokladov alebo vymýšľania. Vráť IBA JSON bez markdown.
+// SYSTEM_LV/POSUDOK/ZMLUVA definované nižšie po SYSTEM_UNIVERSAL
 
-KRITICKÉ PRAVIDLÁ:
-1. LOKALITA: Pozri sa na "k.ú." (katastrálne územie). Ak je tam napísané Petržalka, NESMIEŠ uviesť Staré Mesto. Použi PRESNE to čo je v dokumente.
-2. VÝMERY: Hľadaj tabuľku s podlahovou plochou alebo vetu "Vypočítaná podlahová plocha je...". Uveď PRESNÉ číslo na dve desatinné miesta ak je uvedené.
-3. ZÁKAZ HALUCINÁCIÍ: Ak údaj v dokumente NEVIDÍŠ, VYNECHAJ ho z JSON. Radšej prázdne pole ako lož. NIKDY nevymýšľaj údaje.`;
+const SYSTEM_UNIVERSAL = `Si expertný analytik slovenských realitných dokumentov — rozumieš KAŽDÉMU typu dokumentu:
+list vlastníctva, znalecký posudok, kúpna zmluva, rezervačná zmluva, budúca kúpna zmluva, darovacia,
+nájomná, nadobúdací doklad, pôdorys, energetický certifikát, výpis z katastra, rozhodnutie o vklade.
 
-const SYSTEM_POSUDOK = `Si precízny analytik znaleckých posudkov nehnuteľností. Extrahuj VŠETKY technické údaje o nehnuteľnosti. Vráť IBA JSON bez markdown.
+AKO UVAŽOVAŤ NAD DOKUMENTOM:
 
-KRITICKÉ PRAVIDLÁ:
-1. LOKALITA: Použi katastrálne územie (k.ú.) PRESNE ako je v dokumente. Neplieť si mestské časti.
-2. PLOCHY: Hľadaj "vypočítaná podlahová plocha", tabuľku výmer, alebo rozpis miestností. Balkón/loggia/pivnica sa NEPOČÍTA do podlahovej plochy bytu.
-3. CENA: Hľadaj VŠH (všeobecná hodnota nehnuteľnosti). Uprav na Baťovský formát (zaokrúhli na 1000, odčítaj 100).
-4. STAV: Hľadaj opis technického stavu, materiálu, rekonštrukcií.
-5. NÁKLADY: Hľadaj mesačné náklady, fond opráv, správu domu, energie.
-6. ZÁKAZ HALUCINÁCIÍ: Ak údaj NEVIDÍŠ, VYNECHAJ z JSON. NIKDY nevymýšľaj.`;
+1. ROZPOZNAJ O ČOM DOKUMENT JE
+   - Najprv identifikuj typ dokumentu (posudok/zmluva/LV) z nadpisu a kontextu.
+   - Potom nájdi "predmet" — tú časť kde je POPÍSANÁ nehnuteľnosť (nie osoby, nie právne doložky).
+   - V zmluvách hľadaj článok "PREDMET ZMLUVY" / "Predmet kúpy" / "Opis nehnuteľnosti".
+   - V posudkoch hľadaj "ÚVOD POSUDKU", "Vo veci", "Opis stavby", "Dispozičné riešenie".
 
-const SYSTEM_ZMLUVA = `Si precízny analytik realitných zmlúv. Extrahuj údaje o nehnuteľnosti a podmienkach z kúpnej/nájomnej zmluvy. Vráť IBA JSON bez markdown.
+2. NEZAMIEŇAJ OSOBU A NEHNUTEĽNOSŤ
+   - "Bytom" / "trvalé bydlisko" / "adresa sídla" v identifikácii strán zmluvy = bydlisko OSOBY, NIE predmetu.
+   - Adresa nehnuteľnosti je VŽDY v sekcii ktorá popisuje predmet prevodu/ohodnotenia.
+   - Ak sa v dokumente spomínajú 3 adresy, vyber tú pri popise bytu/domu/pozemku.
 
-KRITICKÉ PRAVIDLÁ:
-1. LOKALITA: Použi adresu a katastrálne územie PRESNE z dokumentu.
-2. CENA: Hľadaj kúpnu cenu alebo nájomné. Uprav na Baťovský formát.
-3. ZÁKAZ HALUCINÁCIÍ: Ak údaj NEVIDÍŠ, VYNECHAJ z JSON. NIKDY nevymýšľaj.`;
+3. LOKALITA — HIERARCHIA
+   - Katastrálne územie (k.ú.) = NAJPRESNEJŠIE (použi vždy keď je).
+   - Obec = mesto/dedina; pri Bratislave/Košiciach aj mestská časť ("m.č.").
+   - Okres — pri Bratislave rozlíš I/II/III/IV/V (Karlova Ves = IV, Petržalka = V, Ružinov = II, Staré Mesto = I, Nové Mesto = III).
+   - NIKDY neprepisuj mestskú časť z vlastnej pamäti — ber len to čo vidíš.
+
+4. POSCHODIE, IZBY, PLOCHA — LOGIKA
+   - "5.p." / "na 5. poschodí" / "piate nadzemné podlažie" → poschodie=5.
+   - "-1.p." / "suterén" / "podzemné podlažie" → poschodie=-1.
+   - Izby = POČET OBYTNÝCH MIESTNOSTÍ, nepočítaj kuchyňu, kúpeľňu, WC, chodbu, halu, pivnicu, balkón.
+     * "garsónka" / "1-izbový" = 1, "dvojizbový" = 2, "3-izbový" / "3 obytných miestností" = 3, atď.
+   - Plocha bytu = podlahová plocha BEZ balkóna/loggie/terasy. Pivnica je sporná — ak je v dokumente rozpis,
+     skontroluj či ju pripočítali (slovenské posudky niekedy áno) a odpočítaj ju.
+   - Ak vidíš tabuľku miestností s plochami, sčítaj len obytnú časť; ak vidíš rovno "celková podlahová plocha
+     bytu, bez loggie, je X m²", použi X.
+   - Celkový počet nadzemných/podzemných podlaží budovy ≠ poschodie bytu (nemýľ si to).
+
+5. MATERIÁL STAVBY
+   - "panelový" / "montovaný panelový" / "z betónových panelov" → panel
+   - "tehlový" / "pálená tehla" / "murovaná z tehly" → tehla
+   - "skelet" / "železobetónový skelet" → skelet
+   - "drevený" / "zrub" → drevo
+   - Ak sa neuvádza, vynechaj — nevymýšľaj.
+
+6. ROK VÝSTAVBY / KOLAUDÁCIE
+   - Posudok: "vek X rokov (od roku YYYY)" → rok_vystavby=YYYY.
+   - Zmluva: málokedy obsahuje; ak áno hľadaj "kolaudačné rozhodnutie zo dňa", "postavený v roku".
+
+7. CENA — BAŤU FORMÁT
+   - Kúpna cena / VŠH / všeobecná hodnota v EUR.
+   - Ak rezervačná zmluva: SČÍTAJ rezervačnú zálohu + doplatok.
+   - Uprav do Baťu: zaokrúhli na 1000 nadol a odčítaj 100 (150000→149900, 112990→112900, 89500→89400).
+
+8. VYBAVENIE A PRÍSLUŠENSTVO
+   - Hľadaj popisy kuchyne (linka, spotrebiče), kúpeľne (vaňa/sprcha/umývadlo), podláh, okien, dverí, vykurovania.
+   - Balkón/loggia/terasa/pivnica/garáž: označ true len keď ich dokument explicitne uvedie pri tomto konkrétnom byte.
+   - Ak sa uvádza výmera doplnku ("pivnica 1,70 m²", "loggia 4,5 m²"), zachyť ju samostatne.
+
+9. PRÁVNE VADY (časť C listu vlastníctva alebo "Ťarchy" v posudku)
+   - Záložné práva (hypotéky) — skrátene zachyť ktorá banka.
+   - Vecné bremená (právo doživotného bývania, právo prechodu) — cituj krátko.
+   - Exekúcie, plomby — cituj.
+
+10. DÔSLEDNÁ POCTIVOSŤ
+    - Ak údaj v dokumente NIE JE, VYNECHAJ kľúč z JSON. NEpoužívaj "N/A", prázdne stringy, null.
+    - Radšej polovica polí ako vymyslené údaje.
+    - Čísla vráť ako číslo (bez "m²", "€", medzier).
+
+Vráť IBA validný JSON bez markdown obalu.`;
+
+const SYSTEM_LV = SYSTEM_UNIVERSAL;
+const SYSTEM_POSUDOK = SYSTEM_UNIVERSAL;
+const SYSTEM_ZMLUVA = SYSTEM_UNIVERSAL;
 
 function getSystem(docType?: string): string {
   if (docType === "posudok" || docType === "znalecký posudok") return SYSTEM_POSUDOK;
@@ -46,8 +95,12 @@ const USER_PROMPT = (text: string) => `Analyzuj tento realitný dokument. Extrah
   "material": "tehla alebo panel alebo skelet alebo drevo alebo ine — PRESNE z dokumentu",
   "rok_kolaudacie": "rok začiatku užívania alebo kolaudácie IBA číslo",
   "rok_vystavby": "rok výstavby IBA číslo",
-  "poschodie": "číslo poschodia IBA číslo",
-  "izby": "počet izieb IBA číslo",
+  "poschodie": "číslo poschodia bytu IBA číslo (napr. 5)",
+  "poschodia_vyssie": "celkový počet nadzemných podlaží v budove IBA číslo",
+  "poschodia_nizsie": "počet podzemných podlaží v budove IBA číslo",
+  "cislo_bytu": "číslo bytu podľa zmluvy/posudku (napr. 51, 16, A5.1)",
+  "vchod": "číslo vchodu alebo orientačné číslo vchodu",
+  "izby": "počet obytných miestností IBA číslo (nie kuchyňa, kúpeľňa, chodba)",
   "vytah": "true alebo false",
   "balkon": "true ak má balkón",
   "balkon_plocha": "plocha balkóna v m² PRESNÉ číslo",
@@ -113,7 +166,12 @@ async function parseByGemini(text: string, system: string, pdfBase64?: string): 
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ parts }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 2000 },
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 16000,
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 0 }, // vypnúť thinking aby sa output nekrátil
+          },
         }),
       }
     );
@@ -141,7 +199,7 @@ async function parseByGPT(text: string, system: string): Promise<Record<string, 
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.1,
-        max_tokens: 2000,
+        max_tokens: 4000,
         messages: [
           { role: "system", content: system },
           { role: "user", content: USER_PROMPT(text) },
@@ -167,7 +225,7 @@ async function parseByClaude(text: string, system: string): Promise<Record<strin
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const msg = await anthropic.messages.create({
       model: "claude-3-5-haiku-20241022",
-      max_tokens: 2000,
+      max_tokens: 4000,
       system: system,
       messages: [{ role: "user", content: USER_PROMPT(text) }],
     });
@@ -200,10 +258,13 @@ export async function POST(req: NextRequest) {
   for (let i = 0; i < strategies.length; i++) {
     console.log(`[parse-doc] Trying ${names[i]}...`);
     const result = await strategies[i](lv_text);
-    if (result && (result.obec || result.okres || result.plocha || result.typ || result.stav || result.cena || result.mesacne_naklady || result.pravne_vady || result.material)) {
-      console.log(`[parse-doc] ✓ ${names[i]} succeeded`);
+    // Považuj za úspech ak AI vráti HOCIJAKÉ užitočné pole (aj len katastrálne územie, izby, poschodie, ulicu)
+    const hasAnyField = result && Object.values(result).some(v => v !== undefined && v !== null && String(v).trim() !== "" && String(v).toLowerCase() !== "n/a");
+    if (hasAnyField) {
+      console.log(`[parse-doc] ✓ ${names[i]} succeeded with fields:`, Object.keys(result!).join(", "));
       return NextResponse.json({ ...result, _ai: names[i], _docType: doc_type || "lv" });
     }
+    console.log(`[parse-doc] ✗ ${names[i]} returned empty, trying next...`);
   }
 
   return NextResponse.json({ error: "Žiadna AI nedokázala spracovať dokument. Skontroluj API kľúče." }, { status: 500 });

@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Prevent white flash during navigation in dark mode */
+html.dark, html.dark body {
+  background-color: #1C1C1E !important;
+  color-scheme: dark;
+}
+
 :root {
   --bg-base:        #F5F5F7;
   --bg-surface:     #FFFFFF;

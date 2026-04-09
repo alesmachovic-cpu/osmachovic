@@ -176,6 +176,7 @@ export default function NastaveniaPage() {
     { id: "inzercia", label: "AI Inzercia", icon: "✍️" },
     { id: "ciele", label: "Ciele a kalkulácie", icon: "🎯" },
     { id: "integracie", label: "Integrácie", icon: "🔗" },
+    { id: "faktury", label: "Faktúry", icon: "🧾", href: "/nastavenia/faktury" },
     ...(isAdmin ? [{ id: "ucty", label: "Účty", icon: "👥" }] : []),
   ];
 
@@ -189,7 +190,10 @@ export default function NastaveniaPage() {
       {/* Category tabs */}
       <div style={{ display: "flex", gap: "6px", marginBottom: "20px", overflowX: "auto", paddingBottom: "4px" }}>
         {categories.map(c => (
-          <button key={c.id} onClick={() => setActiveCategory(c.id)} style={{
+          <button key={c.id} onClick={() => {
+            if ((c as { href?: string }).href) { window.location.href = (c as { href: string }).href; return; }
+            setActiveCategory(c.id);
+          }} style={{
             padding: "8px 16px", borderRadius: "10px", border: "1px solid var(--border)",
             background: activeCategory === c.id ? "#374151" : "var(--bg-surface)",
             color: activeCategory === c.id ? "#fff" : "var(--text-secondary)",

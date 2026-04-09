@@ -8,6 +8,7 @@ import SignatureCanvas from "@/components/SignatureCanvas";
 import { useAuth } from "@/components/AuthProvider";
 import { getUserItem } from "@/lib/userStorage";
 import { getMaklerUuid } from "@/lib/maklerMap";
+import { saveKlientDokument } from "@/lib/klientDokumenty";
 
 const OKRESY: Record<string, string[]> = {
   "Bratislavský kraj": ["Bratislava I","Bratislava II","Bratislava III","Bratislava IV","Bratislava V","Malacky","Pezinok","Senec"],
@@ -208,6 +209,11 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
 
   function handleDocFoto(key: string, files: FileList | null) {
     if (!files || files.length === 0) return;
+    const labelMap: Record<string, string> = {
+      lv: "List vlastníctva", energeticky_certifikat: "Energetický certifikát",
+      podorys: "Pôdorys", nahlad_katastra: "Náhľad z katastra",
+      znalecky_posudok: "Znalecký posudok", ine: "Iný dokument",
+    };
     Array.from(files).forEach(file => {
       const reader = new FileReader();
       reader.onload = () => {
@@ -216,6 +222,14 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
           ...prev,
           [key]: [...(prev[key] || []), base64],
         }));
+        if (klient?.id) {
+          const b64Only = base64.split(",")[1] || "";
+          saveKlientDokument({
+            klient_id: klient.id, name: file.name,
+            type: labelMap[key] || key, size: file.size,
+            source: "naber", mime: file.type, data_base64: b64Only,
+          }).catch(() => {});
+        }
       };
       reader.readAsDataURL(file);
     });

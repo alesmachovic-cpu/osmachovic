@@ -37,10 +37,15 @@ export default function RootLayout({
           (function() {
             function applyTheme() {
               var h = new Date().getHours();
-              if (h >= 20 || h < 6) {
+              var isDark = h >= 20 || h < 6;
+              if (isDark) {
                 document.documentElement.classList.add('dark');
+                document.documentElement.style.backgroundColor = '#1C1C1E';
+                document.documentElement.style.colorScheme = 'dark';
               } else {
                 document.documentElement.classList.remove('dark');
+                document.documentElement.style.backgroundColor = '#F5F5F7';
+                document.documentElement.style.colorScheme = 'light';
               }
             }
             applyTheme();

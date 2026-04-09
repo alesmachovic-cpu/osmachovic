@@ -27,11 +27,15 @@ export async function POST(req: NextRequest) {
                     },
                   },
                   {
-                    text: "Extrahuj celý text z tohto PDF dokumentu. Vráť IBA čistý text, žiadne komentáre ani vysvetlenia. Ak je to List vlastníctva, zachovaj všetky údaje presne ako sú v dokumente.",
+                    text: "Prepíš KOMPLETNE celý text z tohto PDF — vrátane naskenovaných strán (OCR). Zachovaj VŠETKY údaje: mená, adresy, čísla bytov, poschodia, parcely, výmery (m²), ceny (EUR), súpisné čísla, katastrálne územie, IČO, IBAN, dátumy, popis vybavenia (kuchyňa, kúpeľňa, podlahy, okná, dvere), vykurovanie, balkón/loggia/pivnica a ich výmery. Vráť IBA čistý text bez komentárov.",
                   },
                 ],
               }],
-              generationConfig: { temperature: 0, maxOutputTokens: 4000 },
+              generationConfig: {
+                temperature: 0,
+                maxOutputTokens: 32000,
+                thinkingConfig: { thinkingBudget: 0 },
+              },
             }),
           }
         );
@@ -64,7 +68,7 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({
             model: "gpt-4o",
             temperature: 0,
-            max_tokens: 4000,
+            max_tokens: 16000,
             messages: [{
               role: "user",
               content: [

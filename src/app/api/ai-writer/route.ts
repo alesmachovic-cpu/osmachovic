@@ -190,7 +190,7 @@ async function researchLocation(lokalita: string): Promise<string> {
   if (lokalita.trim().split(/[\s,]+/).filter(Boolean).length < 2) return "";
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -321,14 +321,14 @@ async function generateGemini(details: string, locationInfo: string, images?: { 
     }
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: VIANEMA_SYSTEM }] },
           contents: [{ parts }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 2500, responseMimeType: "application/json" },
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2500, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
         }),
       }
     );

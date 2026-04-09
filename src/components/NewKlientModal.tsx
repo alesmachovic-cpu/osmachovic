@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import PhoneInput from "@/components/PhoneInput";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
+import { searchStreets } from "@/lib/streets-db";
 
 interface DuplicateHit {
   id: string;
@@ -35,12 +36,14 @@ interface Props {
     typ: string;
     lokalita: string | null;
     poznamka: string | null;
+    calendar_event_id?: string | null;
+    datum_naberu?: string | null;
+    datum_narodenia?: string | null;
   } | null;
 }
 
 // TODO: Po spustení SQL migrácie (002_update_klienti_constraints.sql) odkomentuj všetky statusy
 const STATUS_OPTIONS = [
-  { value: "aktivny", label: "Aktívny" },
   { value: "novy_kontakt", label: "Nový kontakt" },
   { value: "dohodnuty_naber", label: "Dohodnutý náber" },
   { value: "nabrany", label: "Nabraný" },
@@ -249,20 +252,79 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
   const [telefon, setTelefon] = useState(editKlient?.telefon || initialPhone || "");
   const [meno, setMeno] = useState(editKlient?.meno || "");
   const [email, setEmail] = useState(editKlient?.email || "");
-  const [status, setStatus] = useState(editKlient?.status || "aktivny");
+  const [status, setStatus] = useState(editKlient?.status || "novy_kontakt");
   const [typKlienta, setTypKlienta] = useState<string>(editKlient?.typ || defaultTyp);
   const [typNehnutelnosti, setTypNehnutelnosti] = useState("");
   const [lokalitaInput, setLokalitaInput] = useState(editKlient?.lokalita || "");
   const [lokalitaValue, setLokalitaValue] = useState(editKlient?.lokalita || ""); // actual DB value
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [ulica, setUlica] = useState("");
+  const [cisloDomu, setCisloDomu] = useState("");
+  const [ulicaSuggestions, setUlicaSuggestions] = useState<{ label: string; street: string; city: string; lokalita: string }[]>([]);
+  const [showUlicaSuggestions, setShowUlicaSuggestions] = useState(false);
+  const ulicaSuggestRef = useRef<HTMLDivElement>(null);
   const [datumStretnutia, setDatumStretnutia] = useState("");
+  const [datumNarodenia, setDatumNarodenia] = useState("");
   const [odkaz, setOdkaz] = useState("");
   const [poznamka, setPoznamka] = useState(editKlient?.poznamka || "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [calendarSynced, setCalendarSynced] = useState(false);
   const suggestRef = useRef<HTMLDivElement>(null);
+
+  // Sync state when editKlient changes (e.g. modal stays mounted)
+  useEffect(() => {
+    if (editKlient) {
+      setTelefon(editKlient.telefon || "");
+      setMeno(editKlient.meno || "");
+      setEmail(editKlient.email || "");
+      setStatus(editKlient.status || "novy_kontakt");
+      setTypKlienta(editKlient.typ || defaultTyp);
+      setLokalitaInput(editKlient.lokalita || "");
+      setLokalitaValue(editKlient.lokalita || "");
+      setDatumNarodenia(editKlient.datum_narodenia ? editKlient.datum_narodenia.slice(0, 10) : "");
+
+      // Parse poznamka for structured fields (Adresa, Stretnutie, Typ nehnuteľnosti, Odkaz)
+      const raw = editKlient.poznamka || "";
+      const lines = raw.split("\n");
+      let parsedUlica = "", parsedCislo = "", parsedDatum = "", parsedTyp = "", parsedOdkaz = "";
+      const remaining: string[] = [];
+      for (const line of lines) {
+        const adr = line.match(/^Adresa:\s*(.+?)(?:,\s*(.+))?$/);
+        const str = line.match(/^Stretnutie:\s*(.+)$/);
+        const typM = line.match(/^Typ nehnuteľnosti:\s*(.+)$/);
+        const odkM = line.match(/^Odkaz:\s*(.+)$/);
+        if (adr) {
+          const addrPart = adr[1].trim();
+          const m = addrPart.match(/^(.*?)\s+(\d+\S*)$/);
+          if (m) { parsedUlica = m[1].trim(); parsedCislo = m[2].trim(); }
+          else { parsedUlica = addrPart; }
+        } else if (str) {
+          parsedDatum = str[1].trim();
+        } else if (typM) {
+          parsedTyp = typM[1].trim();
+        } else if (odkM) {
+          parsedOdkaz = odkM[1].trim();
+        } else {
+          remaining.push(line);
+        }
+      }
+      setUlica(parsedUlica);
+      setCisloDomu(parsedCislo);
+      // Prefer real DB column datum_naberu if present
+      if (editKlient.datum_naberu) {
+        const d = new Date(editKlient.datum_naberu);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        setDatumStretnutia(`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+      } else {
+        setDatumStretnutia(parsedDatum);
+      }
+      if (parsedTyp) setTypNehnutelnosti(parsedTyp);
+      setOdkaz(parsedOdkaz);
+      setPoznamka(remaining.join("\n").trim());
+      setSaveError("");
+    }
+  }, [editKlient?.id, editKlient?.poznamka]);
 
   // Duplicate check
   const [checking, setChecking] = useState(false);
@@ -281,7 +343,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const norm = normalizePhone(telefon);
     const digits = norm.replace(/\D/g, "");
-    if (digits.length < 6) {
+    if (digits.length < 9) {
       setChecked(false); setDuplicates([]); setDupLevel("none"); setForceCreate(false); setAutoFilled(false);
       return;
     }
@@ -330,22 +392,31 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (suggestRef.current && !suggestRef.current.contains(e.target as Node)) setShowSuggestions(false);
+      if (ulicaSuggestRef.current && !ulicaSuggestRef.current.contains(e.target as Node)) setShowUlicaSuggestions(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  // Ulica autocomplete — lokálna DB, žiadne API
+  useEffect(() => {
+    if (ulica.trim().length < 2) { setUlicaSuggestions([]); setShowUlicaSuggestions(false); return; }
+    const results = searchStreets(ulica.trim(), lokalitaValue || undefined);
+    const mapped = results.map(r => ({ label: `${r.street}, ${r.city}`, street: r.street, city: r.city, lokalita: r.lokalita }));
+    setUlicaSuggestions(mapped);
+    setShowUlicaSuggestions(mapped.length > 0);
+  }, [ulica, lokalitaValue]);
 
   if (open === false) return null;
 
   // Smart locality search
   const normalizedInput = normalizeSearch(lokalitaInput);
   const suggestions = normalizedInput.length >= 2
-    ? LOKALITY_DB.filter(l => normalizeSearch(l.display).includes(normalizedInput)).slice(0, 8)
+    ? LOKALITY_DB.filter(l => !l.ulica && normalizeSearch(l.display).includes(normalizedInput)).slice(0, 8)
     : [];
 
   function selectLokalita(entry: LokalitaEntry) {
     if (entry.ulica) {
-      // Ulica match — vyplň lokalitu aj ulicu
       const displayName = LOKALITY_DB.find(l => l.lokalita === entry.lokalita && !l.ulica)?.display || entry.lokalita;
       setLokalitaInput(displayName);
       setLokalitaValue(entry.lokalita);
@@ -353,40 +424,73 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
     } else {
       setLokalitaInput(entry.display);
       setLokalitaValue(entry.lokalita);
+      setUlica(""); setCisloDomu(""); // Reset ulica when locality changes
     }
+    setUlicaSuggestions([]);
     setShowSuggestions(false);
   }
 
   async function handleSave() {
     if (!telefon.trim() || !meno.trim()) return;
+    if (!isEdit && !typNehnutelnosti) return;
     if (!isEdit && dupLevel === "critical" && !forceCreate) return;
     setSaving(true);
     setSaveError("");
 
-    const payload = {
+    const basePayload: Record<string, unknown> = {
       meno: meno.trim(),
       telefon: normalizePhone(telefon),
       email: email.trim() || null,
-      status: dupLevel === "critical" ? "caka_na_schvalenie" : status,
-      typ: typKlienta,
       lokalita: lokalitaValue || lokalitaInput.trim() || null,
-      poznamka: isEdit ? (poznamka.trim() || null) : ([
+      poznamka: ([
         odkaz.trim() ? `Odkaz: ${odkaz.trim()}` : "",
-        ulica ? `Ulica: ${ulica}` : "",
+        ulica ? `Adresa: ${ulica}${cisloDomu ? ` ${cisloDomu}` : ""}, ${lokalitaInput || lokalitaValue}` : "",
         typNehnutelnosti ? `Typ nehnuteľnosti: ${typNehnutelnosti}` : "",
         datumStretnutia ? `Stretnutie: ${datumStretnutia}` : "",
-        dupLevel === "critical" ? `⚠️ DUPLICITA — čaká na schválenie manažérom` : "",
-        poznamka,
+        !isEdit && dupLevel === "critical" ? `⚠️ DUPLICITA — čaká na schválenie manažérom` : "",
+        poznamka.trim(),
       ].filter(Boolean).join("\n") || null),
     };
+    // Only include status and typ if they are valid (avoid CHECK constraint errors)
+    if (!isEdit || status !== editKlient?.status) {
+      basePayload.status = dupLevel === "critical" ? "caka_na_schvalenie" : status;
+    }
+    if (!isEdit || typKlienta !== editKlient?.typ) {
+      basePayload.typ = typKlienta;
+    }
+    // For non-edit, always include
+    if (!isEdit) {
+      basePayload.status = dupLevel === "critical" ? "caka_na_schvalenie" : status;
+      basePayload.typ = typKlienta;
+    }
+    // Persist datum stretnutia (náber) as real column when applicable
+    if (showCalendar && datumStretnutia) {
+      basePayload.datum_naberu = new Date(datumStretnutia).toISOString();
+    }
+    if (datumNarodenia) {
+      basePayload.datum_narodenia = datumNarodenia;
+    }
+    const payload = basePayload;
 
     // Get makler UUID for this user
     const maklerUuid = authUser?.id ? await getMaklerUuid(authUser.id) : null;
     const insertPayload = !isEdit && maklerUuid ? { ...payload, makler_id: maklerUuid } : payload;
 
-    const { error } = isEdit
-      ? await supabase.from("klienti").update(payload).eq("id", editKlient!.id)
-      : await supabase.from("klienti").insert(insertPayload);
+    console.log("[NewKlientModal] isEdit:", isEdit, "id:", editKlient?.id, "payload:", JSON.stringify(payload));
+
+    const result = isEdit
+      ? await supabase.from("klienti").update(payload).eq("id", editKlient!.id).select()
+      : await supabase.from("klienti").insert(insertPayload).select();
+
+    const { error, data: resultData } = result;
+    console.log("[NewKlientModal] result:", JSON.stringify({ error, count: resultData?.length, data: resultData?.[0] }));
+
+    // Detect silent failure
+    if (!error && isEdit && (!resultData || resultData.length === 0)) {
+      setSaving(false);
+      setSaveError(`Zmeny sa neuložili. ID: ${editKlient!.id}`);
+      return;
+    }
 
     if (!error && !isEdit && dupLevel !== "none") {
       await supabase.from("logy").insert({
@@ -417,19 +521,41 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
       }
     }
 
-    // Calendar sync (only for new clients)
-    if (!error && !isEdit && showCalendar && datumStretnutia) {
+    // Calendar sync via Google Calendar OAuth (new + edit)
+    if (!error && showCalendar && datumStretnutia && authUser?.id) {
       try {
-        await fetch("/api/calendar-sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: status === "dohodnuty_naber" ? `Náber: ${meno.trim()}` : `Zavolať: ${meno.trim()}`,
-            datetime: datumStretnutia,
-            description: `Klient: ${meno.trim()}\nTel: ${normalizePhone(telefon)}\nLokalita: ${lokalitaValue || lokalitaInput}\nTyp: ${typNehnutelnosti}`,
-            telefon: normalizePhone(telefon),
-          }),
-        });
+        const startDt = new Date(datumStretnutia);
+        const durationMs = status === "dohodnuty_naber" ? 60 * 60 * 1000 : 15 * 60 * 1000;
+        const endDt = new Date(startDt.getTime() + durationMs);
+        const fullAddress = ulica ? `${ulica}${cisloDomu ? ` ${cisloDomu}` : ""}, ${lokalitaInput || lokalitaValue}` : (lokalitaInput || lokalitaValue || "");
+        const body = {
+          userId: authUser.id,
+          summary: status === "dohodnuty_naber" ? `Náber: ${meno.trim()}` : `Zavolať: ${meno.trim()}`,
+          start: startDt.toISOString(),
+          end: endDt.toISOString(),
+          location: fullAddress,
+          description: `Klient: ${meno.trim()}\nTel: ${normalizePhone(telefon)}${fullAddress ? `\nAdresa: ${fullAddress}` : ""}\nTyp: ${typNehnutelnosti}`,
+        };
+        const existingEventId = (editKlient as { calendar_event_id?: string } | null)?.calendar_event_id;
+        if (isEdit && existingEventId) {
+          await fetch("/api/google/calendar", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...body, eventId: existingEventId }),
+          });
+        } else {
+          const res = await fetch("/api/google/calendar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const json = await res.json().catch(() => null);
+          const newEventId = json?.event?.id;
+          const targetId = isEdit ? editKlient?.id : resultData?.[0]?.id;
+          if (newEventId && targetId) {
+            await supabase.from("klienti").update({ calendar_event_id: newEventId }).eq("id", targetId);
+          }
+        }
       } catch { /* silent */ }
     }
 
@@ -439,10 +565,10 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
       setSaveError(error.message || "Nepodarilo sa uložiť klienta");
       return;
     }
-    setTelefon(""); setMeno(""); setEmail(""); setStatus("aktivny");
+    setTelefon(""); setMeno(""); setEmail(""); setStatus("novy_kontakt");
     setTypKlienta("kupujuci"); setTypNehnutelnosti("");
     setLokalitaInput(""); setLokalitaValue("");
-    setUlica(""); setDatumStretnutia(""); setOdkaz(""); setPoznamka("");
+    setUlica(""); setCisloDomu(""); setDatumStretnutia(""); setOdkaz(""); setPoznamka(""); setDatumNarodenia("");
     setChecked(false); setDuplicates([]); setDupLevel("none");
     setCalendarSynced(false); setSaveError("");
     onCreated?.();
@@ -531,10 +657,16 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
             <input style={inputSt} placeholder="Meno a priezvisko" value={meno} onChange={e => setMeno(e.target.value)} />
           </div>
 
-          {/* Email */}
-          <div>
-            <div style={labelSt}>Email</div>
-            <input style={inputSt} placeholder="email@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+          {/* Email + Dátum narodenia */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <div>
+              <div style={labelSt}>Email</div>
+              <input style={inputSt} placeholder="email@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+            </div>
+            <div>
+              <div style={labelSt}>Dátum narodenia</div>
+              <input type="date" style={inputSt} value={datumNarodenia} onChange={e => setDatumNarodenia(e.target.value)} />
+            </div>
           </div>
 
           {/* Status + Typ klienta */}
@@ -559,7 +691,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
 
           {/* Typ nehnuteľnosti */}
           <div>
-            <div style={labelSt}>Typ nehnuteľnosti</div>
+            <div style={labelSt}>Typ nehnuteľnosti *</div>
             <select value={typNehnutelnosti} onChange={e => setTypNehnutelnosti(e.target.value)} style={selectSt}>
               <option value="">— vyberte —</option>
               {TYP_GROUPS.map(g => (
@@ -603,11 +735,49 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
             )}
           </div>
 
-          {/* Ulica */}
-          <div>
-            <div style={labelSt}>Ulica</div>
-            <input style={inputSt} placeholder="Ulica a číslo" value={ulica} onChange={e => setUlica(e.target.value)} />
+          {/* Ulica + číslo — zobrazí sa až keď je vybraná lokalita */}
+          {lokalitaValue && (
+          <div style={{ display: "flex", gap: "10px" }}>
+            <div ref={ulicaSuggestRef} style={{ position: "relative", flex: 1 }}>
+              <div style={labelSt}>Ulica</div>
+              <input style={inputSt} placeholder={`Ulica v ${lokalitaInput || lokalitaValue}...`} value={ulica}
+                onChange={e => { setUlica(e.target.value); setShowUlicaSuggestions(true); }}
+                onFocus={() => { if (ulicaSuggestions.length > 0) setShowUlicaSuggestions(true); }}
+                autoComplete="off"
+              />
+              {showUlicaSuggestions && ulicaSuggestions.length > 0 && (
+                <div style={{
+                  position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20,
+                  background: "var(--bg-surface)", border: "1px solid var(--border)",
+                  borderRadius: "10px", marginTop: "4px", overflow: "hidden",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                }}>
+                  {ulicaSuggestions.map((s, i) => (
+                    <div key={i} onClick={() => {
+                      setUlica(s.street);
+                      setShowUlicaSuggestions(false);
+                    }}
+                      style={{
+                        padding: "10px 14px", cursor: "pointer", fontSize: "13px",
+                        color: "var(--text-primary)", borderBottom: i < ulicaSuggestions.length - 1 ? "1px solid var(--border)" : "none",
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                    >
+                      📍 {s.street}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ width: "90px", flexShrink: 0 }}>
+              <div style={labelSt}>Číslo</div>
+              <input style={inputSt} placeholder="napr. 25" value={cisloDomu}
+                onChange={e => setCisloDomu(e.target.value)}
+              />
+            </div>
           </div>
+          )}
 
           {/* Kalendár — len pre dohodnutý náber / volať neskôr */}
           {showCalendar && (
@@ -647,11 +817,11 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
         <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
           <button onClick={onClose} style={{ padding: "10px 20px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px", fontSize: "14px", cursor: "pointer", color: "var(--text-secondary)" }}>Zrušiť</button>
           <button onClick={handleSave}
-            disabled={saving || !telefon.trim() || !meno.trim() || (!isEdit && dupLevel === "critical" && !forceCreate)}
+            disabled={saving || !telefon.trim() || !meno.trim() || (!isEdit && !typNehnutelnosti) || (!isEdit && dupLevel === "critical" && !forceCreate)}
             style={{
               padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
-              opacity: saving || !telefon.trim() || !meno.trim() || (!isEdit && dupLevel === "critical" && !forceCreate) ? 0.4 : 1,
+              opacity: saving || !telefon.trim() || !meno.trim() || (!isEdit && !typNehnutelnosti) || (!isEdit && dupLevel === "critical" && !forceCreate) ? 0.4 : 1,
             }}>
             {saving ? "Ukladám..." : isEdit ? "Uložiť zmeny" : "Vytvoriť klienta"}
           </button>

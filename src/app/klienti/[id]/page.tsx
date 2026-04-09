@@ -8,6 +8,7 @@ import type { Klient } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
+import { listKlientDokumenty, deleteKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
 
 // Typy pre timeline
 interface TimelineEvent {
@@ -63,10 +64,17 @@ export default function KlientDetailPage() {
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
   const [activeTab, setActiveTab] = useState<"timeline" | "nabery" | "objednavky" | "dokumenty">("timeline");
+  const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
+  useEffect(() => {
+    if (!id) return;
+    listKlientDokumenty(id).then(setKlientDokumenty);
+  }, [id, activeTab]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [naberDatum, setNaberDatum] = useState("");
   const [naberMiesto, setNaberMiesto] = useState("");
+  const [eventType, setEventType] = useState<"volat" | "naber" | "obhliadka" | "podpis" | "fotenie" | "odovzdanie" | "ine">("naber");
+  const [eventTitle, setEventTitle] = useState("");
   const [showSpolupracaModal, setShowSpolupracaModal] = useState(false);
   const [spolupracaMakler, setSpolupracaMakler] = useState("");
   const [spolupracaPct, setSpolupracaPct] = useState(50);
@@ -199,21 +207,39 @@ export default function KlientDetailPage() {
     if (!klient) return;
     setCalendarSyncing(true);
 
-    const isVolat = pendingStatus === "volat_neskor";
-    const durationMs = isVolat ? 15 * 60000 : 60 * 60000; // 15min vs 1h
+    // Generic event mode: pendingStatus null → use eventType
+    const isGeneric = !pendingStatus;
+    const isVolat = pendingStatus === "volat_neskor" || (isGeneric && eventType === "volat");
+    const isNaber = pendingStatus === "dohodnuty_naber" || (isGeneric && eventType === "naber");
 
-    // 1. Update status a dátum
-    const updates: Record<string, unknown> = { status: pendingStatus || "dohodnuty_naber" };
-    if (naberDatum && !isVolat) updates.datum_naberu = new Date(naberDatum).toISOString();
-    if (!isVolat && naberMiesto) updates.lokalita = naberMiesto;
-    await supabase.from("klienti").update(updates).eq("id", klient.id);
+    const EVENT_LABELS: Record<string, { label: string; minutes: number }> = {
+      volat: { label: "Zavolať", minutes: 15 },
+      naber: { label: "Náber", minutes: 60 },
+      obhliadka: { label: "Obhliadka", minutes: 45 },
+      podpis: { label: "Podpis zmluvy", minutes: 60 },
+      fotenie: { label: "Fotenie nehnuteľnosti", minutes: 90 },
+      odovzdanie: { label: "Odovzdanie kľúčov", minutes: 30 },
+      ine: { label: eventTitle.trim() || "Udalosť", minutes: 60 },
+    };
+    const evCfg = isGeneric ? EVENT_LABELS[eventType] : (isVolat ? EVENT_LABELS.volat : EVENT_LABELS.naber);
+    const durationMs = evCfg.minutes * 60000;
+
+    // 1. Update status a dátum (len ak nie generic)
+    if (!isGeneric) {
+      const updates: Record<string, unknown> = { status: pendingStatus || "dohodnuty_naber" };
+      if (naberDatum && !isVolat) updates.datum_naberu = new Date(naberDatum).toISOString();
+      if (!isVolat && naberMiesto) updates.lokalita = naberMiesto;
+      await supabase.from("klienti").update(updates).eq("id", klient.id);
+    } else if (isNaber && naberDatum) {
+      await supabase.from("klienti").update({ datum_naberu: new Date(naberDatum).toISOString() }).eq("id", klient.id);
+    }
 
     // 2. Vytvor Google Calendar event
     if (naberDatum && user?.id) {
       try {
         const startDt = new Date(naberDatum).toISOString();
         const endDt = new Date(new Date(naberDatum).getTime() + durationMs).toISOString();
-        const summary = isVolat ? `Zavolať — ${klient.meno}` : `Náber — ${klient.meno}`;
+        const summary = `${evCfg.label} — ${klient.meno}`;
         const res = await fetch("/api/google/calendar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -244,6 +270,8 @@ export default function KlientDetailPage() {
     setPendingStatus(null);
     setNaberDatum("");
     setNaberMiesto("");
+    setEventTitle("");
+    setEventType("naber");
     loadAll();
   }
 
@@ -321,10 +349,11 @@ export default function KlientDetailPage() {
       }} className="dash-grid">
         {/* Avatar */}
         <div style={{
-          width: "72px", height: "72px", borderRadius: "50%",
-          background: "#374151", color: "#fff",
+          width: "64px", height: "64px", borderRadius: "50%",
+          background: "var(--bg-elevated)", color: "var(--text-secondary)",
+          border: "1px solid var(--border)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: "24px", fontWeight: "800", flexShrink: 0,
+          fontSize: "20px", fontWeight: "700", flexShrink: 0, letterSpacing: "0.02em",
         }}>{initials}</div>
 
         {/* Info */}
@@ -373,7 +402,7 @@ export default function KlientDetailPage() {
             disabled={!isOwner}
             style={{
               padding: "6px 28px 6px 14px", borderRadius: "20px", fontSize: "12px", fontWeight: "700",
-              background: `${statusColor}15`, color: statusColor, border: `1px solid ${statusColor}30`,
+              background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)",
               cursor: isOwner ? "pointer" : "default", appearance: "none",
               opacity: isOwner ? 1 : 0.7,
               backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
@@ -395,7 +424,7 @@ export default function KlientDetailPage() {
           </select>
           <span style={{
             padding: "4px 12px", borderRadius: "20px", fontSize: "11px", fontWeight: "600",
-            background: "#F3F4F6", color: "#374151",
+            background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)",
           }}>
             {TYP_LABELS[klient.typ] || klient.typ}
           </span>
@@ -483,32 +512,34 @@ export default function KlientDetailPage() {
             {WORKFLOW_STEPS.map((ws, i) => {
               const isCompleted = i < workflowStep;
               const isCurrent = i === workflowStep;
+              const dotColor = isCompleted || isCurrent ? "#374151" : "var(--border)";
               return (
                 <div key={ws.key} style={{ display: "flex", alignItems: "center", flex: 1 }}>
                   <div style={{
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", flex: 1,
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", flex: 1,
                   }}>
                     <div style={{
-                      width: "36px", height: "36px", borderRadius: "50%",
-                      background: isCompleted ? "#059669" : isCurrent ? "#374151" : "var(--bg-elevated)",
+                      width: "24px", height: "24px", borderRadius: "50%",
+                      background: isCompleted || isCurrent ? "#374151" : "var(--bg-elevated)",
                       color: isCompleted || isCurrent ? "#fff" : "var(--text-muted)",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: isCompleted ? "14px" : "16px", fontWeight: "700",
-                      border: isCurrent ? "2px solid #374151" : isCompleted ? "2px solid #059669" : "2px solid var(--border)",
+                      fontSize: "11px", fontWeight: "700",
+                      border: `1px solid ${dotColor}`,
                       transition: "all 0.2s",
+                      boxShadow: isCurrent ? "0 0 0 3px rgba(29,29,31,0.08)" : "none",
                     }}>
-                      {isCompleted ? "✓" : ws.icon}
+                      {isCompleted ? "✓" : i + 1}
                     </div>
                     <span style={{
-                      fontSize: "10px", fontWeight: isCurrent ? "700" : "500",
-                      color: isCompleted ? "#059669" : isCurrent ? "var(--text-primary)" : "var(--text-muted)",
+                      fontSize: "11px", fontWeight: isCurrent ? "600" : "500",
+                      color: isCurrent ? "var(--text-primary)" : "var(--text-muted)",
                     }}>{ws.label}</span>
                   </div>
                   {i < WORKFLOW_STEPS.length - 1 && (
                     <div style={{
-                      height: "2px", flex: "0 0 100%", maxWidth: "40px",
-                      background: isCompleted ? "#059669" : "var(--border)",
-                      marginBottom: "18px",
+                      height: "1px", flex: "0 0 100%", maxWidth: "48px",
+                      background: isCompleted ? "#374151" : "var(--border)",
+                      marginBottom: "20px",
                     }} />
                   )}
                 </div>
@@ -518,19 +549,19 @@ export default function KlientDetailPage() {
           {/* Akčné tlačidlo podľa kroku */}
           {workflowStep === 0 && (
             <button onClick={() => handleStatusChange("dohodnuty_naber")} style={{
-              marginTop: "12px", width: "100%", padding: "10px", background: "#374151", color: "#fff",
+              marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>🤝 Dohodnúť náber</button>
           )}
           {workflowStep === 1 && (
             <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
-              marginTop: "12px", width: "100%", padding: "10px", background: "#374151", color: "#fff",
+              marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>📝 Vyplniť náberový list</button>
           )}
           {workflowStep === 2 && (
             <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
-              marginTop: "12px", width: "100%", padding: "10px", background: "#374151", color: "#fff",
+              marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>📰 Vytvoriť inzerát</button>
           )}
@@ -555,7 +586,7 @@ export default function KlientDetailPage() {
             onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
             onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
           >
-            <div style={{ fontSize: "22px", marginBottom: "4px" }}>📋</div>
+            <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📋</div>
             <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Objednávka</div>
           </button>
         ) : (
@@ -567,7 +598,7 @@ export default function KlientDetailPage() {
             onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
             onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
           >
-            <div style={{ fontSize: "22px", marginBottom: "4px" }}>📰</div>
+            <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📰</div>
             <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Inzerát</div>
           </button>
         )}
@@ -579,7 +610,7 @@ export default function KlientDetailPage() {
           onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
           onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
         >
-          <div style={{ fontSize: "22px", marginBottom: "4px" }}>📞</div>
+          <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📞</div>
           <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Zavolať</div>
         </button>
         <button onClick={() => {
@@ -593,19 +624,19 @@ export default function KlientDetailPage() {
           onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
           onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
         >
-          <div style={{ fontSize: "22px", marginBottom: "4px" }}>📅</div>
+          <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📅</div>
           <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Kalendár</div>
         </button>
         <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
           padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
           borderRadius: "12px", cursor: "pointer", textAlign: "center",
-          transition: "border-color 0.15s", opacity: 0.6,
+          transition: "border-color 0.15s",
         }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = "#374151"; e.currentTarget.style.opacity = "1"; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.opacity = "0.6"; }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
+          onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
         >
-          <div style={{ fontSize: "22px", marginBottom: "4px" }}>📝</div>
-          <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)" }}>Nový náber</div>
+          <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📝</div>
+          <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Vyplniť náberový list</div>
         </button>
       </div>
 
@@ -614,18 +645,18 @@ export default function KlientDetailPage() {
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px",
       }} className="cards-grid">
         {[
-          { label: "Nábery", value: nabery.length, icon: "📝", bg: "#F5F3FF" },
-          { label: "Objednávky", value: objednavky.length, icon: "📋", bg: "#ECFDF5" },
-          { label: "Inzeráty", value: inzeraty.length, icon: "📰", bg: "#EFF6FF" },
-          { label: "Obhliadky", value: 0, icon: "👁️", bg: "#FEF3C7" },
+          { label: "Nábery", value: nabery.length },
+          { label: "Objednávky", value: objednavky.length },
+          { label: "Inzeráty", value: inzeraty.length },
+          { label: "Obhliadky", value: 0 },
         ].map(s => (
           <div key={s.label} style={{
-            padding: "16px", borderRadius: "12px", background: s.bg,
+            padding: "18px 16px", borderRadius: "12px",
+            background: "var(--bg-surface)", border: "1px solid var(--border)",
             textAlign: "center",
           }}>
-            <div style={{ fontSize: "20px", marginBottom: "4px" }}>{s.icon}</div>
-            <div style={{ fontSize: "22px", fontWeight: "800", color: "var(--text-primary)" }}>{s.value}</div>
-            <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-muted)" }}>{s.label}</div>
+            <div style={{ fontSize: "24px", fontWeight: "700", color: "var(--text-primary)", letterSpacing: "-0.02em" }}>{s.value}</div>
+            <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", marginTop: "4px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -724,10 +755,10 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
               📝 Náberové listy
             </div>
-            <button onClick={() => router.push("/naber")} style={{
+            <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
               padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
-            }}>+ Nový náber</button>
+            }}>+ Vyplniť náberový list</button>
           </div>
           {nabery.length === 0 ? (
             <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
@@ -834,11 +865,35 @@ export default function KlientDetailPage() {
       {activeTab === "dokumenty" && (
         <div style={cardSt}>
           <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
-            📁 Dokumenty
+            📁 Dokumenty ({klientDokumenty.length})
           </div>
-          <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
-            Dokumenty budú dostupné čoskoro — LV, zmluvy, certifikáty
-          </div>
+          {klientDokumenty.length === 0 ? (
+            <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
+              Žiadne dokumenty. Nahrané v náberáku, inzeráte alebo rezervácii sa zobrazia tu.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {klientDokumenty.map(d => (
+                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px" }}>
+                  <span style={{ fontSize: "18px" }}>📄</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      {d.type || "Dokument"} · {((d.size || 0) / 1024).toFixed(0)} KB · {d.source || "—"} · {d.created_at ? new Date(d.created_at).toLocaleDateString("sk-SK") : ""}
+                    </div>
+                  </div>
+                  {d.data_base64 && (
+                    <a href={`data:${d.mime || "application/octet-stream"};base64,${d.data_base64}`} download={d.name}
+                       style={{ fontSize: "12px", color: "var(--accent, #3B82F6)", textDecoration: "none", padding: "4px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}>
+                      Stiahnuť
+                    </a>
+                  )}
+                  <button onClick={async () => { if (d.id && confirm("Vymazať dokument?")) { await deleteKlientDokument(d.id); setKlientDokumenty(prev => prev.filter(x => x.id !== d.id)); } }}
+                          style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px" }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -865,31 +920,45 @@ export default function KlientDetailPage() {
             maxWidth: "400px", width: "100%", textAlign: "center",
             boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
           }}>
-            <div style={{
-              width: "56px", height: "56px", borderRadius: "50%",
-              background: pendingStatus === "volat_neskor" ? "#FEF3C7" : "#F5F3FF",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "24px", margin: "0 auto 16px",
-              border: pendingStatus === "volat_neskor" ? "2px solid #FDE68A" : "2px solid #DDD6FE",
-            }}>{pendingStatus === "volat_neskor" ? "📞" : "📅"}</div>
             <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 4px" }}>
-              {pendingStatus === "dohodnuty_naber" ? "Kedy a kde bude náber?" : pendingStatus === "volat_neskor" ? "Kedy zavolať?" : "Pridať do kalendára"}
+              {pendingStatus === "dohodnuty_naber" ? "Kedy a kde bude náber?" : pendingStatus === "volat_neskor" ? "Kedy zavolať?" : "Nová udalosť"}
             </h2>
             <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px" }}>
               {pendingStatus === "dohodnuty_naber"
                 ? <>Termín stretnutia s <strong style={{ color: "var(--text-primary)" }}>{klient.meno}</strong> (1 hodina)</>
                 : pendingStatus === "volat_neskor"
                 ? <>Pripomienka na zavolanie <strong style={{ color: "var(--text-primary)" }}>{klient.meno}</strong> (15 min)</>
-                : <>Nová udalosť pre <strong style={{ color: "var(--text-primary)" }}>{klient.meno}</strong></>
+                : <>Pre <strong style={{ color: "var(--text-primary)" }}>{klient.meno}</strong></>
               }
             </p>
-            {/* Location — only for dohodnuty_naber */}
-            {pendingStatus === "dohodnuty_naber" && (
+            {/* Event type selector — only when generic (no pendingStatus) */}
+            {!pendingStatus && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginBottom: "16px", maxWidth: "320px", marginLeft: "auto", marginRight: "auto" }}>
+                {[
+                  { v: "volat", l: "Zavolať" },
+                  { v: "naber", l: "Náber" },
+                  { v: "obhliadka", l: "Obhliadka" },
+                  { v: "podpis", l: "Podpis zmluvy" },
+                  { v: "fotenie", l: "Fotenie" },
+                  { v: "odovzdanie", l: "Odovzdanie kľúčov" },
+                  { v: "ine", l: "Iné" },
+                ].map(o => (
+                  <button key={o.v} onClick={() => setEventType(o.v as typeof eventType)} style={{
+                    padding: "10px 12px", borderRadius: "10px", fontSize: "12px", fontWeight: "600",
+                    cursor: "pointer", textAlign: "center",
+                    background: eventType === o.v ? "#374151" : "var(--bg-elevated)",
+                    color: eventType === o.v ? "#fff" : "var(--text-secondary)",
+                    border: eventType === o.v ? "1px solid #374151" : "1px solid var(--border)",
+                  }}>{o.l}</button>
+                ))}
+              </div>
+            )}
+            {!pendingStatus && eventType === "ine" && (
               <input
                 type="text"
-                value={naberMiesto}
-                onChange={e => setNaberMiesto(e.target.value)}
-                placeholder="Adresa / miesto stretnutia"
+                value={eventTitle}
+                onChange={e => setEventTitle(e.target.value)}
+                placeholder="Názov udalosti"
                 style={{
                   width: "100%", maxWidth: "300px", padding: "12px 16px", marginBottom: "12px",
                   background: "var(--bg-elevated)", border: "2px solid var(--border)",
@@ -897,6 +966,39 @@ export default function KlientDetailPage() {
                   outline: "none", textAlign: "center",
                 }}
               />
+            )}
+            {/* Location — pre náber, obhliadku, podpis, fotenie, odovzdanie */}
+            {(pendingStatus === "dohodnuty_naber" || (!pendingStatus && ["naber","obhliadka","podpis","fotenie","odovzdanie"].includes(eventType))) && (
+              <div style={{ position: "relative", maxWidth: "300px", margin: "0 auto 12px" }}>
+                <input
+                  type="text"
+                  value={naberMiesto}
+                  onChange={e => setNaberMiesto(e.target.value)}
+                  placeholder="Adresa / miesto stretnutia"
+                  style={{
+                    width: "100%", padding: "12px 44px 12px 16px",
+                    background: "var(--bg-elevated)", border: "2px solid var(--border)",
+                    borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)",
+                    outline: "none", textAlign: "center",
+                  }}
+                />
+                <button
+                  type="button"
+                  title="Vyplniť adresu klienta"
+                  onClick={() => {
+                    const adrMatch = klient.poznamka?.match(/Adresa:\s*(.+)/);
+                    const addr = adrMatch ? adrMatch[1].trim() : (klient.lokalita || "");
+                    setNaberMiesto(addr);
+                  }}
+                  style={{
+                    position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)",
+                    width: "32px", height: "32px", borderRadius: "8px",
+                    background: "var(--bg-surface)", border: "1px solid var(--border)",
+                    cursor: "pointer", fontSize: "14px", display: "flex",
+                    alignItems: "center", justifyContent: "center",
+                  }}
+                >📍</button>
+              </div>
             )}
             <input
               type="datetime-local"
@@ -999,6 +1101,9 @@ export default function KlientDetailPage() {
             typ: klient.typ,
             lokalita: klient.lokalita,
             poznamka: klient.poznamka,
+            calendar_event_id: (klient as { calendar_event_id?: string | null }).calendar_event_id ?? null,
+            datum_naberu: (klient as { datum_naberu?: string | null }).datum_naberu ?? null,
+            datum_narodenia: (klient as { datum_narodenia?: string | null }).datum_narodenia ?? null,
           }}
           onClose={() => setEditModal(false)}
           onSaved={() => { setEditModal(false); loadAll(); }}

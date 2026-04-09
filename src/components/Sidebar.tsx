@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { isFeatureEnabled } from "@/lib/featureToggles";
+import { supabase } from "@/lib/supabase";
 
 const ROUTE_FEATURE_MAP: Record<string, string> = {
   "/": "dashboard",
@@ -16,11 +18,11 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
   "/nastavenia": "nastavenia",
 };
 
-const mainNav = [
+const mainNavBase = [
   { label: "Prehľad",      href: "/",           icon: "📊" },
-  { label: "Portfólio",    href: "/portfolio",  icon: "🏠", badge: 12 },
-  { label: "Klienti",      href: "/klienti",    icon: "👥", badge: 3 },
-  { label: "Kupujúci",     href: "/kupujuci",   icon: "🔍", badge: 7 },
+  { label: "Portfólio",    href: "/portfolio",  icon: "🏠" },
+  { label: "Klienti",      href: "/klienti",    icon: "👥" },
+  { label: "Kupujúci",     href: "/kupujuci",   icon: "🔍" },
 ];
 
 const toolsNav = [
@@ -38,6 +40,12 @@ const operativaNav = [
   { label: "Produkcia",       href: "/produkcia",           icon: "📦" },
   { label: "Vyťaženosť tímu", href: "/vytazenost",          icon: "👷" },
   { label: "Provízie",        href: "/potvrdenie-provizii", icon: "✅" },
+  { label: "Odberatelia",     href: "/odberatelia",         icon: "🏷️" },
+  { label: "Faktúry",         href: "/faktury",             icon: "🧾" },
+  { label: "Prehľad financií",href: "/prehlad-financii",    icon: "💶" },
+  { label: "Provízie maklérov",href: "/provizie-maklerov",  icon: "💼" },
+  { label: "Účtovný prehľad", href: "/uctovny-prehlad",     icon: "📊" },
+  { label: "Pravidelné náklady",href: "/pravidelne-naklady",icon: "🔁" },
 ];
 
 const systemNav = [
@@ -98,6 +106,31 @@ function SectionLabel({ label }: { label: string }) {
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const [counts, setCounts] = useState<{ portfolio?: number; klienti?: number; kupujuci?: number }>({});
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [pf, kl, kp] = await Promise.all([
+          supabase.from("nehnutelnosti").select("id", { count: "exact", head: true }),
+          supabase.from("klienti").select("id", { count: "exact", head: true }).eq("typ", "predavajuci"),
+          supabase.from("klienti").select("id", { count: "exact", head: true }).eq("typ", "kupujuci"),
+        ]);
+        setCounts({
+          portfolio: pf.count ?? 0,
+          klienti: kl.count ?? 0,
+          kupujuci: kp.count ?? 0,
+        });
+      } catch { /* ignore */ }
+    })();
+  }, [pathname]);
+
+  const mainNav: NavItem[] = mainNavBase.map((it) => {
+    if (it.href === "/portfolio") return { ...it, badge: counts.portfolio };
+    if (it.href === "/klienti") return { ...it, badge: counts.klienti };
+    if (it.href === "/kupujuci") return { ...it, badge: counts.kupujuci };
+    return it;
+  });
 
   const filterNav = (items: NavItem[]) =>
     user ? items.filter(item => {
