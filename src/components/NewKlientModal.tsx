@@ -418,9 +418,12 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
 
   // Smart locality search
   const normalizedInput = normalizeSearch(lokalitaInput);
-  const suggestions = normalizedInput.length >= 2
+  const dbSuggestions = normalizedInput.length >= 2
     ? LOKALITY_DB.filter(l => !l.ulica && normalizeSearch(l.display).includes(normalizedInput)).slice(0, 8)
     : [];
+  // Ak nie je v zozname, ponúkni "Použiť X ako obec"
+  const showCustomOption = normalizedInput.length >= 2 && dbSuggestions.length === 0 && !lokalitaValue;
+  const suggestions = dbSuggestions;
 
   function selectLokalita(entry: LokalitaEntry) {
     if (entry.ulica) {
@@ -442,17 +445,12 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
     if (!isEdit && !typNehnutelnosti) return;
     if (!isEdit && dupLevel === "critical" && !forceCreate) return;
 
-    // Validácia adresy — lokalita, ulica, číslo sú povinné
+    // Validácia adresy — lokalita musí byť vybraná z dropdownu
     const addrErrors: typeof fieldErrors = {};
-    const lokInput = lokalitaInput.trim();
-    if (!lokalitaValue && !lokInput) {
-      addrErrors.lokalita = "Mesto / obec je povinné";
-    } else if (!lokalitaValue && lokInput) {
-      // Detekuj ulice v poli mesta (slovenské vzory: -ská, -ová, -ova, -cesta, ulica, nám, trieda)
-      const streetPattern = /(ská|ová|ova|ova cesta|ulica|nám\.|námestie|trieda|alej|aleji|sady|brehov|hrádze|pobrežie)$/i;
-      if (streetPattern.test(normalizeSearch(lokInput))) {
-        addrErrors.lokalita = "Toto vyzerá ako ulica. Tu zadaj MESTO alebo OBEC (napr. Bratislava, Košice)";
-      }
+    if (!lokalitaValue) {
+      addrErrors.lokalita = lokalitaInput.trim()
+        ? "Vyber mesto zo zoznamu (alebo klikni na '+ Použiť ako obec')"
+        : "Mesto / obec je povinné";
     }
     if (lokalitaValue && !ulica.trim()) {
       addrErrors.ulica = "Ulica je povinná";
@@ -473,7 +471,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
       meno: meno.trim(),
       telefon: normalizePhone(telefon),
       email: email.trim() || null,
-      lokalita: lokalitaValue || lokalitaInput.trim() || null,
+      lokalita: lokalitaValue || null,
       poznamka: ([
         odkaz.trim() ? `Odkaz: ${odkaz.trim()}` : "",
         ulica ? `Adresa: ${ulica}${cisloDomu ? ` ${cisloDomu}` : ""}, ${lokalitaInput || lokalitaValue}` : "",
@@ -751,7 +749,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
                 Mestská časť alebo obec — ulicu vyplníš nižšie
               </div>
             )}
-            {showSuggestions && suggestions.length > 0 && (
+            {showSuggestions && (suggestions.length > 0 || showCustomOption) && (
               <div style={{
                 position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
                 background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "10px",
@@ -760,7 +758,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
                 {suggestions.map((s, i) => (
                   <div key={i} onClick={() => selectLokalita(s)} style={{
                     padding: "10px 14px", fontSize: "13px", cursor: "pointer",
-                    borderBottom: i < suggestions.length - 1 ? "1px solid var(--border)" : "none",
+                    borderBottom: i < suggestions.length - 1 || showCustomOption ? "1px solid var(--border)" : "none",
                     display: "flex", justifyContent: "space-between", alignItems: "center",
                   }}
                     onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
@@ -769,6 +767,23 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
                     <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{s.lokalita}</span>
                   </div>
                 ))}
+                {showCustomOption && (
+                  <div onClick={() => {
+                    setLokalitaValue(lokalitaInput.trim());
+                    setLokalitaInput(lokalitaInput.trim());
+                    setShowSuggestions(false);
+                    setFieldErrors(p => ({ ...p, lokalita: undefined }));
+                  }} style={{
+                    padding: "10px 14px", fontSize: "13px", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: "6px",
+                    color: "#2563EB",
+                  }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                    <span>+</span>
+                    <span>Použiť <strong>&quot;{lokalitaInput.trim()}&quot;</strong> ako obec</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
