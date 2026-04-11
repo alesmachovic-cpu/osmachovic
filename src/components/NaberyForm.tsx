@@ -174,7 +174,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   const [lvMajitelia, setLvMajitelia] = useState<Array<{ meno: string; podiel?: string; datum_narodenia?: string }>>([]);
   const [lvPozemky, setLvPozemky] = useState<Array<{ cislo_parcely?: string; druh?: string; vymera?: number }>>([]);
   const [lvPravneVady, setLvPravneVady] = useState("");
-  const [lvReviewOpen, setLvReviewOpen] = useState(true);
+
   // AI cena
   const [aiOdhadOpen, setAiOdhadOpen] = useState(false);
   const [aiAnalyza, setAiAnalyza] = useState("");
@@ -216,6 +216,8 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       const vchod = String(lv.vchod);
       if (vchod.match(/[A-Za-zÁ-Ž]/)) setUlica(prev => prev || vchod);
     }
+    // Z koľko poschodí
+    if (lv.poschodia_vyssie && !zKolko) setZKolko(String(lv.poschodia_vyssie));
     if (lv.rok_vystavby && !rokVystavby) setRokVystavby(String(lv.rok_vystavby));
     if (lv.material && !typDomu) setTypDomu(String(lv.material));
     if (lv.vlastnictvo) {
@@ -223,14 +225,25 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       if (v.includes("druz")) setVlastnictvo("druzstevne");
       else if (v.includes("osob")) setVlastnictvo("osobne");
     }
-    // Kraj — auto-detect z okresu ak chýba
-    if (lv.kraj && !kraj) setKraj(String(lv.kraj));
-    else if (lv.okres && !kraj) {
-      const ok = String(lv.okres).toLowerCase();
-      if (ok.includes("bratislava")) setKraj("Bratislavský");
-      else if (ok.includes("košice")) setKraj("Košický");
+    // Kraj + Okres — auto-detect z LV alebo OKRESY mapy
+    if (lv.okres && !okres) {
+      const lvOkres = String(lv.okres);
+      setOkres(lvOkres);
+      // Nájdi kraj podľa okresu z OKRESY mapy
+      if (!kraj) {
+        const foundKraj = Object.entries(OKRESY).find(([, okresy]) =>
+          okresy.some(o => o.toLowerCase() === lvOkres.toLowerCase())
+        )?.[0];
+        if (foundKraj) setKraj(foundKraj);
+      }
     }
-    if (lv.okres && !okres) setOkres(String(lv.okres));
+    if (lv.kraj && !kraj) {
+      const lvKraj = String(lv.kraj);
+      // Pridaj " kraj" ak chýba
+      const krajVal = lvKraj.includes("kraj") ? lvKraj : `${lvKraj} kraj`;
+      const matched = KRAJE.find(k => k.toLowerCase() === krajVal.toLowerCase());
+      setKraj(matched || krajVal);
+    }
     const majitelia = lv.majitelia as Array<{ meno?: string; podiel?: string; datum_narodenia?: string }> | undefined;
     if (majitelia?.length && majitelia[0].meno) {
       setMajitel(majitelia[0].meno);
@@ -449,87 +462,6 @@ Odpovedaj stručne po slovensky.`;
           </p>
         </div>
       </div>
-
-      {/* ── LV Review sekcia (collapsible) ── */}
-      {lv ? (
-        <div style={{
-          ...cardSt,
-          background: lvReviewOpen ? "#F0FDF4" : "var(--bg-surface)",
-          border: lvReviewOpen ? "1.5px solid #BBF7D0" : "1px solid var(--border)",
-        }}>
-          <div
-            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
-            onClick={() => setLvReviewOpen(o => !o)}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "15px" }}>📋</span>
-              <span style={{ fontSize: "14px", fontWeight: "700", color: lvReviewOpen ? "#059669" : "var(--text-primary)" }}>
-                {lvReviewOpen ? "LV — skontroluj a potvrď" : "LV skontrolované ✓"}
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              {!lvReviewOpen && <span style={{ fontSize: "11px", color: "#059669", fontWeight: "600" }}>✓ Potvrdené</span>}
-              <span style={{ fontSize: "20px", color: "var(--text-muted)", fontWeight: "300", lineHeight: 1 }}>{lvReviewOpen ? "−" : "+"}</span>
-            </div>
-          </div>
-
-          {lvReviewOpen && (
-            <div style={{ marginTop: "14px" }}>
-              {/* Adresa */}
-              <div style={{ marginBottom: "12px" }}>
-                <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>Adresa</div>
-                <div style={{ fontSize: "13px", color: "var(--text-primary)" }}>
-                  {[lv.ulica, lv.supisne_cislo, lv.obec, lv.okres].filter(Boolean).map(String).join(", ") || "—"}
-                </div>
-              </div>
-              {/* Vlastníci */}
-              <div style={{ marginBottom: "12px" }}>
-                <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>Vlastníci</div>
-                {allLvOwners.length > 0 ? allLvOwners.map((m, i) => (
-                  <div key={i} style={{ fontSize: "13px", color: "var(--text-primary)", paddingBottom: "3px" }}>
-                    {m.meno}
-                    {m.podiel && <span style={{ color: "var(--text-muted)" }}> — podiel {m.podiel}</span>}
-                    {m.datum_narodenia && <span style={{ color: "var(--text-muted)" }}>, nar. {m.datum_narodenia}</span>}
-                  </div>
-                )) : <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>—</div>}
-              </div>
-              {/* Pozemky */}
-              {lvPozemky.length > 0 && (
-                <div style={{ marginBottom: "12px" }}>
-                  <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
-                    Pozemky {lv.pozemky_sucast ? "· súčasť predaja ✓" : "· nie sú súčasťou predaja"}
-                  </div>
-                  {lvPozemky.map((p, i) => (
-                    <div key={i} style={{ fontSize: "13px", color: "var(--text-primary)", paddingBottom: "3px" }}>
-                      parc. {p.cislo_parcely}{p.druh ? ` — ${p.druh}` : ""}{p.vymera ? `, ${p.vymera} m²` : ""}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* Právne vady */}
-              {lvPravneVady && (
-                <div style={{ marginBottom: "12px", padding: "10px 12px", background: "#FEF3C7", borderRadius: "8px", border: "1px solid #FDE68A" }}>
-                  <div style={{ fontSize: "11px", fontWeight: "700", color: "#92400E", marginBottom: "3px", textTransform: "uppercase" }}>Ťarchy / právne vady</div>
-                  <div style={{ fontSize: "13px", color: "#92400E" }}>{lvPravneVady}</div>
-                </div>
-              )}
-              <button
-                onClick={() => setLvReviewOpen(false)}
-                style={{
-                  width: "100%", padding: "9px 16px", background: "#059669", color: "#fff",
-                  border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-                }}
-              >
-                Skontrolované ✓ — Zavrieť
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div style={{ padding: "12px 16px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "12px", marginBottom: "16px", fontSize: "13px", color: "#92400E" }}>
-          💡 LV nebolo nahraté — vyplníš manuálne. Môžeš ho pridať na karte klienta aj neskôr.
-        </div>
-      )}
 
       {/* 1. Lokalita */}
       <div style={cardSt}>
