@@ -211,13 +211,13 @@ Píš stručne, konkrétne fakty, max 150 slov. Slovenčina.`
       generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
     });
     let res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       { method: "POST", headers: { "Content-Type": "application/json" }, body: locBody }
     );
     if (res.status === 503) {
       await new Promise(r => setTimeout(r, 3000));
       res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: locBody }
       );
     }
@@ -335,14 +335,14 @@ async function generateGemini(details: string, locationInfo: string, images?: { 
       generationConfig: { temperature: 0.7, maxOutputTokens: 2500, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
     });
     let res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       { method: "POST", headers: { "Content-Type": "application/json" }, body: geminiBody }
     );
     // Retry once on 503 (overloaded)
     if (res.status === 503) {
       await new Promise(r => setTimeout(r, 3000));
       res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: geminiBody }
       );
     }

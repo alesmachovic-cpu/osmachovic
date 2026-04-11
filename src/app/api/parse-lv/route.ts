@@ -164,7 +164,7 @@ async function parseByGemini(text: string, system: string, pdfBase64?: string): 
       parts.push({ text: USER_PROMPT(text) });
     }
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -254,12 +254,16 @@ export async function POST(req: NextRequest) {
   const text = lv_text?.trim() || "";
   console.log(`[parse-doc] Document type: ${doc_type || "lv"}, has PDF: ${!!pdf_base64}, text len: ${text.length}`);
 
-  const strategies = [
-    (t: string) => parseByGemini(t, system, pdf_base64),
-    (t: string) => parseByGPT(t, system),
-    (t: string) => parseByClaude(t, system),
-  ];
-  const names = ["Gemini", "GPT", "Claude"];
+  // Ak máme len PDF (bez textu), GPT a Claude nemajú čo čítať — iba Gemini vie PDF
+  const hasPdfOnly = !!pdf_base64 && !text;
+  const strategies = hasPdfOnly
+    ? [(t: string) => parseByGemini(t, system, pdf_base64)]
+    : [
+        (t: string) => parseByGemini(t, system, pdf_base64),
+        (t: string) => parseByGPT(t, system),
+        (t: string) => parseByClaude(t, system),
+      ];
+  const names = hasPdfOnly ? ["Gemini"] : ["Gemini", "GPT", "Claude"];
 
   for (let i = 0; i < strategies.length; i++) {
     console.log(`[parse-doc] Trying ${names[i]}...`);
