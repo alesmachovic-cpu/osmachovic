@@ -212,6 +212,8 @@ export default function KlientDetailPage() {
   const [showLVPrompt, setShowLVPrompt] = useState(false);
   const [lvDiff, setLvDiff] = useState<{ field: string; label: string; old: string; new_: string }[]>([]);
   const [showLVDiff, setShowLVDiff] = useState(false);
+  const [showLVRename, setShowLVRename] = useState(false);
+  const [lvOwnerNames, setLvOwnerNames] = useState<string[]>([]);
   const [showSpolupracaModal, setShowSpolupracaModal] = useState(false);
   const [spolupracaMakler, setSpolupracaMakler] = useState("");
   const [spolupracaPct, setSpolupracaPct] = useState(50);
@@ -862,6 +864,50 @@ export default function KlientDetailPage() {
         </div>
       )}
 
+      {/* LV Rename modal */}
+      {showLVRename && lvOwnerNames.length > 0 && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+          onClick={() => setShowLVRename(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "var(--bg-surface)", borderRadius: "20px", padding: "32px",
+            maxWidth: "420px", width: "100%",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+              <span style={{ fontSize: "24px" }}>👤</span>
+              <div>
+                <h2 style={{ fontSize: "17px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>
+                  Premenovať klienta?
+                </h2>
+                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "2px 0 0" }}>
+                  Meno &quot;{klient.meno}&quot; nezodpovedá vlastníkom z LV
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
+              {lvOwnerNames.map((name, i) => (
+                <button key={i} onClick={async () => {
+                  const { supabase: sb } = await import("@/lib/supabase");
+                  await sb.from("klienti").update({ meno: name }).eq("id", klient.id);
+                  setKlient(k => k ? { ...k, meno: name } : k);
+                  setShowLVRename(false);
+                }} style={{
+                  padding: "14px 16px", background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                  borderRadius: "12px", cursor: "pointer", textAlign: "left", fontSize: "14px",
+                  fontWeight: "600", color: "var(--text-primary)",
+                }}>
+                  {name}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setShowLVRename(false)} style={{
+              width: "100%", padding: "10px 20px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
+              border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            }}>Ponechať &quot;{klient.meno}&quot;</button>
+          </div>
+        </div>
+      )}
+
       {/* Rýchle akcie */}
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px",
@@ -1180,6 +1226,22 @@ export default function KlientDetailPage() {
               setShowLVDiff(true);
             }
             setKlient(k => k ? { ...k, lv_data: data } : k);
+
+            // Ponúkni premenovanie ak meno klienta nezodpovedá žiadnemu vlastníkovi z LV
+            const majitelia = lv.majitelia as Array<{ meno?: string }> | undefined;
+            if (majitelia?.length) {
+              const ownerNames = majitelia.filter(m => m.meno).map(m => m.meno!);
+              const currentName = klient.meno.trim().toLowerCase();
+              const nameMatchesAnyOwner = ownerNames.some(n =>
+                n.toLowerCase() === currentName ||
+                currentName.includes(n.toLowerCase()) ||
+                n.toLowerCase().includes(currentName)
+              );
+              if (!nameMatchesAnyOwner && ownerNames.length > 0) {
+                setLvOwnerNames(ownerNames);
+                setShowLVRename(true);
+              }
+            }
           }} />
           {/* Ostatné dokumenty */}
           <div style={cardSt}>

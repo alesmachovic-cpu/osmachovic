@@ -174,6 +174,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   const [lvMajitelia, setLvMajitelia] = useState<Array<{ meno: string; podiel?: string; datum_narodenia?: string }>>([]);
   const [lvPozemky, setLvPozemky] = useState<Array<{ cislo_parcely?: string; druh?: string; vymera?: number }>>([]);
   const [lvPravneVady, setLvPravneVady] = useState("");
+  const [tarchyRiesenie, setTarchyRiesenie] = useState<"z_kupnej" | "prenos" | "pred_podpisom" | "">("");
 
   // AI cena
   const [aiOdhadOpen, setAiOdhadOpen] = useState(false);
@@ -200,6 +201,8 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       setUlica(u);
     }
     if (lv.supisne_cislo && !supisneCislo) setSupisneCislo(String(lv.supisne_cislo));
+    // Číslo orientačné — z LV alebo z ulice (napr. "Továrenská 1" → orientačné "1")
+    if (lv.cislo_orientacne && !cisloOrientacne) setCisloOrientacne(String(lv.cislo_orientacne));
     if (lv.katastralneUzemie && !katUzemie) setKatUzemie(String(lv.katastralneUzemie));
     if (lv.plocha && !plocha) setPlocha(String(lv.plocha));
     if (lv.izby && !pocetIzieb) setPocetIzieb(String(lv.izby));
@@ -339,6 +342,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       makler: makler || null, zmluva, typ_zmluvy: zmluva ? typZmluvy : null,
       datum_podpisu: datumPodpisu || null, zmluva_do: zmluvaDo || null,
       provizia: provizia || null, popis: popis || null, podpis_data: podpisData,
+      tarcha_text: lvPravneVady || null, tarcha_riesenie: tarchyRiesenie || null,
     };
     const { data, error: dbError } = await supabase.from("naberove_listy").insert(record).select("id").single();
     if (dbError) { setSaving(false); setError("Chyba pri ukladaní: " + dbError.message); return; }
@@ -799,6 +803,35 @@ Odpovedaj stručne po slovensky.`;
             style={{ ...inputSt, resize: "vertical" }} placeholder="Doplňujúce informácie..." />
         </div>
       </div>
+
+      {/* 7b. Ťarchy / právne vady */}
+      {lvPravneVady && (
+        <div style={{ ...cardSt, border: "1.5px solid #FDE68A", background: "var(--bg-surface)" }}>
+          <div style={sectionTitle}>⚠️ Ťarchy / právne vady</div>
+          <div style={{ padding: "10px 12px", background: "#FEF3C7", borderRadius: "8px", border: "1px solid #FDE68A", marginBottom: "14px" }}>
+            <div style={{ fontSize: "13px", color: "#92400E", lineHeight: 1.5 }}>{lvPravneVady}</div>
+          </div>
+          <div>
+            <label style={labelSt}>Riešenie ťarchy</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "6px" }}>
+              {[
+                { value: "z_kupnej" as const, label: "Vyplatenie z kúpnej ceny", desc: "Ťarcha sa vyplatí priamo z kúpnej ceny pri podpise" },
+                { value: "prenos" as const, label: "Prenos na inú nehnuteľnosť", desc: "Záložné právo sa prenesie na inú nehnuteľnosť predávajúceho" },
+                { value: "pred_podpisom" as const, label: "Vyplatenie pred podpisom KZ", desc: "Predávajúci vyplatí ťarchu ešte pred podpisom kúpnej zmluvy" },
+              ].map(o => (
+                <button key={o.value} onClick={() => setTarchyRiesenie(o.value)} style={{
+                  padding: "12px 14px", borderRadius: "10px", cursor: "pointer", textAlign: "left",
+                  border: tarchyRiesenie === o.value ? "2px solid #F59E0B" : "1px solid var(--border)",
+                  background: tarchyRiesenie === o.value ? "#FFFBEB" : "var(--bg-elevated)",
+                }}>
+                  <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>{o.label}</div>
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>{o.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 8. Typ inzercie */}
       <div style={cardSt}>
