@@ -463,7 +463,8 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
       setStatus(editKlient.status || "novy_kontakt");
       setTypKlienta(editKlient.typ || defaultTyp);
       setLokalitaInput(editKlient.lokalita || "");
-      setLokalitaValue(editKlient.lokalita || "");
+      const editLokVal = editKlient.lokalita || "";
+      setLokalitaValue(LOKALITY_DB.some(l => !l.ulica && l.lokalita === editLokVal) ? editLokVal : "");
       setDatumNarodenia(editKlient.datum_narodenia ? editKlient.datum_narodenia.slice(0, 10) : "");
 
       // Parse poznamka for structured fields (Adresa, Stretnutie, Typ nehnuteľnosti, Odkaz)
