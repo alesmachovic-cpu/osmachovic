@@ -204,6 +204,9 @@ export default function KlientDetailPage() {
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [naberDatum, setNaberDatum] = useState("");
   const [naberMiesto, setNaberMiesto] = useState("");
+  const [naberUlica, setNaberUlica] = useState("");
+  const [naberCislo, setNaberCislo] = useState("");
+  const [naberAddrError, setNaberAddrError] = useState("");
   const [eventType, setEventType] = useState<"volat" | "naber" | "obhliadka" | "podpis" | "fotenie" | "odovzdanie" | "ine">("naber");
   const [eventTitle, setEventTitle] = useState("");
   const [showSpolupracaModal, setShowSpolupracaModal] = useState(false);
@@ -325,6 +328,18 @@ export default function KlientDetailPage() {
     ) {
       setPendingStatus(newStatus);
       setNaberMiesto(klient.lokalita || "");
+      // Pre-fill ulica/číslo z poznámky ak existuje
+      const addrMatch = klient.poznamka?.match(/Adresa:\s*(.+?)(?:,|\n|$)/);
+      if (addrMatch) {
+        const parts = addrMatch[1].trim().split(/\s+/);
+        const cislo = parts.pop() || "";
+        setNaberUlica(parts.join(" "));
+        setNaberCislo(/^\d/.test(cislo) ? cislo : "");
+        if (!/^\d/.test(cislo)) setNaberUlica(addrMatch[1].trim());
+      } else {
+        setNaberUlica(""); setNaberCislo("");
+      }
+      setNaberAddrError("");
       setShowDatePicker(true);
       return;
     }
@@ -336,6 +351,14 @@ export default function KlientDetailPage() {
   // Po potvrdení dátumu — vytvor calendar event + update status
   async function handleDateConfirm() {
     if (!klient) return;
+    // Validácia ulica + číslo pri dohodnutom nábere
+    if (pendingStatus === "dohodnuty_naber") {
+      if (!naberUlica.trim() || !naberCislo.trim()) {
+        setNaberAddrError("Ulica a číslo sú povinné pri dohodnutom nábere");
+        return;
+      }
+    }
+    setNaberAddrError("");
     setCalendarSyncing(true);
 
     // Generic event mode: pendingStatus null → use eventType
@@ -360,6 +383,13 @@ export default function KlientDetailPage() {
       const updates: Record<string, unknown> = { status: pendingStatus || "dohodnuty_naber" };
       if (naberDatum && !isVolat) updates.datum_naberu = new Date(naberDatum).toISOString();
       if (!isVolat && naberMiesto) updates.lokalita = naberMiesto;
+      // Ulica + číslo pri dohodnutom nábere → pridaj do poznámky
+      if (isNaber && naberUlica.trim()) {
+        const addrLine = `Adresa: ${naberUlica.trim()} ${naberCislo.trim()}`.trim();
+        const existingNote = klient.poznamka || "";
+        const cleaned = existingNote.replace(/Adresa:\s*.+/i, "").trim();
+        updates.poznamka = cleaned ? `${cleaned}\n${addrLine}` : addrLine;
+      }
       await supabase.from("klienti").update(updates).eq("id", klient.id);
     } else if (isNaber && naberDatum) {
       await supabase.from("klienti").update({ datum_naberu: new Date(naberDatum).toISOString() }).eq("id", klient.id);
@@ -1138,6 +1168,36 @@ export default function KlientDetailPage() {
                 >📍</button>
               </div>
             )}
+            {/* Ulica + číslo — povinné pri dohodnutom nábere */}
+            {pendingStatus === "dohodnuty_naber" && (
+              <div style={{ display: "flex", gap: "8px", maxWidth: "300px", margin: "0 auto 12px" }}>
+                <input
+                  type="text"
+                  value={naberUlica}
+                  onChange={e => { setNaberUlica(e.target.value); setNaberAddrError(""); }}
+                  placeholder="Ulica *"
+                  style={{
+                    flex: 1, padding: "12px 16px",
+                    background: "var(--bg-elevated)", border: naberAddrError && !naberUlica.trim() ? "2px solid #EF4444" : "2px solid var(--border)",
+                    borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)",
+                    outline: "none",
+                  }}
+                />
+                <input
+                  type="text"
+                  value={naberCislo}
+                  onChange={e => { setNaberCislo(e.target.value); setNaberAddrError(""); }}
+                  placeholder="Č. *"
+                  style={{
+                    width: "70px", padding: "12px 10px",
+                    background: "var(--bg-elevated)", border: naberAddrError && !naberCislo.trim() ? "2px solid #EF4444" : "2px solid var(--border)",
+                    borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)",
+                    outline: "none", textAlign: "center",
+                  }}
+                />
+              </div>
+            )}
+            {naberAddrError && <div style={{ fontSize: "11px", color: "#EF4444", marginBottom: "8px" }}>{naberAddrError}</div>}
             <input
               type="datetime-local"
               value={naberDatum ? naberDatum.slice(0, 16) : ""}
