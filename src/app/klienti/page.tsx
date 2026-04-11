@@ -54,6 +54,9 @@ function KlientiContent() {
   const [statusModal, setStatusModal] = useState<{ klient: Klient; status: string } | null>(null);
   const [statusDatum, setStatusDatum] = useState("");
   const [statusMiesto, setStatusMiesto] = useState("");
+  const [statusUlica, setStatusUlica] = useState("");
+  const [statusCislo, setStatusCislo] = useState("");
+  const [statusAddrError, setStatusAddrError] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
 
   async function fetchKlienti() {
@@ -131,6 +134,15 @@ function KlientiContent() {
     if (newStatus === "dohodnuty_naber" || newStatus === "volat_neskor") {
       setStatusMiesto(k.lokalita || "");
       setStatusDatum("");
+      // Pre-fill ulica/číslo z poznámky
+      const addrMatch = k.poznamka?.match(/Adresa:\s*(.+?)(?:,|\n|$)/);
+      if (addrMatch) {
+        const parts = addrMatch[1].trim().split(/\s+/);
+        const cislo = parts.pop() || "";
+        if (/^\d/.test(cislo)) { setStatusUlica(parts.join(" ")); setStatusCislo(cislo); }
+        else { setStatusUlica(addrMatch[1].trim()); setStatusCislo(""); }
+      } else { setStatusUlica(""); setStatusCislo(""); }
+      setStatusAddrError("");
       setStatusModal({ klient: k, status: newStatus });
       return;
     }
@@ -143,14 +155,26 @@ function KlientiContent() {
   // Confirm status change with date/location
   async function handleStatusConfirm() {
     if (!statusModal || !statusDatum) return;
-    setStatusSaving(true);
     const { klient: k, status: newStatus } = statusModal;
     const isVolat = newStatus === "volat_neskor";
-    const durationMs = isVolat ? 15 * 60000 : 60 * 60000; // 15min vs 1h
+    // Validácia ulica + číslo pri dohodnutom nábere
+    if (!isVolat && (!statusUlica.trim() || !statusCislo.trim())) {
+      setStatusAddrError("Ulica a číslo sú povinné pri dohodnutom nábere");
+      return;
+    }
+    setStatusAddrError("");
+    setStatusSaving(true);
+    const durationMs = isVolat ? 15 * 60000 : 60 * 60000;
 
-    // Update status + datum
+    // Update status + datum + ulica do poznámky
     const updates: Record<string, unknown> = { status: newStatus };
     if (!isVolat) updates.datum_naberu = new Date(statusDatum).toISOString();
+    if (!isVolat && statusUlica.trim()) {
+      const addrLine = `Adresa: ${statusUlica.trim()} ${statusCislo.trim()}`.trim();
+      const existing = k.poznamka || "";
+      const cleaned = existing.replace(/Adresa:\s*.+/i, "").trim();
+      updates.poznamka = cleaned ? `${cleaned}\n${addrLine}` : addrLine;
+    }
     await supabase.from("klienti").update(updates).eq("id", k.id);
 
     // Create calendar event
@@ -467,24 +491,46 @@ function KlientiContent() {
                 : <>Pripomienka na zavolanie <strong style={{ color: "var(--text-primary)" }}>{statusModal.klient.meno}</strong> (15 min)</>
               }
             </p>
-            {/* Location — only for dohodnuty_naber */}
+            {/* Location + ulica/číslo — only for dohodnuty_naber */}
             {statusModal.status === "dohodnuty_naber" && (
               <div style={{ marginBottom: "12px" }}>
                 <input
                   type="text"
                   value={statusMiesto}
                   onChange={e => setStatusMiesto(e.target.value)}
-                  placeholder="Ulica a číslo (napr. Hlavná 12, Bratislava)"
+                  placeholder="Obec / mestská časť"
                   style={{
                     width: "100%", maxWidth: "300px", padding: "12px 16px",
                     background: "var(--bg-elevated)", border: "2px solid var(--border)",
                     borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)",
-                    outline: "none", textAlign: "center",
+                    outline: "none", textAlign: "center", marginBottom: "8px",
                   }}
                 />
-                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
-                  Ak ešte nepoznáte presnú adresu, doplňte neskôr
+                <div style={{ display: "flex", gap: "8px", maxWidth: "300px", margin: "0 auto" }}>
+                  <input
+                    type="text"
+                    value={statusUlica}
+                    onChange={e => { setStatusUlica(e.target.value); setStatusAddrError(""); }}
+                    placeholder="Ulica *"
+                    style={{
+                      flex: 1, padding: "12px 16px",
+                      background: "var(--bg-elevated)", border: statusAddrError && !statusUlica.trim() ? "2px solid #EF4444" : "2px solid var(--border)",
+                      borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)", outline: "none",
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={statusCislo}
+                    onChange={e => { setStatusCislo(e.target.value); setStatusAddrError(""); }}
+                    placeholder="Č. *"
+                    style={{
+                      width: "70px", padding: "12px 10px",
+                      background: "var(--bg-elevated)", border: statusAddrError && !statusCislo.trim() ? "2px solid #EF4444" : "2px solid var(--border)",
+                      borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)", outline: "none", textAlign: "center",
+                    }}
+                  />
                 </div>
+                {statusAddrError && <div style={{ fontSize: "11px", color: "#EF4444", marginTop: "6px" }}>{statusAddrError}</div>}
               </div>
             )}
             {/* Date/time */}
