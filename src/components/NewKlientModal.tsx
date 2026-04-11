@@ -39,6 +39,7 @@ interface Props {
     calendar_event_id?: string | null;
     datum_naberu?: string | null;
     datum_narodenia?: string | null;
+    lv_data?: Record<string, unknown> | null;
   } | null;
 }
 
@@ -892,6 +893,40 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
               </div>
             )}
           </div>
+
+          {/* Dohodnutý náber — checklist */}
+          {status === "dohodnuty_naber" && (() => {
+            const hasLv = !!(editKlient?.lv_data && Object.keys(editKlient.lv_data).length > 0);
+            const hasOdkaz = odkaz.trim().length > 0;
+            return (
+              <div style={{
+                background: "#FFFBEB", border: "1px solid #F59E0B", borderRadius: "10px",
+                padding: "12px 14px", display: "flex", flexDirection: "column", gap: "8px",
+              }}>
+                <div style={{ fontWeight: "600", fontSize: "13px", color: "#92400E" }}>
+                  📋 Dohodnutý náber — priprav podklady
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <div style={{ fontSize: "13px", color: hasLv ? "#065F46" : "#B45309", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span>{hasLv ? "✅" : "⬜"}</span>
+                    <span>
+                      {hasLv ? "LV nahraté na karte klienta" : "LV ešte nie je nahraté — vlož ho na kartu klienta"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: "13px", color: hasOdkaz ? "#065F46" : "#B45309", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span>{hasOdkaz ? "✅" : "⬜"}</span>
+                    <span>
+                      {hasOdkaz ? "Odkaz na nehnuteľnosť vyplnený" : "Chýba odkaz na nehnuteľnosť — doplň ho nižšie"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: "13px", color: "#78716C", display: "flex", alignItems: "flex-start", gap: "6px" }}>
+                    <span>🔍</span>
+                    <span>Skontroluj, či sa nehnuteľnosť nepredáva na iných portáloch (NEHNUTELNOSTI.SK, REALITY.SK, BAZOS...)</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Typ nehnuteľnosti */}
           <div>

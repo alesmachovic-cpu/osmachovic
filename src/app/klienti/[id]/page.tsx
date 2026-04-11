@@ -1242,6 +1242,7 @@ export default function KlientDetailPage() {
             calendar_event_id: (klient as { calendar_event_id?: string | null }).calendar_event_id ?? null,
             datum_naberu: (klient as { datum_naberu?: string | null }).datum_naberu ?? null,
             datum_narodenia: (klient as { datum_narodenia?: string | null }).datum_narodenia ?? null,
+            lv_data: klient.lv_data as Record<string, unknown> | null,
           }}
           onClose={() => setEditModal(false)}
           onSaved={() => { setEditModal(false); loadAll(); }}
