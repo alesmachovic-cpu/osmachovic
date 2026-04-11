@@ -201,15 +201,24 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       setUlica(u);
     }
     if (lv.supisne_cislo && !supisneCislo) setSupisneCislo(String(lv.supisne_cislo));
-    // Číslo orientačné — z LV alebo z ulice (napr. "Továrenská 1" → orientačné "1")
-    if (lv.cislo_orientacne && !cisloOrientacne) setCisloOrientacne(String(lv.cislo_orientacne));
+    // Číslo orientačné — z vchodu alebo z ulice (napr. "Továrenská 1" → orientačné "1")
+    if (lv.vchod && !cisloOrientacne) setCisloOrientacne(String(lv.vchod));
+    else if (!cisloOrientacne && lv.ulica) {
+      const uMatch = String(lv.ulica).match(/(\d+[A-Za-z]?)\s*$/);
+      if (uMatch) setCisloOrientacne(uMatch[1]);
+    }
     if (lv.katastralneUzemie && !katUzemie) setKatUzemie(String(lv.katastralneUzemie));
     if (lv.plocha && !plocha) setPlocha(String(lv.plocha));
     if (lv.izby && !pocetIzieb) setPocetIzieb(String(lv.izby));
-    // Poschodie — "prízemie" → 0
-    if (lv.poschodie && !poschodie) {
-      const p = String(lv.poschodie).toLowerCase();
-      setPoschodie(p === "prízemie" || p === "prizemie" ? "0" : String(lv.poschodie));
+    // Poschodie — "prízemie" → 0, "1.p" → 1, etc.
+    if (lv.poschodie != null && !poschodie) {
+      const raw = String(lv.poschodie).trim().toLowerCase();
+      if (raw === "prízemie" || raw === "prizemie" || raw === "0" || raw === "prízem") {
+        setPoschodie("0");
+      } else {
+        const numMatch = raw.match(/(\d+)/);
+        setPoschodie(numMatch ? numMatch[1] : String(lv.poschodie));
+      }
     }
     // Byt číslo
     if (lv.cislo_bytu && !bytCislo) setBytCislo(String(lv.cislo_bytu));
@@ -326,6 +335,9 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
     } else {
       Object.assign(parametre, { druh_pozemku: druhPozemku, pristupova_cesta: pristupovaCesta, siete, ucelove_urcenie: ucelovyUrcenie });
     }
+    // Ťarchy info do parametre
+    if (lvPravneVady) parametre.tarcha_text = lvPravneVady;
+    if (tarchyRiesenie) parametre.tarcha_riesenie = tarchyRiesenie;
     const maklerUuid = authUser?.id ? await getMaklerUuid(authUser.id) : null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const record: Record<string, any> = {
@@ -342,7 +354,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       makler: makler || null, zmluva, typ_zmluvy: zmluva ? typZmluvy : null,
       datum_podpisu: datumPodpisu || null, zmluva_do: zmluvaDo || null,
       provizia: provizia || null, popis: popis || null, podpis_data: podpisData,
-      tarcha_text: lvPravneVady || null, tarcha_riesenie: tarchyRiesenie || null,
     };
     const { data, error: dbError } = await supabase.from("naberove_listy").insert(record).select("id").single();
     if (dbError) { setSaving(false); setError("Chyba pri ukladaní: " + dbError.message); return; }

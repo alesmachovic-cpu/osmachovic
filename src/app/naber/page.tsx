@@ -202,6 +202,20 @@ function NaberPageContent() {
       }
     }
     setShowDatumPicker(false);
+    // Ak LV obsahuje typ nehnuteľnosti, preskočíme výber typu
+    const lvTyp = (selectedKlient?.lv_data as Record<string, unknown> | null)?.typ;
+    if (lvTyp) {
+      const typMap: Record<string, TypNaber> = {
+        "byt": "byt", "rodinny-dom": "rodinny_dom", "rodinny_dom": "rodinny_dom",
+        "pozemok": "pozemok", "garaz": "byt", "komercne": "byt",
+      };
+      const mapped = typMap[String(lvTyp)] || null;
+      if (mapped) {
+        setSelectedType(mapped);
+        setStep("formular");
+        return;
+      }
+    }
     setStep("typ");
   }
 
