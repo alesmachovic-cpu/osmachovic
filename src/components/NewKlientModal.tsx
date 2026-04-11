@@ -597,7 +597,9 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
   const suggestions = normalizedInput.length >= 2
     ? LOKALITY_DB.filter(l => !l.ulica && normalizeSearch(l.display).includes(normalizedInput)).slice(0, 8)
     : [];
-  const showNotFound = normalizedInput.length >= 2 && suggestions.length === 0 && !lokalitaValue;
+  // Double-check: lokalitaValue is valid ONLY if it's actually in LOKALITY_DB
+  const isValidLokalita = lokalitaValue !== "" && LOKALITY_DB.some(l => !l.ulica && l.lokalita === lokalitaValue);
+  const showNotFound = normalizedInput.length >= 2 && suggestions.length === 0 && !isValidLokalita;
 
   function selectLokalita(entry: LokalitaEntry) {
     if (entry.ulica) {
@@ -621,15 +623,13 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
 
     // Validácia adresy — lokalita musí byť vybraná z dropdownu
     const addrErrors: typeof fieldErrors = {};
-    if (!lokalitaValue) {
-      addrErrors.lokalita = lokalitaInput.trim()
-        ? "Vyber mesto zo zoznamu (alebo klikni na '+ Použiť ako obec')"
-        : "Mesto / obec je povinné";
+    if (!isValidLokalita) {
+      addrErrors.lokalita = "Vyber mesto / mestskú časť zo zoznamu";
     }
-    if (lokalitaValue && !ulica.trim()) {
+    if (isValidLokalita && !ulica.trim()) {
       addrErrors.ulica = "Ulica je povinná";
     }
-    if (lokalitaValue && ulica.trim() && !cisloDomu.trim()) {
+    if (isValidLokalita && ulica.trim() && !cisloDomu.trim()) {
       addrErrors.cislo = "Číslo domu je povinné";
     }
     if (Object.keys(addrErrors).length > 0) {
@@ -910,15 +910,16 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
           <div ref={suggestRef} style={{ position: "relative" }}>
             <div style={labelSt}>Mesto / Obec * <span style={{ fontWeight: "400", textTransform: "none", color: "var(--text-muted)" }}>(nie ulica!)</span></div>
             <input
-              style={{ ...inputSt, border: fieldErrors.lokalita ? "2px solid #EF4444" : lokalitaValue ? "2px solid #10B981" : "1px solid var(--border)" }}
+              style={{ ...inputSt, border: fieldErrors.lokalita ? "2px solid #EF4444" : isValidLokalita ? "2px solid #10B981" : "1px solid var(--border)" }}
               placeholder="napr. Bratislava, Košice, Nitra, Žilina..."
               value={lokalitaInput}
               onChange={e => { setLokalitaInput(e.target.value); setLokalitaValue(""); setShowSuggestions(true); setFieldErrors(p => ({ ...p, lokalita: undefined })); }}
               onFocus={() => { if (normalizeSearch(lokalitaInput).length >= 2) setShowSuggestions(true); }}
+              onBlur={() => { if (!isValidLokalita) { setLokalitaInput(""); setLokalitaValue(""); } setShowSuggestions(false); }}
             />
             {fieldErrors.lokalita && <div style={{ fontSize: "11px", color: "#EF4444", marginTop: "4px" }}>⚠ {fieldErrors.lokalita}</div>}
-            {lokalitaValue && !fieldErrors.lokalita && <div style={{ fontSize: "11px", color: "#065F46", marginTop: "4px" }}>→ {lokalitaValue}</div>}
-            {!lokalitaValue && !fieldErrors.lokalita && (
+            {isValidLokalita && !fieldErrors.lokalita && <div style={{ fontSize: "11px", color: "#065F46", marginTop: "4px" }}>→ {lokalitaValue}</div>}
+            {!isValidLokalita && !fieldErrors.lokalita && (
               <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
                 Mestská časť alebo obec — ulicu vyplníš nižšie
               </div>
@@ -951,7 +952,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
           </div>
 
           {/* Ulica + číslo — zobrazí sa až keď je vybraná lokalita */}
-          {lokalitaValue && (
+          {isValidLokalita && (
           <div style={{ display: "flex", gap: "10px" }}>
             <div ref={ulicaSuggestRef} style={{ position: "relative", flex: 1 }}>
               <div style={labelSt}>Ulica *</div>

@@ -69,10 +69,8 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Typ inzercie
   const [typInzercie, setTypInzercie] = useState<TypInzercie>("online");
 
-  // ── Parsovanie údajov z poznámky klienta ──
   const klientNotes = klient.poznamka || "";
   function parseNote(patterns: RegExp[]): string {
     for (const p of patterns) { const m = klientNotes.match(p); if (m) return m[1].trim(); }
@@ -83,7 +81,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
     return false;
   }
 
-  // Location — auto-detect z lokality + poznámky
   const [kraj, setKraj] = useState(() => {
     const lok = (klient.lokalita || "").trim().toLowerCase();
     if (!lok) return "";
@@ -106,7 +103,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   const [supisneCislo, setSupisneCislo] = useState(() => parseNote([/Súpisné\s*č(?:íslo)?\.?:\s*(.+)/i]));
   const [cisloOrientacne, setCisloOrientacne] = useState(() => parseNote([/Orientačné\s*č(?:íslo)?\.?:\s*(.+)/i]));
 
-  // Property common — z poznámky
   const [plocha, setPlocha] = useState(() => parseNote([/Plocha:\s*(\d+[\.,]?\d*)/i, /(\d+)\s*m[²2]/i]));
   const [stav, setStav] = useState(() => {
     const s = parseNote([/Stav:\s*(.+)/i]); if (!s) return "";
@@ -115,7 +111,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   });
   const [poznamkyVybavenie, setPoznamkyVybavenie] = useState(() => parseNote([/Vybavenie:\s*(.+)/i]));
 
-  // Byt-specific — z poznámky
   const [pocetIzieb, setPocetIzieb] = useState(() => parseNote([/(?:Počet izieb|Izby|izieb):\s*(\d+)/i]) || parseNote([/(\d+)\s*-?\s*izb/i]));
   const [vlastnictvo, setVlastnictvo] = useState(() => {
     const v = parseNote([/Vlastníctvo:\s*(.+)/i]);
@@ -132,13 +127,11 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   const [vyhlad, setVyhlad] = useState(() => parseNote([/Výhľad:\s*(.+)/i]));
   const [mesacnePoplatky, setMesacnePoplatky] = useState(() => parseNote([/Mesačné\s*(?:poplatky|náklady):\s*(\d+[\.,]?\d*)/i]));
 
-  // Dom-specific
   const [pocetPodlazi, setPocetPodlazi] = useState(() => parseNote([/Počet podlaží:\s*(\d+)/i, /Podlaží:\s*(\d+)/i]));
   const [rokVystavby, setRokVystavby] = useState(() => parseNote([/Rok\s*(?:výstavby|kolaudácie):\s*(\d{4})/i]));
   const [pozemokPlocha, setPozemokPlocha] = useState(() => parseNote([/Pozemok\s*(?:plocha)?:\s*(\d+)/i]));
   const [zahrada, setZahrada] = useState(() => parseNoteBool([/Záhrada:\s*(\S+)/i]));
 
-  // Pozemok-specific
   const [druhPozemku, setDruhPozemku] = useState(() => parseNote([/Druh pozemku:\s*(.+)/i]));
   const [pristupovaCesta, setPristupovaCesta] = useState(() => parseNoteBool([/Prístupová cesta:\s*(\S+)/i]));
   const [siete, setSiete] = useState(() => ({
@@ -147,10 +140,8 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   }));
   const [ucelovyUrcenie, setUcelovyUrcenie] = useState(() => parseNote([/Účel(?:ové určenie)?:\s*(.+)/i]));
 
-  // Označenie
   const [oznacenie, setOznacenie] = useState("ziadne");
 
-  // Vybavenie — auto-detect z poznámky
   const [vybavenie, setVybavenie] = useState<Record<string, boolean>>(() => {
     const v: Record<string, boolean> = {};
     const map: Record<string, RegExp> = { "Výťah": /výťah/i, "Balkón": /balkón/i, "Lodžia": /lodžia|loggia/i, "Garáž": /garáž/i, "Pivnica": /pivnic/i, "Parking": /parking|parkov/i };
@@ -159,7 +150,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   });
   const [zariadeny, setZariadeny] = useState(() => parseNote([/Zariadený:\s*(.+)/i]));
 
-  // Majiteľ — auto-fill z klienta
   const [majitel, setMajitel] = useState(klient.meno || "");
   const [konatel, setKonatel] = useState(() => parseNote([/Konateľ:\s*(.+)/i]));
   const [jednatel, setJednatel] = useState(() => parseNote([/Jednateľ:\s*(.+)/i]));
@@ -167,7 +157,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   const [uzivatel, setUzivatel] = useState(() => parseNote([/Užívateľ:\s*(.+)/i, /Nájomca:\s*(.+)/i]));
   const [kontaktUzivatel, setKontaktUzivatel] = useState(() => parseNote([/Kontakt užívateľ:\s*(.+)/i]));
 
-  // Predaj — z klienta.proviziaeur a rozpocet_max
   const [predajnaCena, setPredajnaCena] = useState(() =>
     parseNote([/(?:Predajná )?[Cc]ena:\s*([\d\s.,]+)/i]) || (klient.rozpocet_max ? String(klient.rozpocet_max) : "")
   );
@@ -179,68 +168,59 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   const [provizia, setProvizia] = useState(() => klient.proviziaeur ? String(klient.proviziaeur) : parseNote([/Provízia:\s*(.+)/i]));
   const [popis, setPopis] = useState(() => parseNote([/Popis:\s*(.+)/i]) || "");
 
-  // Podpis
   const [podpisData, setPodpisData] = useState<string | null>(null);
 
-  // LV banner + extra vlastníci + parcely
-  const [lvFilled, setLvFilled] = useState(false);
-  const [lvMajitelia, setLvMajitelia] = useState<Array<{ meno: string; podiel?: string }>>([]);
+  // LV data + review
+  const [lvMajitelia, setLvMajitelia] = useState<Array<{ meno: string; podiel?: string; datum_narodenia?: string }>>([]);
   const [lvPozemky, setLvPozemky] = useState<Array<{ cislo_parcely?: string; druh?: string; vymera?: number }>>([]);
   const [lvPravneVady, setLvPravneVady] = useState("");
+  const [lvReviewOpen, setLvReviewOpen] = useState(true);
+  // AI cena
+  const [aiOdhadOpen, setAiOdhadOpen] = useState(false);
+  const [aiAnalyza, setAiAnalyza] = useState("");
+  const [analyzujeAI, setAnalyzujeAI] = useState(false);
+  // Podpis — výber vlastníkov
+  const [podpisOwners, setPodpisOwners] = useState<string[]>([]);
+  const [zastupca, setZastupca] = useState("");
+  const [zastupca_za, setZastupca_za] = useState("");
 
-  // Auto-fill z LV dát klienta (ak sú k dispozícii)
+  // Auto-fill z LV dát klienta
   useEffect(() => {
     const lv = klient.lv_data as Record<string, unknown> | null | undefined;
     if (!lv) return;
-    let filled = false;
-    if (lv.obec && !obec) { setObec(String(lv.obec)); filled = true; }
-    if (lv.ulica && !ulica) { setUlica(String(lv.ulica)); filled = true; }
-    if (lv.supisne_cislo && !supisneCislo) { setSupisneCislo(String(lv.supisne_cislo)); filled = true; }
-    if (lv.katastralneUzemie && !katUzemie) { setKatUzemie(String(lv.katastralneUzemie)); filled = true; }
-    if (lv.plocha && !plocha) { setPlocha(String(lv.plocha)); filled = true; }
-    if (lv.izby && !pocetIzieb) { setPocetIzieb(String(lv.izby)); filled = true; }
-    if (lv.poschodie && !poschodie) { setPoschodie(String(lv.poschodie)); filled = true; }
-    if (lv.rok_vystavby && !rokVystavby) { setRokVystavby(String(lv.rok_vystavby)); filled = true; }
-    if (lv.material && !typDomu) { setTypDomu(String(lv.material)); filled = true; }
+    if (lv.obec && !obec) setObec(String(lv.obec));
+    if (lv.ulica && !ulica) setUlica(String(lv.ulica));
+    if (lv.supisne_cislo && !supisneCislo) setSupisneCislo(String(lv.supisne_cislo));
+    if (lv.katastralneUzemie && !katUzemie) setKatUzemie(String(lv.katastralneUzemie));
+    if (lv.plocha && !plocha) setPlocha(String(lv.plocha));
+    if (lv.izby && !pocetIzieb) setPocetIzieb(String(lv.izby));
+    if (lv.poschodie && !poschodie) setPoschodie(String(lv.poschodie));
+    if (lv.rok_vystavby && !rokVystavby) setRokVystavby(String(lv.rok_vystavby));
+    if (lv.material && !typDomu) setTypDomu(String(lv.material));
     if (lv.vlastnictvo) {
       const v = String(lv.vlastnictvo).toLowerCase();
-      if (v.includes("druz")) { setVlastnictvo("druzstevne"); filled = true; }
-      else if (v.includes("osob")) { setVlastnictvo("osobne"); filled = true; }
+      if (v.includes("druz")) setVlastnictvo("druzstevne");
+      else if (v.includes("osob")) setVlastnictvo("osobne");
     }
-    // Kraj + Okres z LV
-    if (lv.kraj) { setKraj(String(lv.kraj)); filled = true; }
-    if (lv.okres) { setOkres(String(lv.okres)); filled = true; }
-    // Majiteľ — preferuj prvého majiteľa z LV, ak existuje
-    const majitelia = lv.majitelia as Array<{ meno?: string; podiel?: string }> | undefined;
+    if (lv.kraj) setKraj(String(lv.kraj));
+    if (lv.okres) setOkres(String(lv.okres));
+    const majitelia = lv.majitelia as Array<{ meno?: string; podiel?: string; datum_narodenia?: string }> | undefined;
     if (majitelia?.length && majitelia[0].meno) {
       setMajitel(majitelia[0].meno);
-      // Ak je viac vlastníkov, ulož zvyšných pre zobrazenie
-      if (majitelia.length > 1) {
-        setLvMajitelia(majitelia.filter((m, i) => i > 0 && m.meno).map(m => ({ meno: m.meno!, podiel: m.podiel })));
-      }
-      filled = true;
+      const allOwners = majitelia.filter(m => m.meno).map(m => ({ meno: m.meno!, podiel: m.podiel, datum_narodenia: m.datum_narodenia }));
+      if (allOwners.length > 1) setLvMajitelia(allOwners.slice(1));
+      setPodpisOwners(allOwners.map(m => m.meno!));
     }
-    // Pozemky z LV
     const pozemky = lv.pozemky as Array<{ cislo_parcely?: string; druh?: string; vymera?: number }> | undefined;
-    if (pozemky?.length) {
-      setLvPozemky(pozemky);
-      filled = true;
-    }
-    // Právne vady
-    if (lv.pravne_vady) {
-      setLvPravneVady(String(lv.pravne_vady));
-      filled = true;
-    }
-    if (filled) setLvFilled(true);
+    if (pozemky?.length) setLvPozemky(pozemky);
+    if (lv.pravne_vady) setLvPravneVady(String(lv.pravne_vady));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cenový odhad (per-user)
   const [odhadCenaM2, setOdhadCenaM2] = useState(2800);
   const [rekonstrukciaM2, setRekonstrukciaM2] = useState(500);
   const [marza, setMarza] = useState(15);
 
-  // Load per-user pricing defaults
   useEffect(() => {
     if (!uid) return;
     try {
@@ -254,7 +234,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   }, [uid]);
   const [potrebujeReko, setPotrebujeReko] = useState(true);
 
-  // Dokumenty
   const [dokumenty, setDokumenty] = useState<Record<string, boolean>>({});
   const [dokumentyFotos, setDokumentyFotos] = useState<Record<string, string[]>>({});
 
@@ -271,10 +250,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       const reader = new FileReader();
       reader.onload = () => {
         const base64 = reader.result as string;
-        setDokumentyFotos(prev => ({
-          ...prev,
-          [key]: [...(prev[key] || []), base64],
-        }));
+        setDokumentyFotos(prev => ({ ...prev, [key]: [...(prev[key] || []), base64] }));
         if (klient?.id) {
           const b64Only = base64.split(",")[1] || "";
           saveKlientDokument({
@@ -289,89 +265,91 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   }
 
   function removeDocFoto(key: string, index: number) {
-    setDokumentyFotos(prev => ({
-      ...prev,
-      [key]: (prev[key] || []).filter((_, i) => i !== index),
-    }));
+    setDokumentyFotos(prev => ({ ...prev, [key]: (prev[key] || []).filter((_, i) => i !== index) }));
   }
 
   async function handleSubmit() {
     if (!provizia?.trim()) { setError("Provízia je povinné pole"); return; }
     if (!podpisData) { setError("Chýba podpis klienta"); return; }
-
     setSaving(true);
     setError("");
-
     const parametre: Record<string, unknown> = {};
     if (typ === "byt") {
-      Object.assign(parametre, {
-        pocet_izieb: pocetIzieb, vlastnictvo, druzstvo, typ_domu: typDomu,
-        byt_cislo: bytCislo, poschodie, z_kolko: zKolko,
-        kurenie, typ_podlahy: typPodlahy, anuita, vyhlad, mesacne_poplatky: mesacnePoplatky,
-      });
+      Object.assign(parametre, { pocet_izieb: pocetIzieb, vlastnictvo, druzstvo, typ_domu: typDomu, byt_cislo: bytCislo, poschodie, z_kolko: zKolko, kurenie, typ_podlahy: typPodlahy, anuita, vyhlad, mesacne_poplatky: mesacnePoplatky });
     } else if (typ === "rodinny_dom") {
-      Object.assign(parametre, {
-        pocet_izieb: pocetIzieb, typ_domu: typDomu, pocet_podlazi: pocetPodlazi,
-        rok_vystavby: rokVystavby, pozemok_plocha: pozemokPlocha, zahrada,
-        kurenie, typ_podlahy: typPodlahy, anuita, vyhlad, mesacne_poplatky: mesacnePoplatky,
-      });
+      Object.assign(parametre, { pocet_izieb: pocetIzieb, typ_domu: typDomu, pocet_podlazi: pocetPodlazi, rok_vystavby: rokVystavby, pozemok_plocha: pozemokPlocha, zahrada, kurenie, typ_podlahy: typPodlahy, anuita, vyhlad, mesacne_poplatky: mesacnePoplatky });
     } else {
-      Object.assign(parametre, {
-        druh_pozemku: druhPozemku, pristupova_cesta: pristupovaCesta,
-        siete, ucelove_urcenie: ucelovyUrcenie,
-      });
+      Object.assign(parametre, { druh_pozemku: druhPozemku, pristupova_cesta: pristupovaCesta, siete, ucelove_urcenie: ucelovyUrcenie });
     }
-
-    // Get makler UUID for current user
     const maklerUuid = authUser?.id ? await getMaklerUuid(authUser.id) : null;
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const record: Record<string, any> = {
-      typ_nehnutelnosti: typ,
-      klient_id: klient.id,
+      typ_nehnutelnosti: typ, klient_id: klient.id,
       kraj: kraj || null, okres: okres || null, obec: obec || null,
       cast_obce: castObce || null, kat_uzemie: katUzemie || null,
-      ulica: ulica || null, supisne_cislo: supisneCislo || null,
-      cislo_orientacne: cisloOrientacne || null,
-      plocha: plocha ? Number(plocha) : null,
-      stav: stav || null,
+      ulica: ulica || null, supisne_cislo: supisneCislo || null, cislo_orientacne: cisloOrientacne || null,
+      plocha: plocha ? Number(plocha) : null, stav: stav || null,
       poznamky_vybavenie: poznamkyVybavenie || null,
-      parametre,
-      vybavenie: { ...vybavenie, zariadeny: zariadeny || null },
-      oznacenie,
+      parametre, vybavenie: { ...vybavenie, zariadeny: zariadeny || null }, oznacenie,
       majitel: majitel || null, konatel: konatel || null, jednatel: jednatel || null,
-      kontakt_majitel: kontaktMajitel || null, uzivatel: uzivatel || null,
-      kontakt_uzivatel: kontaktUzivatel || null,
+      kontakt_majitel: kontaktMajitel || null, uzivatel: uzivatel || null, kontakt_uzivatel: kontaktUzivatel || null,
       predajna_cena: predajnaCena ? Number(predajnaCena) : null,
-      makler: makler || null,
-      zmluva, typ_zmluvy: zmluva ? typZmluvy : null,
+      makler: makler || null, zmluva, typ_zmluvy: zmluva ? typZmluvy : null,
       datum_podpisu: datumPodpisu || null, zmluva_do: zmluvaDo || null,
-      provizia: provizia || null, popis: popis || null,
-      podpis_data: podpisData,
+      provizia: provizia || null, popis: popis || null, podpis_data: podpisData,
     };
-
-    const { data, error: dbError } = await supabase
-      .from("naberove_listy")
-      .insert(record)
-      .select("id")
-      .single();
-
-    if (dbError) {
-      setSaving(false);
-      setError("Chyba pri ukladaní: " + dbError.message);
-      return;
-    }
-
-    // Update klient status → nabrany + ensure makler_id is set
+    const { data, error: dbError } = await supabase.from("naberove_listy").insert(record).select("id").single();
+    if (dbError) { setSaving(false); setError("Chyba pri ukladaní: " + dbError.message); return; }
     const klientUpdate: Record<string, unknown> = { status: "nabrany" };
     if (maklerUuid && !klient.makler_id) klientUpdate.makler_id = maklerUuid;
-    await supabase
-      .from("klienti")
-      .update(klientUpdate)
-      .eq("id", klient.id);
-
+    await supabase.from("klienti").update(klientUpdate).eq("id", klient.id);
     setSaving(false);
     onSubmit({ id: data.id });
+  }
+
+  async function handleAiAnalyza() {
+    setAnalyzujeAI(true);
+    setAiAnalyza("");
+    try {
+      const allOwnerNames = [majitel, ...lvMajitelia.map(m => m.meno)].filter(Boolean);
+      const vybavenieList = Object.entries(vybavenie).filter(([, v]) => v).map(([k]) => k).join(", ") || "neuvedené";
+      const stavLabel = STAV_OPTIONS.find(s => s.value === stav)?.label || stav || "neznámy";
+      const prompt = `Si expert na slovenský realitný trh. Na základe údajov z náberového listu urob reálnu cenovú analýzu.
+
+NEHNUTEĽNOSŤ:
+- Typ: ${typLabel}
+- Lokalita: ${[obec, ulica, okres].filter(Boolean).join(", ")}
+- Plocha: ${plocha || "neznáma"} m²
+- Stav: ${stavLabel}${typ === "byt" ? `
+- Počet izieb: ${pocetIzieb || "neznámy"}
+- Poschodie: ${poschodie || "?"} z ${zKolko || "?"}
+- Typ domu: ${typDomu || "neznámy"}
+- Vlastníctvo: ${vlastnictvo === "druzstevne" ? "Družstevné" : "Osobné"}` : ""}${typ === "rodinny_dom" ? `
+- Rok výstavby: ${rokVystavby || "neznámy"}
+- Pozemok: ${pozemokPlocha || "?"} m²` : ""}
+- Anuita/hypotéka: ${anuita || "žiadna"}
+- Mesačné poplatky: ${mesacnePoplatky || "neznáme"} €
+- Vybavenie: ${vybavenieList}
+- Vlastníci: ${allOwnerNames.length}
+
+Uveď:
+1. Odporúčaná predajná cena v € (reálna trhová)
+2. Výkupná cena v € (čo ponúkneme klientovi)
+3. Zdôvodnenie (2-3 vety)
+4. Hlavné faktory ovplyvňujúce cenu
+
+Odpovedaj stručne po slovensky.`;
+      const res = await fetch("/api/ai-writer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ systemPrompt: "Si expert realitný analytik pre slovenský trh.", userMessage: prompt, maxTokens: 600 }),
+      });
+      const d = await res.json();
+      setAiAnalyza(d.text || d.error || "Chyba pri analýze");
+    } catch {
+      setAiAnalyza("Chyba pri volaní AI");
+    }
+    setAnalyzujeAI(false);
   }
 
   // Styles
@@ -393,16 +371,12 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
     color: "var(--text-primary)", outline: "none",
   };
   const selectSt: React.CSSProperties = { ...inputSt, appearance: "auto" as React.CSSProperties["appearance"] };
-  const gridSt: React.CSSProperties = {
-    display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px",
-  };
+  const gridSt: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" };
   const checkSt: React.CSSProperties = {
     display: "flex", alignItems: "center", gap: "8px", fontSize: "13px",
     color: "var(--text-primary)", cursor: "pointer", padding: "6px 0",
   };
-  const radioSt: React.CSSProperties = {
-    display: "flex", gap: "12px", flexWrap: "wrap",
-  };
+  const radioSt: React.CSSProperties = { display: "flex", gap: "12px", flexWrap: "wrap" };
 
   function RadioGroup({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
     return (
@@ -423,6 +397,11 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
     );
   }
 
+  const lv = klient.lv_data as Record<string, unknown> | null | undefined;
+  const allLvOwners = lv?.majitelia
+    ? (lv.majitelia as Array<{ meno?: string; podiel?: string; datum_narodenia?: string }>).filter(m => m.meno)
+    : (majitel ? [{ meno: majitel }] : []);
+
   return (
     <div style={{ maxWidth: "700px" }} spellCheck autoCorrect="on">
       {/* Header */}
@@ -442,19 +421,84 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
         </div>
       </div>
 
-      {/* LV banner */}
-      {lvFilled && (
+      {/* ── LV Review sekcia (collapsible) ── */}
+      {lv ? (
         <div style={{
-          padding: "12px 16px", background: "#F0FDF4", border: "1px solid #BBF7D0",
-          borderRadius: "12px", marginBottom: "4px",
-          display: "flex", alignItems: "center", gap: "10px",
+          ...cardSt,
+          background: lvReviewOpen ? "#F0FDF4" : "var(--bg-surface)",
+          border: lvReviewOpen ? "1.5px solid #BBF7D0" : "1px solid var(--border)",
         }}>
-          <span style={{ fontSize: "16px" }}>📋</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "13px", fontWeight: "700", color: "#059669" }}>Polia vyplnené z LV</div>
-            <div style={{ fontSize: "11px", color: "#059669", opacity: 0.8 }}>Adresa, plocha, majiteľ — skontroluj a uprav ak treba</div>
+          <div
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
+            onClick={() => setLvReviewOpen(o => !o)}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "15px" }}>📋</span>
+              <span style={{ fontSize: "14px", fontWeight: "700", color: lvReviewOpen ? "#059669" : "var(--text-primary)" }}>
+                {lvReviewOpen ? "LV — skontroluj a potvrď" : "LV skontrolované ✓"}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              {!lvReviewOpen && <span style={{ fontSize: "11px", color: "#059669", fontWeight: "600" }}>✓ Potvrdené</span>}
+              <span style={{ fontSize: "20px", color: "var(--text-muted)", fontWeight: "300", lineHeight: 1 }}>{lvReviewOpen ? "−" : "+"}</span>
+            </div>
           </div>
-          <button onClick={() => setLvFilled(false)} style={{ background: "none", border: "none", color: "#059669", cursor: "pointer", fontSize: "16px", opacity: 0.6 }}>×</button>
+
+          {lvReviewOpen && (
+            <div style={{ marginTop: "14px" }}>
+              {/* Adresa */}
+              <div style={{ marginBottom: "12px" }}>
+                <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>Adresa</div>
+                <div style={{ fontSize: "13px", color: "var(--text-primary)" }}>
+                  {[lv.ulica, lv.supisne_cislo, lv.obec, lv.okres].filter(Boolean).map(String).join(", ") || "—"}
+                </div>
+              </div>
+              {/* Vlastníci */}
+              <div style={{ marginBottom: "12px" }}>
+                <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>Vlastníci</div>
+                {allLvOwners.length > 0 ? allLvOwners.map((m, i) => (
+                  <div key={i} style={{ fontSize: "13px", color: "var(--text-primary)", paddingBottom: "3px" }}>
+                    {m.meno}
+                    {m.podiel && <span style={{ color: "var(--text-muted)" }}> — podiel {m.podiel}</span>}
+                    {m.datum_narodenia && <span style={{ color: "var(--text-muted)" }}>, nar. {m.datum_narodenia}</span>}
+                  </div>
+                )) : <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>—</div>}
+              </div>
+              {/* Pozemky */}
+              {lvPozemky.length > 0 && (
+                <div style={{ marginBottom: "12px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "4px" }}>
+                    Pozemky {lv.pozemky_sucast ? "· súčasť predaja ✓" : "· nie sú súčasťou predaja"}
+                  </div>
+                  {lvPozemky.map((p, i) => (
+                    <div key={i} style={{ fontSize: "13px", color: "var(--text-primary)", paddingBottom: "3px" }}>
+                      parc. {p.cislo_parcely}{p.druh ? ` — ${p.druh}` : ""}{p.vymera ? `, ${p.vymera} m²` : ""}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Právne vady */}
+              {lvPravneVady && (
+                <div style={{ marginBottom: "12px", padding: "10px 12px", background: "#FEF3C7", borderRadius: "8px", border: "1px solid #FDE68A" }}>
+                  <div style={{ fontSize: "11px", fontWeight: "700", color: "#92400E", marginBottom: "3px", textTransform: "uppercase" }}>Ťarchy / právne vady</div>
+                  <div style={{ fontSize: "13px", color: "#92400E" }}>{lvPravneVady}</div>
+                </div>
+              )}
+              <button
+                onClick={() => setLvReviewOpen(false)}
+                style={{
+                  width: "100%", padding: "9px 16px", background: "#059669", color: "#fff",
+                  border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+                }}
+              >
+                Skontrolované ✓ — Zavrieť
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ padding: "12px 16px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "12px", marginBottom: "16px", fontSize: "13px", color: "#92400E" }}>
+          💡 LV nebolo nahraté — vyplníš manuálne. Môžeš ho pridať na karte klienta aj neskôr.
         </div>
       )}
 
@@ -503,40 +547,52 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
         </div>
       </div>
 
-      {/* Pozemky + právne vady z LV */}
-      {(lvPozemky.length > 0 || lvPravneVady) && (
-        <div style={{
-          background: "var(--bg-surface)", border: "1px solid var(--border)",
-          borderRadius: "14px", padding: "16px", marginBottom: "0",
-        }}>
-          {lvPozemky.length > 0 && (
-            <div style={{ marginBottom: lvPravneVady ? "12px" : "0" }}>
-              <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                Pozemky z LV {(klient.lv_data as Record<string,unknown>)?.pozemky_sucast ? "· súčasť predaja" : ""}
-              </div>
-              {lvPozemky.map((p, i) => (
-                <div key={i} style={{ fontSize: "13px", color: "var(--text-primary)", paddingBottom: "3px" }}>
-                  parc. {p.cislo_parcely}{p.druh ? ` — ${p.druh}` : ""}{p.vymera ? `, ${p.vymera} m²` : ""}
-                </div>
-              ))}
-            </div>
-          )}
-          {lvPravneVady && (
-            <div>
-              <div style={{ fontSize: "12px", fontWeight: "700", color: "#D97706", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                Ťarchy / právne vady
-              </div>
-              <div style={{ fontSize: "13px", color: "#92400E" }}>{lvPravneVady}</div>
-            </div>
-          )}
+      {/* 2. Majiteľ */}
+      <div style={cardSt}>
+        <div style={sectionTitle}>👤 Majiteľ / Vlastník</div>
+        <div className="naber-grid" style={gridSt}>
+          <div>
+            <label style={labelSt}>Majiteľ *</label>
+            <input value={majitel} onChange={e => setMajitel(e.target.value)} style={inputSt} placeholder="Meno a priezvisko" />
+          </div>
+          <div>
+            <label style={labelSt}>Kontakt *</label>
+            <input value={kontaktMajitel} onChange={e => setKontaktMajitel(e.target.value)} style={inputSt} placeholder="+421..." />
+          </div>
+          <div>
+            <label style={labelSt}>Konateľ</label>
+            <input value={konatel} onChange={e => setKonatel(e.target.value)} style={inputSt} />
+          </div>
+          <div>
+            <label style={labelSt}>Jednateľ</label>
+            <input value={jednatel} onChange={e => setJednatel(e.target.value)} style={inputSt} />
+          </div>
+          <div>
+            <label style={labelSt}>Užívateľ</label>
+            <input value={uzivatel} onChange={e => setUzivatel(e.target.value)} style={inputSt} />
+          </div>
+          <div>
+            <label style={labelSt}>Kontakt užívateľa</label>
+            <input value={kontaktUzivatel} onChange={e => setKontaktUzivatel(e.target.value)} style={inputSt} />
+          </div>
         </div>
-      )}
+        {lvMajitelia.length > 0 && (
+          <div style={{ marginTop: "14px", padding: "12px 14px", background: "#F0FDF4", borderRadius: "10px", border: "1px solid #BBF7D0" }}>
+            <div style={{ fontSize: "11px", fontWeight: "700", color: "#059669", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Ďalší spoluvlastníci z LV
+            </div>
+            {lvMajitelia.map((m, i) => (
+              <div key={i} style={{ fontSize: "13px", color: "var(--text-primary)", paddingBottom: "4px" }}>
+                {m.meno}{m.podiel ? <span style={{ color: "var(--text-muted)" }}> — podiel {m.podiel}</span> : ""}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* 2. Nehnuteľnosť */}
+      {/* 3. Nehnuteľnosť */}
       <div style={cardSt}>
         <div style={sectionTitle}>🏠 Nehnuteľnosť</div>
-
-        {/* Byt fields */}
         {typ === "byt" && (
           <>
             <div className="naber-grid" style={gridSt}>
@@ -583,8 +639,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
             </div>
           </>
         )}
-
-        {/* Rodinný dom fields */}
         {typ === "rodinny_dom" && (
           <>
             <div className="naber-grid" style={gridSt}>
@@ -618,8 +672,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
             </label>
           </>
         )}
-
-        {/* Pozemok fields */}
         {typ === "pozemok" && (
           <>
             <div style={{ marginBottom: "12px" }}>
@@ -653,8 +705,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
             </div>
           </>
         )}
-
-        {/* Stav + Plocha (common) */}
         <div className="naber-grid" style={{ ...gridSt, marginTop: "16px" }}>
           <div>
             <label style={labelSt}>Plocha (m²)</label>
@@ -670,7 +720,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
         </div>
       </div>
 
-      {/* 3. Vlastnosti (byt/dom only) */}
+      {/* 4. Vlastnosti */}
       {typ !== "pozemok" && (
         <div style={cardSt}>
           <div style={sectionTitle}>📋 Vlastnosti</div>
@@ -704,7 +754,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
         </div>
       )}
 
-      {/* 4. Označenie */}
+      {/* 5. Označenie */}
       <div style={cardSt}>
         <div style={sectionTitle}>🏷️ Označenie nehnuteľnosti</div>
         <RadioGroup value={oznacenie} onChange={setOznacenie} options={[
@@ -715,7 +765,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
         ]} />
       </div>
 
-      {/* 5. Vybavenie (byt/dom only) */}
+      {/* 6. Vybavenie */}
       {typ !== "pozemok" && (
         <div style={cardSt}>
           <div style={sectionTitle}>🔧 Vybavenie</div>
@@ -738,113 +788,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
         </div>
       )}
 
-      {/* 6. Dokumenty */}
-      <div style={cardSt}>
-        <div style={sectionTitle}>📄 Dokumenty</div>
-        <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px", marginTop: "-8px" }}>
-          Odklikaj prijaté dokumenty a ofoť ich
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {DOKUMENTY_CHECKLIST.map(doc => (
-            <div key={doc.key} style={{
-              padding: "12px 14px", borderRadius: "10px",
-              background: dokumenty[doc.key] ? "#F0FDF4" : "var(--bg-elevated)",
-              border: dokumenty[doc.key] ? "1px solid #BBF7D0" : "1px solid var(--border)",
-              transition: "all 0.15s",
-            }}>
-              <label style={{ ...checkSt, padding: 0, marginBottom: dokumenty[doc.key] ? "8px" : 0 }}>
-                <input type="checkbox" checked={!!dokumenty[doc.key]}
-                  onChange={e => setDokumenty(prev => ({ ...prev, [doc.key]: e.target.checked }))} />
-                <span style={{ fontWeight: "500" }}>{doc.label}</span>
-                {dokumenty[doc.key] && <span style={{ marginLeft: "auto", fontSize: "14px" }}>✓</span>}
-              </label>
-
-              {dokumenty[doc.key] && (
-                <div style={{ marginLeft: "24px" }}>
-                  {/* Existujúce fotky */}
-                  {(dokumentyFotos[doc.key] || []).length > 0 && (
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
-                      {(dokumentyFotos[doc.key] || []).map((foto, i) => (
-                        <div key={i} style={{ position: "relative", width: "60px", height: "60px" }}>
-                          <img src={foto} alt="" style={{
-                            width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px",
-                            border: "1px solid var(--border)",
-                          }} />
-                          <button onClick={() => removeDocFoto(doc.key, i)} style={{
-                            position: "absolute", top: "-6px", right: "-6px",
-                            width: "20px", height: "20px", borderRadius: "50%",
-                            background: "#EF4444", color: "#fff", border: "none",
-                            fontSize: "11px", cursor: "pointer", display: "flex",
-                            alignItems: "center", justifyContent: "center",
-                          }}>×</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {/* Tlačidlo na fotenie */}
-                  <label style={{
-                    display: "inline-flex", alignItems: "center", gap: "6px",
-                    padding: "6px 12px", borderRadius: "8px", fontSize: "12px",
-                    color: "var(--text-secondary)", background: "var(--bg-surface)",
-                    border: "1px solid var(--border)", cursor: "pointer",
-                  }}>
-                    📎 Pridať súbor
-                    <input type="file" accept="image/*,application/pdf" multiple
-                      onChange={e => handleDocFoto(doc.key, e.target.files)}
-                      style={{ display: "none" }} />
-                  </label>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 7. Majiteľ */}
-      <div style={cardSt}>
-        <div style={sectionTitle}>👤 Majiteľ / Vlastník</div>
-        <div className="naber-grid" style={gridSt}>
-          <div>
-            <label style={labelSt}>Majiteľ *{lvMajitelia.length > 0 ? " (1. vlastník)" : ""}</label>
-            <input value={majitel} onChange={e => setMajitel(e.target.value)} style={inputSt} placeholder="Meno a priezvisko" />
-          </div>
-          <div>
-            <label style={labelSt}>Kontakt (telefón) *</label>
-            <input value={kontaktMajitel} onChange={e => setKontaktMajitel(e.target.value)} style={inputSt} placeholder="+421..." />
-          </div>
-          <div>
-            <label style={labelSt}>Konateľ</label>
-            <input value={konatel} onChange={e => setKonatel(e.target.value)} style={inputSt} />
-          </div>
-          <div>
-            <label style={labelSt}>Jednateľ</label>
-            <input value={jednatel} onChange={e => setJednatel(e.target.value)} style={inputSt} />
-          </div>
-          <div>
-            <label style={labelSt}>Užívateľ</label>
-            <input value={uzivatel} onChange={e => setUzivatel(e.target.value)} style={inputSt} />
-          </div>
-          <div>
-            <label style={labelSt}>Kontakt užívateľa</label>
-            <input value={kontaktUzivatel} onChange={e => setKontaktUzivatel(e.target.value)} style={inputSt} />
-          </div>
-        </div>
-        {/* Ďalší vlastníci z LV */}
-        {lvMajitelia.length > 0 && (
-          <div style={{ marginTop: "14px", padding: "12px 14px", background: "#F0FDF4", borderRadius: "10px", border: "1px solid #BBF7D0" }}>
-            <div style={{ fontSize: "11px", fontWeight: "700", color: "#059669", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-              Ďalší vlastníci z LV
-            </div>
-            {lvMajitelia.map((m, i) => (
-              <div key={i} style={{ fontSize: "13px", color: "var(--text-primary)", paddingBottom: "4px" }}>
-                {m.meno}{m.podiel ? <span style={{ color: "var(--text-muted)" }}> — podiel {m.podiel}</span> : ""}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 8. Predaj + Zmluva */}
+      {/* 7. Predaj a zmluva */}
       <div style={cardSt}>
         <div style={sectionTitle}>💰 Predaj a zmluva</div>
         <div className="naber-grid" style={gridSt}>
@@ -858,14 +802,15 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
           </div>
           <div>
             <label style={labelSt}>Provízia <span style={{ color: "#EF4444" }}>*</span></label>
-            <input value={provizia} onChange={e => setProvizia(e.target.value)} style={{ ...inputSt, borderColor: !provizia?.trim() ? "#FCA5A5" : "var(--border)" }} placeholder="napr. 3% alebo 5000€" />
+            <input value={provizia} onChange={e => setProvizia(e.target.value)}
+              style={{ ...inputSt, borderColor: !provizia?.trim() ? "#FCA5A5" : "var(--border)" }}
+              placeholder="napr. 3% alebo 5000€" />
           </div>
         </div>
-
         <div style={{ marginTop: "16px" }}>
-          <label style={{ ...checkSt, marginBottom: "8px" }}>
+          <label style={{ ...checkSt, fontWeight: "600", marginBottom: "8px" }}>
             <input type="checkbox" checked={zmluva} onChange={e => setZmluva(e.target.checked)} />
-            <span style={{ fontWeight: "600" }}>Zmluva podpísaná</span>
+            Zmluva podpísaná
           </label>
           {zmluva && (
             <div className="naber-grid" style={{ ...gridSt, marginTop: "8px" }}>
@@ -887,7 +832,6 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
             </div>
           )}
         </div>
-
         <div style={{ marginTop: "16px" }}>
           <label style={labelSt}>Popis</label>
           <textarea value={popis} onChange={e => setPopis(e.target.value)} rows={3}
@@ -895,90 +839,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
         </div>
       </div>
 
-      {/* 9. Cenový odhad + Výkup */}
-      {typ !== "pozemok" && (
-        <div style={{ ...cardSt, background: "#FAFAF9", border: "1px solid #E7E5E4" }}>
-          <div style={sectionTitle}>📊 Odhad ceny a výkup</div>
-          <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "-8px 0 16px" }}>
-            Automatický odhad na základe m² a lokality — uprav podľa potreby
-          </p>
-
-          <div className="naber-grid" style={gridSt}>
-            <div>
-              <label style={labelSt}>Cena za m² v lokalite (€)</label>
-              <input type="number" value={odhadCenaM2} onChange={e => setOdhadCenaM2(Number(e.target.value) || 0)} style={inputSt} />
-            </div>
-            <div>
-              <label style={labelSt}>Rekonštrukcia za m² (€)</label>
-              <input type="number" value={rekonstrukciaM2} onChange={e => setRekonstrukciaM2(Number(e.target.value) || 0)} style={inputSt} />
-            </div>
-            <div>
-              <label style={labelSt}>Marža (%)</label>
-              <input type="number" value={marza} onChange={e => setMarza(Number(e.target.value) || 0)} style={inputSt} min={0} max={50} />
-            </div>
-            <div style={{ display: "flex", alignItems: "end" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "var(--text-primary)", fontWeight: "500", padding: "10px 0" }}>
-                <input type="checkbox" checked={potrebujeReko} onChange={e => setPotrebujeReko(e.target.checked)} />
-                Potrebuje rekonštrukciu
-              </label>
-            </div>
-          </div>
-
-          {(() => {
-            const m2 = Number(plocha) || 0;
-            if (m2 <= 0) return (
-              <div style={{ marginTop: "16px", padding: "12px 16px", background: "#FEF3C7", borderRadius: "10px", fontSize: "13px", color: "#92400E" }}>
-                Zadaj výmeru (m²) pre výpočet odhadu
-              </div>
-            );
-            const trhCena = m2 * odhadCenaM2;
-            const rekoCena = potrebujeReko ? m2 * rekonstrukciaM2 : 0;
-            const marzaEur = trhCena * (marza / 100);
-            const vykupCena = trhCena - rekoCena - marzaEur;
-
-            return (
-              <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }} className="naber-grid">
-                <div style={{
-                  padding: "16px", borderRadius: "12px", background: "#EFF6FF",
-                  border: "1px solid #BFDBFE", textAlign: "center",
-                }}>
-                  <div style={{ fontSize: "11px", fontWeight: "600", color: "#1D4ED8", marginBottom: "4px" }}>TRHOVÁ CENA</div>
-                  <div style={{ fontSize: "20px", fontWeight: "800", color: "#1E40AF" }}>{trhCena.toLocaleString("sk")} €</div>
-                  <div style={{ fontSize: "10px", color: "#3B82F6", marginTop: "2px" }}>{m2} m² × {odhadCenaM2} €</div>
-                </div>
-                {potrebujeReko && (
-                  <div style={{
-                    padding: "16px", borderRadius: "12px", background: "#FEF3C7",
-                    border: "1px solid #FDE68A", textAlign: "center",
-                  }}>
-                    <div style={{ fontSize: "11px", fontWeight: "600", color: "#92400E", marginBottom: "4px" }}>REKONŠTRUKCIA</div>
-                    <div style={{ fontSize: "20px", fontWeight: "800", color: "#B45309" }}>-{rekoCena.toLocaleString("sk")} €</div>
-                    <div style={{ fontSize: "10px", color: "#D97706", marginTop: "2px" }}>{m2} m² × {rekonstrukciaM2} €</div>
-                  </div>
-                )}
-                <div style={{
-                  padding: "16px", borderRadius: "12px",
-                  background: vykupCena > 0 ? "#F0FDF4" : "#FEF2F2",
-                  border: vykupCena > 0 ? "1px solid #BBF7D0" : "1px solid #FECACA",
-                  textAlign: "center",
-                }}>
-                  <div style={{ fontSize: "11px", fontWeight: "600", color: vykupCena > 0 ? "#065F46" : "#991B1B", marginBottom: "4px" }}>VÝKUPOVÁ CENA</div>
-                  <div style={{ fontSize: "20px", fontWeight: "800", color: vykupCena > 0 ? "#059669" : "#DC2626" }}>{vykupCena.toLocaleString("sk")} €</div>
-                  <div style={{ fontSize: "10px", color: vykupCena > 0 ? "#10B981" : "#EF4444", marginTop: "2px" }}>
-                    Marža {marza}% = {marzaEur.toLocaleString("sk")} €
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "10px", textAlign: "center" }}>
-            Hodnoty sú orientačné. Ceny za m² a rekonštrukciu nastavíš v Nastaveniach.
-          </div>
-        </div>
-      )}
-
-      {/* 10. Typ inzercie */}
+      {/* 8. Typ inzercie */}
       <div style={cardSt}>
         <div style={sectionTitle}>📢 Typ inzercie</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }} className="naber-grid">
@@ -991,20 +852,226 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
               transition: "all 0.15s",
             }}>
               <div style={{ fontSize: "14px", fontWeight: "600" }}>{o.label}</div>
-              <div style={{
-                fontSize: "11px", marginTop: "2px",
-                color: typInzercie === o.value ? "rgba(255,255,255,0.7)" : "var(--text-muted)",
-              }}>{o.desc}</div>
+              <div style={{ fontSize: "11px", marginTop: "2px", color: typInzercie === o.value ? "rgba(255,255,255,0.7)" : "var(--text-muted)" }}>{o.desc}</div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* 10. Podpis klienta */}
+      {/* 9. Dokumenty */}
+      <div style={cardSt}>
+        <div style={sectionTitle}>📄 Dokumenty</div>
+        <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px", marginTop: "-8px" }}>
+          Odklikaj prijaté dokumenty a ofoť ich
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {DOKUMENTY_CHECKLIST.map(doc => (
+            <div key={doc.key} style={{
+              padding: "12px 14px", borderRadius: "10px",
+              background: dokumenty[doc.key] ? "#F0FDF4" : "var(--bg-elevated)",
+              border: dokumenty[doc.key] ? "1px solid #BBF7D0" : "1px solid var(--border)",
+              transition: "all 0.15s",
+            }}>
+              <label style={{ ...checkSt, padding: 0, marginBottom: dokumenty[doc.key] ? "8px" : 0 }}>
+                <input type="checkbox" checked={!!dokumenty[doc.key]}
+                  onChange={e => setDokumenty(prev => ({ ...prev, [doc.key]: e.target.checked }))} />
+                <span style={{ fontWeight: "500" }}>{doc.label}</span>
+                {dokumenty[doc.key] && <span style={{ marginLeft: "auto", fontSize: "14px" }}>✓</span>}
+              </label>
+              {dokumenty[doc.key] && (
+                <div style={{ marginLeft: "24px" }}>
+                  {(dokumentyFotos[doc.key] || []).length > 0 && (
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+                      {(dokumentyFotos[doc.key] || []).map((foto, i) => (
+                        <div key={i} style={{ position: "relative", width: "60px", height: "60px" }}>
+                          <img src={foto} alt="" style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--border)" }} />
+                          <button onClick={() => removeDocFoto(doc.key, i)} style={{
+                            position: "absolute", top: "-6px", right: "-6px",
+                            width: "20px", height: "20px", borderRadius: "50%",
+                            background: "#EF4444", color: "#fff", border: "none",
+                            fontSize: "11px", cursor: "pointer", display: "flex",
+                            alignItems: "center", justifyContent: "center",
+                          }}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <label style={{
+                    display: "inline-flex", alignItems: "center", gap: "6px",
+                    padding: "6px 12px", borderRadius: "8px", fontSize: "12px",
+                    color: "var(--text-secondary)", background: "var(--bg-surface)",
+                    border: "1px solid var(--border)", cursor: "pointer",
+                  }}>
+                    📎 Pridať súbor
+                    <input type="file" accept="image/*,application/pdf" multiple
+                      onChange={e => handleDocFoto(doc.key, e.target.files)}
+                      style={{ display: "none" }} />
+                  </label>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 10. AI Odhad ceny (collapsible) */}
+      {typ !== "pozemok" && (
+        <div style={cardSt}>
+          {/* Collapsed header — vždy viditeľný */}
+          <div
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
+            onClick={() => setAiOdhadOpen(o => !o)}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "15px" }}>📊</span>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)" }}>Odhad ceny</div>
+                {!aiOdhadOpen && (() => {
+                  const m2 = Number(plocha) || 0;
+                  if (m2 <= 0) return <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>Zadaj plochu pre výpočet</div>;
+                  const trhCena = m2 * odhadCenaM2;
+                  const rekoCena = potrebujeReko ? m2 * rekonstrukciaM2 : 0;
+                  const vykup = trhCena - rekoCena - trhCena * (marza / 100);
+                  return (
+                    <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                      Trhová: <strong style={{ color: "#1E40AF" }}>{trhCena.toLocaleString("sk")} €</strong>
+                      {" · "}Výkup: <strong style={{ color: vykup > 0 ? "#059669" : "#DC2626" }}>{vykup.toLocaleString("sk")} €</strong>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+            <span style={{ fontSize: "20px", color: "var(--text-muted)", fontWeight: "300", lineHeight: 1 }}>{aiOdhadOpen ? "−" : "+"}</span>
+          </div>
+
+          {aiOdhadOpen && (
+            <div style={{ marginTop: "16px" }}>
+              <div className="naber-grid" style={gridSt}>
+                <div>
+                  <label style={labelSt}>Cena za m² (€)</label>
+                  <input type="number" value={odhadCenaM2} onChange={e => setOdhadCenaM2(Number(e.target.value) || 0)} style={inputSt} />
+                </div>
+                <div>
+                  <label style={labelSt}>Rekonštrukcia za m² (€)</label>
+                  <input type="number" value={rekonstrukciaM2} onChange={e => setRekonstrukciaM2(Number(e.target.value) || 0)} style={inputSt} />
+                </div>
+                <div>
+                  <label style={labelSt}>Marža (%)</label>
+                  <input type="number" value={marza} onChange={e => setMarza(Number(e.target.value) || 0)} style={inputSt} min={0} max={50} />
+                </div>
+                <div style={{ display: "flex", alignItems: "end" }}>
+                  <label style={{ ...checkSt, padding: "10px 0", fontWeight: "500" }}>
+                    <input type="checkbox" checked={potrebujeReko} onChange={e => setPotrebujeReko(e.target.checked)} />
+                    Potrebuje rekonštrukciu
+                  </label>
+                </div>
+              </div>
+              {(() => {
+                const m2 = Number(plocha) || 0;
+                if (m2 <= 0) return (
+                  <div style={{ marginTop: "16px", padding: "12px 16px", background: "#FEF3C7", borderRadius: "10px", fontSize: "13px", color: "#92400E" }}>
+                    Zadaj výmeru (m²) pre výpočet odhadu
+                  </div>
+                );
+                const trhCena = m2 * odhadCenaM2;
+                const rekoCena = potrebujeReko ? m2 * rekonstrukciaM2 : 0;
+                const marzaEur = trhCena * (marza / 100);
+                const vykupCena = trhCena - rekoCena - marzaEur;
+                return (
+                  <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }} className="naber-grid">
+                    <div style={{ padding: "16px", borderRadius: "12px", background: "#EFF6FF", border: "1px solid #BFDBFE", textAlign: "center" }}>
+                      <div style={{ fontSize: "11px", fontWeight: "600", color: "#1D4ED8", marginBottom: "4px" }}>TRHOVÁ CENA</div>
+                      <div style={{ fontSize: "20px", fontWeight: "800", color: "#1E40AF" }}>{trhCena.toLocaleString("sk")} €</div>
+                      <div style={{ fontSize: "10px", color: "#3B82F6", marginTop: "2px" }}>{m2} m² × {odhadCenaM2} €</div>
+                    </div>
+                    {potrebujeReko && (
+                      <div style={{ padding: "16px", borderRadius: "12px", background: "#FEF3C7", border: "1px solid #FDE68A", textAlign: "center" }}>
+                        <div style={{ fontSize: "11px", fontWeight: "600", color: "#92400E", marginBottom: "4px" }}>REKONŠTRUKCIA</div>
+                        <div style={{ fontSize: "20px", fontWeight: "800", color: "#B45309" }}>-{rekoCena.toLocaleString("sk")} €</div>
+                      </div>
+                    )}
+                    <div style={{ padding: "16px", borderRadius: "12px", background: vykupCena > 0 ? "#F0FDF4" : "#FEF2F2", border: vykupCena > 0 ? "1px solid #BBF7D0" : "1px solid #FECACA", textAlign: "center" }}>
+                      <div style={{ fontSize: "11px", fontWeight: "600", color: vykupCena > 0 ? "#065F46" : "#991B1B", marginBottom: "4px" }}>VÝKUPOVÁ CENA</div>
+                      <div style={{ fontSize: "20px", fontWeight: "800", color: vykupCena > 0 ? "#059669" : "#DC2626" }}>{vykupCena.toLocaleString("sk")} €</div>
+                      <div style={{ fontSize: "10px", color: vykupCena > 0 ? "#10B981" : "#EF4444", marginTop: "2px" }}>Marža {marza}% = {marzaEur.toLocaleString("sk")} €</div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* AI Analýza */}
+              <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
+                <button onClick={handleAiAnalyza} disabled={analyzujeAI} style={{
+                  padding: "9px 18px", background: analyzujeAI ? "#9CA3AF" : "#374151", color: "#fff",
+                  border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600",
+                  cursor: analyzujeAI ? "default" : "pointer",
+                }}>
+                  {analyzujeAI ? "Analyzujem..." : "🤖 AI analýza trhu"}
+                </button>
+                {aiAnalyza && (
+                  <div style={{ marginTop: "12px", padding: "14px 16px", background: "var(--bg-elevated)", borderRadius: "10px", border: "1px solid var(--border)", fontSize: "13px", color: "var(--text-primary)", lineHeight: "1.6", whiteSpace: "pre-wrap" }}>
+                    {aiAnalyza}
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "10px", textAlign: "center" }}>
+                Hodnoty sú orientačné. Ceny za m² nastavíš v Nastaveniach.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 11. Podpis klienta */}
       <div style={cardSt}>
         <div style={sectionTitle}>✍️ Potvrdenie klientom</div>
+        {/* Výber vlastníkov ktorí podpisujú */}
+        {allLvOwners.length > 1 && (
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>
+              Kto podpisuje
+            </div>
+            {allLvOwners.map((owner, i) => (
+              <label key={i} style={{ ...checkSt, padding: "4px 0" }}>
+                <input
+                  type="checkbox"
+                  checked={podpisOwners.includes(owner.meno!)}
+                  onChange={e => setPodpisOwners(prev =>
+                    e.target.checked ? [...prev, owner.meno!] : prev.filter(n => n !== owner.meno)
+                  )}
+                />
+                <span>{owner.meno}</span>
+                {owner.podiel && <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>podiel {owner.podiel}</span>}
+              </label>
+            ))}
+            {/* Zastupca */}
+            <div style={{ marginTop: "10px", padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: "8px", border: "1px solid var(--border)" }}>
+              <label style={{ ...checkSt, padding: 0, marginBottom: zastupca !== "" ? "8px" : 0, fontSize: "12px", color: "var(--text-muted)" }}>
+                <input
+                  type="checkbox"
+                  checked={zastupca !== ""}
+                  onChange={e => { if (!e.target.checked) { setZastupca(""); setZastupca_za(""); } else setZastupca(" "); }}
+                />
+                Podpisuje zástupca (splnomocnenie)
+              </label>
+              {zastupca !== "" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  <div>
+                    <label style={{ ...labelSt, marginBottom: "3px" }}>Meno zástupcu</label>
+                    <input value={zastupca.trim()} onChange={e => setZastupca(e.target.value)} style={{ ...inputSt, padding: "7px 10px" }} placeholder="Meno a priezvisko" />
+                  </div>
+                  <div>
+                    <label style={{ ...labelSt, marginBottom: "3px" }}>Zastupuje</label>
+                    <input value={zastupca_za} onChange={e => setZastupca_za(e.target.value)} style={{ ...inputSt, padding: "7px 10px" }} placeholder="Koho zastupuje" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
-          Vyššie uvedené informácie potvrdzuje (podpis klienta):
+          {podpisOwners.length > 0
+            ? `Vyššie uvedené informácie potvrdzuje: ${podpisOwners.join(", ")}${zastupca.trim() ? ` (zastupuje: ${zastupca.trim()})` : ""}`
+            : "Vyššie uvedené informácie potvrdzuje (podpis klienta):"}
         </div>
         <SignatureCanvas onSignatureChange={setPodpisData} />
       </div>
