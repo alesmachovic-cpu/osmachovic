@@ -950,7 +950,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
               value={lokalitaInput}
               onChange={e => { setLokalitaInput(e.target.value); setLokalitaValue(""); setShowSuggestions(true); setFieldErrors(p => ({ ...p, lokalita: undefined })); }}
               onFocus={() => { if (normalizeSearch(lokalitaInput).length >= 2) setShowSuggestions(true); }}
-              onBlur={() => { setTimeout(() => { if (!isValidLokalita) { setLokalitaInput(""); setLokalitaValue(""); } setShowSuggestions(false); }, 200); }}
+              onBlur={() => { if (!isValidLokalita) { setLokalitaInput(""); setLokalitaValue(""); } setShowSuggestions(false); }}
             />
             {fieldErrors.lokalita && <div style={{ fontSize: "11px", color: "#EF4444", marginTop: "4px" }}>⚠ {fieldErrors.lokalita}</div>}
             {isValidLokalita && !fieldErrors.lokalita && <div style={{ fontSize: "11px", color: "#065F46", marginTop: "4px" }}>→ {lokalitaValue}</div>}
@@ -966,7 +966,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
                 boxShadow: "0 8px 24px rgba(0,0,0,0.12)", marginTop: "4px", overflow: "hidden",
               }}>
                 {suggestions.map((s, i) => (
-                  <div key={i} onClick={() => selectLokalita(s)} style={{
+                  <div key={i} onMouseDown={e => { e.preventDefault(); selectLokalita(s); }} style={{
                     padding: "10px 14px", fontSize: "13px", cursor: "pointer",
                     borderBottom: i < suggestions.length - 1 ? "1px solid var(--border)" : "none",
                     display: "flex", justifyContent: "space-between", alignItems: "center",
