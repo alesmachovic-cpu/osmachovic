@@ -189,12 +189,33 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
     const lv = klient.lv_data as Record<string, unknown> | null | undefined;
     if (!lv) return;
     if (lv.obec && !obec) setObec(String(lv.obec));
-    if (lv.ulica && !ulica) setUlica(String(lv.ulica));
+    // Ulica — len ulicu s orientačným číslom, bez súpisného a obce
+    if (lv.ulica && !ulica) {
+      let u = String(lv.ulica);
+      // Odstráň súpisné číslo a obec ak sa tam dostali
+      if (lv.supisne_cislo) u = u.replace(String(lv.supisne_cislo), "").trim();
+      if (lv.obec) u = u.replace(String(lv.obec), "").trim();
+      if (lv.katastralneUzemie) u = u.replace(String(lv.katastralneUzemie), "").trim();
+      u = u.replace(/,\s*$/, "").replace(/^\s*,/, "").trim();
+      setUlica(u);
+    }
     if (lv.supisne_cislo && !supisneCislo) setSupisneCislo(String(lv.supisne_cislo));
     if (lv.katastralneUzemie && !katUzemie) setKatUzemie(String(lv.katastralneUzemie));
     if (lv.plocha && !plocha) setPlocha(String(lv.plocha));
     if (lv.izby && !pocetIzieb) setPocetIzieb(String(lv.izby));
-    if (lv.poschodie && !poschodie) setPoschodie(String(lv.poschodie));
+    // Poschodie — "prízemie" → 0
+    if (lv.poschodie && !poschodie) {
+      const p = String(lv.poschodie).toLowerCase();
+      setPoschodie(p === "prízemie" || p === "prizemie" ? "0" : String(lv.poschodie));
+    }
+    // Byt číslo
+    if (lv.cislo_bytu && !bytCislo) setBytCislo(String(lv.cislo_bytu));
+    // Vchod
+    if (lv.vchod && !ulica) {
+      // Ak vchod obsahuje ulicu (napr. "Továrenská 1"), použi ho
+      const vchod = String(lv.vchod);
+      if (vchod.match(/[A-Za-zÁ-Ž]/)) setUlica(prev => prev || vchod);
+    }
     if (lv.rok_vystavby && !rokVystavby) setRokVystavby(String(lv.rok_vystavby));
     if (lv.material && !typDomu) setTypDomu(String(lv.material));
     if (lv.vlastnictvo) {
@@ -202,8 +223,14 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       if (v.includes("druz")) setVlastnictvo("druzstevne");
       else if (v.includes("osob")) setVlastnictvo("osobne");
     }
-    if (lv.kraj) setKraj(String(lv.kraj));
-    if (lv.okres) setOkres(String(lv.okres));
+    // Kraj — auto-detect z okresu ak chýba
+    if (lv.kraj && !kraj) setKraj(String(lv.kraj));
+    else if (lv.okres && !kraj) {
+      const ok = String(lv.okres).toLowerCase();
+      if (ok.includes("bratislava")) setKraj("Bratislavský");
+      else if (ok.includes("košice")) setKraj("Košický");
+    }
+    if (lv.okres && !okres) setOkres(String(lv.okres));
     const majitelia = lv.majitelia as Array<{ meno?: string; podiel?: string; datum_narodenia?: string }> | undefined;
     if (majitelia?.length && majitelia[0].meno) {
       setMajitel(majitelia[0].meno);
@@ -214,6 +241,8 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
     const pozemky = lv.pozemky as Array<{ cislo_parcely?: string; druh?: string; vymera?: number }> | undefined;
     if (pozemky?.length) setLvPozemky(pozemky);
     if (lv.pravne_vady) setLvPravneVady(String(lv.pravne_vady));
+    // Auto-check LV v dokumentoch
+    setDokumenty(prev => ({ ...prev, lv: true }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
