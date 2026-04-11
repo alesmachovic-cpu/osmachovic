@@ -214,6 +214,8 @@ export default function KlientDetailPage() {
   const [showLVDiff, setShowLVDiff] = useState(false);
   const [showLVRename, setShowLVRename] = useState(false);
   const [lvOwnerNames, setLvOwnerNames] = useState<string[]>([]);
+  const [selectedLvOwner, setSelectedLvOwner] = useState("");
+  const [lvReminderShown, setLvReminderShown] = useState(false);
   const [showSpolupracaModal, setShowSpolupracaModal] = useState(false);
   const [spolupracaMakler, setSpolupracaMakler] = useState("");
   const [spolupracaPct, setSpolupracaPct] = useState(50);
@@ -228,6 +230,20 @@ export default function KlientDetailPage() {
     if (isAdmin) supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
     if (user?.id) getMaklerUuid(user.id).then(setMyMaklerUuid);
   }, [id]);
+
+  // 15-minútová pripomienka na LV ak chýba
+  useEffect(() => {
+    if (!klient || klient.lv_data || lvReminderShown) return;
+    if (klient.status !== "dohodnuty_naber") return;
+    const timer = setTimeout(() => {
+      // Skontroluj znova — mohol sa medzičasom pridať LV
+      if (!klient.lv_data) {
+        setShowLVPrompt(true);
+        setLvReminderShown(true);
+      }
+    }, 15 * 60 * 1000); // 15 minút
+    return () => clearTimeout(timer);
+  }, [klient?.status, klient?.lv_data, lvReminderShown]);
 
   async function loadAll() {
     setLoading(true);
@@ -884,26 +900,37 @@ export default function KlientDetailPage() {
                 </p>
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
-              {lvOwnerNames.map((name, i) => (
-                <button key={i} onClick={async () => {
-                  const { supabase: sb } = await import("@/lib/supabase");
-                  await sb.from("klienti").update({ meno: name }).eq("id", klient.id);
-                  setKlient(k => k ? { ...k, meno: name } : k);
-                  setShowLVRename(false);
-                }} style={{
-                  padding: "14px 16px", background: "var(--bg-elevated)", border: "1px solid var(--border)",
-                  borderRadius: "12px", cursor: "pointer", textAlign: "left", fontSize: "14px",
-                  fontWeight: "600", color: "var(--text-primary)",
-                }}>
-                  {name}
-                </button>
-              ))}
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>
+                Vyber vlastníka z LV
+              </label>
+              <select value={selectedLvOwner} onChange={e => setSelectedLvOwner(e.target.value)} style={{
+                width: "100%", padding: "12px 14px", fontSize: "14px", fontWeight: "600",
+                background: "var(--bg-elevated)", color: "var(--text-primary)",
+                border: "1px solid var(--border)", borderRadius: "10px",
+                appearance: "auto", cursor: "pointer",
+              }}>
+                {lvOwnerNames.map((name, i) => (
+                  <option key={i} value={name}>{name}</option>
+                ))}
+              </select>
             </div>
-            <button onClick={() => setShowLVRename(false)} style={{
-              width: "100%", padding: "10px 20px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
-              border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-            }}>Ponechať &quot;{klient.meno}&quot;</button>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setShowLVRename(false)} style={{
+                flex: 1, padding: "10px 20px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Ponechať &quot;{klient.meno}&quot;</button>
+              <button onClick={async () => {
+                if (!selectedLvOwner) return;
+                const { supabase: sb } = await import("@/lib/supabase");
+                await sb.from("klienti").update({ meno: selectedLvOwner }).eq("id", klient.id);
+                setKlient(k => k ? { ...k, meno: selectedLvOwner } : k);
+                setShowLVRename(false);
+              }} style={{
+                flex: 1, padding: "10px 20px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Premenovať</button>
+            </div>
           </div>
         </div>
       )}
@@ -1230,7 +1257,18 @@ export default function KlientDetailPage() {
             // Ponúkni premenovanie ak meno klienta nezodpovedá žiadnemu vlastníkovi z LV
             const majitelia = lv.majitelia as Array<{ meno?: string }> | undefined;
             if (majitelia?.length) {
-              const ownerNames = majitelia.filter(m => m.meno).map(m => m.meno!);
+              // Rozdeľ spojené mená (napr. "Ján Novák a Anna Nováková")
+              const rawNames = majitelia.filter(m => m.meno).map(m => m.meno!);
+              const ownerNames: string[] = [];
+              for (const name of rawNames) {
+                // Rozdeľ na " a " ale nie na "a" vnútri mena
+                const parts = name.split(/\s+a\s+/i).map(n => n.trim()).filter(n => n.length > 2);
+                if (parts.length > 1) {
+                  ownerNames.push(...parts);
+                } else {
+                  ownerNames.push(name);
+                }
+              }
               const currentName = klient.meno.trim().toLowerCase();
               const nameMatchesAnyOwner = ownerNames.some(n =>
                 n.toLowerCase() === currentName ||
@@ -1239,6 +1277,7 @@ export default function KlientDetailPage() {
               );
               if (!nameMatchesAnyOwner && ownerNames.length > 0) {
                 setLvOwnerNames(ownerNames);
+                setSelectedLvOwner(ownerNames[0]);
                 setShowLVRename(true);
               }
             }

@@ -83,16 +83,27 @@ function NaberPageContent() {
     const { data } = await supabase.from("klienti").select("*").order("created_at", { ascending: false });
     setKlienti(data ?? []);
 
-    // Ak prišiel klient_id z URL, preskočí rovno na typ
+    // Ak prišiel klient_id z URL, preskočí rovno na typ (alebo formulár ak LV má typ)
     if (preselectedKlientId && data) {
       const found = data.find(k => k.id === preselectedKlientId);
       if (found) {
         setSelectedKlient(found);
-        // Ak klient už má datum_naberu, použi ho
         if (found.datum_naberu) {
           setNaberDatum(new Date(found.datum_naberu).toISOString());
         }
-        setStep("typ");
+        // Ak LV obsahuje typ, preskočíme aj výber typu
+        const lvTyp = (found.lv_data as Record<string, unknown> | null)?.typ;
+        if (lvTyp) {
+          const typMap: Record<string, TypNaber> = {
+            "byt": "byt", "rodinny-dom": "rodinny_dom", "rodinny_dom": "rodinny_dom",
+            "pozemok": "pozemok", "garaz": "byt", "komercne": "byt",
+          };
+          const mapped = typMap[String(lvTyp)] || null;
+          if (mapped) { setSelectedType(mapped); setStep("formular"); }
+          else setStep("typ");
+        } else {
+          setStep("typ");
+        }
       }
     }
 
