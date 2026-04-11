@@ -161,6 +161,181 @@ const LOKALITY_DB: LokalitaEntry[] = [
   { display: "Ivanka pri Dunaji", lokalita: "Senec" },
   { display: "Skalica", lokalita: "Skalica" },
   { display: "Senica", lokalita: "Senica" },
+  // Ďalšie mestá a obce — západ Slovenska
+  { display: "Hlohovec", lokalita: "Hlohovec" },
+  { display: "Leopoldov", lokalita: "Hlohovec" },
+  { display: "Váhovce", lokalita: "Hlohovec" },
+  { display: "Červeník", lokalita: "Hlohovec" },
+  { display: "Šulekovo", lokalita: "Hlohovec" },
+  { display: "Bojná", lokalita: "Topoľčany" },
+  { display: "Topoľčany", lokalita: "Topoľčany" },
+  { display: "Zlaté Moravce", lokalita: "Zlaté Moravce" },
+  { display: "Vráble", lokalita: "Nitra" },
+  { display: "Šurany", lokalita: "Nové Zámky" },
+  { display: "Štúrovo", lokalita: "Nové Zámky" },
+  { display: "Hurbanovo", lokalita: "Komárno" },
+  { display: "Kolárovo", lokalita: "Komárno" },
+  { display: "Fiľakovo", lokalita: "Lučenec" },
+  { display: "Lučenec", lokalita: "Lučenec" },
+  { display: "Veľký Krtíš", lokalita: "Veľký Krtíš" },
+  { display: "Rimavská Sobota", lokalita: "Rimavská Sobota" },
+  { display: "Revúca", lokalita: "Revúca" },
+  { display: "Detva", lokalita: "Detva" },
+  { display: "Krupina", lokalita: "Krupina" },
+  { display: "Žiar nad Hronom", lokalita: "Žiar nad Hronom" },
+  { display: "Banská Štiavnica", lokalita: "Banská Štiavnica" },
+  { display: "Brezno", lokalita: "Brezno" },
+  { display: "Poltár", lokalita: "Poltár" },
+  { display: "Žarnovica", lokalita: "Žarnovica" },
+  { display: "Nová Baňa", lokalita: "Žarnovica" },
+  // Záhorie
+  { display: "Holíč", lokalita: "Skalica" },
+  { display: "Gbely", lokalita: "Skalica" },
+  { display: "Myjava", lokalita: "Myjava" },
+  { display: "Brezová pod Bradlom", lokalita: "Myjava" },
+  { display: "Vrbové", lokalita: "Piešťany" },
+  { display: "Hlohovec", lokalita: "Hlohovec" },
+  // Stredné Slovensko
+  { display: "Turčianske Teplice", lokalita: "Turčianske Teplice" },
+  { display: "Dolný Kubín", lokalita: "Dolný Kubín" },
+  { display: "Námestovo", lokalita: "Námestovo" },
+  { display: "Tvrdošín", lokalita: "Tvrdošín" },
+  { display: "Trstená", lokalita: "Tvrdošín" },
+  { display: "Kysucké Nové Mesto", lokalita: "Kysucké Nové Mesto" },
+  { display: "Čadca", lokalita: "Čadca" },
+  { display: "Bytča", lokalita: "Bytča" },
+  { display: "Rajec", lokalita: "Rajec" },
+  { display: "Krásno nad Kysucou", lokalita: "Čadca" },
+  // Severovýchod
+  { display: "Levoča", lokalita: "Levoča" },
+  { display: "Kežmarok", lokalita: "Kežmarok" },
+  { display: "Starý Smokovec", lokalita: "Poprad" },
+  { display: "Tatranská Lomnica", lokalita: "Poprad" },
+  { display: "Vysoké Tatry", lokalita: "Poprad" },
+  { display: "Spišská Belá", lokalita: "Kežmarok" },
+  { display: "Spišská Stará Ves", lokalita: "Stará Ľubovňa" },
+  { display: "Stará Ľubovňa", lokalita: "Stará Ľubovňa" },
+  { display: "Stropkov", lokalita: "Stropkov" },
+  { display: "Svidník", lokalita: "Svidník" },
+  { display: "Medzilaborce", lokalita: "Medzilaborce" },
+  { display: "Snina", lokalita: "Snina" },
+  { display: "Vranov nad Topľou", lokalita: "Vranov nad Topľou" },
+  { display: "Sobrance", lokalita: "Sobrance" },
+  { display: "Trebišov", lokalita: "Trebišov" },
+  { display: "Rožňava", lokalita: "Rožňava" },
+  { display: "Gelnica", lokalita: "Gelnica" },
+  { display: "Spišské Podhradie", lokalita: "Levoča" },
+  // Okolie Bratislavy
+  { display: "Záhorská Bystrica", lokalita: "Bratislava IV" },
+  { display: "Rohožník", lokalita: "Malacky" },
+  { display: "Borinka", lokalita: "Malacky" },
+  { display: "Lozorno", lokalita: "Malacky" },
+  { display: "Záhorská Ves", lokalita: "Malacky" },
+  { display: "Kuchyňa", lokalita: "Malacky" },
+  { display: "Veľké Leváre", lokalita: "Malacky" },
+  { display: "Zohor", lokalita: "Malacky" },
+  { display: "Jakubov", lokalita: "Malacky" },
+  { display: "Láb", lokalita: "Malacky" },
+  { display: "Plavecký Mikuláš", lokalita: "Malacky" },
+  { display: "Marianka", lokalita: "Malacky" },
+  { display: "Jablonové", lokalita: "Malacky" },
+  { display: "Kostolište", lokalita: "Malacky" },
+  { display: "Pernek", lokalita: "Malacky" },
+  { display: "Sološnica", lokalita: "Malacky" },
+  { display: "Plavecký Štvrtok", lokalita: "Malacky" },
+  { display: "Vysoká pri Morave", lokalita: "Malacky" },
+  { display: "Gajary", lokalita: "Malacky" },
+  { display: "Malé Leváre", lokalita: "Malacky" },
+  { display: "Jabloňové", lokalita: "Malacky" },
+  { display: "Čáry", lokalita: "Senica" },
+  { display: "Šaštín-Stráže", lokalita: "Senica" },
+  { display: "Brodské", lokalita: "Skalica" },
+  { display: "Kopčany", lokalita: "Skalica" },
+  // Okolie Senca
+  { display: "Malinovo", lokalita: "Senec" },
+  { display: "Hamuliakovo", lokalita: "Senec" },
+  { display: "Kostolná pri Dunaji", lokalita: "Senec" },
+  { display: "Tomášov", lokalita: "Senec" },
+  { display: "Kráľová pri Senci", lokalita: "Senec" },
+  { display: "Nová Dedinka", lokalita: "Senec" },
+  { display: "Zálesie", lokalita: "Senec" },
+  { display: "Reca", lokalita: "Senec" },
+  { display: "Slovenský Grob", lokalita: "Pezinok" },
+  { display: "Viničné", lokalita: "Pezinok" },
+  { display: "Čierna Voda", lokalita: "Senec" },
+  { display: "Veľký Biel", lokalita: "Senec" },
+  { display: "Igram", lokalita: "Senec" },
+  { display: "Hrubá Borša", lokalita: "Senec" },
+  { display: "Blatné", lokalita: "Senec" },
+  { display: "Boldog", lokalita: "Senec" },
+  { display: "Most pri Bratislave", lokalita: "Senec" },
+  { display: "Miloslavov", lokalita: "Senec" },
+  { display: "Dunajská Lužná", lokalita: "Senec" },
+  { display: "Rovinka", lokalita: "Senec" },
+  { display: "Kalinkovo", lokalita: "Senec" },
+  // Okolie Pezinka
+  { display: "Limbach", lokalita: "Pezinok" },
+  { display: "Šenkvice", lokalita: "Pezinok" },
+  { display: "Vinosady", lokalita: "Pezinok" },
+  { display: "Vištuk", lokalita: "Pezinok" },
+  { display: "Budmerice", lokalita: "Pezinok" },
+  { display: "Častá", lokalita: "Pezinok" },
+  { display: "Doľany", lokalita: "Pezinok" },
+  { display: "Jablonec", lokalita: "Pezinok" },
+  { display: "Píla", lokalita: "Pezinok" },
+  { display: "Báhoň", lokalita: "Pezinok" },
+  { display: "Dubová", lokalita: "Pezinok" },
+  { display: "Štefanová", lokalita: "Pezinok" },
+  { display: "Cajla", lokalita: "Pezinok" },
+  // Petržalka a okolie — obytné časti
+  { display: "Petržalka - Háje", lokalita: "Bratislava V" },
+  { display: "Petržalka - Dvory", lokalita: "Bratislava V" },
+  { display: "Petržalka - Lúky", lokalita: "Bratislava V" },
+  { display: "Petržalka - Kopčany", lokalita: "Bratislava V" },
+  // Ružinov — obytné časti
+  { display: "Ružinov - Nivy", lokalita: "Bratislava II" },
+  { display: "Ružinov - Trnávka", lokalita: "Bratislava II" },
+  { display: "Ružinov - Štrkovecké jazero", lokalita: "Bratislava II" },
+  // Okolie Nitry
+  { display: "Nitra - Chrenová", lokalita: "Nitra" },
+  { display: "Nitra - Klokočina", lokalita: "Nitra" },
+  { display: "Nitra - Diely", lokalita: "Nitra" },
+  { display: "Nitra - Zobor", lokalita: "Nitra" },
+  { display: "Lužianky", lokalita: "Nitra" },
+  { display: "Pohranice", lokalita: "Nitra" },
+  { display: "Čechynce", lokalita: "Nitra" },
+  { display: "Zbehy", lokalita: "Nitra" },
+  { display: "Alekšince", lokalita: "Nitra" },
+  // Trenčín okolie
+  { display: "Trenčianske Teplice", lokalita: "Trenčín" },
+  { display: "Trenčianska Teplá", lokalita: "Trenčín" },
+  { display: "Nové Mesto nad Váhom", lokalita: "Nové Mesto nad Váhom" },
+  { display: "Partizánske", lokalita: "Partizánske" },
+  { display: "Bánovce nad Bebravou", lokalita: "Bánovce nad Bebravou" },
+  { display: "Ilava", lokalita: "Ilava" },
+  { display: "Dubnica nad Váhom", lokalita: "Ilava" },
+  { display: "Púchov", lokalita: "Púchov" },
+  // Žilina okolie
+  { display: "Bytča", lokalita: "Bytča" },
+  { display: "Kysucké Nové Mesto", lokalita: "Kysucké Nové Mesto" },
+  { display: "Rajec", lokalita: "Rajec" },
+  { display: "Rajecké Teplice", lokalita: "Rajec" },
+  { display: "Turzovka", lokalita: "Čadca" },
+  { display: "Krásno nad Kysucou", lokalita: "Čadca" },
+  // Košice okolie
+  { display: "Košice - Nad jazerom", lokalita: "Košice IV" },
+  { display: "Košice - Pereš", lokalita: "Košice IV" },
+  { display: "Košice - Luník IX", lokalita: "Košice IV" },
+  { display: "Košice - Terasa", lokalita: "Košice II" },
+  { display: "Košice - Šaca", lokalita: "Košice IV" },
+  { display: "Košice - Myslava", lokalita: "Košice IV" },
+  { display: "Košice - Barca", lokalita: "Košice IV" },
+  { display: "Košická Belá", lokalita: "Košice-okolie" },
+  { display: "Bidovce", lokalita: "Košice-okolie" },
+  { display: "Haniska", lokalita: "Košice-okolie" },
+  { display: "Geča", lokalita: "Košice-okolie" },
+  { display: "Nižná Hutka", lokalita: "Košice-okolie" },
+  { display: "Ťahanovce", lokalita: "Košice II" },
   // Okresy
   { display: "Okres Bratislava I", lokalita: "Bratislava I" },
   { display: "Okres Bratislava II", lokalita: "Bratislava II" },
@@ -418,12 +593,10 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
 
   // Smart locality search
   const normalizedInput = normalizeSearch(lokalitaInput);
-  const dbSuggestions = normalizedInput.length >= 2
+  const suggestions = normalizedInput.length >= 2
     ? LOKALITY_DB.filter(l => !l.ulica && normalizeSearch(l.display).includes(normalizedInput)).slice(0, 8)
     : [];
-  // Ak nie je v zozname, ponúkni "Použiť X ako obec"
-  const showCustomOption = normalizedInput.length >= 2 && dbSuggestions.length === 0 && !lokalitaValue;
-  const suggestions = dbSuggestions;
+  const showNotFound = normalizedInput.length >= 2 && suggestions.length === 0 && !lokalitaValue;
 
   function selectLokalita(entry: LokalitaEntry) {
     if (entry.ulica) {
@@ -749,7 +922,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
                 Mestská časť alebo obec — ulicu vyplníš nižšie
               </div>
             )}
-            {showSuggestions && (suggestions.length > 0 || showCustomOption) && (
+            {showSuggestions && suggestions.length > 0 && (
               <div style={{
                 position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
                 background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "10px",
@@ -758,7 +931,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
                 {suggestions.map((s, i) => (
                   <div key={i} onClick={() => selectLokalita(s)} style={{
                     padding: "10px 14px", fontSize: "13px", cursor: "pointer",
-                    borderBottom: i < suggestions.length - 1 || showCustomOption ? "1px solid var(--border)" : "none",
+                    borderBottom: i < suggestions.length - 1 ? "1px solid var(--border)" : "none",
                     display: "flex", justifyContent: "space-between", alignItems: "center",
                   }}
                     onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
@@ -767,23 +940,11 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
                     <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{s.lokalita}</span>
                   </div>
                 ))}
-                {showCustomOption && (
-                  <div onClick={() => {
-                    setLokalitaValue(lokalitaInput.trim());
-                    setLokalitaInput(lokalitaInput.trim());
-                    setShowSuggestions(false);
-                    setFieldErrors(p => ({ ...p, lokalita: undefined }));
-                  }} style={{
-                    padding: "10px 14px", fontSize: "13px", cursor: "pointer",
-                    display: "flex", alignItems: "center", gap: "6px",
-                    color: "#2563EB",
-                  }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                    <span>+</span>
-                    <span>Použiť <strong>&quot;{lokalitaInput.trim()}&quot;</strong> ako obec</span>
-                  </div>
-                )}
+              </div>
+            )}
+            {showNotFound && (
+              <div style={{ fontSize: "11px", color: "#D97706", marginTop: "4px" }}>
+                ⚠ Obec nenájdená — skontroluj pravopis (napr. Bratislava, Petržalka, Košice)
               </div>
             )}
           </div>
