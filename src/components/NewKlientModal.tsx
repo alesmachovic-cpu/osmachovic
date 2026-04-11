@@ -627,12 +627,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
     if (!isValidLokalita) {
       addrErrors.lokalita = "Vyber mesto / mestskú časť zo zoznamu";
     }
-    if (isValidLokalita && !ulica.trim()) {
-      addrErrors.ulica = "Ulica je povinná";
-    }
-    if (isValidLokalita && ulica.trim() && !cisloDomu.trim()) {
-      addrErrors.cislo = "Číslo domu je povinné";
-    }
+    // Ulica a číslo sú povinné až pri dohodnutom nábere, nie pri vytváraní kontaktu
     if (Object.keys(addrErrors).length > 0) {
       setFieldErrors(addrErrors);
       return;
@@ -990,7 +985,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
           {isValidLokalita && (
           <div style={{ display: "flex", gap: "10px" }}>
             <div ref={ulicaSuggestRef} style={{ position: "relative", flex: 1 }}>
-              <div style={labelSt}>Ulica *</div>
+              <div style={labelSt}>Ulica</div>
               <input
                 style={{ ...inputSt, border: fieldErrors.ulica ? "2px solid #EF4444" : ulica.trim() ? "2px solid #10B981" : "1px solid var(--border)" }}
                 placeholder={`Ulica v ${lokalitaInput || lokalitaValue}...`} value={ulica}
@@ -1025,7 +1020,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
               )}
             </div>
             <div style={{ width: "90px", flexShrink: 0 }}>
-              <div style={labelSt}>Číslo *</div>
+              <div style={labelSt}>Číslo</div>
               <input
                 style={{ ...inputSt, border: fieldErrors.cislo ? "2px solid #EF4444" : cisloDomu.trim() ? "2px solid #10B981" : "1px solid var(--border)" }}
                 placeholder="napr. 25" value={cisloDomu}
