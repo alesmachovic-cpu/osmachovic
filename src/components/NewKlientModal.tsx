@@ -950,7 +950,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
               value={lokalitaInput}
               onChange={e => { setLokalitaInput(e.target.value); setLokalitaValue(""); setShowSuggestions(true); setFieldErrors(p => ({ ...p, lokalita: undefined })); }}
               onFocus={() => { if (normalizeSearch(lokalitaInput).length >= 2) setShowSuggestions(true); }}
-              onBlur={() => { if (!isValidLokalita) { setLokalitaInput(""); setLokalitaValue(""); } setShowSuggestions(false); }}
+              onBlur={() => { setTimeout(() => { if (!isValidLokalita) { setLokalitaInput(""); setLokalitaValue(""); } setShowSuggestions(false); }, 200); }}
             />
             {fieldErrors.lokalita && <div style={{ fontSize: "11px", color: "#EF4444", marginTop: "4px" }}>⚠ {fieldErrors.lokalita}</div>}
             {isValidLokalita && !fieldErrors.lokalita && <div style={{ fontSize: "11px", color: "#065F46", marginTop: "4px" }}>→ {lokalitaValue}</div>}
