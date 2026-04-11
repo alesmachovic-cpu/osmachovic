@@ -201,11 +201,11 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       setUlica(u);
     }
     if (lv.supisne_cislo && !supisneCislo) setSupisneCislo(String(lv.supisne_cislo));
-    // Číslo orientačné — z vchodu alebo z ulice (napr. "Továrenská 1" → orientačné "1")
-    if (lv.vchod && !cisloOrientacne) setCisloOrientacne(String(lv.vchod));
-    else if (!cisloOrientacne && lv.ulica) {
-      const uMatch = String(lv.ulica).match(/(\d+[A-Za-z]?)\s*$/);
-      if (uMatch) setCisloOrientacne(uMatch[1]);
+    // Číslo orientačné — extrahuj číslo z vchodu/ulice (napr. "Továrenská 1" → "1")
+    if (!cisloOrientacne) {
+      const source = lv.vchod ? String(lv.vchod) : lv.ulica ? String(lv.ulica) : "";
+      const numMatch = source.match(/(\d+[A-Za-z]?)\s*$/);
+      if (numMatch) setCisloOrientacne(numMatch[1]);
     }
     if (lv.katastralneUzemie && !katUzemie) setKatUzemie(String(lv.katastralneUzemie));
     if (lv.plocha && !plocha) setPlocha(String(lv.plocha));

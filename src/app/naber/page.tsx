@@ -36,6 +36,28 @@ export default function NaberPage() {
   );
 }
 
+// Odvoď typ nehnuteľnosti z LV dát alebo poznámky klienta
+function inferTypFromKlient(k: Klient): TypNaber | null {
+  const lv = k.lv_data as Record<string, unknown> | null;
+  // 1. Explicitný typ v LV
+  if (lv?.typ) {
+    const typMap: Record<string, TypNaber> = {
+      "byt": "byt", "rodinny-dom": "rodinny_dom", "rodinny_dom": "rodinny_dom",
+      "pozemok": "pozemok", "garaz": "byt", "komercne": "byt",
+    };
+    const mapped = typMap[String(lv.typ)];
+    if (mapped) return mapped;
+  }
+  // 2. Odvoď z LV dát — cislo_bytu alebo poschodie → byt
+  if (lv?.cislo_bytu || (lv?.poschodie != null && Number(lv.poschodie) >= 0)) return "byt";
+  // 3. Odvoď z poznámky klienta
+  const note = (k.poznamka || "").toLowerCase();
+  if (note.includes("byt") || note.includes("garsón") || note.includes("izbov")) return "byt";
+  if (note.includes("dom") || note.includes("chata") || note.includes("chalup")) return "rodinny_dom";
+  if (note.includes("pozem")) return "pozemok";
+  return null;
+}
+
 function NaberPageContent() {
   const searchParams = useSearchParams();
   const preselectedKlientId = searchParams.get("klient_id");
@@ -91,19 +113,10 @@ function NaberPageContent() {
         if (found.datum_naberu) {
           setNaberDatum(new Date(found.datum_naberu).toISOString());
         }
-        // Ak LV obsahuje typ, preskočíme aj výber typu
-        const lvTyp = (found.lv_data as Record<string, unknown> | null)?.typ;
-        if (lvTyp) {
-          const typMap: Record<string, TypNaber> = {
-            "byt": "byt", "rodinny-dom": "rodinny_dom", "rodinny_dom": "rodinny_dom",
-            "pozemok": "pozemok", "garaz": "byt", "komercne": "byt",
-          };
-          const mapped = typMap[String(lvTyp)] || null;
-          if (mapped) { setSelectedType(mapped); setStep("formular"); }
-          else setStep("typ");
-        } else {
-          setStep("typ");
-        }
+        // Ak vieme odvodiť typ, preskočíme výber
+        const inferred = inferTypFromKlient(found);
+        if (inferred) { setSelectedType(inferred); setStep("formular"); }
+        else setStep("typ");
       }
     }
 
@@ -213,19 +226,10 @@ function NaberPageContent() {
       }
     }
     setShowDatumPicker(false);
-    // Ak LV obsahuje typ nehnuteľnosti, preskočíme výber typu
-    const lvTyp = (selectedKlient?.lv_data as Record<string, unknown> | null)?.typ;
-    if (lvTyp) {
-      const typMap: Record<string, TypNaber> = {
-        "byt": "byt", "rodinny-dom": "rodinny_dom", "rodinny_dom": "rodinny_dom",
-        "pozemok": "pozemok", "garaz": "byt", "komercne": "byt",
-      };
-      const mapped = typMap[String(lvTyp)] || null;
-      if (mapped) {
-        setSelectedType(mapped);
-        setStep("formular");
-        return;
-      }
+    // Ak vieme odvodiť typ, preskočíme výber
+    if (selectedKlient) {
+      const inferred = inferTypFromKlient(selectedKlient);
+      if (inferred) { setSelectedType(inferred); setStep("formular"); return; }
     }
     setStep("typ");
   }
