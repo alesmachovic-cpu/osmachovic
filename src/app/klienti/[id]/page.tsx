@@ -209,6 +209,7 @@ export default function KlientDetailPage() {
   const [naberAddrError, setNaberAddrError] = useState("");
   const [eventType, setEventType] = useState<"volat" | "naber" | "obhliadka" | "podpis" | "fotenie" | "odovzdanie" | "ine">("naber");
   const [eventTitle, setEventTitle] = useState("");
+  const [showLVPrompt, setShowLVPrompt] = useState(false);
   const [showSpolupracaModal, setShowSpolupracaModal] = useState(false);
   const [spolupracaMakler, setSpolupracaMakler] = useState("");
   const [spolupracaPct, setSpolupracaPct] = useState(50);
@@ -428,6 +429,10 @@ export default function KlientDetailPage() {
 
     setCalendarSyncing(false);
     setShowDatePicker(false);
+    // Po dohodnutom nábere: ak klient nemá LV, ukáž prompt
+    if (isNaber && !klient.lv_data) {
+      setShowLVPrompt(true);
+    }
     setPendingStatus(null);
     setNaberDatum("");
     setNaberMiesto("");
@@ -731,6 +736,57 @@ export default function KlientDetailPage() {
               📅 Termín náberu: {new Date(klient.datum_naberu).toLocaleString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* LV banner — dohodnutý náber bez LV */}
+      {klient.status === "dohodnuty_naber" && !klient.lv_data && (
+        <div style={{
+          ...cardSt, marginBottom: "20px", padding: "14px 20px",
+          background: "linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)",
+          border: "1px solid #F59E0B",
+          display: "flex", alignItems: "center", gap: "12px",
+        }}>
+          <span style={{ fontSize: "20px" }}>📄</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "13px", fontWeight: "600", color: "#92400E" }}>List vlastníctva chýba</div>
+            <div style={{ fontSize: "12px", color: "#A16207" }}>Pridaj LV pre úspešný náber — klikni nižšie na Dokumenty</div>
+          </div>
+          <button onClick={() => setActiveTab("dokumenty")} style={{
+            padding: "8px 16px", background: "#92400E", color: "#fff", border: "none",
+            borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}>Pridať LV</button>
+        </div>
+      )}
+
+      {/* LV prompt modal — po potvrdení náberu */}
+      {showLVPrompt && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+          onClick={() => setShowLVPrompt(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "var(--bg-surface)", borderRadius: "20px", padding: "32px",
+            maxWidth: "380px", width: "100%", textAlign: "center",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+          }}>
+            <div style={{ fontSize: "40px", marginBottom: "12px" }}>📄</div>
+            <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 8px" }}>
+              Pridať List vlastníctva?
+            </h2>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 24px", lineHeight: "1.5" }}>
+              LV pomôže automaticky vyplniť údaje o nehnuteľnosti. Môžeš ho pridať aj neskôr.
+            </p>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+              <button onClick={() => setShowLVPrompt(false)} style={{
+                padding: "10px 24px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Neskôr</button>
+              <button onClick={() => { setShowLVPrompt(false); setActiveTab("dokumenty"); }} style={{
+                padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Pridať teraz</button>
+            </div>
+          </div>
         </div>
       )}
 
