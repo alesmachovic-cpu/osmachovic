@@ -210,6 +210,8 @@ export default function KlientDetailPage() {
   const [eventType, setEventType] = useState<"volat" | "naber" | "obhliadka" | "podpis" | "fotenie" | "odovzdanie" | "ine">("naber");
   const [eventTitle, setEventTitle] = useState("");
   const [showLVPrompt, setShowLVPrompt] = useState(false);
+  const [lvDiff, setLvDiff] = useState<{ field: string; label: string; old: string; new_: string }[]>([]);
+  const [showLVDiff, setShowLVDiff] = useState(false);
   const [showSpolupracaModal, setShowSpolupracaModal] = useState(false);
   const [spolupracaMakler, setSpolupracaMakler] = useState("");
   const [spolupracaPct, setSpolupracaPct] = useState(50);
@@ -790,6 +792,76 @@ export default function KlientDetailPage() {
         </div>
       )}
 
+      {/* LV diff modal — porovnanie LV vs existujúce údaje */}
+      {showLVDiff && lvDiff.length > 0 && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+          onClick={() => setShowLVDiff(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "var(--bg-surface)", borderRadius: "20px", padding: "32px",
+            maxWidth: "480px", width: "100%",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+              <span style={{ fontSize: "24px" }}>⚠️</span>
+              <div>
+                <h2 style={{ fontSize: "17px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>
+                  Nesúlad údajov
+                </h2>
+                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "2px 0 0" }}>
+                  LV obsahuje iné údaje než sú pri klientovi
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
+              {lvDiff.map((d, i) => (
+                <div key={i} style={{
+                  padding: "12px 14px", background: "var(--bg-elevated)", borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                }}>
+                  <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "6px" }}>{d.label}</div>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13px" }}>
+                    <span style={{ color: "#EF4444", textDecoration: "line-through", flex: 1 }}>{d.old}</span>
+                    <span style={{ color: "var(--text-muted)" }}>→</span>
+                    <span style={{ color: "#059669", fontWeight: "600", flex: 1 }}>{d.new_}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button onClick={() => setShowLVDiff(false)} style={{
+                padding: "10px 20px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Ponechať pôvodné</button>
+              <button onClick={async () => {
+                // Aktualizuj klienta údajmi z LV
+                const updates: Record<string, unknown> = {};
+                const lv = klient.lv_data as Record<string, unknown> | null;
+                if (lv) {
+                  for (const d of lvDiff) {
+                    if (d.field === "lokalita" && lv.obec) updates.lokalita = String(lv.obec);
+                    if (d.field === "adresa") {
+                      const addrLine = `Adresa: ${[lv.ulica, lv.supisne_cislo, lv.obec].filter(Boolean).map(String).join(" ")}`;
+                      const existing = klient.poznamka || "";
+                      const cleaned = existing.replace(/Adresa:\s*.+/i, "").trim();
+                      updates.poznamka = cleaned ? `${cleaned}\n${addrLine}` : addrLine;
+                    }
+                  }
+                }
+                if (Object.keys(updates).length > 0) {
+                  const { supabase: sb } = await import("@/lib/supabase");
+                  await sb.from("klienti").update(updates).eq("id", klient.id);
+                  setKlient(k => k ? { ...k, ...updates } as typeof k : k);
+                }
+                setShowLVDiff(false);
+              }} style={{
+                padding: "10px 20px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Aktualizovať podľa LV</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Rýchle akcie */}
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px",
@@ -1083,6 +1155,30 @@ export default function KlientDetailPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {/* LV sekcia */}
           <LVSection klientId={klient.id} lvData={klient.lv_data} onParsed={(data) => {
+            // Porovnaj LV s existujúcimi údajmi klienta
+            const checks: { field: string; label: string; old: string; new_: string }[] = [];
+            const lv = data as Record<string, unknown>;
+            const addrMatch = klient.poznamka?.match(/Adresa:\s*(.+?)(?:\n|$)/);
+            const existingAddr = addrMatch?.[1]?.trim() || "";
+            const lvAddr = [lv.ulica, lv.supisne_cislo, lv.obec].filter(Boolean).map(String).join(" ").trim();
+            if (existingAddr && lvAddr && existingAddr.toLowerCase() !== lvAddr.toLowerCase()) {
+              checks.push({ field: "adresa", label: "Adresa", old: existingAddr, new_: lvAddr });
+            }
+            if (klient.lokalita && lv.obec && String(lv.obec).toLowerCase() !== klient.lokalita.toLowerCase()
+                && !klient.lokalita.toLowerCase().includes(String(lv.obec).toLowerCase())) {
+              checks.push({ field: "lokalita", label: "Lokalita / Obec", old: klient.lokalita, new_: String(lv.obec) });
+            }
+            // Typ nehnuteľnosti check
+            const noteTyp = klient.poznamka?.match(/Typ nehnuteľnosti:\s*(.+)/i)?.[1]?.trim() || "";
+            const lvTyp = lv.typ ? String(lv.typ) : "";
+            if (noteTyp && lvTyp && noteTyp.toLowerCase() !== lvTyp.toLowerCase()) {
+              checks.push({ field: "typ", label: "Typ nehnuteľnosti", old: noteTyp, new_: lvTyp });
+            }
+
+            if (checks.length > 0) {
+              setLvDiff(checks);
+              setShowLVDiff(true);
+            }
             setKlient(k => k ? { ...k, lv_data: data } : k);
           }} />
           {/* Ostatné dokumenty */}
