@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/pravidelne-naklady",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/api-status",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

@@ -50,6 +50,9 @@ export interface Nehnutelnost {
   video_url: string | null;
   kategoria: string | null;
   export_portaly: Record<string, boolean>;
+  klient_id: string | null;
+  status: "koncept" | "aktivny" | "predany" | "archivovany" | null;
+  makler_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -73,6 +76,7 @@ export interface Klient {
   calendar_event_id: string | null;
   spolupracujuci_makler_id: string | null;
   spolupracujuci_provizia_pct: number | null;
+  lv_data: Record<string, unknown> | null;
   created_at: string;
 }
 

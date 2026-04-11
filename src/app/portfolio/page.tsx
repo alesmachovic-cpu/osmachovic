@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import InzeratForm from "@/components/InzeratForm";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 
@@ -12,23 +12,32 @@ interface DBNehnutelnost {
   nazov: string;
   lokalita: string;
   ulica: string;
+  // Staré polia (legacy portfolio záznamy)
   typ_transakcie: string;
   typ_nehnutelnosti: string;
+  stav_inzeratu: string;
+  status_kolizie: string | null;
+  kolizia_poznamka: string | null;
+  balkon: boolean;
+  garaz: boolean;
+  vytah: boolean;
+  url: string;
+  // Nové polia (InzeratForm záznamy)
+  typ: string | null;
+  kategoria: string | null;
+  text_popis: string | null;
+  updated_at: string;
+  // Spoločné
   cena: number | null;
   plocha: number | null;
   izby: number | null;
   poschodie: number | null;
   stav: string | null;
-  balkon: boolean;
-  garaz: boolean;
-  vytah: boolean;
-  url: string;
-  stav_inzeratu: string;
-  created_at: string;
-  status_kolizie: string | null;
-  kolizia_poznamka: string | null;
   makler_id: string | null;
   makler_email: string | null;
+  klient_id: string | null;
+  status: "koncept" | "aktivny" | "predany" | "archivovany" | null;
+  created_at: string;
 }
 
 type SortKey = "created_at" | "nazov" | "cena";
@@ -61,7 +70,10 @@ function typLabel(typ: string): string {
 
 export default function Portfolio() {
   const { user } = useAuth();
+  const router = useRouter();
   const isAdmin = user?.id === "ales";
+  const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
+  const [filterMakler, setFilterMakler] = useState<"mine" | "all">("mine");
   const [items, setItems] = useState<DBNehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<SortKey>("created_at");
@@ -69,7 +81,7 @@ export default function Portfolio() {
   const [view, setView] = useState<ViewMode>("cards");
   const [search, setSearch] = useState("");
   const [filterTyp, setFilterTyp] = useState("");
-  const [showForm, setShowForm] = useState(false);
+  const [filterStatus, setFilterStatus] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<Record<string, { stav: string; eurM2: number; benchmark: number; odchylka: number; komentar: string }>>({});
   const [deepDive, setDeepDive] = useState<DBNehnutelnost | null>(null);
@@ -77,13 +89,15 @@ export default function Portfolio() {
   const [deepLoading, setDeepLoading] = useState(false);
   const [singleAnalyzing, setSingleAnalyzing] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    if (user?.id) getMaklerUuid(user.id).then(uuid => setMyMaklerUuid(uuid ?? null));
+  }, [user?.id]);
+
   useEffect(() => { loadItems(); }, [sort, sortDir]);
 
   async function loadItems() {
     setLoading(true);
-    // Load all - filtering done client-side
-    const query = supabase.from("nehnutelnosti").select("*").order(sort, { ascending: sortDir === "asc" });
-    const { data } = await query;
+    const { data } = await supabase.from("nehnutelnosti").select("*").order(sort, { ascending: sortDir === "asc" });
     setItems((data as DBNehnutelnost[]) ?? []);
     setLoading(false);
   }
@@ -147,30 +161,17 @@ export default function Portfolio() {
   const filtered = items.filter(n => {
     if (search) {
       const q = search.toLowerCase();
-      const hay = `${n.nazov} ${n.lokalita} ${n.ulica} ${n.typ_nehnutelnosti}`.toLowerCase();
+      const hay = `${n.nazov} ${n.lokalita} ${n.ulica} ${n.typ_nehnutelnosti || ""} ${n.typ || ""}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    if (filterTyp && n.typ_transakcie !== filterTyp) return false;
+    if (filterTyp && n.typ_transakcie !== filterTyp && n.kategoria !== filterTyp) return false;
+    if (filterStatus && (n.status || "aktivny") !== filterStatus) return false;
+    // Makler filter — rovnaké pravidlá ako pri klientoch
+    if (!isAdmin && filterMakler === "mine" && myMaklerUuid) {
+      if (n.makler_id !== myMaklerUuid && n.makler_email !== user?.email) return false;
+    }
     return true;
   });
-
-  if (showForm) {
-    return (
-      <div>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
-          <button onClick={() => setShowForm(false)} style={{
-            padding: "8px 16px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-            borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer",
-            display: "flex", alignItems: "center", gap: "6px",
-          }}>← Späť na portfólio</button>
-        </div>
-        <InzeratForm
-          onSaved={() => { setShowForm(false); loadItems(); }}
-          onCancel={() => setShowForm(false)}
-        />
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -182,7 +183,7 @@ export default function Portfolio() {
             {filtered.length} {filtered.length === 1 ? "nehnuteľnosť" : filtered.length < 5 ? "nehnuteľnosti" : "nehnuteľností"} v ponuke
           </p>
         </div>
-        <button onClick={() => setShowForm(true)} style={{
+        <button onClick={() => router.push("/inzerat")} style={{
           padding: "10px 20px", background: "#374151", color: "#fff", borderRadius: "10px",
           fontSize: "13px", fontWeight: "600", border: "none", cursor: "pointer",
           display: "flex", alignItems: "center", gap: "6px",
@@ -205,6 +206,27 @@ export default function Portfolio() {
           <option value="predaj">Na predaj</option>
           <option value="prenajom">Na prenájom</option>
         </select>
+
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{
+          padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
+          appearance: "none" as const, backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+        }}>
+          <option value="">Všetky stavy</option>
+          <option value="aktivny">Aktívny</option>
+          <option value="koncept">Koncept</option>
+          <option value="predany">Predaný</option>
+          <option value="archivovany">Archív</option>
+        </select>
+
+        {isAdmin && (
+          <select value={filterMakler} onChange={e => setFilterMakler(e.target.value as "mine" | "all")} style={{
+            padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
+            appearance: "none" as const, backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+          }}>
+            <option value="mine">Moje inzeráty</option>
+            <option value="all">Všetci makléri</option>
+          </select>
+        )}
 
         <button onClick={runBatchAnalysis} disabled={analyzing || items.length === 0} style={{
           padding: "8px 16px", fontSize: "12px", fontWeight: "600", borderRadius: "8px", cursor: analyzing ? "wait" : "pointer",
@@ -244,7 +266,7 @@ export default function Portfolio() {
           <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "20px" }}>
             {search ? "Skús zmeniť vyhľadávanie" : "Vytvor prvý inzerát a začni budovať ponuku"}
           </div>
-          {!search && <button onClick={() => setShowForm(true)} style={{ display: "inline-flex", padding: "10px 24px", background: "#374151", color: "#fff", borderRadius: "10px", fontSize: "13px", fontWeight: "600", border: "none", cursor: "pointer" }}>+ Nový inzerát</button>}
+          {!search && <button onClick={() => router.push("/inzerat")} style={{ display: "inline-flex", padding: "10px 24px", background: "#374151", color: "#fff", borderRadius: "10px", fontSize: "13px", fontWeight: "600", border: "none", cursor: "pointer" }}>+ Nový inzerát</button>}
         </div>
       )}
 
@@ -252,7 +274,8 @@ export default function Portfolio() {
       {!loading && filtered.length > 0 && view === "cards" && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
           {filtered.map(n => {
-            const stavInfo = STAV_COLORS[n.stav_inzeratu] || STAV_COLORS[n.status_kolizie || ""] || { bg: "#F3F4F6", text: "#6B7280", label: n.stav_inzeratu || "—" };
+            const statusNew = n.status === "koncept" ? { bg: "#FEF3C7", text: "#D97706", label: "Koncept" } : n.status === "predany" ? { bg: "#F0FDF4", text: "#16A34A", label: "Predaný" } : n.status === "archivovany" ? { bg: "#F9FAFB", text: "#9CA3AF", label: "Archív" } : null;
+            const stavInfo = statusNew || STAV_COLORS[n.stav_inzeratu] || STAV_COLORS[n.status_kolizie || ""] || { bg: "#E5E7EB", text: "#374151", label: "Aktívny" };
             return (
               <div key={n.id} style={{ background: "var(--bg-surface)", borderRadius: "14px", border: "1px solid var(--border)", overflow: "hidden" }}>
                 {/* Photo placeholder */}
@@ -276,7 +299,7 @@ export default function Portfolio() {
                     {formatCena(n.cena)}
                   </div>
                   <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px", lineHeight: 1.3 }}>
-                    {n.nazov || `${typLabel(n.typ_nehnutelnosti)}${n.lokalita ? ` — ${n.lokalita}` : ""}`}
+                    {n.nazov || `${typLabel(n.typ || n.typ_nehnutelnosti || "")}${n.lokalita ? ` — ${n.lokalita}` : ""}`}
                   </div>
                   <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>
                     {[n.lokalita, n.ulica].filter(Boolean).join(" · ") || "—"}
@@ -366,7 +389,8 @@ export default function Portfolio() {
             <span style={{ textAlign: "right" }}>Stav</span>
           </div>
           {filtered.map((n, i) => {
-            const stavInfo = STAV_COLORS[n.stav_inzeratu] || STAV_COLORS[n.status_kolizie || ""] || { bg: "#F3F4F6", text: "#6B7280", label: n.stav_inzeratu || "—" };
+            const statusNew = n.status === "koncept" ? { bg: "#FEF3C7", text: "#D97706", label: "Koncept" } : n.status === "predany" ? { bg: "#F0FDF4", text: "#16A34A", label: "Predaný" } : n.status === "archivovany" ? { bg: "#F9FAFB", text: "#9CA3AF", label: "Archív" } : null;
+            const stavInfo = statusNew || STAV_COLORS[n.stav_inzeratu] || STAV_COLORS[n.status_kolizie || ""] || { bg: "#E5E7EB", text: "#374151", label: "Aktívny" };
             return (
               <div key={n.id} className="portfolio-list-row" onClick={() => analysis[n.id] ? runDeepDive(n) : undefined} style={{ display: "grid", gridTemplateColumns: `2fr 1fr 80px 80px 140px ${Object.keys(analysis).length > 0 ? "120px " : ""}90px`, padding: "14px 20px", alignItems: "center", borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none", fontSize: "13px", cursor: "pointer", transition: "background 0.1s" }}
                 onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
@@ -375,10 +399,10 @@ export default function Portfolio() {
                   <div style={{ width: "40px", height: "40px", borderRadius: "8px", background: "linear-gradient(135deg, #F3F4F6, #E5E7EB)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", flexShrink: 0 }}>🏠</div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: "500", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {n.nazov || `${typLabel(n.typ_nehnutelnosti)}${n.lokalita ? ` — ${n.lokalita}` : ""}`}
+                      {n.nazov || `${typLabel(n.typ || n.typ_nehnutelnosti || "")}${n.lokalita ? ` — ${n.lokalita}` : ""}`}
                     </div>
                     <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                      {typLabel(n.typ_nehnutelnosti)} · {n.typ_transakcie === "predaj" ? "Predaj" : "Prenájom"} · {new Date(n.created_at).toLocaleDateString("sk")}
+                      {typLabel(n.typ || n.typ_nehnutelnosti || "")} · {(n.kategoria || n.typ_transakcie) === "predaj" ? "Predaj" : "Prenájom"} · {new Date(n.created_at).toLocaleDateString("sk")}
                     </div>
                   </div>
                 </div>

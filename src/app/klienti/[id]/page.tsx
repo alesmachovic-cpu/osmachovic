@@ -10,6 +10,137 @@ import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
 
+// ── LV sekcia s uploadom a parsovaním ──
+function LVSection({ klientId, lvData, onParsed }: {
+  klientId: string;
+  lvData: Record<string, unknown> | null | undefined;
+  onParsed: (data: Record<string, unknown>) => void;
+}) {
+  const [parsing, setParsing] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function handleLVUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setParsing(true);
+    setErr("");
+    try {
+      const reader = new FileReader();
+      const base64: string = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch("/api/parse-lv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdf_base64: base64, filename: file.name }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const parsed = await res.json();
+
+      // Ulož do klienta
+      const { supabase: sb } = await import("@/lib/supabase");
+      await sb.from("klienti").update({ lv_data: parsed }).eq("id", klientId);
+      onParsed(parsed);
+    } catch (e) {
+      setErr("Chyba pri analýze LV: " + (e as Error).message.slice(0, 120));
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  const lv = lvData as Record<string, unknown> | null | undefined;
+  const majitelia = (lv?.majitelia as Array<Record<string, string>> | undefined) ?? [];
+  const pozemky = (lv?.pozemky as Array<Record<string, unknown>> | undefined) ?? [];
+  const lvObec = lv?.obec ? String(lv.obec) : "";
+  const lvUlica = lv?.ulica ? String(lv.ulica) : "";
+  const lvOkres = lv?.okres ? String(lv.okres) : "";
+  const lvPlocha = lv?.plocha ? String(lv.plocha) : "";
+  const lvIzby = lv?.izby ? String(lv.izby) : "";
+  const lvPravneVady = lv?.pravne_vady ? String(lv.pravne_vady) : "";
+
+  return (
+    <div style={{
+      background: "var(--bg-surface)", border: lv ? "1px solid #BBF7D0" : "1px solid var(--border)",
+      borderRadius: "14px", padding: "20px",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: lv ? "16px" : "0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "18px" }}>📋</span>
+          <div>
+            <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)" }}>
+              List vlastníctva (LV)
+            </div>
+            {lv && (
+              <div style={{ fontSize: "11px", color: "#059669", fontWeight: "600" }}>
+                Analyzovaný · auto-vyplní náberový list
+              </div>
+            )}
+          </div>
+        </div>
+        <label style={{
+          padding: "7px 14px", background: parsing ? "var(--bg-elevated)" : "#374151",
+          color: parsing ? "var(--text-muted)" : "#fff", borderRadius: "9px",
+          fontSize: "12px", fontWeight: "600", cursor: parsing ? "default" : "pointer",
+          border: "none", display: "inline-block",
+        }}>
+          {parsing ? "Analyzujem..." : lv ? "Nahrať znova" : "Nahrať LV"}
+          <input type="file" accept=".pdf,image/*" onChange={handleLVUpload} style={{ display: "none" }} disabled={parsing} />
+        </label>
+      </div>
+      {err && <div style={{ fontSize: "12px", color: "#EF4444", marginTop: "8px" }}>{err}</div>}
+      {lv && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {/* Adresa */}
+          {(lvObec || lvUlica) && (
+            <div style={{ fontSize: "13px", color: "var(--text-primary)", display: "flex", gap: "6px", alignItems: "flex-start" }}>
+              <span style={{ color: "var(--text-muted)", minWidth: "80px", fontSize: "11px", fontWeight: "600", paddingTop: "2px" }}>ADRESA</span>
+              <span>{[lvUlica, lvObec, lvOkres].filter(Boolean).join(", ")}</span>
+            </div>
+          )}
+          {majitelia.length > 0 && (
+            <div style={{ fontSize: "13px", color: "var(--text-primary)", display: "flex", gap: "6px", alignItems: "flex-start" }}>
+              <span style={{ color: "var(--text-muted)", minWidth: "80px", fontSize: "11px", fontWeight: "600", paddingTop: "2px" }}>
+                {majitelia.length > 1 ? "VLASTNÍCI" : "VLASTNÍK"}
+              </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                {majitelia.map((m, i) => (
+                  <span key={i}>{m.meno}{m.podiel && m.podiel !== "1/1" ? <span style={{ color: "var(--text-muted)" }}> ({m.podiel})</span> : ""}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {(lvPlocha || lvIzby) && (
+            <div style={{ fontSize: "13px", color: "var(--text-primary)", display: "flex", gap: "6px", alignItems: "flex-start" }}>
+              <span style={{ color: "var(--text-muted)", minWidth: "80px", fontSize: "11px", fontWeight: "600", paddingTop: "2px" }}>PLOCHA</span>
+              <span>{[lvPlocha ? `${lvPlocha} m²` : null, lvIzby ? `${lvIzby}-izb.` : null].filter(Boolean).join(" · ")}</span>
+            </div>
+          )}
+          {pozemky.length > 0 && (
+            <div style={{ fontSize: "13px", color: "var(--text-primary)", display: "flex", gap: "6px", alignItems: "flex-start" }}>
+              <span style={{ color: "var(--text-muted)", minWidth: "80px", fontSize: "11px", fontWeight: "600", paddingTop: "2px" }}>POZEMKY</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                {pozemky.map((p, i) => (
+                  <span key={i}>parc. {String(p.cislo_parcely ?? "")}{p.druh ? ` — ${String(p.druh)}` : ""}{p.vymera ? `, ${String(p.vymera)} m²` : ""}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {lvPravneVady && (
+            <div style={{ fontSize: "13px", display: "flex", gap: "6px", alignItems: "flex-start" }}>
+              <span style={{ color: "var(--text-muted)", minWidth: "80px", fontSize: "11px", fontWeight: "600", paddingTop: "2px" }}>ŤARCHY</span>
+              <span style={{ color: "#D97706" }}>{lvPravneVady}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Typy pre timeline
 interface TimelineEvent {
   id: string;
@@ -863,37 +994,44 @@ export default function KlientDetailPage() {
       )}
 
       {activeTab === "dokumenty" && (
-        <div style={cardSt}>
-          <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
-            📁 Dokumenty ({klientDokumenty.length})
-          </div>
-          {klientDokumenty.length === 0 ? (
-            <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
-              Žiadne dokumenty. Nahrané v náberáku, inzeráte alebo rezervácii sa zobrazia tu.
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {/* LV sekcia */}
+          <LVSection klientId={klient.id} lvData={klient.lv_data} onParsed={(data) => {
+            setKlient(k => k ? { ...k, lv_data: data } : k);
+          }} />
+          {/* Ostatné dokumenty */}
+          <div style={cardSt}>
+            <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
+              📁 Dokumenty ({klientDokumenty.length})
             </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {klientDokumenty.map(d => (
-                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px" }}>
-                  <span style={{ fontSize: "18px" }}>📄</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                      {d.type || "Dokument"} · {((d.size || 0) / 1024).toFixed(0)} KB · {d.source || "—"} · {d.created_at ? new Date(d.created_at).toLocaleDateString("sk-SK") : ""}
+            {klientDokumenty.length === 0 ? (
+              <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
+                Žiadne dokumenty. Nahrané v náberáku, inzeráte alebo rezervácii sa zobrazia tu.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {klientDokumenty.map(d => (
+                  <div key={d.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px" }}>
+                    <span style={{ fontSize: "18px" }}>📄</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                        {d.type || "Dokument"} · {((d.size || 0) / 1024).toFixed(0)} KB · {d.source || "—"} · {d.created_at ? new Date(d.created_at).toLocaleDateString("sk-SK") : ""}
+                      </div>
                     </div>
+                    {d.data_base64 && (
+                      <a href={`data:${d.mime || "application/octet-stream"};base64,${d.data_base64}`} download={d.name}
+                         style={{ fontSize: "12px", color: "var(--accent, #3B82F6)", textDecoration: "none", padding: "4px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}>
+                        Stiahnuť
+                      </a>
+                    )}
+                    <button onClick={async () => { if (d.id && confirm("Vymazať dokument?")) { await deleteKlientDokument(d.id); setKlientDokumenty(prev => prev.filter(x => x.id !== d.id)); } }}
+                            style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px" }}>×</button>
                   </div>
-                  {d.data_base64 && (
-                    <a href={`data:${d.mime || "application/octet-stream"};base64,${d.data_base64}`} download={d.name}
-                       style={{ fontSize: "12px", color: "var(--accent, #3B82F6)", textDecoration: "none", padding: "4px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}>
-                      Stiahnuť
-                    </a>
-                  )}
-                  <button onClick={async () => { if (d.id && confirm("Vymazať dokument?")) { await deleteKlientDokument(d.id); setKlientDokumenty(prev => prev.filter(x => x.id !== d.id)); } }}
-                          style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px" }}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

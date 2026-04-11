@@ -108,6 +108,9 @@ const defaultForm = {
 export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSaved?: () => void; onCancel?: () => void; prefilledData?: Record<string, unknown> | null } = {}) {
   const { user: authUser } = useAuth();
   const uid = authUser?.id || "";
+  // Edit mode: id + klient linkage
+  const editId = (prefilledData?.id as string | undefined) || undefined;
+  const klientId = (prefilledData?.klient_id as string | undefined) || undefined;
   const [f, setF] = useState(() => {
     if (!prefilledData) return defaultForm;
     // Prefill z náberu — mapuj VŠETKY dostupné polia
@@ -961,7 +964,8 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   async function handleSave(publish: boolean) {
     if (!f.cena) { setError("Cena je povinná"); return; }
     setSaving(true); setError("");
-    const { error: err } = await supabase.from("nehnutelnosti").insert({
+
+    const payload = {
       nazov: f.nazov.trim(), typ: f.typ,
       lokalita: [f.obec, f.okres, f.kraj].filter(Boolean).join(", ") || f.lokalita,
       cena: Number(f.cena), plocha: f.plocha ? Number(f.plocha) : null,
@@ -985,7 +989,21 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       url_virtualka: f.url_virtualka || null, vhodne_pre_studentov: f.vhodne_pre_studentov,
       video_url: f.video_url || null, kategoria: f.kategoria || null,
       export_portaly: publish ? f.export_portaly : {},
-    });
+      // Linking + status
+      klient_id: klientId || null,
+      makler_id: uid || null,
+      status: publish ? "aktivny" : "koncept",
+    };
+
+    let err;
+    if (editId) {
+      // Edit mode — update existing record
+      ({ error: err } = await supabase.from("nehnutelnosti").update(payload).eq("id", editId));
+    } else {
+      // New listing — insert
+      ({ error: err } = await supabase.from("nehnutelnosti").insert(payload));
+    }
+
     setSaving(false);
     if (err) { setError(err.message); return; }
     setSaved(true); setTimeout(() => setSaved(false), 3000);
@@ -1065,13 +1083,12 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
                 {docs.map((d, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 10px", borderRadius: "8px", background: "#F9FAFB", fontSize: "12px", marginBottom: "4px" }}>
                     <span>📄</span><span style={{ flex: 1 }}>{d.name}</span><span style={{ color: "#9CA3AF" }}>{(d.size / 1024).toFixed(0)} KB</span>
-                    {d.text && d.type !== "PDF ✓" && (
+                    {(d.text || d.pdf_base64) && (
                       <button onClick={() => handleProcessDoc(i)} disabled={processingDoc === i}
                         style={{ padding: "3px 10px", borderRadius: "6px", border: "1px solid #3B82F6", background: processingDoc === i ? "#EFF6FF" : "#fff", color: "#3B82F6", fontSize: "11px", fontWeight: "500", cursor: processingDoc === i ? "wait" : "pointer", whiteSpace: "nowrap" }}>
-                        {processingDoc === i ? "Analyzujem..." : "⚡ AI"}
+                        {processingDoc === i ? "Analyzujem..." : d.type?.includes("✓") ? "🔄 Znova" : "⚡ AI"}
                       </button>
                     )}
-                    {d.type === "PDF ✓" && <span style={{ color: "#10B981", fontSize: "11px", fontWeight: "500" }}>✓ Spracované</span>}
                     <button onClick={() => setDocs(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "#9CA3AF", cursor: "pointer" }}>×</button>
                   </div>
                 ))}
@@ -1455,7 +1472,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       {/* Bottom bar */}
       <div style={{ position: "sticky", bottom: 0, background: "var(--bg-surface)", borderTop: "1px solid var(--border)", padding: "14px 0", marginTop: "20px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
         <button onClick={() => { setF(defaultForm); onCancel?.(); }} style={{ padding: "9px 18px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>Zahodiť</button>
-        <button onClick={() => handleSave(false)} disabled={saving} style={{ padding: "9px 22px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>Uložiť</button>
+        <button onClick={() => handleSave(false)} disabled={saving} style={{ padding: "9px 22px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>{editId ? "Uložiť zmeny" : "Uložiť koncept"}</button>
         <button onClick={() => handleSave(true)} disabled={saving} style={{ padding: "9px 24px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>{saving ? "..." : "Publikovať"}</button>
       </div>
     </div>

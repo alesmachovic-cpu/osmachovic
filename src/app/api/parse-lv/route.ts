@@ -124,6 +124,9 @@ const USER_PROMPT = (text: string) => `Analyzuj tento realitný dokument. Extrah
   "orientacia": "svetová strana (S/J/V/Z/SV/SZ/JV/JZ)",
   "inzinierske_siete": "true ak sú uvedené",
   "pravne_vady": "ČASŤ C listu vlastníctva: záložné práva, vecné bremená (doživotné bývanie, prechod), exekúcie — PRESNE cituj z dokumentu",
+  "majitelia": [{"meno": "celé meno vlastníka presne z dokumentu", "podiel": "podiel napr. 1/1 alebo 1/2", "datum_narodenia": "DD.MM.YYYY ak je v dokumente", "adresa": "trvalé bydlisko vlastníka ak je uvedené"}],
+  "pozemky": [{"cislo_parcely": "číslo parcely napr. 123/1", "druh": "druh pozemku napr. zastavané plochy a nádvoria", "vymera": 250}],
+  "pozemky_sucast": true,
   "poznamka": "ďalšie dôležité info"
 }
 
@@ -136,6 +139,8 @@ KRITICKÉ PRAVIDLÁ EXTRAKCIE:
 6. PRÁVNE VADY: Hľadaj v časti C listu vlastníctva. Identifikuj: hypotéky (záložné práva), vecné bremená (doživotné bývanie, prechod), exekúcie
 7. MATERIÁL a STAV: Použi presne tieto hodnoty — tehla/panel/skelet/drevo/ine a novostavba/povodny-stav/uplne-prerobeny/ciastocne-prerobeny/vo-vystavbe
 8. Čísla (plocha, izby, poschodie, rok) uvádzaj IBA ako číslo bez jednotky
+9. MAJITELIA: Hľadaj v časti B listu vlastníctva ("Vlastníci"). Pre každého vlastníka zaznač meno, podiel (napr. 1/2, 1/1), dátum narodenia. Ak je viac vlastníkov, zaznač všetkých do poľa.
+10. POZEMKY: Hľadaj parcely v časti A LV. Ak sú pozemky súčasťou listu vlastníctva, zaznač ich do poľa pozemky a nastav pozemky_sucast: true.
 
 Dokument:
 ${text}`;
@@ -159,7 +164,7 @@ async function parseByGemini(text: string, system: string, pdfBase64?: string): 
       parts.push({ text: USER_PROMPT(text) });
     }
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -241,12 +246,13 @@ async function parseByClaude(text: string, system: string): Promise<Record<strin
 export async function POST(req: NextRequest) {
   const { lv_text, doc_type, pdf_base64 } = await req.json();
 
-  if (!lv_text?.trim()) {
-    return NextResponse.json({ error: "Prázdny text" }, { status: 400 });
+  if (!lv_text?.trim() && !pdf_base64) {
+    return NextResponse.json({ error: "Prázdny text aj PDF" }, { status: 400 });
   }
 
   const system = getSystem(doc_type);
-  console.log(`[parse-doc] Document type: ${doc_type || "lv"}, has PDF: ${!!pdf_base64}`);
+  const text = lv_text?.trim() || "";
+  console.log(`[parse-doc] Document type: ${doc_type || "lv"}, has PDF: ${!!pdf_base64}, text len: ${text.length}`);
 
   const strategies = [
     (t: string) => parseByGemini(t, system, pdf_base64),
@@ -257,7 +263,7 @@ export async function POST(req: NextRequest) {
 
   for (let i = 0; i < strategies.length; i++) {
     console.log(`[parse-doc] Trying ${names[i]}...`);
-    const result = await strategies[i](lv_text);
+    const result = await strategies[i](text);
     // Považuj za úspech ak AI vráti HOCIJAKÉ užitočné pole (aj len katastrálne územie, izby, poschodie, ulicu)
     const hasAnyField = result && Object.values(result).some(v => v !== undefined && v !== null && String(v).trim() !== "" && String(v).toLowerCase() !== "n/a");
     if (hasAnyField) {

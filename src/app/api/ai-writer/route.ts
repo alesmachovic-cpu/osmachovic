@@ -117,6 +117,11 @@ Každý text MUSÍ byť optimalizovaný pre vyhľadávače (Google, nehnutelnost
    - Skryté texty, biely text
    - Klamlivé údaje (AI musí držať pravdivosť z dokumentov)
 
+══ FORMÁTOVANIE — POVINNÉ ══
+ZÁKAZ markdown: žiadne **tučné**, žiadne _kurzíva_, žiadne ## nadpisy, žiadne bloky kódu.
+Odrážky VÝHRADNE vo formáte "– text" (pomlčka + medzera). Žiadne * ani - ako bullet point.
+Text musí byť čistý plain text — kopírovaný priamo do emailu alebo portálu musí vyzerať správne.
+
 ══ ABSOLÚTNE PRAVIDLÁ — POPIS BYTU ══
 1. NIKDY nepoužívaj frázy typu "na fotkách vidíme", "na fotografii je", "vidíme tu", "ako vidno z fotografií", "na obrázku" — píš ako TOP realitný maklér ktorý byt OSOBNE OBHLIADOL. Píš priamo: "Byt ponúka...", "Kuchyňa je vybavená...".
 2. NIKDY si nevymýšľaj LOKALITU, ULICU, MESTSKÚ ČASŤ, OBEC ani ORIENTAČNÉ BODY (obchody, školy, zastávky, parky), ak NIE SÚ explicitne v údajoch alebo v prieskume lokality. Ak nevieš lokalitu, NESPOMÍNAJ ju vôbec.
@@ -189,15 +194,10 @@ async function researchLocation(lokalita: string): Promise<string> {
   if (!lokalita?.trim() || !process.env.GEMINI_API_KEY) return "";
   if (lokalita.trim().split(/[\s,]+/).filter(Boolean).length < 2) return "";
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `Si realitný analytik. Mám nehnuteľnosť na adrese "${lokalita}". Napíš KONKRÉTNY prehľad okolia TEJTO ULICE/ADRESY:
+    const locBody = JSON.stringify({
+      contents: [{
+        parts: [{
+          text: `Si realitný analytik. Mám nehnuteľnosť na adrese "${lokalita}". Napíš KONKRÉTNY prehľad okolia TEJTO ULICE/ADRESY:
 - Čo je v bezprostrednom okolí (do 500m) — konkrétne názvy obchodov, škôl, reštaurácií
 - Doprava — najbližšia zastávka MHD (meno), vzdialenosť do centra
 - Charakter ulice a okolia — tichá/rušná, zeleň, parky v okolí (konkrétne názvy)
@@ -206,12 +206,21 @@ async function researchLocation(lokalita: string): Promise<string> {
 
 DÔLEŽITÉ: Píš o konkrétnej ulici/adrese "${lokalita}", nie o celej mestskej časti všeobecne.
 Píš stručne, konkrétne fakty, max 150 slov. Slovenčina.`
-            }]
-          }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
-        }),
-      }
+        }]
+      }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 500 },
+    });
+    let res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: locBody }
     );
+    if (res.status === 503) {
+      await new Promise(r => setTimeout(r, 3000));
+      res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: locBody }
+      );
+    }
     if (!res.ok) return "";
     const data = await res.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
@@ -226,7 +235,7 @@ async function researchLocationGPT(lokalita: string): Promise<string> {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
-        model: "gpt-4o", temperature: 0.3, max_tokens: 500,
+        model: "gpt-4o-mini", temperature: 0.3, max_tokens: 500,
         messages: [{ role: "user", content: `Si realitný analytik. Pre KONKRÉTNU adresu "${lokalita}" napíš čo je v bezprostrednom okolí tejto ulice — konkrétne názvy obchodov, škôl, MHD zastávok, parkov. Charakter ulice. Max 150 slov, slovenčina.` }],
       }),
     });
@@ -284,7 +293,7 @@ async function generateGPT(details: string, locationInfo: string): Promise<Recor
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
       body: JSON.stringify({
-        model: "gpt-4o", temperature: 0.7, max_tokens: 2500,
+        model: "gpt-4o-mini", temperature: 0.7, max_tokens: 2500,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: VIANEMA_SYSTEM },
@@ -320,18 +329,23 @@ async function generateGemini(details: string, locationInfo: string, images?: { 
       parts.push({ text: USER_PROMPT(details, locationInfo) });
     }
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: VIANEMA_SYSTEM }] },
-          contents: [{ parts }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 2500, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
-        }),
-      }
+    const geminiBody = JSON.stringify({
+      systemInstruction: { parts: [{ text: VIANEMA_SYSTEM }] },
+      contents: [{ parts }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 2500, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
+    });
+    let res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: geminiBody }
     );
+    // Retry once on 503 (overloaded)
+    if (res.status === 503) {
+      await new Promise(r => setTimeout(r, 3000));
+      res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: geminiBody }
+      );
+    }
     if (!res.ok) { const t = (await res.text()).slice(0,300); console.error("[ai-writer] Gemini HTTP", res.status, t); return { __err: `Gemini HTTP ${res.status}: ${t}` }; }
     const data = await res.json();
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
@@ -384,7 +398,7 @@ async function combineBest(
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.OPENAI_API_KEY}` },
         body: JSON.stringify({
-          model: "gpt-4o", temperature: 0.5, max_tokens: 2000,
+          model: "gpt-4o-mini", temperature: 0.5, max_tokens: 2000,
           messages: [
             { role: "system", content: `Si editor pre VIANEMA reality. Skombinuj dva návrhy do jedného. Text MUSÍ začínať "VIANEMA ponúka...". Odrážky pre parametre. Slovenčina.` },
             { role: "user", content: `NÁVRH A:\n${a.emotivny}\n\nNÁVRH B:\n${b.emotivny}\n\nVráť IBA JSON:\n{"nazov":"IBA U NÁS! alebo NA PREDAJ! max 80 znakov","emotivny":"začni VIANEMA ponúka... + odrážky","technicky":"technický text","kratky":"max 3 vety"}` },

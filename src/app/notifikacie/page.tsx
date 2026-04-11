@@ -105,7 +105,96 @@ export default function NotifikaciePage() {
       });
     });
 
-    // 4. Nehnuteľnosti bez dokumentov (warning)
+    // 4. Stagnujúce a nedokončené inzeráty — smart suggestions
+    const { data: inzeraty } = await supabase
+      .from("nehnutelnosti")
+      .select("id,nazov,cena,typ,kategoria,lokalita,obec,status,created_at,updated_at,klient_id")
+      .in("status", ["aktivny", "koncept"])
+      .order("updated_at", { ascending: true })
+      .limit(20);
+
+    const now = Date.now();
+    (inzeraty ?? []).forEach(inz => {
+      const updatedAt = new Date(inz.updated_at || inz.created_at).getTime();
+      const createdAt = new Date(inz.created_at).getTime();
+      const daysInactive = Math.floor((now - updatedAt) / 86400000);
+      const daysOnMarket = Math.floor((now - createdAt) / 86400000);
+      const title = inz.nazov || `${inz.typ || inz.kategoria || "Inzerát"} — ${inz.obec || inz.lokalita || ""}`.trim();
+      const link = inz.klient_id ? `/klienti/${inz.klient_id}` : "/portfolio";
+
+      // Nedokončený koncept > 2 dni
+      if (inz.status === "koncept" && daysOnMarket > 2) {
+        notifications.push({
+          id: `koncept-${inz.id}`,
+          type: "warning",
+          title: `Nedokončený koncept: ${title}`,
+          detail: `Rozpracovaný inzerát čaká na publikovanie ${daysOnMarket} dní. Dokončite a publikujte.`,
+          time: new Date(inz.created_at).toLocaleDateString("sk"),
+          read: false,
+          link,
+        });
+        return;
+      }
+
+      if (inz.status !== "aktivny") return;
+
+      const cena = Number(inz.cena) || 0;
+      const cena2pct = Math.round(cena * 0.98 / 100) * 100 - 100; // -2% zaokrúhlená Baťova
+      const cena5pct = Math.round(cena * 0.95 / 100) * 100 - 100; // -5%
+
+      if (daysInactive >= 7 && daysInactive < 15) {
+        notifications.push({
+          id: `stale-7-${inz.id}`,
+          type: "info",
+          title: `Skontroluj inzerát: ${title}`,
+          detail: `${daysOnMarket} dní na trhu bez zmeny. Skontroluj aktualitu fotiek a textu.`,
+          time: new Date(inz.updated_at || inz.created_at).toLocaleDateString("sk"),
+          read: true,
+          link,
+        });
+      } else if (daysInactive >= 15 && daysInactive < 30) {
+        const tip = daysOnMarket >= 21
+          ? "Zníž cenu alebo aktualizuj text — inzerát stráca viditeľnosť na portáloch."
+          : "Vymeň titulnú fotku — vizuálna obnova zvyčajne zvýši kliky o 15–20 %.";
+        notifications.push({
+          id: `stale-15-${inz.id}`,
+          type: "warning",
+          title: `Obnov záujem: ${title}`,
+          detail: `${daysInactive} dní bez aktivity (${daysOnMarket} dní na trhu). ${tip}`,
+          time: new Date(inz.updated_at || inz.created_at).toLocaleDateString("sk"),
+          read: false,
+          link,
+        });
+      } else if (daysInactive >= 30 && daysInactive < 60) {
+        const tip = cena > 0
+          ? `Zníž cenu o 2 % (${cena.toLocaleString("sk")} € → ${cena2pct.toLocaleString("sk")} €) — najefektívnejší krok pri stagnácii.`
+          : "Zníž cenu o 2–3 % — najefektívnejší krok pri stagnácii.";
+        notifications.push({
+          id: `stale-30-${inz.id}`,
+          type: "action",
+          title: `Inzerát stagnuje: ${title}`,
+          detail: `${daysInactive} dní bez zmeny (${daysOnMarket} dní na trhu). ${tip} Obnov aj fotky a text.`,
+          time: new Date(inz.updated_at || inz.created_at).toLocaleDateString("sk"),
+          read: false,
+          link,
+        });
+      } else if (daysInactive >= 60) {
+        const tip = cena > 0
+          ? `Zásadná revízia: zníž cenu o 5 %+ (${cena.toLocaleString("sk")} € → ${cena5pct.toLocaleString("sk")} €), nové profesionálne fotky, prepíš celý text.`
+          : "Zásadná revízia: zníženie ceny 5 %+, nové fotky, nový text.";
+        notifications.push({
+          id: `stale-60-${inz.id}`,
+          type: "action",
+          title: `Kritická stagnácia: ${title}`,
+          detail: `${daysInactive} dní bez aktivity (${daysOnMarket} dní na trhu). ${tip}`,
+          time: new Date(inz.updated_at || inz.created_at).toLocaleDateString("sk"),
+          read: false,
+          link,
+        });
+      }
+    });
+
+    // 5. Nehnuteľnosti bez dokumentov (warning)
     const { data: noDocProps } = await supabase
       .from("nehnutelnosti")
       .select("id,nazov")

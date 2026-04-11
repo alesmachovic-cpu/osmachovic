@@ -256,7 +256,13 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
   const [typKlienta, setTypKlienta] = useState<string>(editKlient?.typ || defaultTyp);
   const [typNehnutelnosti, setTypNehnutelnosti] = useState("");
   const [lokalitaInput, setLokalitaInput] = useState(editKlient?.lokalita || "");
-  const [lokalitaValue, setLokalitaValue] = useState(editKlient?.lokalita || ""); // actual DB value
+  // lokalitaValue = "confirmed" DB value — len ak je v LOKALITY_DB (edit mode: overíme)
+  const [lokalitaValue, setLokalitaValue] = useState(() => {
+    if (!editKlient?.lokalita) return "";
+    const val = editKlient.lokalita;
+    const isValid = LOKALITY_DB.some(l => !l.ulica && l.lokalita === val);
+    return isValid ? val : "";
+  });
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [ulica, setUlica] = useState("");
   const [cisloDomu, setCisloDomu] = useState("");
@@ -269,6 +275,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
   const [poznamka, setPoznamka] = useState(editKlient?.poznamka || "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ lokalita?: string; ulica?: string; cislo?: string }>({});
   const [calendarSynced, setCalendarSynced] = useState(false);
   const suggestRef = useRef<HTMLDivElement>(null);
 
@@ -434,6 +441,31 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
     if (!telefon.trim() || !meno.trim()) return;
     if (!isEdit && !typNehnutelnosti) return;
     if (!isEdit && dupLevel === "critical" && !forceCreate) return;
+
+    // Validácia adresy — lokalita, ulica, číslo sú povinné
+    const addrErrors: typeof fieldErrors = {};
+    const lokInput = lokalitaInput.trim();
+    if (!lokalitaValue && !lokInput) {
+      addrErrors.lokalita = "Mesto / obec je povinné";
+    } else if (!lokalitaValue && lokInput) {
+      // Detekuj ulice v poli mesta (slovenské vzory: -ská, -ová, -ova, -cesta, ulica, nám, trieda)
+      const streetPattern = /(ská|ová|ova|ova cesta|ulica|nám\.|námestie|trieda|alej|aleji|sady|brehov|hrádze|pobrežie)$/i;
+      if (streetPattern.test(normalizeSearch(lokInput))) {
+        addrErrors.lokalita = "Toto vyzerá ako ulica. Tu zadaj MESTO alebo OBEC (napr. Bratislava, Košice)";
+      }
+    }
+    if (lokalitaValue && !ulica.trim()) {
+      addrErrors.ulica = "Ulica je povinná";
+    }
+    if (lokalitaValue && ulica.trim() && !cisloDomu.trim()) {
+      addrErrors.cislo = "Číslo domu je povinné";
+    }
+    if (Object.keys(addrErrors).length > 0) {
+      setFieldErrors(addrErrors);
+      return;
+    }
+    setFieldErrors({});
+
     setSaving(true);
     setSaveError("");
 
@@ -704,15 +736,21 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
 
           {/* Lokalita — smart autocomplete */}
           <div ref={suggestRef} style={{ position: "relative" }}>
-            <div style={labelSt}>Lokalita *</div>
+            <div style={labelSt}>Mesto / Obec * <span style={{ fontWeight: "400", textTransform: "none", color: "var(--text-muted)" }}>(nie ulica!)</span></div>
             <input
-              style={{ ...inputSt, border: lokalitaValue ? "2px solid #10B981" : "1px solid var(--border)" }}
-              placeholder="Začni písať mesto, časť alebo okres..."
+              style={{ ...inputSt, border: fieldErrors.lokalita ? "2px solid #EF4444" : lokalitaValue ? "2px solid #10B981" : "1px solid var(--border)" }}
+              placeholder="napr. Bratislava, Košice, Nitra, Žilina..."
               value={lokalitaInput}
-              onChange={e => { setLokalitaInput(e.target.value); setLokalitaValue(""); setShowSuggestions(true); }}
+              onChange={e => { setLokalitaInput(e.target.value); setLokalitaValue(""); setShowSuggestions(true); setFieldErrors(p => ({ ...p, lokalita: undefined })); }}
               onFocus={() => { if (normalizeSearch(lokalitaInput).length >= 2) setShowSuggestions(true); }}
             />
-            {lokalitaValue && <div style={{ fontSize: "11px", color: "#065F46", marginTop: "4px" }}>→ {lokalitaValue}</div>}
+            {fieldErrors.lokalita && <div style={{ fontSize: "11px", color: "#EF4444", marginTop: "4px" }}>⚠ {fieldErrors.lokalita}</div>}
+            {lokalitaValue && !fieldErrors.lokalita && <div style={{ fontSize: "11px", color: "#065F46", marginTop: "4px" }}>→ {lokalitaValue}</div>}
+            {!lokalitaValue && !fieldErrors.lokalita && (
+              <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+                Mestská časť alebo obec — ulicu vyplníš nižšie
+              </div>
+            )}
             {showSuggestions && suggestions.length > 0 && (
               <div style={{
                 position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
@@ -739,12 +777,15 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
           {lokalitaValue && (
           <div style={{ display: "flex", gap: "10px" }}>
             <div ref={ulicaSuggestRef} style={{ position: "relative", flex: 1 }}>
-              <div style={labelSt}>Ulica</div>
-              <input style={inputSt} placeholder={`Ulica v ${lokalitaInput || lokalitaValue}...`} value={ulica}
-                onChange={e => { setUlica(e.target.value); setShowUlicaSuggestions(true); }}
+              <div style={labelSt}>Ulica *</div>
+              <input
+                style={{ ...inputSt, border: fieldErrors.ulica ? "2px solid #EF4444" : ulica.trim() ? "2px solid #10B981" : "1px solid var(--border)" }}
+                placeholder={`Ulica v ${lokalitaInput || lokalitaValue}...`} value={ulica}
+                onChange={e => { setUlica(e.target.value); setShowUlicaSuggestions(true); setFieldErrors(p => ({ ...p, ulica: undefined })); }}
                 onFocus={() => { if (ulicaSuggestions.length > 0) setShowUlicaSuggestions(true); }}
                 autoComplete="off"
               />
+              {fieldErrors.ulica && <div style={{ fontSize: "11px", color: "#EF4444", marginTop: "4px" }}>⚠ {fieldErrors.ulica}</div>}
               {showUlicaSuggestions && ulicaSuggestions.length > 0 && (
                 <div style={{
                   position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20,
@@ -771,10 +812,13 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
               )}
             </div>
             <div style={{ width: "90px", flexShrink: 0 }}>
-              <div style={labelSt}>Číslo</div>
-              <input style={inputSt} placeholder="napr. 25" value={cisloDomu}
-                onChange={e => setCisloDomu(e.target.value)}
+              <div style={labelSt}>Číslo *</div>
+              <input
+                style={{ ...inputSt, border: fieldErrors.cislo ? "2px solid #EF4444" : cisloDomu.trim() ? "2px solid #10B981" : "1px solid var(--border)" }}
+                placeholder="napr. 25" value={cisloDomu}
+                onChange={e => { setCisloDomu(e.target.value); setFieldErrors(p => ({ ...p, cislo: undefined })); }}
               />
+              {fieldErrors.cislo && <div style={{ fontSize: "11px", color: "#EF4444", marginTop: "4px" }}>⚠ {fieldErrors.cislo}</div>}
             </div>
           </div>
           )}

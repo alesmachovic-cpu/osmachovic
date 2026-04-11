@@ -182,6 +182,59 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   // Podpis
   const [podpisData, setPodpisData] = useState<string | null>(null);
 
+  // LV banner + extra vlastníci + parcely
+  const [lvFilled, setLvFilled] = useState(false);
+  const [lvMajitelia, setLvMajitelia] = useState<Array<{ meno: string; podiel?: string }>>([]);
+  const [lvPozemky, setLvPozemky] = useState<Array<{ cislo_parcely?: string; druh?: string; vymera?: number }>>([]);
+  const [lvPravneVady, setLvPravneVady] = useState("");
+
+  // Auto-fill z LV dát klienta (ak sú k dispozícii)
+  useEffect(() => {
+    const lv = klient.lv_data as Record<string, unknown> | null | undefined;
+    if (!lv) return;
+    let filled = false;
+    if (lv.obec && !obec) { setObec(String(lv.obec)); filled = true; }
+    if (lv.ulica && !ulica) { setUlica(String(lv.ulica)); filled = true; }
+    if (lv.supisne_cislo && !supisneCislo) { setSupisneCislo(String(lv.supisne_cislo)); filled = true; }
+    if (lv.katastralneUzemie && !katUzemie) { setKatUzemie(String(lv.katastralneUzemie)); filled = true; }
+    if (lv.plocha && !plocha) { setPlocha(String(lv.plocha)); filled = true; }
+    if (lv.izby && !pocetIzieb) { setPocetIzieb(String(lv.izby)); filled = true; }
+    if (lv.poschodie && !poschodie) { setPoschodie(String(lv.poschodie)); filled = true; }
+    if (lv.rok_vystavby && !rokVystavby) { setRokVystavby(String(lv.rok_vystavby)); filled = true; }
+    if (lv.material && !typDomu) { setTypDomu(String(lv.material)); filled = true; }
+    if (lv.vlastnictvo) {
+      const v = String(lv.vlastnictvo).toLowerCase();
+      if (v.includes("druz")) { setVlastnictvo("druzstevne"); filled = true; }
+      else if (v.includes("osob")) { setVlastnictvo("osobne"); filled = true; }
+    }
+    // Kraj + Okres z LV
+    if (lv.kraj) { setKraj(String(lv.kraj)); filled = true; }
+    if (lv.okres) { setOkres(String(lv.okres)); filled = true; }
+    // Majiteľ — preferuj prvého majiteľa z LV, ak existuje
+    const majitelia = lv.majitelia as Array<{ meno?: string; podiel?: string }> | undefined;
+    if (majitelia?.length && majitelia[0].meno) {
+      setMajitel(majitelia[0].meno);
+      // Ak je viac vlastníkov, ulož zvyšných pre zobrazenie
+      if (majitelia.length > 1) {
+        setLvMajitelia(majitelia.filter((m, i) => i > 0 && m.meno).map(m => ({ meno: m.meno!, podiel: m.podiel })));
+      }
+      filled = true;
+    }
+    // Pozemky z LV
+    const pozemky = lv.pozemky as Array<{ cislo_parcely?: string; druh?: string; vymera?: number }> | undefined;
+    if (pozemky?.length) {
+      setLvPozemky(pozemky);
+      filled = true;
+    }
+    // Právne vady
+    if (lv.pravne_vady) {
+      setLvPravneVady(String(lv.pravne_vady));
+      filled = true;
+    }
+    if (filled) setLvFilled(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Cenový odhad (per-user)
   const [odhadCenaM2, setOdhadCenaM2] = useState(2800);
   const [rekonstrukciaM2, setRekonstrukciaM2] = useState(500);
@@ -389,6 +442,22 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
         </div>
       </div>
 
+      {/* LV banner */}
+      {lvFilled && (
+        <div style={{
+          padding: "12px 16px", background: "#F0FDF4", border: "1px solid #BBF7D0",
+          borderRadius: "12px", marginBottom: "4px",
+          display: "flex", alignItems: "center", gap: "10px",
+        }}>
+          <span style={{ fontSize: "16px" }}>📋</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "13px", fontWeight: "700", color: "#059669" }}>Polia vyplnené z LV</div>
+            <div style={{ fontSize: "11px", color: "#059669", opacity: 0.8 }}>Adresa, plocha, majiteľ — skontroluj a uprav ak treba</div>
+          </div>
+          <button onClick={() => setLvFilled(false)} style={{ background: "none", border: "none", color: "#059669", cursor: "pointer", fontSize: "16px", opacity: 0.6 }}>×</button>
+        </div>
+      )}
+
       {/* 1. Lokalita */}
       <div style={cardSt}>
         <div style={sectionTitle}>📍 Lokalita</div>
@@ -433,6 +502,35 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Pozemky + právne vady z LV */}
+      {(lvPozemky.length > 0 || lvPravneVady) && (
+        <div style={{
+          background: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderRadius: "14px", padding: "16px", marginBottom: "0",
+        }}>
+          {lvPozemky.length > 0 && (
+            <div style={{ marginBottom: lvPravneVady ? "12px" : "0" }}>
+              <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                Pozemky z LV {(klient.lv_data as Record<string,unknown>)?.pozemky_sucast ? "· súčasť predaja" : ""}
+              </div>
+              {lvPozemky.map((p, i) => (
+                <div key={i} style={{ fontSize: "13px", color: "var(--text-primary)", paddingBottom: "3px" }}>
+                  parc. {p.cislo_parcely}{p.druh ? ` — ${p.druh}` : ""}{p.vymera ? `, ${p.vymera} m²` : ""}
+                </div>
+              ))}
+            </div>
+          )}
+          {lvPravneVady && (
+            <div>
+              <div style={{ fontSize: "12px", fontWeight: "700", color: "#D97706", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                Ťarchy / právne vady
+              </div>
+              <div style={{ fontSize: "13px", color: "#92400E" }}>{lvPravneVady}</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 2. Nehnuteľnosť */}
       <div style={cardSt}>
@@ -707,7 +805,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
         <div style={sectionTitle}>👤 Majiteľ / Vlastník</div>
         <div className="naber-grid" style={gridSt}>
           <div>
-            <label style={labelSt}>Majiteľ *</label>
+            <label style={labelSt}>Majiteľ *{lvMajitelia.length > 0 ? " (1. vlastník)" : ""}</label>
             <input value={majitel} onChange={e => setMajitel(e.target.value)} style={inputSt} placeholder="Meno a priezvisko" />
           </div>
           <div>
@@ -731,6 +829,19 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
             <input value={kontaktUzivatel} onChange={e => setKontaktUzivatel(e.target.value)} style={inputSt} />
           </div>
         </div>
+        {/* Ďalší vlastníci z LV */}
+        {lvMajitelia.length > 0 && (
+          <div style={{ marginTop: "14px", padding: "12px 14px", background: "#F0FDF4", borderRadius: "10px", border: "1px solid #BBF7D0" }}>
+            <div style={{ fontSize: "11px", fontWeight: "700", color: "#059669", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Ďalší vlastníci z LV
+            </div>
+            {lvMajitelia.map((m, i) => (
+              <div key={i} style={{ fontSize: "13px", color: "var(--text-primary)", paddingBottom: "4px" }}>
+                {m.meno}{m.podiel ? <span style={{ color: "var(--text-muted)" }}> — podiel {m.podiel}</span> : ""}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 8. Predaj + Zmluva */}
