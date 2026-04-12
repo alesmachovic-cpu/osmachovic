@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { Klient } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
@@ -58,6 +58,7 @@ function KlientiContent() {
   const [statusCislo, setStatusCislo] = useState("");
   const [statusAddrError, setStatusAddrError] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
+  const [lvPromptKlient, setLvPromptKlient] = useState<Klient | null>(null);
 
   async function fetchKlienti() {
     setLoading(true);
@@ -73,6 +74,7 @@ function KlientiContent() {
   }
 
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   useEffect(() => {
     fetchKlienti();
@@ -209,6 +211,10 @@ function KlientiContent() {
     }
 
     setStatusSaving(false);
+    // Po dohodnutom nábere: ak klient nemá LV, ukáž prompt
+    if (!isVolat && !k.lv_data) {
+      setLvPromptKlient(k);
+    }
     setStatusModal(null);
     setStatusDatum("");
     setStatusMiesto("");
@@ -557,6 +563,36 @@ function KlientiContent() {
               }}>
                 {statusSaving ? "Ukladám..." : statusModal.status === "dohodnuty_naber" ? "Potvrdiť náber" : "Uložiť pripomienku"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LV prompt po dohodnutom nábere */}
+      {lvPromptKlient && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+          onClick={() => setLvPromptKlient(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "var(--bg-surface)", borderRadius: "20px", padding: "32px",
+            maxWidth: "380px", width: "100%", textAlign: "center",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+          }}>
+            <div style={{ fontSize: "40px", marginBottom: "12px" }}>📄</div>
+            <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 8px" }}>
+              Pridať List vlastníctva
+            </h2>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 24px", lineHeight: "1.5" }}>
+              LV pre <strong>{lvPromptKlient.meno}</strong> pomôže automaticky vyplniť náberový list. Pridaj ho teraz alebo neskôr na karte klienta.
+            </p>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+              <button onClick={() => setLvPromptKlient(null)} style={{
+                padding: "10px 24px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Neskôr</button>
+              <button onClick={() => { router.push(`/klienti/${lvPromptKlient.id}?tab=dokumenty`); setLvPromptKlient(null); }} style={{
+                padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>Pridať LV</button>
             </div>
           </div>
         </div>

@@ -12,7 +12,22 @@ const TYP_LABELS: Record<string, string> = {
 const STAV_LABELS: Record<string, string> = {
   velmi_dobry: "Velmi dobry", dobry: "Dobry", zly: "Zly",
   kompletna_rekonstrukcia: "Kompletna rekonstrukcia", novostavba: "Novostavba",
-  invest_zamer: "Investicny zamer", projekt: "Projekt", vystavba: "Vystavba",
+  schatralý: "Schatralny", invest_zamer: "Investicny zamer", projekt: "Projekt", vystavba: "Vystavba",
+};
+const VLASTNICTVO_LABELS: Record<string, string> = {
+  osobne: "Osobne vlastnictvo", druzstevne: "Druzstevne vlastnictvo",
+};
+const ZMLUVA_LABELS: Record<string, string> = {
+  exkluzivna: "Exkluzivna", neexkluzivna: "Neexkluzivna",
+};
+const INZERCIA_LABELS: Record<string, string> = {
+  inkognito: "Inkognito (len databaza)", online_web: "Online — nas web",
+  online: "Online (web + portaly)", vyhradne: "Vyhradne (exkluzivna inzercia)",
+};
+const TARCHA_LABELS: Record<string, string> = {
+  z_kupnej: "Vyplatenie z kupnej ceny",
+  prenos: "Prenos na inu nehnutelnost",
+  pred_podpisom: "Vyplatenie pred podpisom KZ",
 };
 
 function formatDate(iso: string): string {
@@ -25,72 +40,263 @@ function formatCena(v: number): string {
   return v.toLocaleString("sk") + " EUR";
 }
 
-// Generate minimal PDF manually (no external lib) using PDF spec
+type Section = { title: string; icon: string; rows: [string, string][] };
+
 function generatePdfBytes(naber: Record<string, unknown>, klient: Record<string, unknown>): Buffer {
-  const lines: string[] = [];
   const klientMeno = (klient?.meno as string) || "Klient";
   const klientTelefon = klient?.telefon as string;
   const klientEmail = klient?.email as string;
-
-  lines.push("VIANEMA - Naberovy list");
-  lines.push("");
-
-  if (naber.datum_naberu) lines.push("Datum: " + formatDate(naber.datum_naberu as string));
-  lines.push("");
-
-  lines.push("--- KLIENT ---");
-  lines.push("Meno: " + klientMeno);
-  if (klientTelefon) lines.push("Telefon: " + klientTelefon);
-  if (klientEmail) lines.push("Email: " + klientEmail);
-  lines.push("");
-
-  lines.push("--- NEHNUTELNOST ---");
-  lines.push("Typ: " + (TYP_LABELS[naber.typ_nehnutelnosti as string] || naber.typ_nehnutelnosti));
-  const adresa = [naber.ulica, naber.cislo_orientacne, naber.obec, naber.okres, naber.kraj].filter(Boolean).join(", ");
-  if (adresa) lines.push("Adresa: " + adresa);
-  if (naber.plocha) lines.push("Plocha: " + naber.plocha + " m2");
-  if (naber.stav) lines.push("Stav: " + (STAV_LABELS[naber.stav as string] || naber.stav));
-  if (naber.predajna_cena) lines.push("Predajna cena: " + formatCena(Number(naber.predajna_cena)));
-
   const params = naber.parametre as Record<string, unknown> | null;
-  if (params) {
-    if (params.pocet_izieb) lines.push("Pocet izieb: " + params.pocet_izieb);
-    if (params.poschodie) lines.push("Poschodie: " + params.poschodie + (params.z_kolko ? "/" + params.z_kolko : ""));
-    if (params.kurenie) lines.push("Kurenie: " + params.kurenie);
-    if (params.pozemok_plocha) lines.push("Pozemok: " + params.pozemok_plocha + " m2");
-  }
-  lines.push("");
+  const vybavenie = naber.vybavenie as Record<string, unknown> | null;
+  const oznacenie = naber.oznacenie as Record<string, unknown> | null;
+  const lv = klient?.lv_data as Record<string, unknown> | null;
 
+  const sections: Section[] = [];
+
+  // 1. KLIENT
+  const klientRows: [string, string][] = [];
+  klientRows.push(["Meno", klientMeno]);
+  if (klientTelefon) klientRows.push(["Telefon", klientTelefon]);
+  if (klientEmail) klientRows.push(["Email", klientEmail]);
+  sections.push({ title: "KLIENT", icon: "1", rows: klientRows });
+
+  // 2. VLASTNIK / MAJITEL
+  const vlastnikRows: [string, string][] = [];
+  if (naber.majitel) vlastnikRows.push(["Majitel", String(naber.majitel)]);
+  if (naber.kontakt_majitel) vlastnikRows.push(["Kontakt majitela", String(naber.kontakt_majitel)]);
+  if (naber.konatel) vlastnikRows.push(["Konatel", String(naber.konatel)]);
+  if (naber.jednatel) vlastnikRows.push(["Jednatel", String(naber.jednatel)]);
+  if (naber.uzivatel) vlastnikRows.push(["Uzivatel", String(naber.uzivatel)]);
+  if (naber.kontakt_uzivatel) vlastnikRows.push(["Kontakt uzivatela", String(naber.kontakt_uzivatel)]);
+  // LV majitelia
+  const majitelia = lv?.majitelia as Array<{ meno?: string; podiel?: string; datum_narodenia?: string }> | undefined;
+  if (majitelia?.length) {
+    majitelia.forEach((m, i) => {
+      if (m.meno) {
+        let val = m.meno;
+        if (m.podiel) val += ` — podiel ${m.podiel}`;
+        if (m.datum_narodenia) val += `, nar. ${m.datum_narodenia}`;
+        vlastnikRows.push([`Vlastnik ${i + 1} (LV)`, val]);
+      }
+    });
+  }
+  if (vlastnikRows.length > 0) sections.push({ title: "VLASTNIK", icon: "2", rows: vlastnikRows });
+
+  // 3. LOKALITA
+  const lokalitaRows: [string, string][] = [];
+  if (naber.kraj) lokalitaRows.push(["Kraj", String(naber.kraj)]);
+  if (naber.okres) lokalitaRows.push(["Okres", String(naber.okres)]);
+  if (naber.obec) lokalitaRows.push(["Obec", String(naber.obec)]);
+  if (naber.cast_obce) lokalitaRows.push(["Cast obce", String(naber.cast_obce)]);
+  if (naber.kat_uzemie) lokalitaRows.push(["Katastralne uzemie", String(naber.kat_uzemie)]);
+  if (naber.ulica) lokalitaRows.push(["Ulica", String(naber.ulica)]);
+  if (naber.cislo_orientacne) lokalitaRows.push(["Cislo orientacne", String(naber.cislo_orientacne)]);
+  if (naber.supisne_cislo) lokalitaRows.push(["Supisne cislo", String(naber.supisne_cislo)]);
+  if (lokalitaRows.length > 0) sections.push({ title: "LOKALITA", icon: "3", rows: lokalitaRows });
+
+  // 4. NEHNUTELNOST
+  const nehnutRows: [string, string][] = [];
+  nehnutRows.push(["Typ", TYP_LABELS[naber.typ_nehnutelnosti as string] || String(naber.typ_nehnutelnosti || "")]);
+  if (naber.plocha) nehnutRows.push(["Plocha", naber.plocha + " m2"]);
+  if (naber.stav) nehnutRows.push(["Stav", STAV_LABELS[naber.stav as string] || String(naber.stav)]);
+  if (params?.pocet_izieb) nehnutRows.push(["Pocet izieb", String(params.pocet_izieb)]);
+  if (params?.byt_cislo) nehnutRows.push(["Cislo bytu", String(params.byt_cislo)]);
+  if (params?.poschodie != null) {
+    let posch = String(params.poschodie);
+    if (params.z_kolko) posch += " / " + params.z_kolko;
+    nehnutRows.push(["Poschodie", posch]);
+  }
+  if (params?.vlastnictvo) nehnutRows.push(["Vlastnictvo", VLASTNICTVO_LABELS[params.vlastnictvo as string] || String(params.vlastnictvo)]);
+  if (params?.druzstvo) nehnutRows.push(["Druzstvo", String(params.druzstvo)]);
+  if (params?.typ_domu) nehnutRows.push(["Typ domu", String(params.typ_domu)]);
+  if (params?.rok_vystavby) nehnutRows.push(["Rok vystavby", String(params.rok_vystavby)]);
+  if (params?.kurenie) nehnutRows.push(["Kurenie", String(params.kurenie)]);
+  if (params?.typ_podlahy) nehnutRows.push(["Typ podlahy", String(params.typ_podlahy)]);
+  if (params?.mesacne_poplatky) nehnutRows.push(["Mesacne poplatky", params.mesacne_poplatky + " EUR"]);
+  if (params?.anuita) nehnutRows.push(["Anuita / hypoteka", String(params.anuita)]);
+  if (params?.vyhlad) nehnutRows.push(["Vyhlad", String(params.vyhlad)]);
+  // Rodinny dom extras
+  if (params?.pocet_podlazi) nehnutRows.push(["Pocet podlazi", String(params.pocet_podlazi)]);
+  if (params?.pozemok_plocha) nehnutRows.push(["Plocha pozemku", params.pozemok_plocha + " m2"]);
+  if (params?.zahrada) nehnutRows.push(["Zahrada", "Ano"]);
+  // Pozemok extras
+  if (params?.druh_pozemku) nehnutRows.push(["Druh pozemku", String(params.druh_pozemku)]);
+  if (params?.pristupova_cesta) nehnutRows.push(["Pristupova cesta", String(params.pristupova_cesta)]);
+  if (params?.siete) nehnutRows.push(["Inzinierske siete", String(params.siete)]);
+  if (params?.ucelove_urcenie) nehnutRows.push(["Ucelove urcenie", String(params.ucelove_urcenie)]);
+  sections.push({ title: "NEHNUTELNOST", icon: "4", rows: nehnutRows });
+
+  // 5. OZNACENIE NEHNUTELNOSTI
+  if (oznacenie) {
+    const ozRows: [string, string][] = [];
+    if (oznacenie.list_vlastnictva) ozRows.push(["List vlastnictva", String(oznacenie.list_vlastnictva)]);
+    if (oznacenie.cislo_parcely) ozRows.push(["Parcela", String(oznacenie.cislo_parcely)]);
+    if (oznacenie.katastralne_uzemie) ozRows.push(["Kat. uzemie", String(oznacenie.katastralne_uzemie)]);
+    if (ozRows.length > 0) sections.push({ title: "OZNACENIE NEHNUTELNOSTI", icon: "5", rows: ozRows });
+  }
+
+  // 6. VYBAVENIE
+  if (vybavenie) {
+    const vybRows: [string, string][] = [];
+    const items = Object.entries(vybavenie).filter(([k, v]) => v && k !== "zariadeny");
+    if (items.length > 0) vybRows.push(["Vybavenie", items.map(([k]) => k).join(", ")]);
+    if (vybavenie.zariadeny) vybRows.push(["Zariadeny", String(vybavenie.zariadeny)]);
+    if (naber.poznamky_vybavenie) vybRows.push(["Poznamky k vybaveniu", String(naber.poznamky_vybavenie)]);
+    if (vybRows.length > 0) sections.push({ title: "VYBAVENIE", icon: "6", rows: vybRows });
+  }
+
+  // 7. POZEMKY Z LV
+  const pozemky = lv?.pozemky as Array<{ cislo_parcely?: string; druh?: string; vymera?: number }> | undefined;
+  if (pozemky?.length) {
+    const pozRows: [string, string][] = [];
+    pozemky.forEach((p, i) => {
+      let val = `parc. ${p.cislo_parcely || "?"}`;
+      if (p.druh) val += ` — ${p.druh}`;
+      if (p.vymera) val += `, ${p.vymera} m2`;
+      pozRows.push([`Pozemok ${i + 1}`, val]);
+    });
+    sections.push({ title: "POZEMKY", icon: "7", rows: pozRows });
+  }
+
+  // 8. TARCHA / PRAVNE VADY
+  if (params?.tarcha_text) {
+    const tRows: [string, string][] = [];
+    tRows.push(["Tarcha", String(params.tarcha_text)]);
+    if (params.tarcha_riesenie) tRows.push(["Riesenie", TARCHA_LABELS[params.tarcha_riesenie as string] || String(params.tarcha_riesenie)]);
+    sections.push({ title: "TARCHA / PRAVNE VADY", icon: "!", rows: tRows });
+  }
+
+  // 9. PREDAJ A ZMLUVA
+  const zmlRows: [string, string][] = [];
+  if (naber.predajna_cena) zmlRows.push(["Predajna cena", formatCena(Number(naber.predajna_cena))]);
+  if (naber.provizia) zmlRows.push(["Provizia", String(naber.provizia)]);
   if (naber.zmluva) {
-    lines.push("--- ZMLUVA ---");
-    if (naber.typ_zmluvy) lines.push("Typ zmluvy: " + naber.typ_zmluvy);
-    if (naber.datum_podpisu) lines.push("Datum podpisu: " + formatDate(naber.datum_podpisu as string));
-    if (naber.zmluva_do) lines.push("Platnost do: " + formatDate(naber.zmluva_do as string));
-    if (naber.provizia) lines.push("Provizia: " + naber.provizia);
-    lines.push("");
+    if (naber.typ_zmluvy) zmlRows.push(["Typ zmluvy", ZMLUVA_LABELS[naber.typ_zmluvy as string] || String(naber.typ_zmluvy)]);
+    if (naber.datum_podpisu) zmlRows.push(["Datum podpisu", formatDate(naber.datum_podpisu as string)]);
+    if (naber.zmluva_do) zmlRows.push(["Platnost do", formatDate(naber.zmluva_do as string)]);
   }
+  if (naber.typ_inzercie) zmlRows.push(["Typ inzercie", INZERCIA_LABELS[naber.typ_inzercie as string] || String(naber.typ_inzercie)]);
+  if (zmlRows.length > 0) sections.push({ title: "PREDAJ A ZMLUVA", icon: "8", rows: zmlRows });
 
-  lines.push("--- MAKLER ---");
-  if (naber.makler) lines.push("Makler: " + naber.makler);
-  lines.push("");
-  lines.push("---");
-  lines.push("VIANEMA s.r.o. | www.vianema.sk");
+  // 10. MAKLER
+  const makRows: [string, string][] = [];
+  if (naber.makler) makRows.push(["Makler", String(naber.makler)]);
+  if (naber.popis) makRows.push(["Poznamka", String(naber.popis)]);
+  sections.push({ title: "MAKLER", icon: "9", rows: makRows });
 
-  // Build a minimal valid PDF
-  const text = lines.join("\n");
-  return buildSimplePdf(text, klientMeno, naber);
+  return buildPdf(sections, naber, klientMeno);
 }
 
-function buildSimplePdf(text: string, title: string, naber: Record<string, unknown>): Buffer {
-  // Minimal PDF 1.4 generator
-  const textLines = text.split("\n");
-  const pageW = 595.28; // A4
+function buildPdf(sections: Section[], naber: Record<string, unknown>, title: string): Buffer {
+  const pageW = 595.28;
   const pageH = 841.89;
   const margin = 50;
-  const lineHeight = 16;
-  const fontSize = 11;
-  const headerFontSize = 22;
+  const rightMargin = 50;
+  const contentW = pageW - margin - rightMargin;
+  const lineHeight = 15;
+  const fontSize = 10;
+  const sectionGap = 10;
 
+  // Collect all pages' content streams
+  const pageStreams: string[] = [];
+  let stream = "";
+  let yPos = pageH - 90; // start after header
+
+  function newPage() {
+    pageStreams.push(stream);
+    stream = "";
+    yPos = pageH - 40;
+  }
+
+  function checkSpace(needed: number) {
+    if (yPos - needed < margin + 30) newPage();
+  }
+
+  // Header on first page
+  stream += "q\n0.216 0.255 0.318 rg\n";
+  stream += `0 ${pageH - 65} ${pageW} 65 re f\nQ\n`;
+  stream += "BT\n/F2 22 Tf\n1 1 1 rg\n";
+  stream += `${margin} ${pageH - 38} Td\n(VIANEMA) Tj\n`;
+  stream += `/F1 10 Tf\n0 -15 Td\n(Naberovy list) Tj\nET\n`;
+  if (naber.datum_naberu) {
+    stream += `BT\n1 1 1 rg\n/F1 10 Tf\n${pageW - margin - 130} ${pageH - 42} Td\n`;
+    stream += `(${esc(formatDate(naber.datum_naberu as string))}) Tj\nET\n`;
+  }
+
+  // Render sections
+  for (const section of sections) {
+    if (section.rows.length === 0) continue;
+
+    // Space needed: title + rows
+    const needed = 24 + section.rows.length * lineHeight + sectionGap;
+    checkSpace(Math.min(needed, 80)); // at least check for title + 3 rows
+
+    // Section title with line
+    yPos -= sectionGap + 6;
+    // Gray line
+    stream += `q\n0.85 0.87 0.89 rg\n${margin} ${yPos} ${contentW} 0.5 re f\nQ\n`;
+    yPos -= 16;
+    stream += `BT\n/F2 11 Tf\n0.216 0.255 0.318 rg\n`;
+    stream += `${margin} ${yPos} Td\n(${esc(section.title)}) Tj\nET\n`;
+    yPos -= 6;
+
+    // Rows
+    for (const [label, value] of section.rows) {
+      checkSpace(lineHeight + 4);
+      yPos -= lineHeight;
+
+      // Label (muted)
+      stream += `BT\n/F1 ${fontSize} Tf\n0.45 0.48 0.52 rg\n`;
+      stream += `${margin} ${yPos} Td\n(${esc(label + ":")}) Tj\nET\n`;
+
+      // Value (bold, dark) — wrap long text
+      const valueX = margin + 140;
+      const maxW = pageW - rightMargin - valueX;
+      const maxChars = Math.floor(maxW / (fontSize * 0.5));
+
+      if (value.length > maxChars) {
+        // Multi-line value
+        const words = value.split(/\s+/);
+        let currentLine = "";
+        let firstLine = true;
+        for (const word of words) {
+          if ((currentLine + " " + word).length > maxChars && currentLine) {
+            stream += `BT\n/F2 ${fontSize} Tf\n0.216 0.255 0.318 rg\n`;
+            stream += `${valueX} ${yPos} Td\n(${esc(currentLine)}) Tj\nET\n`;
+            if (!firstLine) { /* already accounted */ } else firstLine = false;
+            yPos -= lineHeight;
+            checkSpace(lineHeight);
+            currentLine = word;
+          } else {
+            currentLine = currentLine ? currentLine + " " + word : word;
+          }
+        }
+        if (currentLine) {
+          stream += `BT\n/F2 ${fontSize} Tf\n0.216 0.255 0.318 rg\n`;
+          stream += `${valueX} ${yPos} Td\n(${esc(currentLine)}) Tj\nET\n`;
+        }
+      } else {
+        stream += `BT\n/F2 ${fontSize} Tf\n0.216 0.255 0.318 rg\n`;
+        stream += `${valueX} ${yPos} Td\n(${esc(value)}) Tj\nET\n`;
+      }
+    }
+  }
+
+  // Signature
+  if (naber.podpis_data && typeof naber.podpis_data === "string") {
+    checkSpace(50);
+    yPos -= 24;
+    stream += `BT\n/F1 9 Tf\n0.45 0.48 0.52 rg\n${margin} ${yPos} Td\n`;
+    stream += `(Podpis: [podpisany elektronicky]) Tj\nET\n`;
+  }
+
+  // Footer
+  stream += `BT\n/F1 8 Tf\n0.65 0.67 0.70 rg\n${margin} 30 Td\n`;
+  stream += `(VIANEMA s.r.o. | www.vianema.sk | Vsetky prava vyhradene) Tj\nET\n`;
+
+  pageStreams.push(stream);
+
+  // Build PDF objects
   const objects: string[] = [];
   let objCount = 0;
   const offsets: number[] = [];
@@ -101,113 +307,42 @@ function buildSimplePdf(text: string, title: string, naber: Record<string, unkno
     return objCount;
   }
 
+  const pageCount = pageStreams.length;
+
   // Obj 1: Catalog
   addObj("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj");
-  // Obj 2: Pages
-  addObj("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj");
+  // Obj 2: Pages (filled later)
+  addObj(""); // placeholder
+  // Obj 3: Font Helvetica
+  addObj("3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj");
+  // Obj 4: Font Helvetica-Bold
+  addObj("4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj");
 
-  // Build page content stream
-  let streamContent = "";
+  // Create page + stream objects
+  const pageObjIds: number[] = [];
+  for (let i = 0; i < pageCount; i++) {
+    const streamBytes = Buffer.from(pageStreams[i], "latin1");
+    const streamObjId = addObj(`${objCount + 1} 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n${pageStreams[i]}endstream\nendobj`);
 
-  // Dark header background
-  streamContent += "q\n0.216 0.255 0.318 rg\n"; // #374151
-  streamContent += `0 ${pageH - 60} ${pageW} 60 re f\nQ\n`;
-
-  // Header text (white)
-  streamContent += "BT\n";
-  streamContent += `/F1 ${headerFontSize} Tf\n`;
-  streamContent += "1 1 1 rg\n"; // white
-  streamContent += `${margin} ${pageH - 35} Td\n`;
-  streamContent += `(VIANEMA) Tj\n`;
-  streamContent += `/F1 10 Tf\n`;
-  streamContent += `0 -16 Td\n`;
-  streamContent += `(Naberovy list) Tj\n`;
-  streamContent += "ET\n";
-
-  // Date in header (right side)
-  if (naber.datum_naberu) {
-    streamContent += "BT\n1 1 1 rg\n/F1 10 Tf\n";
-    streamContent += `${pageW - margin - 150} ${pageH - 40} Td\n`;
-    streamContent += `(${escPdf(formatDate(naber.datum_naberu as string))}) Tj\nET\n`;
-  }
-
-  // Body text
-  let yPos = pageH - 90;
-  streamContent += "BT\n";
-  streamContent += `0.216 0.255 0.318 rg\n`; // dark gray
-  streamContent += `/F1 ${fontSize} Tf\n`;
-  streamContent += `${margin} ${yPos} Td\n`;
-
-  for (const line of textLines) {
-    if (yPos < margin) break; // simple: stop at page end
-
-    const isSectionHeader = line.startsWith("---") && line.endsWith("---") && line.length > 6;
-    const isMainTitle = line === "VIANEMA - Naberovy list";
-
-    if (isMainTitle) continue; // skip, already in header
-
-    if (isSectionHeader) {
-      const sectionName = line.replace(/---/g, "").trim();
-      streamContent += `0 -${lineHeight + 4} Td\n`;
-      streamContent += `/F2 12 Tf\n`;
-      streamContent += `0.216 0.255 0.318 rg\n`;
-      streamContent += `(${escPdf(sectionName)}) Tj\n`;
-      streamContent += `/F1 ${fontSize} Tf\n`;
-      yPos -= lineHeight + 4;
-    } else if (line === "---") {
-      streamContent += `0 -${lineHeight} Td\n`;
-      yPos -= lineHeight;
-    } else if (line === "") {
-      streamContent += `0 -${lineHeight / 2} Td\n`;
-      yPos -= lineHeight / 2;
-    } else {
-      // Check if it's a label: value pair
-      const colonIdx = line.indexOf(": ");
-      if (colonIdx > 0 && colonIdx < 20) {
-        const label = line.substring(0, colonIdx + 1);
-        const value = line.substring(colonIdx + 2);
-        streamContent += `0 -${lineHeight} Td\n`;
-        streamContent += `0.42 0.45 0.50 rg\n`; // muted
-        streamContent += `(${escPdf(label)}) Tj\n`;
-        streamContent += `0.216 0.255 0.318 rg\n`; // dark
-        streamContent += `/F2 ${fontSize} Tf\n`;
-        streamContent += `( ${escPdf(value)}) Tj\n`;
-        streamContent += `/F1 ${fontSize} Tf\n`;
-      } else {
-        streamContent += `0 -${lineHeight} Td\n`;
-        streamContent += `(${escPdf(line)}) Tj\n`;
-      }
-      yPos -= lineHeight;
+    // Add header to non-first pages
+    let pageStream = pageStreams[i];
+    if (i > 0) {
+      // Add mini header
+      let hdr = `BT\n/F2 10 Tf\n0.45 0.48 0.52 rg\n${margin} ${pageH - 25} Td\n`;
+      hdr += `(VIANEMA — Naberovy list) Tj\nET\n`;
+      pageStream = hdr + pageStream;
+      // Re-create stream object
+      const newBytes = Buffer.from(pageStream, "latin1");
+      objects[streamObjId - 1] = `${streamObjId} 0 obj\n<< /Length ${newBytes.length} >>\nstream\n${pageStream}endstream\nendobj`;
     }
+
+    const pageObjId = addObj(`${objCount + 1} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Contents ${streamObjId} 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> >>\nendobj`);
+    pageObjIds.push(pageObjId);
   }
 
-  // Footer
-  streamContent += `0 -${Math.max(0, yPos - margin - 20)} Td\n`;
-  streamContent += `0.61 0.64 0.69 rg\n`;
-  streamContent += `/F1 8 Tf\n`;
-  streamContent += `(VIANEMA s.r.o. | www.vianema.sk) Tj\n`;
-
-  streamContent += "ET\n";
-
-  // Signature if present
-  if (naber.podpis_data && typeof naber.podpis_data === "string" && (naber.podpis_data as string).startsWith("data:image")) {
-    // We skip embedding image in minimal PDF for now - too complex
-    // Just add text
-    streamContent += "BT\n0.42 0.45 0.50 rg\n/F1 10 Tf\n";
-    streamContent += `${margin} ${Math.max(80, yPos - 30)} Td\n`;
-    streamContent += `(Podpis: [podpisany elektronicky]) Tj\nET\n`;
-  }
-
-  const streamBytes = Buffer.from(streamContent, "latin1");
-
-  // Obj 3: Page
-  addObj(`3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Contents 6 0 R /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> >>\nendobj`);
-  // Obj 4: Font (Helvetica)
-  addObj("4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj");
-  // Obj 5: Font Bold
-  addObj("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj");
-  // Obj 6: Content stream
-  addObj(`6 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n${streamContent}endstream\nendobj`);
+  // Fix Pages object
+  const kids = pageObjIds.map(id => `${id} 0 R`).join(" ");
+  objects[1] = `2 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${pageCount} >>\nendobj`;
 
   // Build PDF file
   let pdf = "%PDF-1.4\n";
@@ -230,17 +365,15 @@ function buildSimplePdf(text: string, title: string, naber: Record<string, unkno
   pdf += xrefOffset + "\n";
   pdf += "%%EOF";
 
-  void title; // used for context
+  void title;
   return Buffer.from(pdf, "latin1");
 }
 
-function escPdf(s: string): string {
-  // Escape special PDF string chars and convert Slovak chars to ASCII
+function esc(s: string): string {
   return s
     .replace(/\\/g, "\\\\")
     .replace(/\(/g, "\\(")
     .replace(/\)/g, "\\)")
-    // Slovak diacritics → ASCII (for Helvetica font compatibility)
     .replace(/á/g, "a").replace(/Á/g, "A")
     .replace(/č/g, "c").replace(/Č/g, "C")
     .replace(/ď/g, "d").replace(/Ď/g, "D")
@@ -260,10 +393,10 @@ function escPdf(s: string): string {
     .replace(/ä/g, "a").replace(/Ä/g, "A")
     .replace(/ü/g, "u").replace(/Ü/g, "U")
     .replace(/ö/g, "o").replace(/Ö/g, "O")
-    .replace(/[^\x20-\x7E]/g, ""); // remove any remaining non-ASCII
+    .replace(/[^\x20-\x7E]/g, "");
 }
 
-// GET: Download PDF for a naber
+// GET: Download PDF
 export async function GET(req: NextRequest) {
   const naberId = req.nextUrl.searchParams.get("id");
   if (!naberId) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -281,7 +414,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse(new Uint8Array(pdfBuffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="naberovy-list-${lokalita}.pdf"`,
+      "Content-Disposition": `attachment; filename="naberovy-list-${esc(lokalita)}.pdf"`,
     },
   });
 }
@@ -317,7 +450,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         from: "VIANEMA <noreply@vianema.sk>",
         to,
-        subject: `Naberovy list - ${escPdf(lokalita)}`,
+        subject: `Naberovy list — ${esc(lokalita)}`,
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background: #374151; color: white; padding: 24px 32px; border-radius: 12px 12px 0 0;">
@@ -326,17 +459,17 @@ export async function POST(req: NextRequest) {
             </div>
             <div style="background: #f9fafb; padding: 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
               <p style="margin: 0 0 16px; font-size: 15px; color: #374151;">
-                Dobry den <strong>${escPdf(klientMeno)}</strong>,
+                Dobry den <strong>${esc(klientMeno)}</strong>,
               </p>
               <p style="margin: 0 0 16px; font-size: 14px; color: #6b7280; line-height: 1.6;">
-                v prilohe najdete kopiu naberoveho listu pre nehnutelnost <strong>${escPdf(lokalita)}</strong>.
+                v prilohe najdete kopiu naberoveho listu pre nehnutelnost <strong>${esc(lokalita)}</strong>.
               </p>
               <p style="margin: 0 0 8px; font-size: 14px; color: #6b7280;">
                 V pripade otazok ma nevahajte kontaktovat.
               </p>
               <p style="margin: 24px 0 0; font-size: 14px; color: #374151;">
                 S pozdravom,<br/>
-                <strong>${escPdf(maklerMeno || "VIANEMA")}</strong>
+                <strong>${esc(maklerMeno || "VIANEMA")}</strong>
               </p>
             </div>
           </div>
