@@ -733,7 +733,50 @@ Odpovedaj stručne po slovensky.`;
 
       {/* 3. Nehnuteľnosť — BYT */}
       {typ === "byt" && (<>
-        {/* ═══ KARTA: Technické info bytu ═══ */}
+        {/* ═══ KARTA 1: Stav bytového domu ═══ */}
+        <div style={cardSt}>
+          <div style={sectionTitle}>🏢 Bytový dom</div>
+
+          {/* Konštrukcia */}
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelSt}>Konštrukcia</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "6px" }}>
+              {[{ value: "tehlovy", label: "Tehlový" }, { value: "panelovy", label: "Panelový" }, { value: "skeletovy", label: "Skeletový" }].map(o => (
+                <button type="button" key={o.value} onClick={() => setTypDomu(o.value)} style={{
+                  padding: "10px 18px", borderRadius: "20px", fontSize: "13px", fontWeight: "600",
+                  border: typDomu === o.value ? "2px solid #374151" : "1px solid var(--border)",
+                  background: typDomu === o.value ? "#374151" : "var(--bg-elevated)",
+                  color: typDomu === o.value ? "#fff" : "var(--text-secondary)",
+                  cursor: "pointer",
+                }}>{o.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Stav domu checkboxy */}
+          <div>
+            <label style={labelSt}>Technický stav domu</label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px", marginTop: "6px" }}>
+              {[
+                { checked: stupackyMenene, set: setStupackyMenene, label: "Stúpačky menené" },
+                { checked: zatepleny, set: setZatepleny, label: "Zateplený" },
+                { checked: strechaRobena, set: setStrechaRobena, label: "Strecha robená" },
+                { checked: plastyOkna, set: setPlastyOkna, label: "Plastové okná" },
+                { checked: rozvodyMenene, set: setRozvodyMenene, label: "Rozvody menené" },
+              ].map(item => (
+                <label key={item.label} style={{ ...checkSt, minHeight: "44px", padding: "8px 0" }}>
+                  <input type="checkbox" checked={item.checked} onChange={e => item.set(e.target.checked)} style={{ width: "20px", height: "20px" }} />
+                  {item.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginTop: "10px" }}>
+            <input value={stavDomuPoznamka} onChange={e => setStavDomuPoznamka(e.target.value)} style={inputSt} placeholder="Poznámka — napr. rok rekonštrukcie domu..." />
+          </div>
+        </div>
+
+        {/* ═══ KARTA 2: Byt ═══ */}
         <div style={cardSt}>
           <div style={sectionTitle}>🏠 Byt</div>
 
@@ -773,22 +816,6 @@ Odpovedaj stručne po slovensky.`;
             </div>
           </div>
 
-          {/* Konštrukcia */}
-          <div style={{ marginTop: "16px" }}>
-            <label style={labelSt}>Konštrukcia domu</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "6px" }}>
-              {[{ value: "tehlovy", label: "Tehlový" }, { value: "panelovy", label: "Panelový" }, { value: "skeletovy", label: "Skeletový" }].map(o => (
-                <button type="button" key={o.value} onClick={() => setTypDomu(o.value)} style={{
-                  padding: "10px 18px", borderRadius: "20px", fontSize: "13px", fontWeight: "600",
-                  border: typDomu === o.value ? "2px solid #374151" : "1px solid var(--border)",
-                  background: typDomu === o.value ? "#374151" : "var(--bg-elevated)",
-                  color: typDomu === o.value ? "#fff" : "var(--text-secondary)",
-                  cursor: "pointer",
-                }}>{o.label}</button>
-              ))}
-            </div>
-          </div>
-
           {/* Stav */}
           <div style={{ marginTop: "16px" }}>
             <label style={labelSt}>Stav</label>
@@ -822,28 +849,6 @@ Odpovedaj stručne po slovensky.`;
             {vlastnictvo === "druzstevne" && (
               <input value={druzstvo} onChange={e => setDruzstvo(e.target.value)} style={{ ...inputSt, marginTop: "8px" }} placeholder="Názov družstva" />
             )}
-          </div>
-        </div>
-
-        {/* ═══ KARTA: Stav bytového domu ═══ */}
-        <div style={cardSt}>
-          <div style={sectionTitle}>🏢 Stav bytového domu</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
-            {[
-              { checked: stupackyMenene, set: setStupackyMenene, label: "Stúpačky menené" },
-              { checked: zatepleny, set: setZatepleny, label: "Zateplený" },
-              { checked: strechaRobena, set: setStrechaRobena, label: "Strecha robená" },
-              { checked: plastyOkna, set: setPlastyOkna, label: "Plastové okná" },
-              { checked: rozvodyMenene, set: setRozvodyMenene, label: "Rozvody menené" },
-            ].map(item => (
-              <label key={item.label} style={{ ...checkSt, minHeight: "44px", padding: "8px 0" }}>
-                <input type="checkbox" checked={item.checked} onChange={e => item.set(e.target.checked)} style={{ width: "20px", height: "20px" }} />
-                {item.label}
-              </label>
-            ))}
-          </div>
-          <div style={{ marginTop: "10px" }}>
-            <input value={stavDomuPoznamka} onChange={e => setStavDomuPoznamka(e.target.value)} style={inputSt} placeholder="Poznámka — napr. rok rekonštrukcie domu..." />
           </div>
         </div>
 
@@ -1061,7 +1066,7 @@ Odpovedaj stručne po slovensky.`;
             <div>
               <label style={labelSt}>Označenie</label>
               <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
-                {[{ value: "ziadne", label: "Žiadne" }, { value: "plachta", label: "Plachta" }, { value: "acko", label: "Áčko" }].map(o => (
+                {[{ value: "ziadne", label: "Žiadne" }, { value: "plachta", label: "Plachta" }].map(o => (
                   <button type="button" key={o.value} onClick={() => setOznacenie(o.value)} style={{
                     padding: "8px 14px", borderRadius: "16px", fontSize: "12px", fontWeight: "500",
                     border: oznacenie === o.value ? "2px solid #374151" : "1px solid var(--border)",
@@ -1253,7 +1258,7 @@ Odpovedaj stručne po slovensky.`;
               <div>
                 <label style={labelSt}>Označenie</label>
                 <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
-                  {[{ value: "ziadne", label: "Žiadne" }, { value: "plachta", label: "Plachta" }, { value: "acko", label: "Áčko" }].map(o => (
+                  {[{ value: "ziadne", label: "Žiadne" }, { value: "plachta", label: "Plachta" }].map(o => (
                     <button type="button" key={o.value} onClick={() => setOznacenie(o.value)} style={{
                       padding: "6px 10px", borderRadius: "16px", fontSize: "11px", fontWeight: "500",
                       border: oznacenie === o.value ? "2px solid #374151" : "1px solid var(--border)",
@@ -1343,7 +1348,7 @@ Odpovedaj stručne po slovensky.`;
           <div style={{ marginTop: "14px" }}>
             <label style={labelSt}>Označenie</label>
             <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
-              {[{ value: "ziadne", label: "Žiadne" }, { value: "plachta", label: "Plachta" }, { value: "acko", label: "Áčko" }].map(o => (
+              {[{ value: "ziadne", label: "Žiadne" }, { value: "plachta", label: "Plachta" }].map(o => (
                 <button type="button" key={o.value} onClick={() => setOznacenie(o.value)} style={{
                   padding: "6px 10px", borderRadius: "16px", fontSize: "11px", fontWeight: "500",
                   border: oznacenie === o.value ? "2px solid #374151" : "1px solid var(--border)",
@@ -1441,26 +1446,35 @@ Odpovedaj stručne po slovensky.`;
       <div style={cardSt}>
         <div style={sectionTitle}>📝 Zmluva</div>
         <div style={{ marginTop: "0" }}>
-          <label style={{ ...checkSt, fontWeight: "600", marginBottom: "8px" }}>
-            <input type="checkbox" checked={zmluva} onChange={e => setZmluva(e.target.checked)} />
-            Zmluva podpísaná
+          <label style={{ ...checkSt, fontWeight: "600", marginBottom: "8px", minHeight: "44px" }}>
+            <input type="checkbox" checked={zmluva} onChange={e => { setZmluva(e.target.checked); if (e.target.checked && !datumPodpisu) setDatumPodpisu(new Date().toISOString().split("T")[0]); }} style={{ width: "20px", height: "20px" }} />
+            Klient má záujem podpísať zmluvu
           </label>
           {zmluva && (
-            <div className="naber-grid" style={{ ...gridSt, marginTop: "8px" }}>
-              <div>
+            <div style={{ background: "var(--bg-elevated)", borderRadius: "12px", padding: "16px", marginTop: "8px" }}>
+              <div style={{ marginBottom: "14px" }}>
                 <label style={labelSt}>Typ zmluvy</label>
-                <RadioGroup value={typZmluvy} onChange={setTypZmluvy} options={[
-                  { value: "exkluzivna", label: "Exkluzívna" },
-                  { value: "neexkluzivna", label: "Neexkluzívna" },
-                ]} />
+                <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+                  {[{ value: "exkluzivna", label: "Exkluzívna" }, { value: "neexkluzivna", label: "Neexkluzívna" }].map(o => (
+                    <button type="button" key={o.value} onClick={() => setTypZmluvy(o.value)} style={{
+                      padding: "10px 18px", borderRadius: "20px", fontSize: "13px", fontWeight: "600",
+                      border: typZmluvy === o.value ? "2px solid #374151" : "1px solid var(--border)",
+                      background: typZmluvy === o.value ? "#374151" : "var(--bg-surface)",
+                      color: typZmluvy === o.value ? "#fff" : "var(--text-secondary)",
+                      cursor: "pointer", flex: 1, textAlign: "center",
+                    }}>{o.label}</button>
+                  ))}
+                </div>
               </div>
-              <div>
-                <label style={labelSt}>Dátum podpisu</label>
-                <input type="date" value={datumPodpisu} onChange={e => setDatumPodpisu(e.target.value)} style={inputSt} />
-              </div>
-              <div>
-                <label style={labelSt}>Zmluva do</label>
-                <input type="date" value={zmluvaDo} onChange={e => setZmluvaDo(e.target.value)} style={inputSt} />
+              <div className="naber-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={labelSt}>Dátum podpisu</label>
+                  <input type="date" value={datumPodpisu} onChange={e => setDatumPodpisu(e.target.value)} style={inputSt} />
+                </div>
+                <div>
+                  <label style={labelSt}>Zmluva platná do</label>
+                  <input type="date" value={zmluvaDo} onChange={e => setZmluvaDo(e.target.value)} style={inputSt} />
+                </div>
               </div>
             </div>
           )}
