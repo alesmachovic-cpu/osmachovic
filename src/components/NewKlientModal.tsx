@@ -24,6 +24,7 @@ interface Props {
   onClose: () => void;
   onCreated?: () => void;
   onSaved?: () => void;
+  onLvPrompt?: (klient: { id: string; meno: string }) => void;
   initialPhone?: string;
   showTypKlienta?: boolean; // len z dashboardu overenia
   defaultTyp?: "kupujuci" | "predavajuci" | "oboje";
@@ -422,7 +423,7 @@ function getLastDigits(phone: string, count: number): string {
   return phone.replace(/\D/g, "").slice(-count);
 }
 
-export default function NewKlientModal({ open, onClose, onCreated, onSaved, initialPhone, showTypKlienta = false, defaultTyp = "predavajuci", editKlient }: Props) {
+export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLvPrompt, initialPhone, showTypKlienta = false, defaultTyp = "predavajuci", editKlient }: Props) {
   const { user: authUser } = useAuth();
   const isEdit = !!editKlient;
   const [telefon, setTelefon] = useState(editKlient?.telefon || initialPhone || "");
@@ -771,6 +772,15 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, init
     setUlica(""); setCisloDomu(""); setDatumStretnutia(""); setOdkaz(""); setPoznamka(""); setDatumNarodenia("");
     setChecked(false); setDuplicates([]); setDupLevel("none");
     setCalendarSynced(false); setSaveError("");
+    // LV prompt — ak dohodnutý náber a nemá LV
+    if (status === "dohodnuty_naber") {
+      const hasLv = isEdit ? !!(editKlient?.lv_data && Object.keys(editKlient.lv_data).length > 0) : false;
+      if (!hasLv) {
+        const klientId = isEdit ? editKlient?.id : resultData?.[0]?.id;
+        const klientMeno = meno.trim();
+        if (klientId) onLvPrompt?.({ id: klientId, meno: klientMeno });
+      }
+    }
     onCreated?.();
     onSaved?.();
     onClose();

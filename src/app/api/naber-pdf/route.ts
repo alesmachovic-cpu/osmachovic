@@ -135,9 +135,20 @@ function generatePdfBytes(naber: Record<string, unknown>, klient: Record<string,
   if (params?.rok_vystavby) nehnutRows.push(["Rok vystavby", String(params.rok_vystavby)]);
   if (params?.kurenie) nehnutRows.push(["Kurenie", String(params.kurenie)]);
   if (params?.typ_podlahy) nehnutRows.push(["Typ podlahy", String(params.typ_podlahy)]);
-  if (params?.mesacne_poplatky) nehnutRows.push(["Mesacne poplatky", params.mesacne_poplatky + " EUR"]);
-  if (params?.anuita) nehnutRows.push(["Anuita / hypoteka", String(params.anuita)]);
+  // mesacne_poplatky a anuita su teraz vo financiach
   if (params?.vyhlad) nehnutRows.push(["Vyhlad", String(params.vyhlad)]);
+  // Stav domu
+  if (params?.stav_domu) {
+    const sd = params.stav_domu as Record<string, unknown>;
+    const stavItems: string[] = [];
+    if (sd.stupacky_menene) stavItems.push("stupacky menene");
+    if (sd.zatepleny) stavItems.push("zatepleny");
+    if (sd.strecha_robena) stavItems.push("strecha robena");
+    if (sd.plasty_okna) stavItems.push("plastove okna");
+    if (sd.rozvody_menene) stavItems.push("rozvody menene");
+    if (stavItems.length > 0) nehnutRows.push(["Stav domu", stavItems.join(", ")]);
+    if (sd.poznamka) nehnutRows.push(["Pozn. k stavu", String(sd.poznamka)]);
+  }
   // Rodinny dom extras
   if (params?.pocet_podlazi) nehnutRows.push(["Pocet podlazi", String(params.pocet_podlazi)]);
   if (params?.pozemok_plocha) nehnutRows.push(["Plocha pozemku", params.pozemok_plocha + " m2"]);
@@ -189,17 +200,22 @@ function generatePdfBytes(naber: Record<string, unknown>, klient: Record<string,
     sections.push({ title: "TARCHA / PRAVNE VADY", icon: "!", rows: tRows });
   }
 
-  // 9. PREDAJ A ZMLUVA
+  // 9. FINANCIE A ZMLUVA
   const zmlRows: [string, string][] = [];
   if (naber.predajna_cena) zmlRows.push(["Predajna cena", formatCena(Number(naber.predajna_cena))]);
-  if (naber.provizia) zmlRows.push(["Provizia", String(naber.provizia)]);
+  if (params?.mesacne_poplatky) zmlRows.push(["Mesacne poplatky", params.mesacne_poplatky + " EUR"]);
+  if (params?.anuita) zmlRows.push(["Zostatok hypoteky", params.anuita + " EUR"]);
+  if (naber.provizia) {
+    const provTypLabel = params?.provizia_typ === "z_kupnej" ? " (z kupnej ceny)" : params?.provizia_typ === "nad_cenu" ? " (nad cenu majitela)" : "";
+    zmlRows.push(["Provizia", String(naber.provizia) + provTypLabel]);
+  }
   if (naber.zmluva) {
     if (naber.typ_zmluvy) zmlRows.push(["Typ zmluvy", ZMLUVA_LABELS[naber.typ_zmluvy as string] || String(naber.typ_zmluvy)]);
     if (naber.datum_podpisu) zmlRows.push(["Datum podpisu", formatDate(naber.datum_podpisu as string)]);
     if (naber.zmluva_do) zmlRows.push(["Platnost do", formatDate(naber.zmluva_do as string)]);
   }
   if (naber.typ_inzercie) zmlRows.push(["Typ inzercie", INZERCIA_LABELS[naber.typ_inzercie as string] || String(naber.typ_inzercie)]);
-  if (zmlRows.length > 0) sections.push({ title: "PREDAJ A ZMLUVA", icon: "8", rows: zmlRows });
+  if (zmlRows.length > 0) sections.push({ title: "FINANCIE A ZMLUVA", icon: "8", rows: zmlRows });
 
   // 10. MAKLER
   const makRows: [string, string][] = [];
@@ -207,10 +223,10 @@ function generatePdfBytes(naber: Record<string, unknown>, klient: Record<string,
   if (naber.popis) makRows.push(["Poznamka", String(naber.popis)]);
   sections.push({ title: "MAKLER", icon: "9", rows: makRows });
 
-  return buildPdf(sections, naber, company.nazov || "VIANEMA");
+  return buildPdf(sections, naber, company.nazov || "VIANEMA", klientMeno);
 }
 
-function buildPdf(sections: Section[], naber: Record<string, unknown>, title: string): Buffer {
+function buildPdf(sections: Section[], naber: Record<string, unknown>, title: string, klientMeno: string): Buffer {
   const pageW = 595.28;
   const pageH = 841.89;
   const margin = 50;
@@ -305,12 +321,27 @@ function buildPdf(sections: Section[], naber: Record<string, unknown>, title: st
     }
   }
 
-  // Signature
+  // Signature — jasne elektronicky podpísané klientom
   if (naber.podpis_data && typeof naber.podpis_data === "string") {
-    checkSpace(50);
-    yPos -= 24;
+    checkSpace(80);
+    yPos -= 30;
+    // Oddeľovacia čiara
+    stream += `q\n0.85 0.87 0.89 rg\n${margin} ${yPos + 8} ${contentW} 0.5 re f\nQ\n`;
+    // "Podpísané elektronicky klientom:"
+    stream += `BT\n/F2 10 Tf\n0.216 0.255 0.318 rg\n${margin} ${yPos - 8} Td\n`;
+    stream += `(Podpisane elektronicky klientom:) Tj\nET\n`;
+    yPos -= 22;
+    // Meno klienta
+    stream += `BT\n/F2 11 Tf\n0.216 0.255 0.318 rg\n${margin} ${yPos} Td\n`;
+    stream += `(${esc(klientMeno)}) Tj\nET\n`;
+    yPos -= 16;
+    // Dátum
+    const datumPodpisu = naber.datum_podpisu ? formatDate(naber.datum_podpisu as string) : formatDate(new Date().toISOString());
     stream += `BT\n/F1 9 Tf\n0.45 0.48 0.52 rg\n${margin} ${yPos} Td\n`;
-    stream += `(Podpis: [podpisany elektronicky]) Tj\nET\n`;
+    stream += `(Datum: ${esc(datumPodpisu)}) Tj\nET\n`;
+    yPos -= 14;
+    stream += `BT\n/F1 8 Tf\n0.55 0.58 0.62 rg\n${margin} ${yPos} Td\n`;
+    stream += `(Tento dokument bol podpisany elektronicky a je pravne zavazny.) Tj\nET\n`;
   }
 
   // Footer

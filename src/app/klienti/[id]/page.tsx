@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { STATUS_LABELS } from "@/lib/database.types";
@@ -216,6 +216,9 @@ export default function KlientDetailPage() {
   const [lvOwnerNames, setLvOwnerNames] = useState<string[]>([]);
   const [selectedLvOwner, setSelectedLvOwner] = useState("");
   const [lvReminderShown, setLvReminderShown] = useState(false);
+  const [lvUploading, setLvUploading] = useState(false);
+  const [lvUploadErr, setLvUploadErr] = useState("");
+  const lvFileRef = useRef<HTMLInputElement>(null);
   const [showSpolupracaModal, setShowSpolupracaModal] = useState(false);
   const [spolupracaMakler, setSpolupracaMakler] = useState("");
   const [spolupracaPct, setSpolupracaPct] = useState(50);
@@ -474,6 +477,69 @@ export default function KlientDetailPage() {
   const initials = klient.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
   const statusColor = STATUS_COLORS[klient.status] || "#6B7280";
   const workflowStep = getWorkflowStep();
+
+  // Rýchle nahratie LV priamo z banneru/promptu
+  async function handleQuickLvUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !klient) return;
+    e.target.value = "";
+    setLvUploading(true);
+    setLvUploadErr("");
+    try {
+      const reader = new FileReader();
+      const base64: string = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/parse-lv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdf_base64: base64, filename: file.name }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const parsed = await res.json();
+      await supabase.from("klienti").update({ lv_data: parsed }).eq("id", klient.id);
+      setKlient(k => k ? { ...k, lv_data: parsed } : k);
+      setShowLVPrompt(false);
+
+      // Calendar update s adresou z LV
+      const lv = parsed as Record<string, unknown>;
+      const lvAddr = [lv.ulica, lv.supisne_cislo, lv.obec].filter(Boolean).map(String).join(" ").trim();
+      const calEventId = (klient as { calendar_event_id?: string | null }).calendar_event_id;
+      if (calEventId && user?.id && lvAddr) {
+        fetch("/api/google/calendar", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id, eventId: calEventId, location: lvAddr,
+            description: [`Adresa: ${lvAddr}`, klient.telefon && `Tel: ${klient.telefon}`, klient.email && `Email: ${klient.email}`].filter(Boolean).join("\n"),
+          }),
+        }).catch(() => {});
+      }
+
+      // Rename check
+      const majitelia = lv.majitelia as Array<{ meno?: string }> | undefined;
+      if (majitelia?.length) {
+        const ownerNames: string[] = [];
+        for (const m of majitelia.filter(m => m.meno)) {
+          const parts = m.meno!.split(/\s+a\s+/i).map(n => n.trim()).filter(n => n.length > 2);
+          ownerNames.push(...(parts.length > 1 ? parts : [m.meno!]));
+        }
+        const currentName = klient.meno.trim().toLowerCase();
+        const nameMatch = ownerNames.some(n => n.toLowerCase() === currentName || currentName.includes(n.toLowerCase()) || n.toLowerCase().includes(currentName));
+        if (!nameMatch && ownerNames.length > 0) {
+          setLvOwnerNames(ownerNames);
+          setSelectedLvOwner(ownerNames[0]);
+          setShowLVRename(true);
+        }
+      }
+    } catch (err) {
+      setLvUploadErr("Chyba pri analýze LV: " + (err as Error).message.slice(0, 120));
+    } finally {
+      setLvUploading(false);
+    }
+  }
 
   const cardSt: React.CSSProperties = {
     background: "var(--bg-surface)", border: "1px solid var(--border)",
@@ -759,53 +825,77 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {/* LV banner — dohodnutý náber bez LV */}
+      {/* LV banner — dohodnutý náber bez LV — priamy upload */}
       {klient.status === "dohodnuty_naber" && !klient.lv_data && (
         <div style={{
           ...cardSt, marginBottom: "20px", padding: "14px 20px",
           background: "linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)",
           border: "1px solid #F59E0B",
-          display: "flex", alignItems: "center", gap: "12px",
         }}>
-          <span style={{ fontSize: "20px" }}>📄</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "13px", fontWeight: "600", color: "#92400E" }}>List vlastníctva chýba</div>
-            <div style={{ fontSize: "12px", color: "#A16207" }}>Pridaj LV pre úspešný náber — klikni nižšie na Dokumenty</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontSize: "20px" }}>📄</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "13px", fontWeight: "600", color: "#92400E" }}>List vlastníctva chýba</div>
+              <div style={{ fontSize: "12px", color: "#A16207" }}>
+                {lvUploading ? "Analyzujem LV..." : "Nahraj PDF alebo fotku LV"}
+              </div>
+            </div>
+            <label style={{
+              padding: "8px 16px", background: lvUploading ? "#B45309" : "#92400E", color: "#fff", border: "none",
+              borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+              cursor: lvUploading ? "default" : "pointer", whiteSpace: "nowrap",
+              opacity: lvUploading ? 0.7 : 1,
+            }}>
+              {lvUploading ? "⏳ Analyzujem..." : "📎 Nahrať LV"}
+              <input type="file" accept=".pdf,image/*" onChange={handleQuickLvUpload} style={{ display: "none" }} disabled={lvUploading} />
+            </label>
           </div>
-          <button onClick={() => setActiveTab("dokumenty")} style={{
-            padding: "8px 16px", background: "#92400E", color: "#fff", border: "none",
-            borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
-            whiteSpace: "nowrap",
-          }}>Pridať LV</button>
+          {lvUploadErr && (
+            <div style={{ fontSize: "12px", color: "#991B1B", marginTop: "8px" }}>{lvUploadErr}</div>
+          )}
         </div>
       )}
 
-      {/* LV prompt modal — po potvrdení náberu */}
+      {/* LV prompt modal — po potvrdení náberu — priamy upload */}
       {showLVPrompt && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
           onClick={() => setShowLVPrompt(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: "var(--bg-surface)", borderRadius: "20px", padding: "32px",
-            maxWidth: "380px", width: "100%", textAlign: "center",
+            maxWidth: "400px", width: "100%", textAlign: "center",
             boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
           }}>
             <div style={{ fontSize: "40px", marginBottom: "12px" }}>📄</div>
             <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 8px" }}>
-              Pridať List vlastníctva?
+              Pridať List vlastníctva
             </h2>
-            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 24px", lineHeight: "1.5" }}>
-              LV pomôže automaticky vyplniť údaje o nehnuteľnosti. Môžeš ho pridať aj neskôr.
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px", lineHeight: "1.5" }}>
+              LV automaticky vyplní adresu, vlastníkov a ťarchy do náberového listu.
             </p>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
-              <button onClick={() => setShowLVPrompt(false)} style={{
-                padding: "10px 24px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
-                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-              }}>Neskôr</button>
-              <button onClick={() => { setShowLVPrompt(false); setActiveTab("dokumenty"); }} style={{
-                padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
-                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-              }}>Pridať teraz</button>
-            </div>
+            {lvUploading ? (
+              <div style={{ padding: "16px", background: "var(--bg-elevated)", borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)" }}>
+                ⏳ Analyzujem LV...
+              </div>
+            ) : (
+              <>
+                <label style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                  padding: "14px 24px", background: "#374151", color: "#fff", border: "none",
+                  borderRadius: "12px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
+                  marginBottom: "10px", width: "100%",
+                }}>
+                  📎 Nahrať LV (PDF alebo fotka)
+                  <input type="file" accept=".pdf,image/*" onChange={handleQuickLvUpload} style={{ display: "none" }} />
+                </label>
+                <button onClick={() => setShowLVPrompt(false)} style={{
+                  padding: "10px 24px", background: "transparent", color: "var(--text-muted)",
+                  border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "500", cursor: "pointer",
+                }}>Neskôr</button>
+              </>
+            )}
+            {lvUploadErr && (
+              <div style={{ fontSize: "12px", color: "#EF4444", marginTop: "10px" }}>{lvUploadErr}</div>
+            )}
           </div>
         </div>
       )}
@@ -924,6 +1014,27 @@ export default function KlientDetailPage() {
                 if (!selectedLvOwner) return;
                 const { supabase: sb } = await import("@/lib/supabase");
                 await sb.from("klienti").update({ meno: selectedLvOwner }).eq("id", klient.id);
+                // Aktualizuj Google Calendar event s novým menom
+                const calEventId = (klient as { calendar_event_id?: string | null }).calendar_event_id;
+                if (calEventId && user?.id) {
+                  try {
+                    const isNaber = klient.status === "dohodnuty_naber" || klient.status === "nabrany";
+                    const prefix = isNaber ? "Náber" : "Zavolať";
+                    await fetch("/api/google/calendar", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        userId: user.id,
+                        eventId: calEventId,
+                        summary: `${prefix} — ${selectedLvOwner}`,
+                        description: [
+                          klient.telefon && `Tel: ${klient.telefon}`,
+                          klient.email && `Email: ${klient.email}`,
+                        ].filter(Boolean).join("\n"),
+                      }),
+                    });
+                  } catch { /* calendar update silent */ }
+                }
                 setKlient(k => k ? { ...k, meno: selectedLvOwner } : k);
                 setShowLVRename(false);
               }} style={{
@@ -1254,6 +1365,25 @@ export default function KlientDetailPage() {
             }
             setKlient(k => k ? { ...k, lv_data: data } : k);
 
+            // Aktualizuj Google Calendar event s adresou z LV
+            const calEventId = (klient as { calendar_event_id?: string | null }).calendar_event_id;
+            if (calEventId && user?.id && lvAddr) {
+              fetch("/api/google/calendar", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId: user.id,
+                  eventId: calEventId,
+                  location: lvAddr,
+                  description: [
+                    `Adresa: ${lvAddr}`,
+                    klient.telefon && `Tel: ${klient.telefon}`,
+                    klient.email && `Email: ${klient.email}`,
+                  ].filter(Boolean).join("\n"),
+                }),
+              }).catch(() => { /* calendar update silent */ });
+            }
+
             // Ponúkni premenovanie ak meno klienta nezodpovedá žiadnemu vlastníkovi z LV
             const majitelia = lv.majitelia as Array<{ meno?: string }> | undefined;
             if (majitelia?.length) {
@@ -1559,8 +1689,10 @@ export default function KlientDetailPage() {
           }}
           onClose={() => setEditModal(false)}
           onSaved={() => { setEditModal(false); loadAll(); }}
+          onLvPrompt={() => setShowLVPrompt(true)}
         />
       )}
+
     </div>
   );
 }

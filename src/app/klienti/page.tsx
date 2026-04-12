@@ -59,6 +59,37 @@ function KlientiContent() {
   const [statusAddrError, setStatusAddrError] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
   const [lvPromptKlient, setLvPromptKlient] = useState<Klient | null>(null);
+  const [lvUploading, setLvUploading] = useState(false);
+  const [lvUploadErr, setLvUploadErr] = useState("");
+
+  async function handleQuickLvUpload(e: React.ChangeEvent<HTMLInputElement>, klientId: string) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setLvUploading(true);
+    setLvUploadErr("");
+    try {
+      const reader = new FileReader();
+      const base64: string = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/parse-lv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdf_base64: base64, filename: file.name }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await supabase.from("klienti").update({ lv_data: await res.json() }).eq("id", klientId);
+      setLvPromptKlient(null);
+      fetchKlienti();
+    } catch (err) {
+      setLvUploadErr("Chyba: " + (err as Error).message.slice(0, 100));
+    } finally {
+      setLvUploading(false);
+    }
+  }
 
   async function fetchKlienti() {
     setLoading(true);
@@ -568,37 +599,51 @@ function KlientiContent() {
         </div>
       )}
 
-      {/* LV prompt po dohodnutom nábere */}
+      {/* LV prompt po dohodnutom nábere — priamy upload */}
       {lvPromptKlient && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
           onClick={() => setLvPromptKlient(null)}>
           <div onClick={e => e.stopPropagation()} style={{
             background: "var(--bg-surface)", borderRadius: "20px", padding: "32px",
-            maxWidth: "380px", width: "100%", textAlign: "center",
+            maxWidth: "400px", width: "100%", textAlign: "center",
             boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
           }}>
             <div style={{ fontSize: "40px", marginBottom: "12px" }}>📄</div>
             <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 8px" }}>
               Pridať List vlastníctva
             </h2>
-            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 24px", lineHeight: "1.5" }}>
-              LV pre <strong>{lvPromptKlient.meno}</strong> pomôže automaticky vyplniť náberový list. Pridaj ho teraz alebo neskôr na karte klienta.
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px", lineHeight: "1.5" }}>
+              LV pre <strong>{lvPromptKlient.meno}</strong> automaticky vyplní adresu, vlastníkov a ťarchy.
             </p>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
-              <button onClick={() => setLvPromptKlient(null)} style={{
-                padding: "10px 24px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
-                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-              }}>Neskôr</button>
-              <button onClick={() => { router.push(`/klienti/${lvPromptKlient.id}?tab=dokumenty`); setLvPromptKlient(null); }} style={{
-                padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
-                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-              }}>Pridať LV</button>
-            </div>
+            {lvUploading ? (
+              <div style={{ padding: "16px", background: "var(--bg-elevated)", borderRadius: "12px", fontSize: "14px", color: "var(--text-primary)" }}>
+                ⏳ Analyzujem LV...
+              </div>
+            ) : (
+              <>
+                <label style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                  padding: "14px 24px", background: "#374151", color: "#fff", border: "none",
+                  borderRadius: "12px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
+                  marginBottom: "10px", width: "100%",
+                }}>
+                  📎 Nahrať LV (PDF alebo fotka)
+                  <input type="file" accept=".pdf,image/*" onChange={e => handleQuickLvUpload(e, lvPromptKlient.id)} style={{ display: "none" }} />
+                </label>
+                <button onClick={() => setLvPromptKlient(null)} style={{
+                  padding: "10px 24px", background: "transparent", color: "var(--text-muted)",
+                  border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "500", cursor: "pointer",
+                }}>Neskôr</button>
+              </>
+            )}
+            {lvUploadErr && (
+              <div style={{ fontSize: "12px", color: "#EF4444", marginTop: "10px" }}>{lvUploadErr}</div>
+            )}
           </div>
         </div>
       )}
 
-      {modal && <NewKlientModal open editKlient={editingKlient} showTypKlienta onClose={() => { setModal(false); setEditingKlient(null); }} onSaved={fetchKlienti} />}
+      {modal && <NewKlientModal open editKlient={editingKlient} showTypKlienta onClose={() => { setModal(false); setEditingKlient(null); }} onSaved={fetchKlienti} onLvPrompt={(k) => setLvPromptKlient({ id: k.id, meno: k.meno } as Klient)} />}
     </div>
   );
 }
