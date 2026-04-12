@@ -50,6 +50,13 @@ export default function NastaveniaPage() {
   const [vzorLinks, setVzorLinks] = useState(["", "", ""]);
   const [vzorSaved, setVzorSaved] = useState(false);
 
+  // Spoločnosť (admin only)
+  const [companyName, setCompanyName] = useState("Vianema s. r. o.");
+  const [companySidlo, setCompanySidlo] = useState("");
+  const [companyIco, setCompanyIco] = useState("");
+  const [companyRegistracia, setCompanyRegistracia] = useState("");
+  const [companySaved, setCompanySaved] = useState(false);
+
   // Active category
   const [activeCategory, setActiveCategory] = useState("profil");
 
@@ -82,6 +89,23 @@ export default function NastaveniaPage() {
       // Load vzorové inzeráty (per-user)
       const vi = getUserItem(uid, "vzorove_inzeraty");
       if (vi) setVzorLinks(JSON.parse(vi));
+
+      // Load company info (admin only, from Supabase)
+      if (isAdmin) {
+        import("@/lib/supabase").then(({ supabase: sb }) => {
+          sb.from("makleri").select("firma").eq("email", "ales@vianema.sk").single().then(({ data }) => {
+            if (data?.firma) {
+              try {
+                const c = typeof data.firma === "string" ? JSON.parse(data.firma) : data.firma;
+                if (c.nazov) setCompanyName(c.nazov);
+                if (c.sidlo) setCompanySidlo(c.sidlo);
+                if (c.ico) setCompanyIco(c.ico);
+                if (c.registracia) setCompanyRegistracia(c.registracia);
+              } catch { /* not JSON, legacy value */ }
+            }
+          });
+        });
+      }
 
       // Load feature toggles (global - admin manages all)
       setFeatureToggles(loadFeatureToggles());
@@ -149,6 +173,18 @@ export default function NastaveniaPage() {
     setGoogleStatus({ connected: false, email: null });
   }
 
+  async function handleSaveCompany() {
+    try {
+      const { supabase: sb } = await import("@/lib/supabase");
+      const companyData = JSON.stringify({
+        nazov: companyName, sidlo: companySidlo, ico: companyIco, registracia: companyRegistracia,
+      });
+      await sb.from("makleri").update({ firma: companyData }).eq("email", "ales@vianema.sk");
+      setCompanySaved(true);
+      setTimeout(() => setCompanySaved(false), 2000);
+    } catch { /* ignore */ }
+  }
+
   function handleSave() {
     if (!uid) return;
     setUserItem(uid, "makler_goals", JSON.stringify(goals));
@@ -177,7 +213,10 @@ export default function NastaveniaPage() {
     { id: "ciele", label: "Ciele a kalkulácie", icon: "🎯" },
     { id: "integracie", label: "Integrácie", icon: "🔗" },
     { id: "faktury", label: "Faktúry", icon: "🧾", href: "/nastavenia/faktury" },
-    ...(isAdmin ? [{ id: "ucty", label: "Účty", icon: "👥" }] : []),
+    ...(isAdmin ? [
+      { id: "spolocnost", label: "Spoločnosť", icon: "🏢" },
+      { id: "ucty", label: "Účty", icon: "👥" },
+    ] : []),
   ];
 
   return (
@@ -538,6 +577,48 @@ export default function NastaveniaPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ═══ Spoločnosť (admin only) ═══ */}
+      {activeCategory === "spolocnost" && isAdmin && (
+        <div style={cardSt}>
+          <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "4px" }}>
+            🏢 Info o spoločnosti
+          </div>
+          <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 20px" }}>
+            Fakturačné údaje spoločnosti — zobrazujú sa v náberovom liste a dokumentoch
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div>
+              <label style={labelSt}>Názov spoločnosti</label>
+              <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={inputSt}
+                placeholder="napr. Vianema s. r. o." />
+            </div>
+            <div>
+              <label style={labelSt}>Sídlo</label>
+              <input value={companySidlo} onChange={e => setCompanySidlo(e.target.value)} style={inputSt}
+                placeholder="napr. Karpatské námestie 10A, 831 06 Bratislava – mestská časť Rača" />
+            </div>
+            <div>
+              <label style={labelSt}>IČO</label>
+              <input value={companyIco} onChange={e => setCompanyIco(e.target.value)} style={inputSt}
+                placeholder="napr. 47 395 095" />
+            </div>
+            <div>
+              <label style={labelSt}>Registrácia</label>
+              <textarea value={companyRegistracia} onChange={e => setCompanyRegistracia(e.target.value)}
+                rows={2} style={{ ...inputSt, resize: "vertical" }}
+                placeholder='napr. zapísaná v OR MS Bratislava III, oddiel: Sro, vložka č.: 123596/B' />
+            </div>
+          </div>
+          <div style={{ marginTop: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
+            <button onClick={handleSaveCompany} style={{
+              padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
+              borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            }}>Uložiť</button>
+            {companySaved && <span style={{ fontSize: "13px", color: "#059669", fontWeight: "600" }}>✓ Uložené</span>}
+          </div>
         </div>
       )}
 

@@ -40,9 +40,21 @@ function formatCena(v: number): string {
   return v.toLocaleString("sk") + " EUR";
 }
 
+type CompanyInfo = { nazov?: string; sidlo?: string; ico?: string; registracia?: string };
 type Section = { title: string; icon: string; rows: [string, string][] };
 
-function generatePdfBytes(naber: Record<string, unknown>, klient: Record<string, unknown>): Buffer {
+async function loadCompanyInfo(): Promise<CompanyInfo> {
+  try {
+    const { data } = await supabase.from("makleri").select("firma").eq("email", "ales@vianema.sk").single();
+    if (data?.firma) {
+      const c = typeof data.firma === "string" ? JSON.parse(data.firma) : data.firma;
+      return c as CompanyInfo;
+    }
+  } catch { /* ignore */ }
+  return { nazov: "Vianema s. r. o." };
+}
+
+function generatePdfBytes(naber: Record<string, unknown>, klient: Record<string, unknown>, company: CompanyInfo): Buffer {
   const klientMeno = (klient?.meno as string) || "Klient";
   const klientTelefon = klient?.telefon as string;
   const klientEmail = klient?.email as string;
@@ -52,6 +64,17 @@ function generatePdfBytes(naber: Record<string, unknown>, klient: Record<string,
   const lv = klient?.lv_data as Record<string, unknown> | null;
 
   const sections: Section[] = [];
+
+  // 0. SPROSTREDKOVATEL
+  const sRows: [string, string][] = [];
+  sRows.push(["Sprostredkovatel", company.nazov || "Vianema s. r. o."]);
+  if (company.sidlo) sRows.push(["Sidlo", company.sidlo]);
+  if (company.ico) sRows.push(["ICO", company.ico]);
+  const maklerName = (naber.makler as string) || "";
+  sRows.push(["Zastupena", maklerName || "..........................................."]);
+  if (company.registracia) sRows.push(["", company.registracia]);
+  sRows.push(["", "(dalej ako \"Sprostredkovatel\")"]);
+  sections.push({ title: "SPROSTREDKOVATEL", icon: "S", rows: sRows });
 
   // 1. KLIENT
   const klientRows: [string, string][] = [];
@@ -184,7 +207,7 @@ function generatePdfBytes(naber: Record<string, unknown>, klient: Record<string,
   if (naber.popis) makRows.push(["Poznamka", String(naber.popis)]);
   sections.push({ title: "MAKLER", icon: "9", rows: makRows });
 
-  return buildPdf(sections, naber, klientMeno);
+  return buildPdf(sections, naber, company.nazov || "VIANEMA");
 }
 
 function buildPdf(sections: Section[], naber: Record<string, unknown>, title: string): Buffer {
@@ -216,7 +239,7 @@ function buildPdf(sections: Section[], naber: Record<string, unknown>, title: st
   stream += "q\n0.216 0.255 0.318 rg\n";
   stream += `0 ${pageH - 65} ${pageW} 65 re f\nQ\n`;
   stream += "BT\n/F2 22 Tf\n1 1 1 rg\n";
-  stream += `${margin} ${pageH - 38} Td\n(VIANEMA) Tj\n`;
+  stream += `${margin} ${pageH - 38} Td\n(${esc(title)}) Tj\n`;
   stream += `/F1 10 Tf\n0 -15 Td\n(Naberovy list) Tj\nET\n`;
   if (naber.datum_naberu) {
     stream += `BT\n1 1 1 rg\n/F1 10 Tf\n${pageW - margin - 130} ${pageH - 42} Td\n`;
@@ -292,7 +315,7 @@ function buildPdf(sections: Section[], naber: Record<string, unknown>, title: st
 
   // Footer
   stream += `BT\n/F1 8 Tf\n0.65 0.67 0.70 rg\n${margin} 30 Td\n`;
-  stream += `(VIANEMA s.r.o. | www.vianema.sk | Vsetky prava vyhradene) Tj\nET\n`;
+  stream += `(${esc(title)} | www.vianema.sk) Tj\nET\n`;
 
   pageStreams.push(stream);
 
@@ -404,11 +427,14 @@ export async function GET(req: NextRequest) {
   const { data: naber } = await supabase.from("naberove_listy").select("*").eq("id", naberId).single();
   if (!naber) return NextResponse.json({ error: "Naber not found" }, { status: 404 });
 
-  const { data: klient } = naber.klient_id
-    ? await supabase.from("klienti").select("*").eq("id", naber.klient_id).single()
-    : { data: null };
+  const [{ data: klient }, company] = await Promise.all([
+    naber.klient_id
+      ? supabase.from("klienti").select("*").eq("id", naber.klient_id).single()
+      : Promise.resolve({ data: null }),
+    loadCompanyInfo(),
+  ]);
 
-  const pdfBuffer = generatePdfBytes(naber, klient || {});
+  const pdfBuffer = generatePdfBytes(naber, klient || {}, company);
   const lokalita = [naber.obec, naber.okres].filter(Boolean).join("-") || "naber";
 
   return new NextResponse(new Uint8Array(pdfBuffer), {
@@ -431,11 +457,14 @@ export async function POST(req: NextRequest) {
     const { data: naber } = await supabase.from("naberove_listy").select("*").eq("id", naberId).single();
     if (!naber) return NextResponse.json({ error: "Naber not found" }, { status: 404 });
 
-    const { data: klient } = naber.klient_id
-      ? await supabase.from("klienti").select("*").eq("id", naber.klient_id).single()
-      : { data: null };
+    const [{ data: klient }, company] = await Promise.all([
+      naber.klient_id
+        ? supabase.from("klienti").select("*").eq("id", naber.klient_id).single()
+        : Promise.resolve({ data: null }),
+      loadCompanyInfo(),
+    ]);
 
-    const pdfBuffer = generatePdfBytes(naber, klient || {});
+    const pdfBuffer = generatePdfBytes(naber, klient || {}, company);
     const pdfBase64 = pdfBuffer.toString("base64");
 
     const lokalita = [naber.ulica, naber.obec, naber.okres].filter(Boolean).join(", ") || "nehnutelnost";
