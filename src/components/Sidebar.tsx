@@ -28,6 +28,7 @@ const mainNavBase = [
 const toolsNav = [
   { label: "Náberový list",   href: "/naber",      icon: "📝" },
   { label: "Inzerát",         href: "/inzerat",    icon: "📰" },
+  { label: "Monitor",         href: "/monitor",    icon: "📡" },
   { label: "Analýza trhu",    href: "/analyzy",    icon: "📈" },
   { label: "Kalkulátor",      href: "/kalkulator", icon: "🧮" },
   { label: "Matching",        href: "/matching",   icon: "🔗" },
