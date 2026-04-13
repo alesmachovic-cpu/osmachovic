@@ -17,6 +17,11 @@ export const maxDuration = 30; // Vercel hobby limit
  *
  * Pipeline: Stiahni → Parsuj → Porovnaj s DB → Ulož nové → Notifikuj
  *
+ * Triggery:
+ * 1. Vercel Cron — 1x denne o 8:00 (hobby plan limit)
+ * 2. Externý cron (cron-job.org) — každých 15 min: GET /api/cron/scrape?key=CRON_SECRET
+ * 3. Manuálne z UI — tlačidlo "Spustiť scrape" na /monitor
+ *
  * Stratégia pre 30s limit:
  * - Spracúvame MAX 3 filtre za jeden request
  * - Ak je filtrov viac, spracujeme tie s najstarším last_scraped
@@ -33,11 +38,14 @@ const MAX_FILTERS_PER_RUN = 3;
 export async function GET(request: Request) {
   const startTime = Date.now();
 
-  // Bezpečnosť: overenie CRON_SECRET (Vercel posiela header)
+  // Bezpečnosť: overenie CRON_SECRET
+  // Vercel cron posiela header, externý cron posiela ?key= parameter
   const authHeader = request.headers.get("authorization");
+  const { searchParams } = new URL(request.url);
+  const queryKey = searchParams.get("key");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && queryKey !== cronSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
