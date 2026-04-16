@@ -51,11 +51,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const sb = getSupabaseAdmin();
   const results: ScrapeResult[] = [];
   const allNewInzeraty: ScrapedInzerat[] = [];
 
   try {
+    const sb = getSupabaseAdmin();
     // 1. Načítaj aktívne filtre
     const { data: filtre, error: filtreErr } = await sb
       .from("monitor_filtre")
