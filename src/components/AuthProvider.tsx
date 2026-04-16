@@ -73,6 +73,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   useEffect(() => {
+    // Safety net: ak sa init zasekne, po 4 sekundách ukončíme checking
+    const safetyTimeout = setTimeout(() => {
+      console.warn("[auth] Safety timeout — forcing checking=false");
+      setChecking(false);
+    }, 4000);
+
     (async () => {
       try {
         const accs = await loadAccounts();
@@ -113,6 +119,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       } catch (e) {
         console.error("[auth] initial load error:", e);
       } finally {
+        clearTimeout(safetyTimeout);
         setChecking(false);
       }
     })();
@@ -136,7 +143,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       }
     });
 
-    return () => { subscription.unsubscribe(); };
+    return () => { subscription.unsubscribe(); clearTimeout(safetyTimeout); };
   }, []);
 
   async function refreshAccounts() {
