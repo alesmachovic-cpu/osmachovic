@@ -73,6 +73,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     if (acc.password && acc.password !== password) return "Nesprávne heslo";
     localStorage.setItem("crm_user", userId);
     setUser(acc);
+    // Po prihláseni presmeruj na Prehľad
+    if (typeof window !== "undefined") {
+      setTimeout(() => { window.location.href = "/"; }, 50);
+    }
     return null;
   }
 
