@@ -114,14 +114,23 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     setAccounts(accs);
   }
 
-  async function login(userId: string, password: string): Promise<string | null> {
-    const { data } = await supabase.from("users").select("*").eq("id", userId).single();
-    if (!data) return "Účet neexistuje";
-    const acc = data as User;
+  async function login(identifier: string, password: string): Promise<string | null> {
+    const q = identifier.trim().toLowerCase();
+    if (!q) return "Zadaj meno alebo email";
+
+    // Skús nájsť user podľa id, emailu alebo mena
+    const { data: list } = await supabase.from("users").select("*");
+    const accs = (list ?? []) as User[];
+    const acc = accs.find(a =>
+      a.id.toLowerCase() === q ||
+      (a.email || "").toLowerCase() === q ||
+      (a.name || "").toLowerCase() === q
+    );
+    if (!acc) return "Účet neexistuje (skontroluj meno/email)";
     if (acc.password && acc.password !== password) return "Nesprávne heslo";
-    localStorage.setItem("crm_user", userId);
+
+    localStorage.setItem("crm_user", acc.id);
     setUser(acc);
-    // Po prihláseni presmeruj na Prehľad
     if (typeof window !== "undefined") {
       setTimeout(() => { window.location.href = "/"; }, 50);
     }
@@ -255,48 +264,30 @@ function SlovakiaMap() {
   );
 }
 
-function LoginScreen({ accounts, onLogin, onGoogleLogin }: { accounts: User[]; onLogin: (id: string, pw: string) => Promise<string | null>; onGoogleLogin: () => Promise<void> }) {
-  const [selected, setSelected] = useState<string | null>(null);
+function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts: User[]; onLogin: (id: string, pw: string) => Promise<string | null>; onGoogleLogin: () => Promise<void> }) {
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [animating, setAnimating] = useState(false);
-  const [showLegacy, setShowLegacy] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  async function handleSubmit(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!identifier.trim()) { setError("Zadaj meno alebo email"); return; }
+    setSubmitting(true);
+    setError("");
+    const err = await onLogin(identifier, password);
+    if (err) { setError(err); setSubmitting(false); }
+  }
 
   async function handleGoogle() {
     setGoogleLoading(true);
-    try { await onGoogleLogin(); } catch (e) {
+    setError("");
+    try {
+      await onGoogleLogin();
+    } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setGoogleLoading(false);
-    }
-  }
-
-  const selectedAccount = accounts.find(a => a.id === selected);
-  const needsPassword = selectedAccount?.password && selectedAccount.password.length > 0;
-
-  async function handleSelect(id: string) {
-    const acc = accounts.find(a => a.id === id);
-    if (!acc) return;
-
-    if (!acc.password) {
-      setSelected(id);
-      setAnimating(true);
-      const err = await onLogin(id, "");
-      if (err) { setError(err); setAnimating(false); }
-    } else {
-      setSelected(id);
-      setPassword("");
-      setError("");
-    }
-  }
-
-  async function handlePasswordSubmit() {
-    if (!selected) return;
-    setAnimating(true);
-    const err = await onLogin(selected, password);
-    if (err) {
-      setError(err);
-      setAnimating(false);
     }
   }
 
@@ -304,307 +295,169 @@ function LoginScreen({ accounts, onLogin, onGoogleLogin }: { accounts: User[]; o
     <div style={{
       minHeight: "100vh",
       background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)",
-      display: "flex", flexDirection: "column",
+      display: "flex", alignItems: "center", justifyContent: "center",
       fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif",
-      position: "relative", overflow: "hidden",
+      padding: "24px",
     }}>
-      {/* Subtle gradient orbs */}
       <div style={{
-        position: "absolute", width: "600px", height: "600px", borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)",
-        top: "-200px", right: "-100px", pointerEvents: "none",
-      }} />
-      <div style={{
-        position: "absolute", width: "500px", height: "500px", borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 70%)",
-        bottom: "-150px", left: "-100px", pointerEvents: "none",
-      }} />
-
-      {/* Top bar */}
-      <div style={{
-        padding: "20px 32px", display: "flex", alignItems: "center", justifyContent: "space-between",
-        position: "relative", zIndex: 2,
+        width: "100%", maxWidth: "400px",
+        background: "rgba(255,255,255,0.08)",
+        backdropFilter: "blur(40px)", WebkitBackdropFilter: "blur(40px)",
+        borderRadius: "24px",
+        border: "1px solid rgba(255,255,255,0.12)",
+        padding: "36px 32px",
+        boxShadow: "0 32px 64px rgba(0,0,0,0.3)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: "28px" }}>
           <div style={{
-            width: "32px", height: "32px", borderRadius: "8px",
+            width: "56px", height: "56px", borderRadius: "14px",
             background: "rgba(255,255,255,0.15)", backdropFilter: "blur(20px)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "16px",
+            fontSize: "24px", fontWeight: 700, color: "#fff", margin: "0 auto 14px",
           }}>V</div>
-          <span style={{ fontSize: "15px", fontWeight: "600", color: "rgba(255,255,255,0.9)", letterSpacing: "-0.01em" }}>VIANEMA</span>
+          <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#fff", margin: "0 0 4px", letterSpacing: "-0.02em" }}>
+            Machovič CRM
+          </h1>
+          <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", margin: 0 }}>
+            Prihláste sa do systému
+          </p>
         </div>
-        <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
-          Realitný systém
-        </div>
-      </div>
 
-      {/* Main content */}
-      <div style={{
-        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "0 24px 40px", position: "relative", zIndex: 2,
-      }}>
-        <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center",
-          width: "100%", maxWidth: "900px", gap: "40px",
-        }}>
-          {/* Map section */}
-          <div style={{ width: "100%", textAlign: "center" }}>
-            <SlovakiaMap />
+        {/* Formulár */}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.7)", marginBottom: "6px", display: "block", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Meno alebo email
+            </label>
+            <input
+              type="text"
+              autoComplete="username"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              disabled={submitting}
+              placeholder="Meno alebo email"
+              style={{
+                width: "100%", padding: "13px 16px", borderRadius: "12px",
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "#fff", fontSize: "14px", outline: "none",
+                transition: "all 0.15s",
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.7)", marginBottom: "6px", display: "block", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Heslo
+            </label>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={submitting}
+              placeholder="••••••••"
+              style={{
+                width: "100%", padding: "13px 16px", borderRadius: "12px",
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "#fff", fontSize: "14px", outline: "none",
+                transition: "all 0.15s",
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+            />
+          </div>
+
+          {error && (
             <div style={{
-              display: "flex", justifyContent: "center", gap: "20px", marginTop: "12px",
-              flexWrap: "wrap",
+              padding: "10px 12px", borderRadius: "10px",
+              background: "rgba(239,68,68,0.15)",
+              border: "1px solid rgba(239,68,68,0.3)",
+              color: "#fecaca", fontSize: "12px", fontWeight: 500,
             }}>
-              {["Bratislava", "Trenčín", "Púchov", "Žilina", "Poprad", "Košice"].map(city => (
-                <span key={city} style={{
-                  fontSize: "11px", color: "rgba(255,255,255,0.5)", fontWeight: "500",
-                  display: "flex", alignItems: "center", gap: "4px",
-                }}>
-                  <span style={{
-                    width: "5px", height: "5px", borderRadius: "50%",
-                    background: "rgba(255,255,255,0.4)", display: "inline-block",
-                  }} />
-                  {city}
-                </span>
-              ))}
+              {error}
             </div>
-          </div>
+          )}
 
-          {/* Login card */}
-          <div style={{
-            width: "100%", maxWidth: "400px",
-            background: "rgba(255,255,255,0.08)",
-            backdropFilter: "blur(40px)", WebkitBackdropFilter: "blur(40px)",
-            borderRadius: "24px",
-            border: "1px solid rgba(255,255,255,0.12)",
-            padding: "32px 28px",
-            boxShadow: "0 32px 64px rgba(0,0,0,0.3)",
-          }}>
-            <div style={{ textAlign: "center", marginBottom: "28px" }}>
-              <h1 style={{
-                fontSize: "24px", fontWeight: "700",
-                color: "#fff", margin: "0 0 6px",
-                letterSpacing: "-0.02em",
-              }}>
-                Prihlásenie
-              </h1>
-              <p style={{
-                fontSize: "14px", color: "rgba(255,255,255,0.5)", margin: 0,
-                fontWeight: "400",
-              }}>
-                {selected && needsPassword
-                  ? selectedAccount?.name
-                  : showLegacy ? "Vyber svoj účet" : "Pokračuj cez Google účet"
-                }
-              </p>
-            </div>
-
-            {/* Google Sign In — PRIMARY */}
-            {!selected && !showLegacy && (
+          <button
+            type="submit"
+            disabled={submitting || !identifier.trim()}
+            style={{
+              width: "100%", padding: "14px 16px", borderRadius: "12px",
+              background: "#fff", color: "#111827",
+              border: "none", fontSize: "14px", fontWeight: 700,
+              cursor: (submitting || !identifier.trim()) ? "default" : "pointer",
+              opacity: (submitting || !identifier.trim()) ? 0.5 : 1,
+              transition: "all 0.15s",
+              marginTop: "4px",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+            }}
+          >
+            {submitting ? (
               <>
-                <button
-                  onClick={handleGoogle}
-                  disabled={googleLoading}
-                  style={{
-                    width: "100%", padding: "14px 16px", borderRadius: "14px",
-                    background: "#fff", color: "#1f2937",
-                    border: "none", fontSize: "14px", fontWeight: 600,
-                    cursor: googleLoading ? "default" : "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
-                    opacity: googleLoading ? 0.7 : 1,
-                    transition: "all 0.15s",
-                    marginBottom: "16px",
-                  }}
-                >
-                  {googleLoading ? (
-                    <>
-                      <span style={{ width: "16px", height: "16px", border: "2px solid #e5e7eb", borderTopColor: "#374151", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
-                      Pripájam Google...
-                    </>
-                  ) : (
-                    <>
-                      <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                      </svg>
-                      Prihlásiť sa cez Google
-                    </>
-                  )}
-                </button>
-
-                {accounts.length > 0 && (
-                  <button
-                    onClick={() => setShowLegacy(true)}
-                    style={{
-                      fontSize: "12px", color: "rgba(255,255,255,0.5)", background: "none",
-                      border: "none", cursor: "pointer", textAlign: "center", padding: "4px",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    alebo prihlásiť heslom →
-                  </button>
-                )}
+                <span style={{ width: "14px", height: "14px", border: "2px solid rgba(17,24,39,0.2)", borderTopColor: "#111827", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+                Prihlasujem...
               </>
-            )}
+            ) : "Prihlásiť"}
+          </button>
+        </form>
 
-            {(selected || showLegacy) && (
-              <div style={{ marginBottom: "12px", textAlign: "center" }}>
-                <button
-                  onClick={() => { setShowLegacy(false); setSelected(null); setPassword(""); setError(""); }}
-                  style={{
-                    fontSize: "12px", color: "rgba(255,255,255,0.5)", background: "none",
-                    border: "none", cursor: "pointer", padding: "4px",
-                  }}
-                >
-                  ← Späť na Google prihlásenie
-                </button>
-              </div>
-            )}
-
-            {(showLegacy || selected) && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {selected && needsPassword ? (
-                <>
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: "12px",
-                    padding: "14px 16px", borderRadius: "14px",
-                    background: "rgba(255,255,255,0.06)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    marginBottom: "4px",
-                  }}>
-                    <div style={{
-                      width: "44px", height: "44px", borderRadius: "50%",
-                      background: "rgba(255,255,255,0.12)", color: "#fff",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "15px", fontWeight: "700", flexShrink: 0,
-                    }}>{selectedAccount?.initials}</div>
-                    <div>
-                      <div style={{ fontSize: "14px", fontWeight: "600", color: "#fff" }}>
-                        {selectedAccount?.name}
-                      </div>
-                      <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", marginTop: "1px" }}>
-                        {selectedAccount?.role}
-                      </div>
-                    </div>
-                  </div>
-
-                  <input
-                    type="password"
-                    placeholder="Heslo"
-                    value={password}
-                    onChange={e => { setPassword(e.target.value); setError(""); }}
-                    onKeyDown={e => { if (e.key === "Enter") handlePasswordSubmit(); }}
-                    autoFocus
-                    style={{
-                      width: "100%", padding: "14px 16px", borderRadius: "12px",
-                      border: error ? "1px solid #EF4444" : "1px solid rgba(255,255,255,0.1)",
-                      fontSize: "15px", outline: "none",
-                      background: "rgba(255,255,255,0.06)",
-                      color: "#fff", boxSizing: "border-box",
-                    }}
-                  />
-
-                  {error && (
-                    <div style={{ fontSize: "12px", color: "#F87171", fontWeight: "500", textAlign: "center" }}>
-                      {error}
-                    </div>
-                  )}
-
-                  <button onClick={handlePasswordSubmit} disabled={animating} style={{
-                    width: "100%", padding: "14px", borderRadius: "12px", border: "none",
-                    background: "rgba(255,255,255,0.95)", color: "#1a1a2e",
-                    fontSize: "15px", fontWeight: "600",
-                    cursor: animating ? "default" : "pointer", marginTop: "4px",
-                    opacity: animating ? 0.6 : 1,
-                    transition: "all 0.2s",
-                  }}>
-                    {animating ? "Prihlasujem..." : "Prihlásiť sa"}
-                  </button>
-
-                  <button onClick={() => { setSelected(null); setError(""); }} style={{
-                    background: "none", border: "none", fontSize: "13px",
-                    color: "rgba(255,255,255,0.5)", cursor: "pointer",
-                    padding: "8px", textAlign: "center",
-                  }}>
-                    Späť na výber účtu
-                  </button>
-                </>
-              ) : (
-                accounts.map(account => {
-                  const isSelected = selected === account.id && animating;
-                  return (
-                    <button
-                      key={account.id}
-                      onClick={() => handleSelect(account.id)}
-                      disabled={animating}
-                      style={{
-                        display: "flex", alignItems: "center", gap: "12px",
-                        padding: "14px 16px",
-                        background: isSelected
-                          ? "rgba(255,255,255,0.15)"
-                          : "rgba(255,255,255,0.04)",
-                        border: "1px solid " + (isSelected ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)"),
-                        borderRadius: "14px",
-                        cursor: animating ? "default" : "pointer",
-                        transition: "all 0.25s ease",
-                        transform: isSelected ? "scale(0.98)" : "scale(1)",
-                        textAlign: "left",
-                        opacity: animating && !isSelected ? 0.3 : 1,
-                      }}
-                    >
-                      <div style={{
-                        width: "44px", height: "44px", borderRadius: "50%",
-                        background: isSelected ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)",
-                        color: "#fff",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "14px", fontWeight: "700", flexShrink: 0,
-                        transition: "all 0.25s",
-                      }}>
-                        {account.initials}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: "14px", fontWeight: "600", color: "#fff",
-                        }}>
-                          {account.name}
-                        </div>
-                        <div style={{
-                          fontSize: "11px", color: "rgba(255,255,255,0.4)",
-                          marginTop: "2px",
-                        }}>
-                          {account.role}
-                        </div>
-                      </div>
-                      {account.password ? (
-                        <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.3)" }}>🔒</span>
-                      ) : (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" strokeLinecap="round">
-                          <polyline points="9 18 15 12 9 6" />
-                        </svg>
-                      )}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-            )}
-          </div>
+        {/* Divider */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "20px 0" }}>
+          <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.12)" }} />
+          <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", fontWeight: 500, letterSpacing: "0.04em" }}>ALEBO</span>
+          <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.12)" }} />
         </div>
-      </div>
 
-      {/* Footer */}
-      <div style={{
-        padding: "16px 32px", textAlign: "center", position: "relative", zIndex: 2,
-      }}>
+        {/* Google Button */}
+        <button
+          onClick={handleGoogle}
+          disabled={googleLoading}
+          style={{
+            width: "100%", padding: "13px 16px", borderRadius: "12px",
+            background: "rgba(255,255,255,0.06)", color: "#fff",
+            border: "1px solid rgba(255,255,255,0.12)",
+            fontSize: "14px", fontWeight: 600,
+            cursor: googleLoading ? "default" : "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+            transition: "all 0.15s",
+            opacity: googleLoading ? 0.7 : 1,
+          }}
+          onMouseEnter={(e) => { if (!googleLoading) e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+        >
+          {googleLoading ? (
+            <>
+              <span style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", display: "inline-block", animation: "spin 0.8s linear infinite" }} />
+              Pripájam Google...
+            </>
+          ) : (
+            <>
+              <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Prihlásiť cez Google
+            </>
+          )}
+        </button>
+
+        {/* Footer */}
         <p style={{
-          fontSize: "11px", color: "rgba(255,255,255,0.25)", margin: 0,
+          fontSize: "11px", color: "rgba(255,255,255,0.3)",
+          textAlign: "center", marginTop: "24px", margin: "24px 0 0",
           letterSpacing: "0.02em",
         }}>
           VIANEMA Reality · Machovič CRM v10.0
         </p>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
