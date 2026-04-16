@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/components/AuthProvider";
+import { getUserItem, setUserItem } from "@/lib/userStorage";
 
 export type DodavatelSettings = {
   nazov: string;
@@ -41,12 +43,15 @@ export const DEFAULT_DODAVATEL: DodavatelSettings = {
   vystavil: "",
 };
 
-const STORAGE_KEY = "faktury_dodavatel";
+export const STORAGE_KEY = "faktury_dodavatel";
 
-export function loadDodavatel(): DodavatelSettings {
+/** Per-user loader: každý makler má vlastné fakturačné údaje */
+export function loadDodavatel(userId?: string): DodavatelSettings {
   if (typeof window === "undefined") return DEFAULT_DODAVATEL;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = userId
+      ? getUserItem(userId, STORAGE_KEY)
+      : localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_DODAVATEL;
     return { ...DEFAULT_DODAVATEL, ...JSON.parse(raw) };
   } catch {
@@ -71,13 +76,17 @@ const labelSt: React.CSSProperties = {
 };
 
 export default function NastaveniaFakturyPage() {
+  const { user } = useAuth();
   const [s, setS] = useState<DodavatelSettings>(DEFAULT_DODAVATEL);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => { setS(loadDodavatel()); }, []);
+  useEffect(() => {
+    if (user?.id) setS(loadDodavatel(user.id));
+  }, [user?.id]);
 
   function save() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+    if (!user?.id) return;
+    setUserItem(user.id, STORAGE_KEY, JSON.stringify(s));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }

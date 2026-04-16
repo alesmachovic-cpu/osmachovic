@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loadDodavatel } from "@/app/nastavenia/faktury/page";
+import { useAuth } from "@/components/AuthProvider";
 
 type Odberatel = {
   id: string;
@@ -45,6 +46,7 @@ function addDays(d: string, n: number) {
 
 export default function NovaFakturaPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const today = new Date().toISOString().slice(0, 10);
 
   const [odberatelia, setOdberatelia] = useState<Odberatel[]>([]);
@@ -68,11 +70,11 @@ export default function NovaFakturaPage() {
       setOdberatelia(Array.isArray(d) ? d : []);
       if (Array.isArray(d) && d.length > 0) setOdberatelId(d[0].id);
     });
-    const dod = loadDodavatel();
+    const dod = loadDodavatel(user?.id);
     if (dod.splatnost_dni) setDatumSplatnosti(addDays(today, dod.splatnost_dni));
     if (dod.poznamka_default) setPoznamka(dod.poznamka_default);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.id]);
 
   function updatePolozka(i: number, patch: Partial<Polozka>) {
     setPolozky((prev) => {

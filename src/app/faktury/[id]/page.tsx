@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { loadDodavatel, DEFAULT_DODAVATEL, type DodavatelSettings } from "@/app/nastavenia/faktury/page";
+import { useAuth } from "@/components/AuthProvider";
 
 type Polozka = { id: string; popis: string; mnozstvo: number; jednotka: string; cena_jednotka: number; spolu: number };
 type Faktura = {
@@ -23,13 +24,14 @@ type Faktura = {
 
 export default function FakturaDetail() {
   const params = useParams<{ id: string }>();
+  const { user } = useAuth();
   const [f, setF] = useState<Faktura | null>(null);
   const [DODAVATEL, setDodavatel] = useState<DodavatelSettings>(DEFAULT_DODAVATEL);
 
   useEffect(() => {
     fetch(`/api/faktury?id=${params.id}`).then((r) => r.json()).then(setF);
-    setDodavatel(loadDodavatel());
-  }, [params.id]);
+    setDodavatel(loadDodavatel(user?.id));
+  }, [params.id, user?.id]);
 
   if (!f) return <div style={{ padding: "24px" }}>Načítavam…</div>;
 
