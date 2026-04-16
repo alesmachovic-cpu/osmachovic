@@ -1433,10 +1433,27 @@ export default function KlientDetailPage() {
                       </div>
                     </div>
                     {d.data_base64 && (
-                      <a href={`data:${d.mime || "application/octet-stream"};base64,${d.data_base64}`} download={d.name}
-                         style={{ fontSize: "12px", color: "var(--accent, #3B82F6)", textDecoration: "none", padding: "4px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}>
-                        Stiahnuť
-                      </a>
+                      <>
+                        <button
+                          onClick={() => {
+                            try {
+                              const bin = atob(d.data_base64 as string);
+                              const bytes = new Uint8Array(bin.length);
+                              for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                              const blob = new Blob([bytes], { type: d.mime || "application/pdf" });
+                              const url = URL.createObjectURL(blob);
+                              window.open(url, "_blank");
+                              setTimeout(() => URL.revokeObjectURL(url), 60000);
+                            } catch (e) { console.error(e); }
+                          }}
+                          style={{ fontSize: "12px", color: "var(--accent, #3B82F6)", background: "none", padding: "4px 10px", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer" }}>
+                          👁 Zobraziť
+                        </button>
+                        <a href={`data:${d.mime || "application/octet-stream"};base64,${d.data_base64}`} download={d.name}
+                           style={{ fontSize: "12px", color: "var(--text-secondary)", textDecoration: "none", padding: "4px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}>
+                          ⬇ Stiahnuť
+                        </a>
+                      </>
                     )}
                     <button onClick={async () => { if (d.id && confirm("Vymazať dokument?")) { await deleteKlientDokument(d.id); setKlientDokumenty(prev => prev.filter(x => x.id !== d.id)); } }}
                             style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px" }}>×</button>
