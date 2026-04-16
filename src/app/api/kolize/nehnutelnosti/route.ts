@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+const getSb = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     const kolize: Array<Record<string, unknown>> = [];
 
     if (lokalita && typ_nehnutelnosti && izby) {
-      let query = supabase
+      let query = getSb()
         .from('nehnutelnosti')
         .select('id, nazov, lokalita, typ_nehnutelnosti, izby, cena, makler_email, makler_meno, status_kolizie')
         .eq('lokalita', lokalita)
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (kolize.length > 0) {
-      await supabase.from('kolizny_log').insert(kolize.map(k => ({
+      await getSb().from('kolizny_log').insert(kolize.map(k => ({
         typ_kolizie: k.typ,
         zavaznost: k.zavaznost,
         popis: k.sprava,

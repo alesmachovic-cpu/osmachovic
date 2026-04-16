@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+const getSb = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     const novy_status = akcia === 'schvalit' ? 'aktivna' : 'neaktivna';
 
-    const { data, error } = await supabase
+    const { data, error } = await getSb()
       .from('nehnutelnosti')
       .update({ status_kolizie: novy_status, kolizia_poznamka: poznamka || null })
       .eq('id', nehnutelnost_id)
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     if (error) throw error;
 
     // Aktualizuj aj kolizny log
-    await supabase
+    await getSb()
       .from('kolizny_log')
       .update({ stav: akcia === 'schvalit' ? 'riesena' : 'ignorovana', aktualizovane: new Date().toISOString() })
       .contains('meta_data', { existujuca_nehnutelnost_id: nehnutelnost_id });
