@@ -834,6 +834,14 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
                 ✅ Číslo nie je v databáze
               </div>
             )}
+            {checked && duplicates.some(d => d.status === "realitna_kancelaria" || d.status === "nechce_rk") && (
+              <div style={{ marginTop: "8px", padding: "10px 12px", background: "#FEE2E2", borderRadius: "8px", border: "1px solid #EF4444", display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontSize: "20px" }}>⚠️</span>
+                <div style={{ fontSize: "12px", color: "#991B1B", fontWeight: 600, lineHeight: 1.4 }}>
+                  Pozor: toto číslo patrí <strong>realitnej kancelárii</strong>, nie súkromnému predajcovi.
+                </div>
+              </div>
+            )}
             {checked && dupLevel === "warning" && (
               <div style={{ marginTop: "8px", padding: "10px 12px", background: "#FEF3C7", borderRadius: "8px", border: "1px solid #F59E0B" }}>
                 <div style={{ fontSize: "12px", fontWeight: "600", color: "#92400E", marginBottom: "6px" }}>⚠️ Rovnaké číslo, iné údaje</div>

@@ -493,6 +493,35 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
     const klientUpdate: Record<string, unknown> = { status: "nabrany" };
     if (maklerUuid && !klient.makler_id) klientUpdate.makler_id = maklerUuid;
     await supabase.from("klienti").update(klientUpdate).eq("id", klient.id);
+
+    // Auto-upload Náberového listu ako PDF do Dokumentov klienta
+    try {
+      const pdfRes = await fetch(`/api/naber-pdf?id=${data.id}`);
+      if (pdfRes.ok) {
+        const blob = await pdfRes.blob();
+        const reader = new FileReader();
+        const base64: string = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        const meno = (klient.meno || "klient").replace(/[^a-zA-Z0-9]+/g, "_");
+        const datum = new Date().toISOString().split("T")[0];
+        await saveKlientDokument({
+          klient_id: klient.id,
+          name: `naberovy_list_${meno}_${datum}.pdf`,
+          type: "Náberový list",
+          size: blob.size,
+          source: "naber",
+          mime: "application/pdf",
+          data_base64: base64,
+        });
+      }
+    } catch (e) {
+      console.warn("[naber] auto-upload PDF failed:", e);
+      // Nezrušíme save ak PDF upload zlyhá — náberak je uložený v DB
+    }
+
     setSaving(false);
     onSubmit({ id: data.id });
   }
