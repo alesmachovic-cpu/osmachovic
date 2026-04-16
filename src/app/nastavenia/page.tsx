@@ -27,6 +27,7 @@ export default function NastaveniaPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserLoginEmail, setNewUserLoginEmail] = useState("");
   const [newUserRole, setNewUserRole] = useState("Maklér · Vianema");
   const [newUserPw, setNewUserPw] = useState("");
   const [showAddUser, setShowAddUser] = useState(false);
@@ -656,8 +657,12 @@ export default function NastaveniaPage() {
                   <input style={inputSt} value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Meno Priezvisko" />
                 </div>
                 <div>
-                  <div style={labelSt}>Email</div>
-                  <input type="email" style={inputSt} value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="email@vianema.sk" />
+                  <div style={labelSt}>Vianema email</div>
+                  <input type="email" style={inputSt} value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="meno@vianema.eu" />
+                </div>
+                <div>
+                  <div style={labelSt}>Gmail pre prihlásenie (Google OAuth)</div>
+                  <input type="email" style={inputSt} value={newUserLoginEmail} onChange={e => setNewUserLoginEmail(e.target.value)} placeholder="meno.priezvisko@gmail.com" />
                 </div>
                 <div>
                   <div style={labelSt}>Rola</div>
@@ -678,8 +683,8 @@ export default function NastaveniaPage() {
                   const id = newUserName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
                   const parts = newUserName.trim().split(" ");
                   const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
-                  addAccount({ id, name: newUserName.trim(), initials, role: newUserRole, email: newUserEmail, password: newUserPw || "" });
-                  setNewUserName(""); setNewUserEmail(""); setNewUserPw("");
+                  addAccount({ id, name: newUserName.trim(), initials, role: newUserRole, email: newUserEmail, login_email: newUserLoginEmail || undefined, password: newUserPw || "" });
+                  setNewUserName(""); setNewUserEmail(""); setNewUserLoginEmail(""); setNewUserPw("");
                   setShowAddUser(false);
                 }} style={{
                   padding: "8px 18px", background: "#374151", color: "#fff", border: "none",
@@ -716,10 +721,19 @@ export default function NastaveniaPage() {
                     <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                       {acc.email} · {acc.role}
                     </div>
+                    {acc.login_email && (
+                      <div style={{ fontSize: "11px", color: "#3B82F6", marginTop: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
+                        <span>G</span> {acc.login_email}
+                      </div>
+                    )}
                   </div>
 
                   {editingUser?.id === acc.id ? (
-                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                      <input type="email" placeholder="Gmail pre Google login" value={editingUser.login_email || ""}
+                        onChange={e => setEditingUser({ ...editingUser, login_email: e.target.value })}
+                        style={{ ...inputSt, width: "200px", padding: "6px 10px", fontSize: "12px" }}
+                      />
                       <input type="password" placeholder="Nové heslo" value={editingUser.password || ""}
                         onChange={e => setEditingUser({ ...editingUser, password: e.target.value })}
                         style={{ ...inputSt, width: "140px", padding: "6px 10px", fontSize: "12px" }}

@@ -8,7 +8,8 @@ interface User {
   name: string;
   initials: string;
   role: string;
-  email: string;
+  email: string;        // Business email (napr. @vianema.eu) — faktúry, komunikácia
+  login_email?: string; // Google email (Gmail) pre OAuth login — môže byť rôzny
   password?: string;
 }
 
@@ -51,10 +52,14 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   // Helper: priradí Supabase session email k našemu `users` whitelist záznamu
+  // Priorita: login_email (Gmail na prihlásenie) → email (fallback pre legacy)
   async function matchSessionToUser(email: string | null | undefined, accs: User[]): Promise<User | null> {
     if (!email) return null;
-    const found = accs.find(a => a.email?.toLowerCase() === email.toLowerCase());
-    return found || null;
+    const q = email.toLowerCase();
+    const byLogin = accs.find(a => a.login_email?.toLowerCase() === q);
+    if (byLogin) return byLogin;
+    const byEmail = accs.find(a => a.email?.toLowerCase() === q);
+    return byEmail || null;
   }
 
   useEffect(() => {
@@ -124,6 +129,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const acc = accs.find(a =>
       a.id.toLowerCase() === q ||
       (a.email || "").toLowerCase() === q ||
+      (a.login_email || "").toLowerCase() === q ||
       (a.name || "").toLowerCase() === q
     );
     if (!acc) return "Účet neexistuje (skontroluj meno/email)";
@@ -158,6 +164,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       initials: updated.initials,
       role: updated.role,
       email: updated.email,
+      login_email: updated.login_email || null,
       password: updated.password || "",
     }).eq("id", updated.id);
     await refreshAccounts();
@@ -171,6 +178,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       initials: account.initials,
       role: account.role,
       email: account.email,
+      login_email: account.login_email || null,
       password: account.password || "",
     });
     await refreshAccounts();
