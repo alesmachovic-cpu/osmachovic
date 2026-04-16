@@ -1349,7 +1349,7 @@ export default function KlientDetailPage() {
       {activeTab === "dokumenty" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {/* LV sekcia */}
-          <LVSection klientId={klient.id} lvData={klient.lv_data} canEdit={isOwner} onParsed={(data) => {
+          <LVSection klientId={klient.id} lvData={klient.lv_data} canEdit={!!isOwner} onParsed={(data) => {
             // Porovnaj LV s existujúcimi údajmi klienta
             const checks: { field: string; label: string; old: string; new_: string }[] = [];
             const lv = data as Record<string, unknown>;
