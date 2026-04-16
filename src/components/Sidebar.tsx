@@ -23,6 +23,7 @@ const mainNavBase = [
   { label: "Portfólio",    href: "/portfolio",  icon: "🏠" },
   { label: "Klienti",      href: "/klienti",    icon: "👥" },
   { label: "Kupujúci",     href: "/kupujuci",   icon: "🔍" },
+  { label: "Odklik",       href: "/odklik",     icon: "📭" },
 ];
 
 const toolsNav = [

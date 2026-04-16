@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/lv-reminder",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/odklik",
+      "schedule": "0 5 * * *"
     }
   ]
 }
