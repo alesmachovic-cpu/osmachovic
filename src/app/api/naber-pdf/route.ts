@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
+const getSb = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
@@ -45,7 +45,7 @@ type Section = { title: string; icon: string; rows: [string, string][] };
 
 async function loadCompanyInfo(): Promise<CompanyInfo> {
   try {
-    const { data } = await supabase.from("makleri").select("firma").eq("email", "ales@vianema.sk").single();
+    const { data } = await getSb().from("makleri").select("firma").eq("email", "ales@vianema.sk").single();
     if (data?.firma) {
       const c = typeof data.firma === "string" ? JSON.parse(data.firma) : data.firma;
       return c as CompanyInfo;
@@ -455,12 +455,12 @@ export async function GET(req: NextRequest) {
   const naberId = req.nextUrl.searchParams.get("id");
   if (!naberId) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  const { data: naber } = await supabase.from("naberove_listy").select("*").eq("id", naberId).single();
+  const { data: naber } = await getSb().from("naberove_listy").select("*").eq("id", naberId).single();
   if (!naber) return NextResponse.json({ error: "Naber not found" }, { status: 404 });
 
   const [{ data: klient }, company] = await Promise.all([
     naber.klient_id
-      ? supabase.from("klienti").select("*").eq("id", naber.klient_id).single()
+      ? getSb().from("klienti").select("*").eq("id", naber.klient_id).single()
       : Promise.resolve({ data: null }),
     loadCompanyInfo(),
   ]);
@@ -485,12 +485,12 @@ export async function POST(req: NextRequest) {
     const RESEND_API_KEY = process.env.RESEND_API_KEY;
     if (!RESEND_API_KEY) return NextResponse.json({ error: "RESEND_API_KEY not configured" }, { status: 500 });
 
-    const { data: naber } = await supabase.from("naberove_listy").select("*").eq("id", naberId).single();
+    const { data: naber } = await getSb().from("naberove_listy").select("*").eq("id", naberId).single();
     if (!naber) return NextResponse.json({ error: "Naber not found" }, { status: 404 });
 
     const [{ data: klient }, company] = await Promise.all([
       naber.klient_id
-        ? supabase.from("klienti").select("*").eq("id", naber.klient_id).single()
+        ? getSb().from("klienti").select("*").eq("id", naber.klient_id).single()
         : Promise.resolve({ data: null }),
       loadCompanyInfo(),
     ]);
