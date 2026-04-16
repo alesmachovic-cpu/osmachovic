@@ -49,24 +49,31 @@ const PORTALS = [
   { value: "nehnutelnosti.sk", label: "Nehnuteľnosti.sk" },
   { value: "topreality.sk", label: "TopReality.sk" },
 ];
-
 const TYPY = [
   { value: "", label: "Všetky typy" },
   { value: "byt", label: "Byt" },
   { value: "dom", label: "Dom" },
   { value: "pozemok", label: "Pozemok" },
 ];
-
 const SORT_OPTIONS = [
   { value: "newest", label: "Najnovšie" },
   { value: "price_asc", label: "Najlacnejšie" },
   { value: "price_desc", label: "Najdrahšie" },
 ];
-
 const PORTAL_DOT: Record<string, string> = {
-  "nehnutelnosti.sk": "#3b82f6",
-  "reality.sk": "#10b981",
-  "topreality.sk": "#8b5cf6",
+  "nehnutelnosti.sk": "#007AFF",
+  "reality.sk": "#34C759",
+  "topreality.sk": "#AF52DE",
+};
+
+/* ── Štýly ── */
+const S = {
+  card: { background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" },
+  label: { fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.04em", display: "block", marginBottom: "6px" },
+  input: { width: "100%", height: "38px", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0 12px", fontSize: "14px", color: "var(--text-primary)", outline: "none", transition: "all 0.15s" },
+  select: { width: "100%", height: "38px", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0 12px", fontSize: "14px", color: "var(--text-primary)", outline: "none", cursor: "pointer" },
+  btnPrimary: { height: "38px", padding: "0 18px", background: "var(--text-primary)", color: "#fff", border: "none", borderRadius: "var(--radius-sm)", fontSize: "14px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" },
+  btnSecondary: { height: "38px", padding: "0 14px", background: "var(--bg-base)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", fontSize: "13px", fontWeight: 500, cursor: "pointer" },
 };
 
 /* ── Helpers ── */
@@ -75,23 +82,15 @@ const timeAgo = (date: string) => {
   const diff = Date.now() - new Date(date).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "práve teraz";
-  if (mins < 60) return `${mins} min`;
+  if (mins < 60) return `pred ${mins} min`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} hod`;
+  if (hours < 24) return `pred ${hours} hod`;
   const days = Math.floor(hours / 24);
-  return `${days} ${days === 1 ? "deň" : days < 5 ? "dni" : "dní"}`;
+  return `pred ${days} ${days === 1 ? "dňom" : "dňami"}`;
 };
 
-/* ── Lokalita Autocomplete Component ── */
-function LokalitaInput({
-  value,
-  onChange,
-  placeholder = "Bratislava - Petržalka...",
-}: {
-  value: string;
-  onChange: (display: string, dbValue: string) => void;
-  placeholder?: string;
-}) {
+/* ── Lokalita Autocomplete ── */
+function LokalitaInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   const [input, setInput] = useState(value);
   const [suggestions, setSuggestions] = useState<LokalitaEntry[]>([]);
   const [open, setOpen] = useState(false);
@@ -101,46 +100,20 @@ function LokalitaInput({
   useEffect(() => { setInput(value); }, [value]);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const h = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const handleInput = (val: string) => {
-    setInput(val);
+  const handleInput = (v: string) => {
+    setInput(v);
     setActiveIdx(-1);
-    const results = filterLokality(val, 8);
-    setSuggestions(results);
-    setOpen(results.length > 0);
-    // Allow free text too
-    onChange(val, val);
+    const res = filterLokality(v, 8);
+    setSuggestions(res);
+    setOpen(res.length > 0);
+    onChange(v);
   };
-
-  const selectItem = (item: LokalitaEntry) => {
-    setInput(item.display);
-    onChange(item.display, item.lokalita);
-    setOpen(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!open) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIdx(i => Math.min(i + 1, suggestions.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIdx(i => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && activeIdx >= 0) {
-      e.preventDefault();
-      selectItem(suggestions[activeIdx]);
-    } else if (e.key === "Escape") {
-      setOpen(false);
-    }
-  };
+  const select = (it: LokalitaEntry) => { setInput(it.display); onChange(it.display); setOpen(false); };
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
@@ -149,41 +122,39 @@ function LokalitaInput({
         placeholder={placeholder}
         value={input}
         onChange={e => handleInput(e.target.value)}
-        onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
-        onKeyDown={handleKeyDown}
-        className="w-full h-10 bg-gray-50 border-0 rounded-lg px-3 text-sm focus:ring-2 focus:ring-gray-200 focus:bg-white transition placeholder:text-gray-300"
+        onFocus={() => { if (suggestions.length) setOpen(true); }}
+        onKeyDown={e => {
+          if (!open) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, suggestions.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)); }
+          else if (e.key === "Enter" && activeIdx >= 0) { e.preventDefault(); select(suggestions[activeIdx]); }
+          else if (e.key === "Escape") setOpen(false);
+        }}
+        style={S.input}
       />
       {open && suggestions.length > 0 && (
-        <div
-          style={{
-            position: "absolute", top: "100%", left: 0, right: 0,
-            zIndex: 50, marginTop: "4px",
-            background: "#fff", borderRadius: "10px",
-            border: "1px solid #e5e7eb",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-            maxHeight: "240px", overflowY: "auto",
-          }}
-        >
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
+          background: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)", boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+          maxHeight: "260px", overflowY: "auto",
+        }}>
           {suggestions.map((s, i) => (
             <button
               key={s.display + i}
-              onClick={() => selectItem(s)}
-              style={{
-                display: "flex", alignItems: "center", gap: "8px",
-                width: "100%", padding: "8px 12px", border: "none",
-                background: i === activeIdx ? "#f3f4f6" : "transparent",
-                cursor: "pointer", textAlign: "left",
-                fontSize: "13px", color: "#111827",
-                transition: "background 0.1s",
-              }}
+              onClick={() => select(s)}
               onMouseEnter={() => setActiveIdx(i)}
+              style={{
+                display: "flex", alignItems: "center", gap: "10px", width: "100%",
+                padding: "10px 12px", border: "none", cursor: "pointer", textAlign: "left",
+                fontSize: "14px", color: "var(--text-primary)",
+                background: i === activeIdx ? "var(--bg-hover)" : "transparent",
+              }}
             >
-              <span style={{ fontSize: "12px", color: "#9ca3af" }}>📍</span>
-              <span>{s.display}</span>
+              <span style={{ color: "var(--text-muted)" }}>📍</span>
+              <span style={{ flex: 1 }}>{s.display}</span>
               {s.lokalita !== s.display && (
-                <span style={{ marginLeft: "auto", fontSize: "11px", color: "#9ca3af" }}>
-                  {s.lokalita}
-                </span>
+                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{s.lokalita}</span>
               )}
             </button>
           ))}
@@ -202,56 +173,46 @@ export default function MonitorPage() {
   const [tab, setTab] = useState<"inzeraty" | "filtre">("inzeraty");
   const [showNewFilter, setShowNewFilter] = useState(false);
 
-  // View filters
   const [viewPortal, setViewPortal] = useState("");
   const [viewTyp, setViewTyp] = useState("");
-  const [viewCenaOd, setViewCenaOd] = useState("");
-  const [viewCenaDo, setViewCenaDo] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [lenSukromni, setLenSukromni] = useState(false);
 
-  // Toast
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" | "info" } | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null);
-
-  const showToast = (msg: string, type: "success" | "error" | "info" = "success") => {
+  const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 5000);
   };
 
   const loadInzeraty = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (viewPortal) params.set("portal", viewPortal);
-    if (viewTyp) params.set("typ", viewTyp);
-    if (viewCenaOd) params.set("cena_od", viewCenaOd);
-    if (viewCenaDo) params.set("cena_do", viewCenaDo);
-    params.set("limit", "100");
-
-    const res = await fetch(`/api/monitor?${params.toString()}`);
-    const data = await res.json();
-    setInzeraty(data.inzeraty || []);
-    setTotal(data.total || 0);
-  }, [viewPortal, viewTyp, viewCenaOd, viewCenaDo]);
+    const p = new URLSearchParams();
+    if (viewPortal) p.set("portal", viewPortal);
+    if (viewTyp) p.set("typ", viewTyp);
+    p.set("limit", "200");
+    const res = await fetch(`/api/monitor?${p.toString()}`);
+    const d = await res.json();
+    setInzeraty(d.inzeraty || []);
+    setTotal(d.total || 0);
+  }, [viewPortal, viewTyp]);
 
   const loadFiltre = async () => {
     const res = await fetch("/api/monitor/filtre");
-    const data = await res.json();
-    setFiltre(data.filtre || []);
+    const d = await res.json();
+    setFiltre(d.filtre || []);
   };
 
   useEffect(() => {
     Promise.all([loadInzeraty(), loadFiltre()]).finally(() => setLoading(false));
   }, [loadInzeraty]);
 
-  // Derived data
   const today = new Date().toISOString().split("T")[0];
   const noveDnes = inzeraty.filter(i => i.first_seen_at?.startsWith(today)).length;
   const sukromniCount = inzeraty.filter(i => i.predajca_typ === "sukromny").length;
   const aktivneFiltre = filtre.filter(f => f.is_active).length;
 
-  // Client-side filtering + sorting
   const filtered = inzeraty
     .filter(i => {
       if (lenSukromni && i.predajca_typ !== "sukromny") return false;
@@ -262,14 +223,13 @@ export default function MonitorPage() {
       return true;
     })
     .sort((a, b) => {
-      if (sort === "price_asc") return (a.cena || 999999999) - (b.cena || 999999999);
+      if (sort === "price_asc") return (a.cena || 9e9) - (b.cena || 9e9);
       if (sort === "price_desc") return (b.cena || 0) - (a.cena || 0);
       return new Date(b.first_seen_at).getTime() - new Date(a.first_seen_at).getTime();
     });
 
-  // New filter form
   const [nf, setNf] = useState({
-    nazov: "", portal: "vsetky", typ: "", lokalita: "",
+    nazov: "", portal: "reality.sk", typ: "byt", lokalita: "",
     cena_od: "", cena_do: "", search_url: "",
     notify_email: true, notify_telegram: false,
   });
@@ -290,9 +250,11 @@ export default function MonitorPage() {
     });
     if (res.ok) {
       setShowNewFilter(false);
-      setNf({ nazov: "", portal: "vsetky", typ: "", lokalita: "", cena_od: "", cena_do: "", search_url: "", notify_email: true, notify_telegram: false });
+      setNf({ nazov: "", portal: "reality.sk", typ: "byt", lokalita: "", cena_od: "", cena_do: "", search_url: "", notify_email: true, notify_telegram: false });
       loadFiltre();
       showToast("Filter vytvorený");
+    } else {
+      showToast("Chyba pri vytváraní filtra", "error");
     }
   };
 
@@ -304,7 +266,6 @@ export default function MonitorPage() {
     });
     loadFiltre();
   };
-
   const deleteFilter = async (id: string) => {
     if (!confirm("Vymazať filter?")) return;
     await fetch(`/api/monitor/filtre?id=${id}`, { method: "DELETE" });
@@ -312,25 +273,20 @@ export default function MonitorPage() {
     showToast("Filter vymazaný");
   };
 
-  // Scrape
   const [scraping, setScraping] = useState(false);
-  const [lastScrapeResult, setLastScrapeResult] = useState<string | null>(null);
   const runScrape = async () => {
     setScraping(true);
-    setLastScrapeResult(null);
     try {
-      const res = await fetch("/api/cron/scrape?key=" + encodeURIComponent("__internal__"));
-      const data = await res.json();
+      const res = await fetch("/api/cron/scrape?key=__internal__");
+      const d = await res.json();
       if (res.ok) {
-        const msg = data.message || "Scrape dokončený";
-        setLastScrapeResult(msg);
-        showToast(msg);
+        showToast(d.message || "Scrape dokončený");
+        await loadInzeraty();
       } else {
-        showToast(data.error || "Chyba pri scrapovaní", "error");
+        showToast(d.error || "Chyba pri scrape", "error");
       }
-      await loadInzeraty();
     } catch {
-      showToast("Chyba pri scrapovaní", "error");
+      showToast("Chyba pri scrape", "error");
     } finally {
       setScraping(false);
     }
@@ -338,110 +294,86 @@ export default function MonitorPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-32">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
-          <span className="text-sm text-gray-400">Načítavam monitor...</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "120px 0" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+          <div style={{ width: "32px", height: "32px", border: "2px solid var(--border)", borderTopColor: "var(--text-primary)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>Načítavam monitor...</span>
         </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
-  const toastColors = {
-    success: { bg: "#111827", dot: "#4ade80" },
-    error: { bg: "#7f1d1d", dot: "#fca5a5" },
-    info: { bg: "#1e3a5f", dot: "#93c5fd" },
-  };
-
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+    <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
       {/* Toast */}
       {toast && (
-        <div
-          style={{
-            animation: "slideIn 0.3s ease",
-            position: "fixed", top: "16px", right: "16px", zIndex: 50,
-            background: toastColors[toast.type].bg,
-            color: "#fff", padding: "10px 16px", borderRadius: "12px",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-            fontSize: "13px", fontWeight: 500,
-            display: "flex", alignItems: "center", gap: "8px",
-            maxWidth: "400px",
-          }}
-        >
-          <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: toastColors[toast.type].dot, flexShrink: 0 }} />
+        <div style={{
+          position: "fixed", top: "16px", right: "16px", zIndex: 100,
+          background: toast.type === "error" ? "var(--danger)" : "var(--text-primary)",
+          color: "#fff", padding: "12px 18px", borderRadius: "var(--radius-md)",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+          fontSize: "13px", fontWeight: 500, animation: "slideIn 0.25s ease",
+          display: "flex", alignItems: "center", gap: "10px",
+        }}>
+          <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: toast.type === "error" ? "#fca5a5" : "var(--success)" }} />
           {toast.msg}
         </div>
       )}
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#111827", letterSpacing: "-0.02em", margin: 0 }}>Monitor</h1>
-          <p style={{ fontSize: "13px", color: "#9ca3af", marginTop: "2px" }}>Sledovanie nových inzerátov na slovenských portáloch</p>
+          <h1 style={{ fontSize: "28px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em", margin: 0 }}>Monitor</h1>
+          <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "4px 0 0" }}>
+            Sledovanie nových inzerátov na slovenských portáloch
+          </p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {aktivneFiltre === 0 && (
-            <span style={{ fontSize: "12px", color: "#f59e0b", background: "#fffbeb", padding: "4px 10px", borderRadius: "8px", fontWeight: 500 }}>
-              Pridaj filter pre spustenie
-            </span>
-          )}
-          <button
-            onClick={runScrape}
-            disabled={scraping || aktivneFiltre === 0}
-            style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              height: "36px", padding: "0 16px", borderRadius: "10px",
-              fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer",
-              background: scraping ? "#d1d5db" : "#111827",
-              color: "#fff", transition: "all 0.15s",
-              opacity: aktivneFiltre === 0 ? 0.4 : 1,
-            }}
-          >
-            {scraping ? (
-              <>
-                <span style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.3)", borderTop: "2px solid #fff", borderRadius: "50%", animation: "spin 0.6s linear infinite", display: "inline-block" }} />
-                Scrapujem...
-              </>
-            ) : (
-              "Spustiť scrape"
-            )}
-          </button>
-        </div>
+        <button
+          onClick={runScrape}
+          disabled={scraping || aktivneFiltre === 0}
+          style={{
+            ...S.btnPrimary,
+            opacity: (scraping || aktivneFiltre === 0) ? 0.4 : 1,
+            cursor: (scraping || aktivneFiltre === 0) ? "not-allowed" : "pointer",
+            display: "flex", alignItems: "center", gap: "8px",
+          }}
+        >
+          {scraping ? (
+            <>
+              <span style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+              Scrapujem...
+            </>
+          ) : aktivneFiltre === 0 ? "Pridaj filter" : "Spustiť scrape"}
+        </button>
       </div>
 
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
         {[
-          { label: "Celkom inzerátov", value: total, icon: "🏠" },
-          { label: "Nové dnes", value: noveDnes, icon: "✨", highlight: noveDnes > 0 },
-          { label: "Súkromní", value: sukromniCount, icon: "👤", highlight: sukromniCount > 0, color: "#f97316" },
-          { label: "Aktívne filtre", value: aktivneFiltre, icon: "📡" },
+          { label: "Celkom inzerátov", value: total, color: "var(--text-primary)" },
+          { label: "Nové dnes", value: noveDnes, color: noveDnes > 0 ? "var(--accent)" : "var(--text-primary)" },
+          { label: "Súkromní", value: sukromniCount, color: sukromniCount > 0 ? "var(--warning)" : "var(--text-primary)" },
+          { label: "Aktívne filtre", value: aktivneFiltre, color: aktivneFiltre > 0 ? "var(--success)" : "var(--text-muted)" },
         ].map((s, i) => (
-          <div key={i} style={{
-            background: "#fff", borderRadius: "14px", border: "1px solid #f3f4f6",
-            padding: "16px 18px", transition: "box-shadow 0.2s",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "28px", fontWeight: 700, color: s.color || "#111827", letterSpacing: "-0.02em" }}>{s.value}</span>
-              <span style={{ fontSize: "18px" }}>{s.icon}</span>
-            </div>
-            <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "4px", fontWeight: 500 }}>{s.label}</div>
+          <div key={i} style={{ ...S.card, padding: "16px 18px" }}>
+            <div style={{ fontSize: "28px", fontWeight: 700, color: s.color, letterSpacing: "-0.02em" }}>{s.value}</div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px", fontWeight: 500 }}>{s.label}</div>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "20px", borderBottom: "1px solid #f3f4f6" }}>
+      <div style={{ display: "flex", gap: "4px", marginBottom: "20px", borderBottom: "1px solid var(--border-subtle)" }}>
         {(["inzeraty", "filtre"] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             style={{
-              padding: "10px 16px", fontSize: "13px", fontWeight: 500,
-              border: "none", background: "none", cursor: "pointer",
-              borderBottom: tab === t ? "2px solid #111827" : "2px solid transparent",
-              color: tab === t ? "#111827" : "#9ca3af",
+              padding: "12px 18px", fontSize: "14px", fontWeight: 500,
+              border: "none", background: "transparent", cursor: "pointer",
+              borderBottom: tab === t ? "2px solid var(--text-primary)" : "2px solid transparent",
+              color: tab === t ? "var(--text-primary)" : "var(--text-muted)",
               marginBottom: "-1px", transition: "all 0.15s",
             }}
           >
@@ -454,120 +386,111 @@ export default function MonitorPage() {
       {tab === "inzeraty" && (
         <>
           {/* Filter bar */}
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
-            <div style={{ position: "relative", flex: "1 1 200px", maxWidth: "280px" }}>
-              <svg style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", width: "16px", height: "16px", color: "#d1d5db" }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-              <input type="text" placeholder="Hľadať názov, lokalitu..." value={search} onChange={e => setSearch(e.target.value)}
-                style={{ width: "100%", height: "36px", paddingLeft: "36px", paddingRight: "12px", background: "#f9fafb", border: "none", borderRadius: "10px", fontSize: "13px", outline: "none" }} />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "16px" }}>
+            <div style={{ position: "relative", flex: "1 1 240px", maxWidth: "320px" }}>
+              <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", fontSize: "14px" }}>🔍</span>
+              <input
+                type="text"
+                placeholder="Hľadať názov, lokalitu..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ ...S.input, paddingLeft: "38px" }}
+              />
             </div>
-            <select value={viewPortal} onChange={e => { setViewPortal(e.target.value); }}
-              style={{ height: "36px", background: "#f9fafb", border: "none", borderRadius: "10px", padding: "0 12px", fontSize: "13px", color: "#4b5563", outline: "none" }}>
+            <select value={viewPortal} onChange={e => setViewPortal(e.target.value)} style={{ ...S.select, width: "auto", minWidth: "160px" }}>
               <option value="">Všetky portály</option>
               {PORTALS.filter(p => p.value !== "vsetky").map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
-            <select value={viewTyp} onChange={e => { setViewTyp(e.target.value); }}
-              style={{ height: "36px", background: "#f9fafb", border: "none", borderRadius: "10px", padding: "0 12px", fontSize: "13px", color: "#4b5563", outline: "none" }}>
+            <select value={viewTyp} onChange={e => setViewTyp(e.target.value)} style={{ ...S.select, width: "auto", minWidth: "140px" }}>
               {TYPY.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
-            <select value={sort} onChange={e => setSort(e.target.value)}
-              style={{ height: "36px", background: "#f9fafb", border: "none", borderRadius: "10px", padding: "0 12px", fontSize: "13px", color: "#4b5563", outline: "none" }}>
+            <select value={sort} onChange={e => setSort(e.target.value)} style={{ ...S.select, width: "auto", minWidth: "140px" }}>
               {SORT_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
-            <button onClick={() => setLenSukromni(!lenSukromni)}
+            <button
+              onClick={() => setLenSukromni(!lenSukromni)}
               style={{
-                height: "36px", padding: "0 14px", borderRadius: "10px",
-                fontSize: "13px", fontWeight: 500, border: "none", cursor: "pointer",
-                background: lenSukromni ? "#fff7ed" : "#f9fafb",
-                color: lenSukromni ? "#c2410c" : "#6b7280",
-                boxShadow: lenSukromni ? "inset 0 0 0 1px #fed7aa" : "none",
-                transition: "all 0.15s",
-              }}>
-              {lenSukromni ? "👤 Len súkromní" : "Len súkromní"}
+                ...S.btnSecondary,
+                background: lenSukromni ? "var(--warning-light)" : "var(--bg-base)",
+                color: lenSukromni ? "var(--warning)" : "var(--text-secondary)",
+                borderColor: lenSukromni ? "var(--warning)" : "var(--border-subtle)",
+                fontWeight: 600,
+              }}
+            >
+              👤 Len súkromní
             </button>
           </div>
 
-          <div style={{ fontSize: "12px", color: "#9ca3af", marginBottom: "12px" }}>
-            {filtered.length === total ? `${total} inzerátov` : `${filtered.length} z ${total} inzerátov`}
+          <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "12px" }}>
+            {filtered.length === total ? `${total} inzerátov` : `${filtered.length} z ${total}`}
           </div>
 
-          {/* Listings */}
           {filtered.length === 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 0" }}>
-              <div style={{
-                width: "64px", height: "64px", background: "#f9fafb", borderRadius: "16px",
-                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px", fontSize: "28px",
-              }}>
-                🏠
-              </div>
-              <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#111827", margin: "0 0 4px" }}>
+            <div style={{ ...S.card, padding: "80px 32px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+              <div style={{ fontSize: "48px", marginBottom: "16px" }}>🏠</div>
+              <h3 style={{ fontSize: "17px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 6px" }}>
                 {total === 0 ? "Zatiaľ žiadne inzeráty" : "Nič nenájdené"}
               </h3>
-              <p style={{ fontSize: "13px", color: "#9ca3af", margin: "0 0 16px", textAlign: "center", maxWidth: "320px" }}>
+              <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "0 0 20px", maxWidth: "400px" }}>
                 {total === 0
-                  ? "Pridaj filter a spusti scrape — inzeráty z reality.sk sa zobrazia tu."
+                  ? "Pridaj filter v záložke Filtre a spusti prvý scrape. Inzeráty z reality.sk sa objavia tu."
                   : "Skús zmeniť filtre alebo vyhľadávanie."}
               </p>
               {total === 0 && (
-                <button onClick={() => { setTab("filtre"); setShowNewFilter(true); }}
-                  style={{ height: "36px", padding: "0 20px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer", background: "#111827", color: "#fff" }}>
+                <button onClick={() => { setTab("filtre"); setShowNewFilter(true); }} style={S.btnPrimary}>
                   Pridať filter
                 </button>
               )}
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {filtered.map(i => (
-                <a key={i.id} href={i.url} target="_blank" rel="noopener noreferrer"
+                <a
+                  key={i.id}
+                  href={i.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   style={{
-                    display: "flex", gap: "14px", padding: "14px",
-                    background: "#fff", borderRadius: "14px", border: "1px solid #f3f4f6",
+                    ...S.card, padding: "16px",
+                    display: "flex", gap: "16px",
                     textDecoration: "none", color: "inherit",
-                    transition: "all 0.2s",
+                    transition: "all 0.15s",
                   }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)"; (e.currentTarget as HTMLElement).style.borderColor = "#e5e7eb"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = "none"; (e.currentTarget as HTMLElement).style.borderColor = "#f3f4f6"; }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = "none"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border-subtle)"; }}
                 >
-                  {/* Photo */}
-                  <div style={{ width: "112px", height: "80px", background: "#f9fafb", borderRadius: "10px", overflow: "hidden", flexShrink: 0 }}>
+                  <div style={{ width: "120px", height: "90px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", overflow: "hidden", flexShrink: 0 }}>
                     {i.foto_url ? (
                       <img src={i.foto_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     ) : (
-                      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", color: "#d1d5db" }}>🏠</div>
+                      <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "28px", color: "var(--text-muted)" }}>🏠</div>
                     )}
                   </div>
-                  {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
-                      <h3 style={{ fontSize: "14px", fontWeight: 500, color: "#111827", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
+                      <h3 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {i.nazov || "Bez názvu"}
                       </h3>
-                      <span style={{ fontSize: "16px", fontWeight: 700, color: "#111827", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                      <span style={{ fontSize: "17px", fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap" }}>
                         {i.cena ? `${fmt(i.cena)} €` : "—"}
                       </span>
                     </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px", marginTop: "6px" }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "#9ca3af" }}>
-                        <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: PORTAL_DOT[i.portal] || "#d1d5db" }} />
+                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px", marginTop: "8px" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)" }}>
+                        <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: PORTAL_DOT[i.portal] || "var(--text-muted)" }} />
                         {i.portal}
                       </span>
-                      {i.typ && <><span style={{ fontSize: "11px", color: "#d1d5db" }}>·</span><span style={{ fontSize: "11px", color: "#9ca3af" }}>{i.typ}</span></>}
-                      {i.plocha > 0 && <><span style={{ fontSize: "11px", color: "#d1d5db" }}>·</span><span style={{ fontSize: "11px", color: "#6b7280", fontWeight: 500 }}>{i.plocha} m²</span></>}
-                      {i.izby > 0 && <><span style={{ fontSize: "11px", color: "#d1d5db" }}>·</span><span style={{ fontSize: "11px", color: "#6b7280", fontWeight: 500 }}>{i.izby}-izb</span></>}
-                      {i.lokalita && <><span style={{ fontSize: "11px", color: "#d1d5db" }}>·</span><span style={{ fontSize: "11px", color: "#9ca3af" }}>{i.lokalita}</span></>}
+                      {i.typ && <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{i.typ}</span>}
+                      {i.plocha > 0 && <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>{i.plocha} m²</span>}
+                      {i.izby > 0 && <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>{i.izby}-izb</span>}
+                      {i.lokalita && <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>📍 {i.lokalita}</span>}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "8px" }}>
-                      <span style={{ fontSize: "11px", color: "#d1d5db" }}>{timeAgo(i.first_seen_at)}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px" }}>
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{timeAgo(i.first_seen_at)}</span>
                       {i.predajca_typ === "sukromny" && (
-                        <span style={{
-                          display: "inline-flex", alignItems: "center", gap: "4px",
-                          fontSize: "11px", fontWeight: 600, color: "#c2410c",
-                          background: "#fff7ed", padding: "2px 8px", borderRadius: "6px",
-                        }}>
+                        <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--warning)", background: "var(--warning-light)", padding: "2px 8px", borderRadius: "6px" }}>
                           👤 Súkromný
                         </span>
-                      )}
-                      {i.predajca_typ && i.predajca_typ !== "sukromny" && (
-                        <span style={{ fontSize: "11px", color: "#d1d5db" }}>Realitka</span>
                       )}
                     </div>
                   </div>
@@ -581,106 +504,119 @@ export default function MonitorPage() {
       {/* ═══ TAB: FILTRE ═══ */}
       {tab === "filtre" && (
         <>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "16px", gap: "12px", flexWrap: "wrap" }}>
             <div>
-              <p style={{ fontSize: "13px", color: "#9ca3af", margin: 0 }}>Filtre určujú, ktoré inzeráty sa sledujú a scrapujú.</p>
-              <p style={{ fontSize: "11px", color: "#d1d5db", margin: "4px 0 0" }}>
-                Momentálne funguje: <strong style={{ color: "#10b981" }}>Reality.sk</strong>
-                <span style={{ color: "#d1d5db" }}> · </span>
-                <span style={{ color: "#9ca3af" }}>Nehnuteľnosti.sk a TopReality.sk vyžadujú ScrapingBee</span>
+              <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: 0 }}>Filtre určujú, ktoré inzeráty sa sledujú a scrapujú.</p>
+              <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "4px 0 0" }}>
+                Funguje: <strong style={{ color: "var(--success)" }}>Reality.sk</strong>
+                <span style={{ margin: "0 6px" }}>·</span>
+                Nehnuteľnosti.sk a TopReality.sk vyžadujú ScrapingBee API
               </p>
             </div>
-            <button onClick={() => setShowNewFilter(!showNewFilter)}
-              style={{ height: "36px", padding: "0 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer", background: "#111827", color: "#fff" }}>
+            <button onClick={() => setShowNewFilter(!showNewFilter)} style={S.btnPrimary}>
               + Nový filter
             </button>
           </div>
 
-          {/* New filter form */}
           {showNewFilter && (
-            <div style={{
-              animation: "slideDown 0.2s ease",
-              background: "#fff", borderRadius: "14px", border: "1px solid #f3f4f6",
-              padding: "20px", marginBottom: "16px",
-            }}>
-              <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#111827", margin: "0 0 16px" }}>Nový filter</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <div style={{ ...S.card, padding: "24px", marginBottom: "16px" }}>
+              <h3 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 18px" }}>Nový filter</h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={{ fontSize: "11px", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.02em", display: "block", marginBottom: "6px" }}>Názov</label>
-                  <input type="text" placeholder='napr. "Byty Petržalka do 150k"' value={nf.nazov}
+                  <label style={S.label}>Názov</label>
+                  <input
+                    type="text"
+                    placeholder='napr. "Byty Petržalka do 150k"'
+                    value={nf.nazov}
                     onChange={e => setNf({ ...nf, nazov: e.target.value })}
-                    className="w-full h-10 bg-gray-50 border-0 rounded-lg px-3 text-sm focus:ring-2 focus:ring-gray-200 focus:bg-white transition placeholder:text-gray-300" />
+                    style={S.input}
+                  />
                 </div>
                 <div>
-                  <label style={{ fontSize: "11px", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.02em", display: "block", marginBottom: "6px" }}>Portál</label>
-                  <select value={nf.portal} onChange={e => setNf({ ...nf, portal: e.target.value })}
-                    className="w-full h-10 bg-gray-50 border-0 rounded-lg px-3 text-sm focus:ring-2 focus:ring-gray-200">
+                  <label style={S.label}>Portál</label>
+                  <select value={nf.portal} onChange={e => setNf({ ...nf, portal: e.target.value })} style={S.select}>
                     {PORTALS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: "11px", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.02em", display: "block", marginBottom: "6px" }}>Typ</label>
-                  <select value={nf.typ} onChange={e => setNf({ ...nf, typ: e.target.value })}
-                    className="w-full h-10 bg-gray-50 border-0 rounded-lg px-3 text-sm focus:ring-2 focus:ring-gray-200">
+                  <label style={S.label}>Typ</label>
+                  <select value={nf.typ} onChange={e => setNf({ ...nf, typ: e.target.value })} style={S.select}>
                     {TYPY.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: "11px", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.02em", display: "block", marginBottom: "6px" }}>Lokalita</label>
+                  <label style={S.label}>Lokalita</label>
                   <LokalitaInput
                     value={nf.lokalita}
-                    onChange={(display) => setNf({ ...nf, lokalita: display })}
+                    onChange={v => setNf({ ...nf, lokalita: v })}
                     placeholder="Bratislava - Petržalka..."
                   />
                 </div>
-                <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ display: "flex", gap: "12px" }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: "11px", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.02em", display: "block", marginBottom: "6px" }}>Cena od</label>
-                    <input type="number" placeholder="50 000" value={nf.cena_od}
+                    <label style={S.label}>Cena od</label>
+                    <input
+                      type="number"
+                      placeholder="50 000"
+                      value={nf.cena_od}
                       onChange={e => setNf({ ...nf, cena_od: e.target.value })}
-                      className="w-full h-10 bg-gray-50 border-0 rounded-lg px-3 text-sm focus:ring-2 focus:ring-gray-200 focus:bg-white transition placeholder:text-gray-300" />
+                      style={S.input}
+                    />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <label style={{ fontSize: "11px", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.02em", display: "block", marginBottom: "6px" }}>Cena do</label>
-                    <input type="number" placeholder="200 000" value={nf.cena_do}
+                    <label style={S.label}>Cena do</label>
+                    <input
+                      type="number"
+                      placeholder="200 000"
+                      value={nf.cena_do}
                       onChange={e => setNf({ ...nf, cena_do: e.target.value })}
-                      className="w-full h-10 bg-gray-50 border-0 rounded-lg px-3 text-sm focus:ring-2 focus:ring-gray-200 focus:bg-white transition placeholder:text-gray-300" />
+                      style={S.input}
+                    />
                   </div>
                 </div>
                 <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={{ fontSize: "11px", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.02em", display: "block", marginBottom: "6px" }}>
-                    Priamy URL na výsledky <span style={{ fontWeight: 400, textTransform: "none" }}>(voliteľné)</span>
-                  </label>
-                  <input type="url" placeholder="https://www.reality.sk/byty/bratislava-petrzalka/predaj/" value={nf.search_url}
+                  <label style={S.label}>Priamy URL na výsledky <span style={{ fontWeight: 400, textTransform: "none", color: "var(--text-muted)" }}>(voliteľné, prepíše vyššie nastavenia)</span></label>
+                  <input
+                    type="url"
+                    placeholder="https://www.reality.sk/byty/predaj/"
+                    value={nf.search_url}
                     onChange={e => setNf({ ...nf, search_url: e.target.value })}
-                    className="w-full h-10 bg-gray-50 border-0 rounded-lg px-3 text-sm focus:ring-2 focus:ring-gray-200 focus:bg-white transition placeholder:text-gray-300" />
-                  <p style={{ fontSize: "11px", color: "#d1d5db", margin: "4px 0 0" }}>Tip: nastav si filter na portáli a skopíruj URL z prehliadača</p>
+                    style={S.input}
+                  />
+                  <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "6px 0 0" }}>
+                    💡 Tip: nastav si filter na portáli a skopíruj URL z prehliadača
+                  </p>
                 </div>
-                <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: "20px", paddingTop: "4px" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#4b5563", cursor: "pointer" }}>
-                    <input type="checkbox" checked={nf.notify_email} onChange={e => setNf({ ...nf, notify_email: e.target.checked })}
-                      style={{ borderRadius: "4px" }} />
+                <div style={{ gridColumn: "1 / -1", display: "flex", gap: "24px", paddingTop: "4px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "var(--text-secondary)", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={nf.notify_email}
+                      onChange={e => setNf({ ...nf, notify_email: e.target.checked })}
+                      style={{ width: "16px", height: "16px" }}
+                    />
                     Email notifikácia
                   </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "#4b5563", cursor: "pointer" }}>
-                    <input type="checkbox" checked={nf.notify_telegram} onChange={e => setNf({ ...nf, notify_telegram: e.target.checked })}
-                      style={{ borderRadius: "4px" }} />
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "var(--text-secondary)", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={nf.notify_telegram}
+                      onChange={e => setNf({ ...nf, notify_telegram: e.target.checked })}
+                      style={{ width: "16px", height: "16px" }}
+                    />
                     Telegram
                   </label>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "8px", marginTop: "20px", paddingTop: "16px", borderTop: "1px solid #f9fafb" }}>
-                <button onClick={createFilter} disabled={!nf.nazov}
-                  style={{
-                    height: "36px", padding: "0 20px", borderRadius: "10px",
-                    fontSize: "13px", fontWeight: 600, border: "none", cursor: "pointer",
-                    background: "#111827", color: "#fff",
-                    opacity: nf.nazov ? 1 : 0.3,
-                  }}>
+              <div style={{ display: "flex", gap: "8px", marginTop: "20px", paddingTop: "16px", borderTop: "1px solid var(--border-subtle)" }}>
+                <button
+                  onClick={createFilter}
+                  disabled={!nf.nazov}
+                  style={{ ...S.btnPrimary, opacity: nf.nazov ? 1 : 0.4, cursor: nf.nazov ? "pointer" : "not-allowed" }}
+                >
                   Vytvoriť filter
                 </button>
-                <button onClick={() => setShowNewFilter(false)}
-                  style={{ height: "36px", padding: "0 16px", borderRadius: "10px", fontSize: "13px", color: "#9ca3af", background: "none", border: "none", cursor: "pointer" }}>
+                <button onClick={() => setShowNewFilter(false)} style={{ ...S.btnSecondary, border: "none", background: "transparent" }}>
                   Zrušiť
                 </button>
               </div>
@@ -688,64 +624,59 @@ export default function MonitorPage() {
           )}
 
           {/* Filter list */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {filtre.length === 0 && !showNewFilter && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "64px 0" }}>
-                <div style={{ width: "48px", height: "48px", background: "#f9fafb", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "12px", fontSize: "22px" }}>🔍</div>
-                <p style={{ fontSize: "13px", color: "#9ca3af", margin: 0 }}>Zatiaľ žiadne filtre</p>
+              <div style={{ ...S.card, padding: "64px 24px", textAlign: "center" }}>
+                <div style={{ fontSize: "36px", marginBottom: "12px" }}>🔍</div>
+                <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: 0 }}>Zatiaľ žiadne filtre</p>
               </div>
             )}
             {filtre.map(f => (
-              <div key={f.id}
-                style={{
-                  background: "#fff", borderRadius: "14px", border: "1px solid #f3f4f6",
-                  padding: "16px", transition: "all 0.2s",
-                  opacity: f.is_active ? 1 : 0.4,
-                }}>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-                  <div>
-                    <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#111827", margin: "0 0 8px" }}>{f.nazov}</h3>
-                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px" }}>
+              <div key={f.id} style={{ ...S.card, padding: "18px", opacity: f.is_active ? 1 : 0.5 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <h3 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px" }}>{f.nazov}</h3>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                       <span style={{
-                        display: "inline-flex", alignItems: "center", gap: "4px",
-                        fontSize: "11px", padding: "2px 8px", borderRadius: "6px", fontWeight: 500,
-                        background: f.portal === "vsetky" ? "#f3f4f6" : f.portal === "reality.sk" ? "#ecfdf5" : f.portal === "nehnutelnosti.sk" ? "#eff6ff" : "#f5f3ff",
-                        color: f.portal === "vsetky" ? "#6b7280" : f.portal === "reality.sk" ? "#059669" : f.portal === "nehnutelnosti.sk" ? "#2563eb" : "#7c3aed",
+                        fontSize: "12px", padding: "3px 10px", borderRadius: "6px", fontWeight: 500,
+                        background: f.portal === "vsetky" ? "var(--bg-hover)" : f.portal === "reality.sk" ? "var(--success-light)" : f.portal === "nehnutelnosti.sk" ? "var(--accent-light)" : "var(--purple-light)",
+                        color: f.portal === "vsetky" ? "var(--text-secondary)" : f.portal === "reality.sk" ? "var(--success)" : f.portal === "nehnutelnosti.sk" ? "var(--accent)" : "var(--purple)",
                       }}>
                         {f.portal === "vsetky" ? "Všetky" : f.portal}
                       </span>
-                      {f.typ && <span style={{ fontSize: "11px", background: "#f9fafb", color: "#6b7280", padding: "2px 8px", borderRadius: "6px" }}>{f.typ}</span>}
-                      {f.lokalita && <span style={{ fontSize: "11px", background: "#f9fafb", color: "#6b7280", padding: "2px 8px", borderRadius: "6px" }}>📍 {f.lokalita}</span>}
+                      {f.typ && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>{f.typ}</span>}
+                      {f.lokalita && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>📍 {f.lokalita}</span>}
                       {(f.cena_od || f.cena_do) && (
-                        <span style={{ fontSize: "11px", background: "#f9fafb", color: "#6b7280", padding: "2px 8px", borderRadius: "6px" }}>
+                        <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                           {f.cena_od ? `${fmt(Number(f.cena_od))} €` : "0 €"} – {f.cena_do ? `${fmt(Number(f.cena_do))} €` : "∞"}
                         </span>
                       )}
-                      {f.notify_email && <span style={{ fontSize: "11px", color: "#3b82f6" }}>Email</span>}
-                      {f.notify_telegram && <span style={{ fontSize: "11px", color: "#06b6d4" }}>Telegram</span>}
+                      {f.notify_email && <span style={{ fontSize: "12px", color: "var(--accent)", fontWeight: 500 }}>📧 Email</span>}
+                      {f.notify_telegram && <span style={{ fontSize: "12px", color: "var(--purple)", fontWeight: 500 }}>✈️ Telegram</span>}
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "12px" }}>
-                    <button onClick={() => toggleFilter(f)}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <button
+                      onClick={() => toggleFilter(f)}
                       style={{
-                        height: "28px", padding: "0 10px", borderRadius: "6px",
-                        fontSize: "11px", fontWeight: 500, border: "none", cursor: "pointer",
-                        background: f.is_active ? "#ecfdf5" : "#f9fafb",
-                        color: f.is_active ? "#059669" : "#9ca3af",
-                        transition: "all 0.15s",
-                      }}>
+                        height: "30px", padding: "0 12px", borderRadius: "6px",
+                        fontSize: "12px", fontWeight: 600, border: "none", cursor: "pointer",
+                        background: f.is_active ? "var(--success-light)" : "var(--bg-hover)",
+                        color: f.is_active ? "var(--success)" : "var(--text-muted)",
+                      }}
+                    >
                       {f.is_active ? "Aktívny" : "Pauznutý"}
                     </button>
-                    <button onClick={() => deleteFilter(f.id)}
+                    <button
+                      onClick={() => deleteFilter(f.id)}
                       style={{
-                        width: "28px", height: "28px", borderRadius: "6px",
-                        border: "none", cursor: "pointer", background: "transparent",
-                        color: "#d1d5db", fontSize: "14px",
+                        width: "30px", height: "30px", borderRadius: "6px",
+                        border: "none", background: "transparent", color: "var(--text-muted)",
+                        cursor: "pointer", fontSize: "14px",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        transition: "all 0.15s",
                       }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#ef4444"; (e.currentTarget as HTMLElement).style.background = "#fef2f2"; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#d1d5db"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--danger-light)"; (e.currentTarget as HTMLElement).style.color = "var(--danger)"; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
                     >
                       ✕
                     </button>
@@ -759,8 +690,8 @@ export default function MonitorPage() {
 
       <style>{`
         @keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes spin { to { transform: rotate(360deg); } }
+        select:focus, input:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-light) !important; }
       `}</style>
     </div>
   );
