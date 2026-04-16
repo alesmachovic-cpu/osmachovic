@@ -53,12 +53,18 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   // Helper: priradí Supabase session email k našemu `users` whitelist záznamu
   // Priorita: login_email (Gmail na prihlásenie) → email (fallback pre legacy)
+  // Ak nájdený cez 'email' (ale login_email je prázdny), auto-uloží Gmail do login_email
   async function matchSessionToUser(email: string | null | undefined, accs: User[]): Promise<User | null> {
     if (!email) return null;
     const q = email.toLowerCase();
     const byLogin = accs.find(a => a.login_email?.toLowerCase() === q);
     if (byLogin) return byLogin;
     const byEmail = accs.find(a => a.email?.toLowerCase() === q);
+    if (byEmail && !byEmail.login_email) {
+      // Auto-naviaž Gmail na login_email
+      await supabase.from("users").update({ login_email: email }).eq("id", byEmail.id);
+      byEmail.login_email = email;
+    }
     return byEmail || null;
   }
 
