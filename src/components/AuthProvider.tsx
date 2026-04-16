@@ -244,7 +244,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   return (
-    <AuthContext.Provider value={{ user, accounts, login, loginWithGoogle, logout, updateAccount, addAccount, deleteAccount, refreshAccounts }}>
+    <AuthContext.Provider value={{ user, accounts, login, loginWithGoogle, linkGoogleToCurrent, logout, updateAccount, addAccount, deleteAccount, refreshAccounts }}>
       {children}
     </AuthContext.Provider>
   );
