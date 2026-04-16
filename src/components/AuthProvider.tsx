@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, createContext, useContext } from "react";
+import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 interface User {
@@ -42,6 +43,7 @@ export function useAuth() {
 }
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [accounts, setAccounts] = useState<User[]>([]);
   const [checking, setChecking] = useState(true);
@@ -213,7 +215,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     );
   }
 
-  if (!user) {
+  // Na /auth/callback sa vždy zobrazí children (callback page potrebuje bežať bez login overlay)
+  const isAuthCallback = pathname?.startsWith("/auth/callback");
+
+  if (!user && !isAuthCallback) {
     return (
       <AuthContext.Provider value={{ user, accounts, login, loginWithGoogle, logout, updateAccount, addAccount, deleteAccount, refreshAccounts }}>
         <LoginScreen accounts={accounts} onLogin={login} onGoogleLogin={loginWithGoogle} />

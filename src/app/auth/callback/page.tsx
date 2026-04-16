@@ -6,27 +6,48 @@ import { supabase } from "@/lib/supabase";
 
 /**
  * OAuth callback page.
- * Supabase Google sign-in redirects here after successful auth.
- * We verify the session is set, then redirect to Prehľad.
+ * Supabase Google sign-in redirects here with ?code=... (PKCE flow).
+ * We explicitly exchange the code for a session, then redirect.
  */
 export default function AuthCallback() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState("Prihlasujem...");
 
   useEffect(() => {
     (async () => {
       try {
-        // Supabase auto-processes URL hash fragments.
-        // We just need to wait for session to be available.
-        await new Promise((r) => setTimeout(r, 500));
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        if (!data.session) {
-          setError("Prihlásenie sa nepodarilo. Skús znova.");
-          setTimeout(() => router.push("/"), 2500);
+        const url = new URL(window.location.href);
+        const code = url.searchParams.get("code");
+        const errorDescription = url.searchParams.get("error_description");
+
+        if (errorDescription) {
+          setError(errorDescription);
+          setTimeout(() => router.push("/"), 3000);
           return;
         }
-        // Logged in — redirect to dashboard. AuthProvider will match whitelist.
+
+        if (code) {
+          setStatus("Overujem účet...");
+          const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchErr) {
+            setError(`Google overenie zlyhalo: ${exchErr.message}`);
+            setTimeout(() => router.push("/"), 3000);
+            return;
+          }
+        }
+
+        // Počkaj kým sa session uloží a onAuthStateChange fajne
+        setStatus("Dokončujem...");
+        let tries = 0;
+        while (tries < 20) {
+          const { data } = await supabase.auth.getSession();
+          if (data.session) break;
+          await new Promise((r) => setTimeout(r, 100));
+          tries++;
+        }
+
+        // Redirect na dashboard — AuthProvider matchne whitelist
         router.push("/");
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -38,7 +59,7 @@ export default function AuthCallback() {
   return (
     <div style={{
       minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      background: "var(--bg-base, #F5F5F7)",
+      background: "#F5F5F7",
     }}>
       <div style={{ textAlign: "center" }}>
         {error ? (
@@ -47,7 +68,7 @@ export default function AuthCallback() {
             <h2 style={{ fontSize: "18px", fontWeight: 600, color: "#991B1B", margin: "0 0 8px" }}>
               Prihlásenie zlyhalo
             </h2>
-            <p style={{ fontSize: "13px", color: "#6b7280", margin: 0 }}>{error}</p>
+            <p style={{ fontSize: "13px", color: "#6b7280", margin: 0, maxWidth: "400px" }}>{error}</p>
           </>
         ) : (
           <>
@@ -57,7 +78,7 @@ export default function AuthCallback() {
               borderRadius: "50%", margin: "0 auto 16px",
               animation: "spin 0.8s linear infinite",
             }} />
-            <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>Prihlasujem...</p>
+            <p style={{ fontSize: "14px", color: "#6b7280", margin: 0 }}>{status}</p>
           </>
         )}
       </div>
