@@ -10,14 +10,7 @@ export const supabase = new Proxy({} as SupabaseClient, {
       if (!url || !key) {
         throw new Error('Supabase env vars not set')
       }
-      _supabase = createClient(url, key, {
-        auth: {
-          flowType: 'implicit',
-          detectSessionInUrl: true,
-          persistSession: true,
-          autoRefreshToken: true,
-        },
-      })
+      _supabase = createClient(url, key)
     }
     return (_supabase as unknown as Record<string, unknown>)[prop as string]
   },
