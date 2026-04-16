@@ -76,7 +76,7 @@ export async function GET() {
               <p>Dnes o <strong>${datumStr}</strong> máš naplánovaný náber pre klienta <strong>${klient.meno}</strong>${klient.lokalita ? ` (${klient.lokalita})` : ""}, ale ešte nemáš nahratý List vlastníctva.</p>
               <p>Pridaj LV pred náberom — pomôže automaticky vyplniť náberový list.</p>
               <p style="margin-top: 20px;">
-                <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://funny-stonebraker.vercel.app"}/klienti/${klient.id}"
+                <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://crmvianema.vercel.app"}/klienti/${klient.id}"
                    style="background: #374151; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
                   Otvoriť klienta
                 </a>

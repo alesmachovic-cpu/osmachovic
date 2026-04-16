@@ -52,7 +52,7 @@ export async function sendEmailNotification(
       </table>
       ${count > 20 ? `<p style="color: #6b7280; margin-top: 16px;">...a ďalších ${count - 20} inzerátov</p>` : ""}
       <p style="margin-top: 24px;">
-        <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://funny-stonebraker.vercel.app"}/monitor"
+        <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://crmvianema.vercel.app"}/monitor"
            style="background: #374151; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
           Otvoriť Monitor
         </a>
