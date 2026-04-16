@@ -6,8 +6,8 @@ import { supabase } from "@/lib/supabase";
 
 /**
  * OAuth callback page.
- * Supabase Google sign-in redirects here with ?code=... (PKCE flow).
- * We explicitly exchange the code for a session, then redirect.
+ * Supabase Google sign-in (implicit flow) redirects here with #access_token=... in URL hash.
+ * Supabase client auto-processes the hash and stores session. We just wait and redirect.
  */
 export default function AuthCallback() {
   const router = useRouter();
@@ -18,36 +18,34 @@ export default function AuthCallback() {
     (async () => {
       try {
         const url = new URL(window.location.href);
-        const code = url.searchParams.get("code");
-        const errorDescription = url.searchParams.get("error_description");
-
-        if (errorDescription) {
+        const errorDescription = url.searchParams.get("error_description") || url.hash.includes("error_description");
+        if (errorDescription && typeof errorDescription === "string") {
           setError(errorDescription);
           setTimeout(() => router.push("/"), 3000);
           return;
         }
 
-        if (code) {
-          setStatus("Overujem účet...");
-          const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchErr) {
-            setError(`Google overenie zlyhalo: ${exchErr.message}`);
-            setTimeout(() => router.push("/"), 3000);
-            return;
-          }
-        }
+        setStatus("Overujem účet...");
 
-        // Počkaj kým sa session uloží a onAuthStateChange fajne
-        setStatus("Dokončujem...");
+        // Supabase client automaticky spracuje URL hash (#access_token=...).
+        // Počkáme kým sa session uloží (polling max 3s).
         let tries = 0;
-        while (tries < 20) {
+        while (tries < 30) {
           const { data } = await supabase.auth.getSession();
           if (data.session) break;
           await new Promise((r) => setTimeout(r, 100));
           tries++;
         }
 
-        // Redirect na dashboard — AuthProvider matchne whitelist
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) {
+          setError("Session sa neuložila. Skús znova.");
+          setTimeout(() => router.push("/"), 3000);
+          return;
+        }
+
+        setStatus("Hotovo! Presmerovávam...");
+        await new Promise((r) => setTimeout(r, 200));
         router.push("/");
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
