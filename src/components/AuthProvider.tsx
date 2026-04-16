@@ -19,6 +19,7 @@ interface AuthContextType {
   accounts: User[];
   login: (userId: string, password: string) => Promise<string | null>;
   loginWithGoogle: () => Promise<void>;
+  linkGoogleToCurrent: () => Promise<void>;
   logout: () => void;
   updateAccount: (account: User) => Promise<void>;
   addAccount: (account: User) => Promise<void>;
@@ -31,6 +32,7 @@ const AuthContext = createContext<AuthContextType>({
   accounts: [],
   login: async () => null,
   loginWithGoogle: async () => {},
+  linkGoogleToCurrent: async () => {},
   logout: () => {},
   updateAccount: async () => {},
   addAccount: async () => {},
@@ -159,6 +161,21 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     });
   }
 
+  /**
+   * Prepoj Google účet k aktuálne prihlásenému userovi (napr. po hesla login).
+   * Po Google OAuth návrate sa email uloží do users.login_email a session sa zahodí
+   * (zostaneme prihlásený cez heslo, ale odvtedy vieme použiť aj Google).
+   */
+  async function linkGoogleToCurrent(): Promise<void> {
+    if (!user?.id) return;
+    localStorage.setItem("pending_link_user_id", user.id);
+    const redirectTo = `${window.location.origin}/auth/callback`;
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo, queryParams: { prompt: "select_account" } },
+    });
+  }
+
   async function logout() {
     localStorage.removeItem("crm_user");
     await supabase.auth.signOut();
@@ -220,7 +237,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   if (!user && !isAuthCallback) {
     return (
-      <AuthContext.Provider value={{ user, accounts, login, loginWithGoogle, logout, updateAccount, addAccount, deleteAccount, refreshAccounts }}>
+      <AuthContext.Provider value={{ user, accounts, login, loginWithGoogle, linkGoogleToCurrent, logout, updateAccount, addAccount, deleteAccount, refreshAccounts }}>
         <LoginScreen accounts={accounts} onLogin={login} onGoogleLogin={loginWithGoogle} />
       </AuthContext.Provider>
     );

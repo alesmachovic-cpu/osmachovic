@@ -9,6 +9,7 @@ import { STATUS_LABELS } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import ActivityRings from "@/components/ActivityRings";
 import SystemSearch from "@/components/SystemSearch";
+import LinkGoogleBanner from "@/components/LinkGoogleBanner";
 import { useAuth } from "@/components/AuthProvider";
 import { getUserItem, setUserItem } from "@/lib/userStorage";
 import { getMaklerUuid } from "@/lib/maklerMap";
@@ -403,6 +404,9 @@ export default function Dashboard() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+      {/* Google link banner — zobrazuje sa len ak user nemá login_email */}
+      <LinkGoogleBanner />
 
       {/* Customize button */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
