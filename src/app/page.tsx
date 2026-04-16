@@ -10,7 +10,7 @@ import NewKlientModal from "@/components/NewKlientModal";
 import ActivityRings from "@/components/ActivityRings";
 import SystemSearch from "@/components/SystemSearch";
 import { useAuth } from "@/components/AuthProvider";
-import { getUserItem } from "@/lib/userStorage";
+import { getUserItem, setUserItem } from "@/lib/userStorage";
 import { getMaklerUuid } from "@/lib/maklerMap";
 
 interface ActivityItem {
@@ -221,10 +221,10 @@ function CalendarWidget({ userId }: { userId?: string }) {
   );
 }
 
-function loadTiles(): TileKey[] {
+function loadTiles(userId?: string): TileKey[] {
   if (typeof window === "undefined") return DEFAULT_TILES;
   try {
-    const raw = localStorage.getItem("dashboard_tiles");
+    const raw = userId ? getUserItem(userId, "dashboard_tiles") : localStorage.getItem("dashboard_tiles");
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -258,12 +258,12 @@ export default function Dashboard() {
   const [showTileEditor, setShowTileEditor] = useState(false);
   const [dragTile, setDragTile] = useState<TileKey | null>(null);
 
-  useEffect(() => { setTiles(loadTiles()); }, []);
+  useEffect(() => { if (user?.id) setTiles(loadTiles(user.id)); }, [user?.id]);
 
   function toggleTile(key: TileKey) {
     setTiles(prev => {
       const next = prev.includes(key) ? prev.filter(t => t !== key) : [...prev, key];
-      localStorage.setItem("dashboard_tiles", JSON.stringify(next));
+      if (user?.id) setUserItem(user.id, "dashboard_tiles", JSON.stringify(next));
       return next;
     });
   }
@@ -282,7 +282,7 @@ export default function Dashboard() {
       if (fromIdx === -1 || toIdx === -1) return prev;
       next.splice(fromIdx, 1);
       next.splice(toIdx, 0, dragTile);
-      localStorage.setItem("dashboard_tiles", JSON.stringify(next));
+      if (user?.id) setUserItem(user.id, "dashboard_tiles", JSON.stringify(next));
       return next;
     });
   }

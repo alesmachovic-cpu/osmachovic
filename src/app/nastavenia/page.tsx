@@ -425,7 +425,8 @@ export default function NastaveniaPage() {
             </div>
           </div>
 
-          {/* Cenový odhad / Výkup */}
+          {/* Cenový odhad / Výkup — len admin */}
+          {isAdmin && (
           <div style={cardSt}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
               <div style={{
@@ -480,6 +481,7 @@ export default function NastaveniaPage() {
               {cenoSaved && <span style={{ fontSize: "13px", color: "#065F46", fontWeight: "500" }}>Uložené</span>}
             </div>
           </div>
+          )}
         </div>
       )}
 
