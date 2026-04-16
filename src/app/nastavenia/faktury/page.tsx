@@ -25,16 +25,16 @@ export type DodavatelSettings = {
 };
 
 export const DEFAULT_DODAVATEL: DodavatelSettings = {
-  nazov: "Vianema s. r. o.",
-  adresa: "Karpatské námestie 10/A, 831 06 Bratislava",
-  ico: "47395095",
-  dic: "2023848508",
-  ic_dph: "SK2023848508",
+  nazov: "",
+  adresa: "",
+  ico: "",
+  dic: "",
+  ic_dph: "",
   iban: "",
   banka: "",
   swift: "",
   obch_register: "",
-  konst_symbol: "308",
+  konst_symbol: "",
   email: "",
   telefon: "",
   splatnost_dni: 14,
