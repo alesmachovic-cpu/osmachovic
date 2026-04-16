@@ -57,8 +57,16 @@ export async function GET(request: Request) {
 
     const klientiWithPdf = new Set((existingDocs || []).map((d) => d.klient_id));
 
-    // Nábery, ktoré treba spracovať: klient_id nie je v klientiWithPdf
-    const todo = allNabery.filter((n) => !klientiWithPdf.has(n.klient_id));
+    // Zisti ktorí klienti ešte existujú (orphan nábery preskočíme)
+    const { data: existingKlienti } = await sb
+      .from("klienti")
+      .select("id")
+      .in("id", klientIds);
+    const klientiExist = new Set((existingKlienti || []).map((k) => k.id));
+
+    // Nábery, ktoré treba spracovať: klient existuje A ešte nemá PDF
+    const todo = allNabery.filter((n) => klientiExist.has(n.klient_id) && !klientiWithPdf.has(n.klient_id));
+    const orphanCount = allNabery.filter((n) => !klientiExist.has(n.klient_id)).length;
     const totalTodo = todo.length;
     const batch = todo.slice(0, limit);
 
@@ -132,7 +140,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       message: `Spracované ${processed} / ${batch.length} náberov. Zostáva: ${remaining}`,
       total_nabery: allNabery.length,
-      already_had_pdf: allNabery.length - totalTodo,
+      already_had_pdf: allNabery.length - totalTodo - orphanCount,
+      orphan_missing_klient: orphanCount,
       to_process: totalTodo,
       processed_this_batch: processed,
       remaining,
