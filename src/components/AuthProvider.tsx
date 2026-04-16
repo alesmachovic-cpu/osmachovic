@@ -74,32 +74,47 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     (async () => {
-      const accs = await loadAccounts();
-      setAccounts(accs);
+      try {
+        const accs = await loadAccounts();
+        setAccounts(accs);
 
-      // 1) Skús Supabase session (Google OAuth)
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.email) {
-        const matched = await matchSessionToUser(session.user.email, accs);
-        if (matched) {
-          setUser(matched);
-          localStorage.setItem("crm_user", matched.id);
-          setChecking(false);
-          return;
-        } else {
-          // Prihlásený cez Google, ale email nie je vo whitelist — odhlás
-          console.warn("[auth] Google session, but email not in users whitelist:", session.user.email);
-          await supabase.auth.signOut();
+        // 1) Skús Supabase session (Google OAuth)
+        let session = null;
+        try {
+          const res = await supabase.auth.getSession();
+          session = res.data.session;
+        } catch (e) {
+          console.warn("[auth] getSession failed:", e);
         }
-      }
 
-      // 2) Fallback: legacy password login (localStorage)
-      const saved = localStorage.getItem("crm_user");
-      if (saved) {
-        const found = accs.find(a => a.id === saved);
-        if (found) setUser(found);
+        if (session?.user?.email) {
+          try {
+            const matched = await matchSessionToUser(session.user.email, accs);
+            if (matched) {
+              setUser(matched);
+              localStorage.setItem("crm_user", matched.id);
+              setChecking(false);
+              return;
+            } else {
+              console.warn("[auth] Google session, but email not in users whitelist:", session.user.email);
+              await supabase.auth.signOut();
+            }
+          } catch (e) {
+            console.error("[auth] match error:", e);
+          }
+        }
+
+        // 2) Fallback: legacy password login (localStorage)
+        const saved = localStorage.getItem("crm_user");
+        if (saved) {
+          const found = accs.find(a => a.id === saved);
+          if (found) setUser(found);
+        }
+      } catch (e) {
+        console.error("[auth] initial load error:", e);
+      } finally {
+        setChecking(false);
       }
-      setChecking(false);
     })();
 
     // Listener na zmenu Supabase session (napr. po OAuth redirect)
