@@ -45,7 +45,9 @@ export async function GET(request: Request) {
   const queryKey = searchParams.get("key");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && queryKey !== cronSecret) {
+  // Povolíme: 1) Vercel cron header, 2) externý cron ?key=, 3) interné volanie z UI (__internal__)
+  const isInternal = queryKey === "__internal__";
+  if (cronSecret && !isInternal && authHeader !== `Bearer ${cronSecret}` && queryKey !== cronSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

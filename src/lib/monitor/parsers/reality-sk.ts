@@ -7,7 +7,7 @@ const BASE_URL = "https://www.reality.sk";
 
 const TYP_URL: Record<string, string> = {
   byt: "byty",
-  dom: "rodinne-domy",
+  dom: "domy",
   pozemok: "pozemky",
 };
 
@@ -17,105 +17,94 @@ export const realitySkParser: PortalParser = {
   buildSearchUrl(filter: MonitorFilter): string {
     if (filter.search_url) return filter.search_url;
 
-    const typSlug = filter.typ ? TYP_URL[filter.typ] || "" : "";
-    let url = `${BASE_URL}/predaj/${typSlug}`;
+    const typSlug = filter.typ ? TYP_URL[filter.typ] || "vyhladavanie" : "vyhladavanie";
+    let url = `${BASE_URL}/${typSlug}/`;
 
-    // reality.sk používa query parametre
-    const params = new URLSearchParams();
-    if (filter.cena_od) params.set("cena_od", String(filter.cena_od));
-    if (filter.cena_do) params.set("cena_do", String(filter.cena_do));
-    if (filter.plocha_od) params.set("vymera_od", String(filter.plocha_od));
-    if (filter.plocha_do) params.set("vymera_do", String(filter.plocha_do));
-
+    // Lokalita
     if (filter.lokalita) {
       const slug = filter.lokalita
         .toLowerCase()
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/\s+/g, "-");
-      url += `/${slug}`;
+      // reality.sk format: /byty/2-izbovy-byt/bratislava-petrzalka/predaj/
+      if (filter.typ === "byt") {
+        url = `${BASE_URL}/byty/${slug}/predaj/`;
+      } else {
+        url += `${slug}/predaj/`;
+      }
+    } else {
+      url += "predaj/";
     }
 
-    const paramStr = params.toString();
-    return paramStr ? `${url}/?${paramStr}` : `${url}/`;
+    return url;
   },
 
   parseListings(html: string): ScrapedInzerat[] {
     const listings: ScrapedInzerat[] = [];
     const seenIds = new Set<string>();
 
-    const priceRegex = /(\d[\d\s,.]*)\s*€/;
-    const areaRegex = /(\d[\d,.]*)\s*m[²2]/;
-    const roomRegex = /(\d+)[- ]izb/;
+    // reality.sk has offer blocks with class "offer-item-in"
+    // Each block contains: offer-title, offer-location, price, area, rooms, image
+    const blockRegex = /class="offer-item-in\s*"[\s\S]*?(?=class="offer-item-in\s*"|<\/section|<\/main|$)/gi;
+    const blocks = html.match(blockRegex) || [];
 
-    // reality.sk — hľadáme linky na detaily inzerátov
-    const detailRegex = /<a[^>]*href="([^"]*\/detail\/([^/"]+)[^"]*)"/g;
+    for (const block of blocks) {
+      // URL & ID: /byty/slug/UNIQUE_ID/
+      const urlMatch = block.match(/href="(\/(?:byty|domy|pozemky|rodinne-domy)\/([^\/]+)\/([A-Za-z0-9_-]{8,})\/)"/);
+      if (!urlMatch) continue;
 
-    let match;
-    while ((match = detailRegex.exec(html)) !== null) {
-      const href = match[1];
-      const slug = match[2];
-      if (seenIds.has(slug)) continue;
-      seenIds.add(slug);
+      const relUrl = urlMatch[1];
+      const externalId = urlMatch[3];
+      if (seenIds.has(externalId)) continue;
+      seenIds.add(externalId);
 
-      const fullUrl = href.startsWith("http") ? href : `${BASE_URL}${href}`;
+      // Title from title attribute or offer-title class
+      const titleMatch = block.match(/class="offer-title[^"]*"[^>]*>[\s]*<a[^>]*title="([^"|]+)/);
+      const titleAlt = block.match(/title="([^"|]+?)(?:\s*\|\s*Reality\.sk)?"/);
+      const nazov = (titleMatch?.[1] || titleAlt?.[1] || "").trim();
 
-      // Kontext okolo linku
-      const pos = match.index;
-      const context = html.substring(
-        Math.max(0, pos - 300),
-        Math.min(html.length, pos + 600)
-      );
+      // Price: "139,900 €" format
+      const priceMatch = block.match(/([\d][,.\d\s]*)\s*€/);
+      let cena: number | undefined;
+      if (priceMatch) {
+        const priceStr = priceMatch[1].replace(/\s/g, "").replace(",", "");
+        cena = parseFloat(priceStr);
+        if (isNaN(cena)) cena = undefined;
+      }
 
-      // Názov
-      const titleMatch = context.match(
-        /(?:title|alt)="([^"]+)"|<h[23][^>]*>([^<]+)/
-      );
-      const nazov = (titleMatch?.[1] || titleMatch?.[2] || slug).trim();
+      // Area: "86 m²"
+      const areaMatch = block.match(/(\d+(?:[,.]\d+)?)\s*m[²2&]/);
+      const plocha = areaMatch ? parseFloat(areaMatch[1].replace(",", ".")) : undefined;
 
-      // Cena
-      const priceMatch = context.match(priceRegex);
-      const cena = priceMatch
-        ? parseFloat(priceMatch[1].replace(/\s/g, "").replace(",", "."))
-        : undefined;
-
-      // Plocha
-      const areaMatch = context.match(areaRegex);
-      const plocha = areaMatch
-        ? parseFloat(areaMatch[1].replace(",", "."))
-        : undefined;
-
-      // Izby
-      const roomMatch = context.match(roomRegex);
+      // Rooms from title or text
+      const roomMatch = (nazov + block).match(/(\d+)[- ]izb/);
       const izby = roomMatch ? parseInt(roomMatch[1]) : undefined;
 
-      // Typ
+      // Image
+      const imgMatch = block.match(/(?:data-src|src)="(https:\/\/img\.[^"]+)"/);
+      const foto_url = imgMatch?.[1]?.replace(/&amp;/g, "&");
+
+      // Location: offer-location class
+      const locMatch = block.match(/class="offer-location[^"]*"[^>]*>([\s\S]*?)<\//);
+      const lokalita = locMatch?.[1]?.replace(/<[^>]*>/g, "").trim() || undefined;
+
+      // Typ from URL
       let typ = "iny";
-      const ctxLower = context.toLowerCase();
-      if (ctxLower.includes("izb") || ctxLower.includes("byt")) typ = "byt";
-      else if (ctxLower.includes("dom") || ctxLower.includes("rodin")) typ = "dom";
-      else if (ctxLower.includes("pozem")) typ = "pozemok";
-
-      // Foto
-      const imgMatch = context.match(
-        /<img[^>]*src="([^"]*(?:jpg|jpeg|png|webp)[^"]*)"/i
-      );
-
-      // Lokalita
-      const lokMatch = context.match(
-        /(?:location|address|city|lokalita)[^>]*>([^<]+)/i
-      );
+      if (relUrl.startsWith("/byty")) typ = "byt";
+      else if (relUrl.startsWith("/domy") || relUrl.startsWith("/rodinne")) typ = "dom";
+      else if (relUrl.startsWith("/pozemky")) typ = "pozemok";
 
       listings.push({
         portal: PORTAL,
-        external_id: slug,
-        url: fullUrl,
+        external_id: externalId,
+        url: `${BASE_URL}${relUrl}`,
         nazov,
         typ,
-        lokalita: lokMatch?.[1]?.trim(),
+        lokalita,
         cena,
         plocha,
         izby,
-        foto_url: imgMatch?.[1],
+        foto_url,
         raw_data: {},
       });
     }
