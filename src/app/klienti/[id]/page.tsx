@@ -11,10 +11,11 @@ import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
 
 // ── LV sekcia s uploadom a parsovaním ──
-function LVSection({ klientId, lvData, onParsed }: {
+function LVSection({ klientId, lvData, onParsed, canEdit = true }: {
   klientId: string;
   lvData: Record<string, unknown> | null | undefined;
   onParsed: (data: Record<string, unknown>) => void;
+  canEdit?: boolean;
 }) {
   const [parsing, setParsing] = useState(false);
   const [err, setErr] = useState("");
@@ -81,15 +82,17 @@ function LVSection({ klientId, lvData, onParsed }: {
             )}
           </div>
         </div>
-        <label style={{
-          padding: "7px 14px", background: parsing ? "var(--bg-elevated)" : "#374151",
-          color: parsing ? "var(--text-muted)" : "#fff", borderRadius: "9px",
-          fontSize: "12px", fontWeight: "600", cursor: parsing ? "default" : "pointer",
-          border: "none", display: "inline-block",
-        }}>
-          {parsing ? "Analyzujem..." : lv ? "Nahrať znova" : "Nahrať LV"}
-          <input type="file" accept=".pdf,image/*" onChange={handleLVUpload} style={{ display: "none" }} disabled={parsing} />
-        </label>
+        {canEdit && (
+          <label style={{
+            padding: "7px 14px", background: parsing ? "var(--bg-elevated)" : "#374151",
+            color: parsing ? "var(--text-muted)" : "#fff", borderRadius: "9px",
+            fontSize: "12px", fontWeight: "600", cursor: parsing ? "default" : "pointer",
+            border: "none", display: "inline-block",
+          }}>
+            {parsing ? "Analyzujem..." : lv ? "Nahrať znova" : "Nahrať LV"}
+            <input type="file" accept=".pdf,image/*" onChange={handleLVUpload} style={{ display: "none" }} disabled={parsing} />
+          </label>
+        )}
       </div>
       {err && <div style={{ fontSize: "12px", color: "#EF4444", marginTop: "8px" }}>{err}</div>}
       {lv && (
@@ -583,7 +586,7 @@ export default function KlientDetailPage() {
             Všetky informácie a história
           </p>
         </div>
-        {isOwner && (
+        {isOwner ? (
           <button onClick={() => setEditModal(true)} style={{
             padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
             border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
@@ -591,6 +594,14 @@ export default function KlientDetailPage() {
           }}>
             ✏️ Upraviť
           </button>
+        ) : (
+          <div style={{
+            padding: "9px 14px", background: "#FEF3C7", color: "#92400E",
+            border: "1px solid #FDE68A", borderRadius: "10px", fontSize: "12px",
+            fontWeight: "600", display: "flex", alignItems: "center", gap: "6px",
+          }}>
+            🔒 Len na čítanie — klient iného makléra
+          </div>
         )}
       </div>
 
@@ -1338,7 +1349,7 @@ export default function KlientDetailPage() {
       {activeTab === "dokumenty" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {/* LV sekcia */}
-          <LVSection klientId={klient.id} lvData={klient.lv_data} onParsed={(data) => {
+          <LVSection klientId={klient.id} lvData={klient.lv_data} canEdit={isOwner} onParsed={(data) => {
             // Porovnaj LV s existujúcimi údajmi klienta
             const checks: { field: string; label: string; old: string; new_: string }[] = [];
             const lv = data as Record<string, unknown>;
