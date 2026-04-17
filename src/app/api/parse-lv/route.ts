@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+export const maxDuration = 60; // Gemini PDF reading môže trvať 30-50s
+
 // SYSTEM_LV/POSUDOK/ZMLUVA definované nižšie po SYSTEM_UNIVERSAL
 
 const SYSTEM_UNIVERSAL = `Si expertný analytik slovenských realitných dokumentov — rozumieš KAŽDÉMU typu dokumentu:
@@ -265,17 +268,21 @@ export async function POST(req: NextRequest) {
       ];
   const names = hasPdfOnly ? ["Gemini"] : ["Gemini", "GPT", "Claude"];
 
+  const attempts: string[] = [];
   for (let i = 0; i < strategies.length; i++) {
     console.log(`[parse-doc] Trying ${names[i]}...`);
     const result = await strategies[i](text);
-    // Považuj za úspech ak AI vráti HOCIJAKÉ užitočné pole (aj len katastrálne územie, izby, poschodie, ulicu)
     const hasAnyField = result && Object.values(result).some(v => v !== undefined && v !== null && String(v).trim() !== "" && String(v).toLowerCase() !== "n/a");
     if (hasAnyField) {
       console.log(`[parse-doc] ✓ ${names[i]} succeeded with fields:`, Object.keys(result!).join(", "));
       return NextResponse.json({ ...result, _ai: names[i], _docType: doc_type || "lv" });
     }
+    attempts.push(`${names[i]}: ${result === null ? "chyba (pozri logs)" : "prázdna odpoveď"}`);
     console.log(`[parse-doc] ✗ ${names[i]} returned empty, trying next...`);
   }
 
-  return NextResponse.json({ error: "Žiadna AI nedokázala spracovať dokument. Skontroluj API kľúče." }, { status: 500 });
+  return NextResponse.json({
+    error: `AI nedokázali spracovať dokument. Pokusy: ${attempts.join(" | ")}. Skontroluj či je PDF čitateľné (nie iba obrázok) a či má text.`,
+    attempts,
+  }, { status: 500 });
 }
