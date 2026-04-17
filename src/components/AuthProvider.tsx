@@ -175,9 +175,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     localStorage.setItem("crm_user", acc.id);
     setUser(acc);
-    if (typeof window !== "undefined") {
-      setTimeout(() => { window.location.href = "/"; }, 50);
-    }
     return null;
   }
 
