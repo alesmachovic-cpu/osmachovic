@@ -11,11 +11,15 @@ import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
 
 // ── LV sekcia s uploadom a parsovaním ──
-function LVSection({ klientId, lvData, onParsed, canEdit = true }: {
+function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation }: {
   klientId: string;
   lvData: Record<string, unknown> | null | undefined;
   onParsed: (data: Record<string, unknown>) => void;
   canEdit?: boolean;
+  klientMeno?: string;
+  klientLokalita?: string;
+  onFixName?: (newName: string) => Promise<void>;
+  onFixLocation?: (newLokalita: string) => Promise<void>;
 }) {
   const [parsing, setParsing] = useState(false);
   const [err, setErr] = useState("");
@@ -63,6 +67,29 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true }: {
   const lvIzby = lv?.izby ? String(lv.izby) : "";
   const lvPravneVady = lv?.pravne_vady ? String(lv.pravne_vady) : "";
 
+  // Mismatch detekcia — zobrazí warning banner s tlačidlom na opravu
+  const ownerNames: string[] = (() => {
+    const names: string[] = [];
+    for (const m of majitelia.filter(m => m.meno)) {
+      const parts = m.meno!.split(/\s+a\s+/i).map(n => n.trim()).filter(n => n.length > 2);
+      names.push(...(parts.length > 1 ? parts : [m.meno!]));
+    }
+    return names;
+  })();
+  const nameCurrent = klientMeno.trim().toLowerCase();
+  const nameMatches = !nameCurrent || ownerNames.length === 0 ||
+    ownerNames.some(n => n.toLowerCase() === nameCurrent ||
+                         nameCurrent.includes(n.toLowerCase()) ||
+                         n.toLowerCase().includes(nameCurrent));
+  const locCurrent = klientLokalita.trim().toLowerCase();
+  const locLv = lvObec.trim().toLowerCase();
+  const locMatches = !locCurrent || !locLv || locCurrent === locLv ||
+    locCurrent.includes(locLv) || locLv.includes(locCurrent);
+  const [selectedOwner, setSelectedOwner] = useState<string>("");
+  const [fixingName, setFixingName] = useState(false);
+  const [fixingLoc, setFixingLoc] = useState(false);
+  useEffect(() => { if (ownerNames.length > 0 && !selectedOwner) setSelectedOwner(ownerNames[0]); }, [ownerNames, selectedOwner]);
+
   return (
     <div style={{
       background: "var(--bg-surface)", border: lv ? "1px solid #BBF7D0" : "1px solid var(--border)",
@@ -95,8 +122,53 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true }: {
         )}
       </div>
       {err && <div style={{ fontSize: "12px", color: "#EF4444", marginTop: "8px" }}>{err}</div>}
+      {lv && canEdit && (!nameMatches || !locMatches) && (
+        <div style={{ marginTop: "12px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "10px", padding: "14px" }}>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "#92400E", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+            ⚠️ Údaje klienta sa nezhodujú s LV
+          </div>
+          {!nameMatches && ownerNames.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+              <span style={{ fontSize: "12px", color: "#92400E" }}>
+                Meno: <strong>{klientMeno}</strong> → vlastník z LV:
+              </span>
+              <select value={selectedOwner} onChange={(e) => setSelectedOwner(e.target.value)}
+                style={{ padding: "4px 8px", fontSize: "12px", borderRadius: "6px", border: "1px solid #FDE68A", background: "#fff", color: "#92400E" }}>
+                {ownerNames.map((n, i) => <option key={i} value={n}>{n}</option>)}
+              </select>
+              <button
+                disabled={fixingName || !selectedOwner}
+                onClick={async () => {
+                  if (!onFixName || !selectedOwner) return;
+                  setFixingName(true);
+                  try { await onFixName(selectedOwner); } finally { setFixingName(false); }
+                }}
+                style={{ padding: "5px 12px", fontSize: "12px", fontWeight: 600, background: "#D97706", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer" }}>
+                {fixingName ? "Ukladám..." : "Premenovať klienta"}
+              </button>
+            </div>
+          )}
+          {!locMatches && lvObec && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "12px", color: "#92400E" }}>
+                Lokalita: <strong>{klientLokalita}</strong> → z LV: <strong>{lvObec}</strong>
+              </span>
+              <button
+                disabled={fixingLoc}
+                onClick={async () => {
+                  if (!onFixLocation) return;
+                  setFixingLoc(true);
+                  try { await onFixLocation(lvObec); } finally { setFixingLoc(false); }
+                }}
+                style={{ padding: "5px 12px", fontSize: "12px", fontWeight: 600, background: "#D97706", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer" }}>
+                {fixingLoc ? "Ukladám..." : "Prepísať lokalitu"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {lv && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "14px" }}>
           {/* Adresa */}
           {(lvObec || lvUlica) && (
             <div style={{ fontSize: "13px", color: "var(--text-primary)", display: "flex", gap: "6px", alignItems: "flex-start" }}>
@@ -1349,7 +1421,35 @@ export default function KlientDetailPage() {
       {activeTab === "dokumenty" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {/* LV sekcia */}
-          <LVSection klientId={klient.id} lvData={klient.lv_data} canEdit={!!isOwner} onParsed={(data) => {
+          <LVSection
+            klientId={klient.id}
+            lvData={klient.lv_data}
+            canEdit={!!isOwner}
+            klientMeno={klient.meno || ""}
+            klientLokalita={klient.lokalita || ""}
+            onFixName={async (newName) => {
+              await supabase.from("klienti").update({ meno: newName }).eq("id", klient.id);
+              setKlient(k => k ? { ...k, meno: newName } : k);
+              // Sync kalendár event
+              const calEventId = (klient as { calendar_event_id?: string | null }).calendar_event_id;
+              if (calEventId && user?.id) {
+                const isNaber = klient.status === "dohodnuty_naber" || klient.status === "nabrany";
+                const prefix = isNaber ? "Náber" : "Zavolať";
+                fetch("/api/google/calendar", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    userId: user.id, eventId: calEventId,
+                    summary: `${prefix} — ${newName}`,
+                  }),
+                }).catch(() => {});
+              }
+            }}
+            onFixLocation={async (newLok) => {
+              await supabase.from("klienti").update({ lokalita: newLok }).eq("id", klient.id);
+              setKlient(k => k ? { ...k, lokalita: newLok } : k);
+            }}
+            onParsed={(data) => {
             // Porovnaj LV s existujúcimi údajmi klienta
             const checks: { field: string; label: string; old: string; new_: string }[] = [];
             const lv = data as Record<string, unknown>;
