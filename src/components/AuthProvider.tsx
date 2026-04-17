@@ -73,7 +73,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   useEffect(() => {
-    // Safety net: ak sa init zasekne, po 2.5s ukončíme checking
+    // Jediný zdroj pravdy = localStorage.crm_user
+    // Supabase session sa používa LEN na Google login flow (v callback page).
+    // Žiadne onAuthStateChange — tie spôsobovali edge case logouty.
     const safetyTimeout = setTimeout(() => {
       console.warn("[auth] Safety timeout — forcing checking=false");
       setChecking(false);
@@ -81,38 +83,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     (async () => {
       try {
-        // FAST PATH: ak máme crm_user v localStorage, načítaj accounts asynchronne
-        // ale zatiaľ užívateľa "uhádni" z cache keď príde — nastavme checking=false hneď
-        const saved = localStorage.getItem("crm_user");
-
-        // Parallel: accounts + supabase session
-        const [accs, sessionRes] = await Promise.all([
-          loadAccounts().catch(() => [] as User[]),
-          supabase.auth.getSession().catch(() => ({ data: { session: null } })),
-        ]);
+        const savedId = localStorage.getItem("crm_user");
+        const accs = await loadAccounts().catch(() => [] as User[]);
         setAccounts(accs);
-        const session = sessionRes.data.session;
 
-        // 1) Supabase session (Google OAuth) má prednosť
-        if (session?.user?.email) {
-          try {
-            const matched = await matchSessionToUser(session.user.email, accs);
-            if (matched) {
-              setUser(matched);
-              localStorage.setItem("crm_user", matched.id);
-              return;
-            } else {
-              console.warn("[auth] Google session, but email not in users whitelist:", session.user.email);
-              await supabase.auth.signOut();
-            }
-          } catch (e) {
-            console.error("[auth] match error:", e);
-          }
-        }
-
-        // 2) Fallback: legacy password login (localStorage)
-        if (saved) {
-          const found = accs.find(a => a.id === saved);
+        if (savedId) {
+          const found = accs.find(a => a.id === savedId);
           if (found) setUser(found);
         }
       } catch (e) {
@@ -123,33 +99,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       }
     })();
 
-    // Listener na zmenu Supabase session (napr. po OAuth redirect)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Ignoruj INITIAL_SESSION (to spracovávame v init vyššie) a TOKEN_REFRESHED
-      if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") return;
-
-      if (event === "SIGNED_IN" && session?.user?.email) {
-        // SPRING: ak sme práve v linking flow, nech to rieši callback page (nerobiť nič)
-        if (localStorage.getItem("pending_link_user_id")) return;
-
-        const accs = await loadAccounts();
-        setAccounts(accs);
-        const matched = await matchSessionToUser(session.user.email, accs);
-        if (matched) {
-          setUser(matched);
-          localStorage.setItem("crm_user", matched.id);
-        } else {
-          alert(`Tento Google účet (${session.user.email}) nie je povolený. Požiadaj admina o prístup.`);
-          await supabase.auth.signOut();
-          // Nenastavujeme setUser(null) — ak bol prihlásený heslom, nech tak zostane
-        }
-      }
-      // POZNÁMKA: SIGNED_OUT event zámerne nespracovávame.
-      // Supabase session môže expirovať/odhlásiť sa nezávisle od nášho password loginu
-      // (crm_user v localStorage). Logout sa rieši cez explicitnú logout() funkciu.
-    });
-
-    return () => { subscription.unsubscribe(); clearTimeout(safetyTimeout); };
+    return () => { clearTimeout(safetyTimeout); };
   }, []);
 
   async function refreshAccounts() {

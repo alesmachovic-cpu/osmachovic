@@ -1,19 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 /**
  * OAuth callback page.
- * Podporuje dva režimy:
- * 1) Normálne prihlásenie cez Google — session sa vytvorí a AuthProvider matchne whitelist
- * 2) Prepojenie Google k existujúcemu userovi (pending_link_user_id v localStorage)
- *    — uloží google email do users.login_email pre tohto user, potom zahodí Supabase session
- *    (ostane prihlásený cez pôvodný password session)
+ * Po úspešnom Google OAuth:
+ * 1) Počká kým sa Supabase session uloží
+ * 2) Nájde usera v `users` tabuľke podľa emailu
+ * 3) Ak existuje "pending_link_user_id" (linking flow) → uloží login_email k tomu userovi
+ * 4) Nastaví localStorage.crm_user → hard reload na dashboard
+ *
+ * AuthProvider potom prečíta crm_user a zobrazí dashboard.
  */
 export default function AuthCallback() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("Prihlasujem...");
 
@@ -21,57 +21,83 @@ export default function AuthCallback() {
     (async () => {
       try {
         const url = new URL(window.location.href);
-        const errorDescription = url.searchParams.get("error_description");
-        if (errorDescription) {
-          setError(errorDescription);
-          setTimeout(() => router.push("/"), 3000);
+        const errDesc = url.searchParams.get("error_description");
+        if (errDesc) {
+          setError(errDesc);
+          setTimeout(() => { window.location.href = "/"; }, 3000);
           return;
         }
 
-        setStatus("Overujem účet...");
+        setStatus("Overujem Google účet...");
 
-        // Počkaj kým Supabase spracuje URL hash a uloží session
-        let tries = 0;
-        while (tries < 30) {
+        // Počkaj kým Supabase spracuje URL hash a uloží session (max 3s)
+        let session = null;
+        for (let i = 0; i < 30; i++) {
           const { data } = await supabase.auth.getSession();
-          if (data.session) break;
+          if (data.session) { session = data.session; break; }
           await new Promise((r) => setTimeout(r, 100));
-          tries++;
         }
 
-        const { data } = await supabase.auth.getSession();
-        if (!data.session) {
-          setError("Session sa neuložila. Skús znova.");
-          setTimeout(() => router.push("/"), 3000);
+        if (!session?.user?.email) {
+          setError("Google prihlásenie zlyhalo — session sa neuložila.");
+          setTimeout(() => { window.location.href = "/"; }, 3000);
           return;
         }
 
-        const sessionEmail = data.session.user?.email;
-        const pendingLinkId = localStorage.getItem("pending_link_user_id");
+        const gmailEmail = session.user.email;
 
-        if (pendingLinkId && sessionEmail) {
-          // LINKING MODE: uloź google email k tomuto userovi, potom zahoď Supabase session
-          setStatus("Ukladám prepojenie...");
-          await supabase.from("users")
-            .update({ login_email: sessionEmail })
+        // Linking flow: pripoj Gmail k existujúcemu userovi
+        const pendingLinkId = localStorage.getItem("pending_link_user_id");
+        if (pendingLinkId) {
+          setStatus("Pripájam Google účet...");
+          const { error: updErr } = await supabase.from("users")
+            .update({ login_email: gmailEmail })
             .eq("id", pendingLinkId);
+          if (updErr) console.warn("[callback] link update error:", updErr);
+
           await supabase.auth.signOut();
           localStorage.removeItem("pending_link_user_id");
-          localStorage.setItem("crm_user", pendingLinkId); // zostaň prihlásený cez heslo
-          router.push("/?linked=1");
+          localStorage.setItem("crm_user", pendingLinkId);
+          setStatus("Prepojenie úspešné! Presmerovávam...");
+          setTimeout(() => { window.location.href = "/?linked=1"; }, 300);
           return;
         }
 
-        // NORMÁLNY MODE: redirect na dashboard, AuthProvider matchne whitelist
+        // Normálny Google login: nájdi usera podľa emailu
+        setStatus("Hľadám účet...");
+        const { data: usersList } = await supabase.from("users").select("*");
+        const accs = usersList ?? [];
+        const matched = accs.find((a) => {
+          const gEmail = gmailEmail.toLowerCase();
+          return (
+            (a.login_email || "").toLowerCase() === gEmail ||
+            (a.email || "").toLowerCase() === gEmail
+          );
+        });
+
+        if (!matched) {
+          setError(`Google účet ${gmailEmail} nie je povolený. Požiadaj admina o prístup.`);
+          await supabase.auth.signOut();
+          setTimeout(() => { window.location.href = "/"; }, 4000);
+          return;
+        }
+
+        // Auto-naviaž login_email ak prvýkrát
+        if (!matched.login_email) {
+          await supabase.from("users")
+            .update({ login_email: gmailEmail })
+            .eq("id", matched.id);
+        }
+
+        localStorage.setItem("crm_user", matched.id);
         setStatus("Hotovo! Presmerovávam...");
-        await new Promise((r) => setTimeout(r, 200));
-        router.push("/");
+        setTimeout(() => { window.location.href = "/"; }, 200);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
-        setTimeout(() => router.push("/"), 3000);
+        setTimeout(() => { window.location.href = "/"; }, 3000);
       }
     })();
-  }, [router]);
+  }, []);
 
   return (
     <div style={{
