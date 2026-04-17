@@ -125,7 +125,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     // Listener na zmenu Supabase session (napr. po OAuth redirect)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Ignoruj INITIAL_SESSION (to spracovávame v init vyššie) a TOKEN_REFRESHED
+      if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") return;
+
       if (event === "SIGNED_IN" && session?.user?.email) {
+        // SPRING: ak sme práve v linking flow, nech to rieši callback page (nerobiť nič)
+        if (localStorage.getItem("pending_link_user_id")) return;
+
         const accs = await loadAccounts();
         setAccounts(accs);
         const matched = await matchSessionToUser(session.user.email, accs);
@@ -135,11 +141,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         } else {
           alert(`Tento Google účet (${session.user.email}) nie je povolený. Požiadaj admina o prístup.`);
           await supabase.auth.signOut();
-          setUser(null);
+          // Nenastavujeme setUser(null) — ak bol prihlásený heslom, nech tak zostane
         }
-      } else if (event === "SIGNED_OUT") {
-        setUser(null);
       }
+      // POZNÁMKA: SIGNED_OUT event zámerne nespracovávame.
+      // Supabase session môže expirovať/odhlásiť sa nezávisle od nášho password loginu
+      // (crm_user v localStorage). Logout sa rieši cez explicitnú logout() funkciu.
     });
 
     return () => { subscription.unsubscribe(); clearTimeout(safetyTimeout); };
