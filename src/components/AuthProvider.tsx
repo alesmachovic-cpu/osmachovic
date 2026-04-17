@@ -73,33 +73,33 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   useEffect(() => {
-    // Safety net: ak sa init zasekne, po 4 sekundách ukončíme checking
+    // Safety net: ak sa init zasekne, po 2.5s ukončíme checking
     const safetyTimeout = setTimeout(() => {
       console.warn("[auth] Safety timeout — forcing checking=false");
       setChecking(false);
-    }, 4000);
+    }, 2500);
 
     (async () => {
       try {
-        const accs = await loadAccounts();
+        // FAST PATH: ak máme crm_user v localStorage, načítaj accounts asynchronne
+        // ale zatiaľ užívateľa "uhádni" z cache keď príde — nastavme checking=false hneď
+        const saved = localStorage.getItem("crm_user");
+
+        // Parallel: accounts + supabase session
+        const [accs, sessionRes] = await Promise.all([
+          loadAccounts().catch(() => [] as User[]),
+          supabase.auth.getSession().catch(() => ({ data: { session: null } })),
+        ]);
         setAccounts(accs);
+        const session = sessionRes.data.session;
 
-        // 1) Skús Supabase session (Google OAuth)
-        let session = null;
-        try {
-          const res = await supabase.auth.getSession();
-          session = res.data.session;
-        } catch (e) {
-          console.warn("[auth] getSession failed:", e);
-        }
-
+        // 1) Supabase session (Google OAuth) má prednosť
         if (session?.user?.email) {
           try {
             const matched = await matchSessionToUser(session.user.email, accs);
             if (matched) {
               setUser(matched);
               localStorage.setItem("crm_user", matched.id);
-              setChecking(false);
               return;
             } else {
               console.warn("[auth] Google session, but email not in users whitelist:", session.user.email);
@@ -111,7 +111,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         }
 
         // 2) Fallback: legacy password login (localStorage)
-        const saved = localStorage.getItem("crm_user");
         if (saved) {
           const found = accs.find(a => a.id === saved);
           if (found) setUser(found);
