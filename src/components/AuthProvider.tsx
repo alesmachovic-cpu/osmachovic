@@ -223,8 +223,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     );
   }
 
-  // Na /auth/callback sa vždy zobrazí children (callback page potrebuje bežať bez login overlay)
-  const isAuthCallback = pathname?.startsWith("/auth/callback");
+  // Na /auth/callback a /reset-password sa vždy zobrazí children (login bypass)
+  const isAuthCallback = pathname?.startsWith("/auth/callback") || pathname?.startsWith("/reset-password");
 
   if (!user && !isAuthCallback) {
     return (
@@ -431,6 +431,28 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
               </>
             ) : "Prihlásiť"}
           </button>
+
+          {/* Zabudnuté heslo */}
+          <div style={{ textAlign: "center", marginTop: "6px" }}>
+            <button type="button" onClick={async () => {
+              if (!identifier.trim()) { setError("Najprv zadaj meno alebo email"); return; }
+              try {
+                await fetch("/api/auth/forgot", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ identifier: identifier.trim() }),
+                });
+                setError("");
+                alert("Ak existuje účet s týmto menom/emailom, poslali sme ti link na obnovenie hesla. Skontroluj si email (aj SPAM).");
+              } catch { alert("Chyba pri odosielaní. Skús znova."); }
+            }} style={{
+              fontSize: "12px", color: "rgba(255,255,255,0.5)",
+              background: "none", border: "none", cursor: "pointer",
+              textDecoration: "underline", padding: "4px",
+            }}>
+              Zabudnuté heslo?
+            </button>
+          </div>
         </form>
 
         {/* Divider */}

@@ -41,6 +41,23 @@ const AMENITY_ITEMS = [
   "Klimatizácia", "Alarm", "Telefón",
 ];
 
+// Priradí ku každej položke vybavenia kľúč + jednotku (m² alebo ks)
+// Položky ktoré nie sú tu vrátia null (nepotrebujú dodatočný input)
+function getAmenitySpec(name: string): { key: string; unit: "m²" | "ks" } | null {
+  const map: Record<string, { key: string; unit: "m²" | "ks" }> = {
+    "Balkón":       { key: "balkon",   unit: "m²" },
+    "Lodžia":       { key: "loggia",   unit: "m²" },
+    "Terasa":       { key: "terasa",   unit: "m²" },
+    "Garáž":        { key: "garaz",    unit: "m²" },
+    "Pivnica":      { key: "pivnica",  unit: "m²" },
+    "Komora":       { key: "komora",   unit: "m²" },
+    "Výťah":        { key: "vytah",    unit: "ks" },
+    "Parking":      { key: "parking",  unit: "ks" },
+    "Klimatizácia": { key: "klima",    unit: "ks" },
+  };
+  return map[name] || null;
+}
+
 const DISPOZICIA_BYT = [
   { value: "garzonka", label: "Garzónka" },
   { value: "1kk", label: "1+kk" },
@@ -808,6 +825,22 @@ Odpovedaj stručne po slovensky.`;
                 <input type="checkbox" checked={!!vybavenie["Výťah"]} onChange={e => setVybavenie(prev => ({ ...prev, "Výťah": e.target.checked }))} style={{ width: "20px", height: "20px" }} />
                 {vybavenie["Výťah"] ? "Áno" : "Nie"}
               </label>
+              {vybavenie["Výťah"] && (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                  <input
+                    type="number" min="0" step="1"
+                    value={vymery.vytah || ""}
+                    onChange={(e) => setVymery(prev => ({ ...prev, vytah: e.target.value }))}
+                    placeholder="Počet"
+                    style={{
+                      width: "100px", padding: "8px 10px", fontSize: "13px",
+                      background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                      borderRadius: "8px", color: "var(--text-primary)",
+                    }}
+                  />
+                  <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>ks</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1008,11 +1041,7 @@ Odpovedaj stručne po slovensky.`;
           <div style={sectionTitle}>🛋️ Vybavenie bytu</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
             {AMENITY_ITEMS.filter(a => a !== "Výťah").map(a => {
-              // Ak je to položka s výmerou (balkón/lodžia/terasa/garáž) → pridaj m² input
-              const vymeraKey = a === "Balkón" ? "balkon"
-                : a === "Lodžia" ? "loggia"
-                : a === "Terasa" ? "terasa"
-                : a === "Garáž" ? "garaz" : null;
+              const spec = getAmenitySpec(a);
               const isChecked = !!vybavenie[a];
               return (
                 <div key={a} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -1022,21 +1051,22 @@ Odpovedaj stručne po slovensky.`;
                       style={{ width: "20px", height: "20px" }} />
                     {a}
                   </label>
-                  {vymeraKey && isChecked && (
+                  {spec && isChecked && (
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "30px", marginBottom: "4px" }}>
                       <input
                         type="number"
-                        step="0.1"
-                        value={vymery[vymeraKey] || ""}
-                        onChange={(e) => setVymery(prev => ({ ...prev, [vymeraKey]: e.target.value }))}
-                        placeholder="Výmera"
+                        step={spec.unit === "m²" ? "0.1" : "1"}
+                        min="0"
+                        value={vymery[spec.key] || ""}
+                        onChange={(e) => setVymery(prev => ({ ...prev, [spec.key]: e.target.value }))}
+                        placeholder={spec.unit === "m²" ? "Výmera" : "Počet"}
                         style={{
                           width: "90px", padding: "6px 10px", fontSize: "13px",
                           background: "var(--bg-elevated)", border: "1px solid var(--border)",
                           borderRadius: "8px", color: "var(--text-primary)",
                         }}
                       />
-                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>m²</span>
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{spec.unit}</span>
                     </div>
                   )}
                 </div>
@@ -1389,10 +1419,7 @@ Odpovedaj stručne po slovensky.`;
           <div style={sectionTitle}>🛋️ Vybavenie</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
             {AMENITY_ITEMS.map(a => {
-              const vymeraKey = a === "Balkón" ? "balkon"
-                : a === "Lodžia" ? "loggia"
-                : a === "Terasa" ? "terasa"
-                : a === "Garáž" ? "garaz" : null;
+              const spec = getAmenitySpec(a);
               const isChecked = !!vybavenie[a];
               return (
                 <div key={a} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -1402,20 +1429,22 @@ Odpovedaj stručne po slovensky.`;
                       style={{ width: "20px", height: "20px" }} />
                     {a}
                   </label>
-                  {vymeraKey && isChecked && (
+                  {spec && isChecked && (
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "30px", marginBottom: "4px" }}>
                       <input
-                        type="number" step="0.1"
-                        value={vymery[vymeraKey] || ""}
-                        onChange={(e) => setVymery(prev => ({ ...prev, [vymeraKey]: e.target.value }))}
-                        placeholder="Výmera"
+                        type="number"
+                        step={spec.unit === "m²" ? "0.1" : "1"}
+                        min="0"
+                        value={vymery[spec.key] || ""}
+                        onChange={(e) => setVymery(prev => ({ ...prev, [spec.key]: e.target.value }))}
+                        placeholder={spec.unit === "m²" ? "Výmera" : "Počet"}
                         style={{
                           width: "90px", padding: "6px 10px", fontSize: "13px",
                           background: "var(--bg-elevated)", border: "1px solid var(--border)",
                           borderRadius: "8px", color: "var(--text-primary)",
                         }}
                       />
-                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>m²</span>
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{spec.unit}</span>
                     </div>
                   )}
                 </div>
