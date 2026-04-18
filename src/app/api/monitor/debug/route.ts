@@ -55,6 +55,30 @@ export async function GET(request: Request) {
 
     const listings = parser.parseListings(html);
 
+    // Diagnostika HTML — extrahuj všetky unikátne a href vzory s /číslami/
+    // + unikátne div/article class mená (filtrované na tie čo vyzerajú relevantne)
+    const hrefMatches = Array.from(html.matchAll(/href="(\/[^"]*\/\d{5,}[^"]*)"/g)).map((m) => m[1]);
+    const uniqueHrefs = Array.from(new Set(hrefMatches)).slice(0, 15);
+
+    const classMatches = Array.from(
+      html.matchAll(/<(?:div|article|li|section)[^>]*class="([^"]{5,120})"/g)
+    ).map((m) => m[1]);
+    // Zgrupuj a spočítaj, vráť top 20 najčastejších
+    const classCounts: Record<string, number> = {};
+    for (const c of classMatches) classCounts[c] = (classCounts[c] || 0) + 1;
+    const topClasses = Object.entries(classCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 25)
+      .map(([cls, count]) => ({ cls, count }));
+
+    // __NEXT_DATA__ — Next.js appky často majú data v JSON script tagu
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]{1,500})/);
+    const nextDataPreview = nextDataMatch?.[1]?.slice(0, 400);
+
+    // Hľadaj textové markery typické pre inzeráty (ceny, izby)
+    const priceCount = (html.match(/\d[\d\s]*\s*€/g) || []).length;
+    const izbyCount = (html.match(/\d[- ]izb/g) || []).length;
+
     return NextResponse.json({
       portal,
       searchUrl,
@@ -63,10 +87,17 @@ export async function GET(request: Request) {
       httpStatus: status,
       scrapingBeeCost: cost,
       htmlLength: html.length,
-      htmlStart: html.slice(0, 2000),
-      htmlEnd: html.slice(-500),
       parsedCount: listings.length,
       firstListing: listings[0] || null,
+      diagnostics: {
+        priceOccurrences: priceCount,
+        izbyOccurrences: izbyCount,
+        uniqueHrefsWithNumbers: uniqueHrefs,
+        topContainerClasses: topClasses,
+        hasNextData: !!nextDataMatch,
+        nextDataPreview,
+      },
+      htmlStart: html.slice(0, 1500),
     });
   } catch (e) {
     return NextResponse.json({
