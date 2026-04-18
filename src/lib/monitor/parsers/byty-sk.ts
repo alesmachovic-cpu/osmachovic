@@ -1,6 +1,7 @@
 /* ── Parser pre byty.sk ── */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
+import { detectFirma } from "./shared";
 
 /**
  * byty.sk — slovenský realitný portál (SPA, potrebuje ScrapingBee JS rendering)
@@ -62,6 +63,24 @@ export const bytySkParser: PortalParser = {
           const loc = item.location as Record<string, unknown> | undefined;
           const location = String(loc?.city || item.lokalita || item.mesto || "");
 
+          // Predajca: bežné polia v byty.sk Next.js dátach
+          const sellerObj = (item.advertiser || item.agent || item.broker || item.seller || item.owner) as
+            | Record<string, unknown>
+            | string
+            | undefined;
+          const sellerName =
+            typeof sellerObj === "string"
+              ? sellerObj
+              : String(
+                  (sellerObj?.name as string | undefined) ||
+                  (sellerObj?.title as string | undefined) ||
+                  (sellerObj?.company as string | undefined) ||
+                  item.predajca ||
+                  ""
+                );
+          const predajca_meno = sellerName.trim() || undefined;
+          const isFirma = detectFirma(title, predajca_meno);
+
           listings.push({
             portal: PORTAL,
             external_id: id,
@@ -73,6 +92,8 @@ export const bytySkParser: PortalParser = {
             plocha: area,
             izby: rooms,
             foto_url: (item.image || item.photo || item.foto) as string | undefined,
+            predajca_meno,
+            predajca_typ: isFirma ? "firma" : undefined,
             raw_data: {},
           });
         }
@@ -115,12 +136,20 @@ export const bytySkParser: PortalParser = {
       if (relUrl.startsWith("/dom")) typ = "dom";
       else if (relUrl.startsWith("/pozemok")) typ = "pozemok";
 
+      const sellerMatch = block.match(
+        /class="[^"]*(?:advertiser|seller|agent|agency|broker|company|realitka|inzerent)[^"]*"[^>]*>\s*(?:<[^>]*>\s*)*([^<]{2,100})/i
+      );
+      const predajca_meno = sellerMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
+      const isFirma = detectFirma(nazov, predajca_meno, block);
+
       listings.push({
         portal: PORTAL,
         external_id: externalId,
         url: `${BASE_URL}${relUrl}`,
         nazov, typ,
         cena, plocha, izby, foto_url,
+        predajca_meno,
+        predajca_typ: isFirma ? "firma" : undefined,
         raw_data: {},
       });
     }

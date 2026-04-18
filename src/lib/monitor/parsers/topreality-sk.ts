@@ -1,6 +1,7 @@
 /* ── Parser pre topreality.sk ── */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
+import { detectFirma } from "./shared";
 
 const PORTAL = "topreality.sk";
 const BASE_URL = "https://www.topreality.sk";
@@ -96,6 +97,12 @@ export const toprealitySkParser: PortalParser = {
         /(?:location|address|city|lokalita)[^>]*>([^<]+)/i
       );
 
+      const sellerMatch = context.match(
+        /class="[^"]*(?:advertiser|seller|agent|agency|broker|company|realitka|inzerent)[^"]*"[^>]*>\s*(?:<[^>]*>\s*)*([^<]{2,100})/i
+      );
+      const predajca_meno = sellerMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
+      const isFirma = detectFirma(nazov, predajca_meno, context);
+
       listings.push({
         portal: PORTAL,
         external_id: externalId,
@@ -107,6 +114,8 @@ export const toprealitySkParser: PortalParser = {
         plocha,
         izby,
         foto_url: imgMatch?.[1],
+        predajca_meno,
+        predajca_typ: isFirma ? "firma" : undefined,
         raw_data: {},
       });
     }

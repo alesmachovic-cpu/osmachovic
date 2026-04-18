@@ -1,6 +1,7 @@
 /* ── Parser pre reality.sk ── */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
+import { detectFirma } from "./shared";
 
 const PORTAL = "reality.sk";
 const BASE_URL = "https://www.reality.sk";
@@ -30,14 +31,6 @@ export const realitySkParser: PortalParser = {
   parseListings(html: string): ScrapedInzerat[] {
     const listings: ScrapedInzerat[] = [];
     const seenIds = new Set<string>();
-
-    // Detekcia firmy vs súkromný podľa kľúčových slov v nadpise/popise
-    const firemneMarkery = [
-      "s.r.o", "s. r. o", "a.s.", "spol.",
-      "real", "reality", "invest", "group",
-      "exkluzívn", "v zastúpení", "v ponuke", "ponúkame",
-      "rk ", "rk:", "naša kancelária",
-    ];
 
     // reality.sk — blok "offer-item-in" obsahuje jednu ponuku
     const blockRegex = /class="offer-item-in\s*"[\s\S]*?(?=class="offer-item-in\s*"|<\/section|<\/main|$)/gi;
@@ -89,14 +82,12 @@ export const realitySkParser: PortalParser = {
       else if (relUrl.startsWith("/domy") || relUrl.startsWith("/rodinne")) typ = "dom";
       else if (relUrl.startsWith("/pozemky")) typ = "pozemok";
 
-      // Detekcia firmy z textu (nadpis + popis bloku — ak obsahuje agency keyword)
-      const textSearch = (nazov + " " + block).toLowerCase();
-      const isFirma = firemneMarkery.some((m) => textSearch.includes(m));
-      const predajca_typ = isFirma ? "firma" : undefined;  // undefined = neznámy (prejde filtrom len_sukromni)
-
       // Popis z offer-desc
       const descMatch = block.match(/class="offer-desc[^"]*"[^>]*>([\s\S]*?)<\/p>/);
       const popis = descMatch?.[1]?.replace(/<[^>]*>/g, "").trim().slice(0, 500) || undefined;
+
+      // Detekcia firmy: nazov + popis + celý blok. undefined = neznámy (prejde filtrom len_sukromni).
+      const predajca_typ = detectFirma(nazov, popis, block) ? "firma" : undefined;
 
       listings.push({
         portal: PORTAL,

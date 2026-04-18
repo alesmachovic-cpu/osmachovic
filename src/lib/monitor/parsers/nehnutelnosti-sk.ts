@@ -1,6 +1,7 @@
 /* ── Parser pre nehnutelnosti.sk ── */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
+import { detectFirma } from "./shared";
 
 /**
  * nehnutelnosti.sk — najväčší slovenský portál
@@ -128,6 +129,18 @@ export const nehnutelnostiSkParser: PortalParser = {
       const lokMatch = block.match(/(?:class="[^"]*(?:location|address|city)[^"]*"[^>]*>)\s*([^<]+)/i);
       const lokalita = lokMatch?.[1]?.trim() || undefined;
 
+      // Predajca meno — hľadaj v kontajneroch pre inzerenta/agenta/realitku
+      const sellerMatch = block.match(
+        /class="[^"]*(?:advertiser|seller|agent|agency|broker|company|realitka|inzerent)[^"]*"[^>]*>\s*(?:<[^>]*>\s*)*([^<]{2,100})/i
+      );
+      const predajca_meno = sellerMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
+
+      // Detekcia firma/súkromný — match na (nazov + predajca_meno + block).
+      // Ak trafí firemný marker → "firma" (filter len_sukromni ho preskočí).
+      // Inak undefined (prejde ako potenciálne súkromný).
+      const isFirma = detectFirma(nazov, predajca_meno, block);
+      const predajca_typ = isFirma ? "firma" : undefined;
+
       listings.push({
         portal: PORTAL,
         external_id: externalId,
@@ -139,6 +152,8 @@ export const nehnutelnostiSkParser: PortalParser = {
         plocha,
         izby,
         foto_url,
+        predajca_meno,
+        predajca_typ,
         raw_data: {},
       });
     }
@@ -161,14 +176,17 @@ export const nehnutelnostiSkParser: PortalParser = {
 
         const priceMatch = context.match(priceRegex);
         const areaMatch = context.match(areaRegex);
+        const nazovFallback = linkMatch[2].replace(/<[^>]*>/g, "").trim();
+        const isFirma = detectFirma(nazovFallback, context);
 
         listings.push({
           portal: PORTAL,
           external_id: externalId,
           url: `${BASE_URL}${href}`,
-          nazov: linkMatch[2].replace(/<[^>]*>/g, "").trim(),
+          nazov: nazovFallback,
           cena: priceMatch ? parseFloat(priceMatch[1].replace(/\s/g, "").replace(",", ".")) : undefined,
           plocha: areaMatch ? parseFloat(areaMatch[1].replace(",", ".")) : undefined,
+          predajca_typ: isFirma ? "firma" : undefined,
           raw_data: {},
         });
       }
