@@ -6,10 +6,17 @@
 // Zámerne NEobsahujú "invest"/"group" — slová "investícia"/"investor" sú bežné
 // v súkromných inzerátoch ("ideálne na investíciu", "pre investora").
 const FIREMNE_MARKERY: readonly string[] = [
+  // Právne formy
   "s.r.o", "s. r. o", "a.s.", "a. s.", "spol.",
+  // Anglické / medzinárodné
   "realit", "estate", "broker", "property",
+  // Typické slovenské RK formulácie
   "exkluzívn", "v zastúpení", "v ponuke", "ponúkame",
   " rk ", " rk:", "naša kancelária",
+  // Známe slovenské RK brandy (často ako prefix v názve inzerátu)
+  "herrys", "mikelssen", "re/max", "remax", "century 21",
+  "lexxus", "trigon", "sapientia", "bond reality",
+  "frank zicher", "fincentrum", "vianema",
 ];
 
 /**
