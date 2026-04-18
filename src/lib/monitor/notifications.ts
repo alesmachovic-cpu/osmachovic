@@ -68,7 +68,7 @@ export async function sendEmailNotification(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "OS Machovič <noreply@vianema.sk>",
+        from: "Machovič CRM Monitor <onboarding@resend.dev>",  // TODO: zmeň na noreply@vianema.sk keď overíš doménu v Resend
         to: managerEmail,
         subject,
         html,

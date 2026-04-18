@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import {
   PORTALS,
   ALL_PORTALS,
+  PORTALS_NO_SCRAPINGBEE,
   fetchPage,
   sendEmailNotification,
   sendTelegramNotification,
@@ -179,12 +180,22 @@ async function processFilter(
       if (!parser) continue;
 
       // 1. Stiahni HTML
+      // reality.sk a bazos.sk fungujú cez priamy fetch (bez ScrapingBee) → šetrí credits
+      // Ostatné (nehnutelnosti.sk, byty.sk, topreality.sk) → ScrapingBee s JS renderingom
       const searchUrl = parser.buildSearchUrl(filter);
-      const { html } = await fetchPage({
-        url: searchUrl,
-        renderJs: true,
-        waitMs: 2000, // počkaj na JS rendering
-      });
+      const needsJs = !PORTALS_NO_SCRAPINGBEE.includes(portalName);
+      let html = "";
+      try {
+        const result = await fetchPage({
+          url: searchUrl,
+          renderJs: needsJs,
+          waitMs: needsJs ? 2000 : 0,
+        });
+        html = result.html;
+      } catch (e) {
+        console.warn(`[scrape] ${portalName} fetch failed:`, e);
+        continue; // preskoč tento portál, skús ďalší
+      }
 
       // 2. Parsuj inzeráty
       const listings = parser.parseListings(html);

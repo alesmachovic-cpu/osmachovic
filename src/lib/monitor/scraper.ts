@@ -71,7 +71,7 @@ async function fetchViaScrapingBee(
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000); // 25s timeout (Vercel = 30s)
+  const timeout = setTimeout(() => controller.abort(), 18000); // 18s timeout (Vercel 30s - buffer pre ostatné portály)
 
   try {
     const res = await fetch(`${SCRAPINGBEE_API}?${params.toString()}`, {
