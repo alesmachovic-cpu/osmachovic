@@ -767,6 +767,26 @@ export default function NastaveniaPage() {
                         borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)",
                       }}>Heslo</button>
                       {acc.id !== "ales" && (
+                        <button onClick={async () => {
+                          if (!confirm(`Resetovať heslo pre ${acc.name}? Vygeneruje sa dočasné heslo ktoré môžeš poslať maklerovi.`)) return;
+                          try {
+                            const res = await fetch("/api/users/reset-password", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ user_id: acc.id }),
+                            });
+                            const body = await res.json();
+                            if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
+                            // Skopíruj do clipboardu + zobraz
+                            try { await navigator.clipboard.writeText(body.temp_password); } catch { /* ignore */ }
+                            alert(`✅ Heslo resetované pre ${acc.name}\n\nDočasné heslo (skopírované do schránky):\n\n${body.temp_password}\n\nPošli ho maklerovi bezpečným kanálom (SMS / osobne).`);
+                          } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
+                        }} style={{
+                          padding: "5px 10px", background: "#FEF3C7", border: "1px solid #FDE68A",
+                          borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#92400E",
+                        }}>🔑 Reset</button>
+                      )}
+                      {acc.id !== "ales" && (
                         <button onClick={() => { if (confirm(`Odstrániť účet ${acc.name}?`)) deleteAccount(acc.id); }} style={{
                           padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)",
                           borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#EF4444",

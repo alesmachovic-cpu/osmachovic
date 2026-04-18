@@ -835,6 +835,60 @@ export default function KlientDetailPage() {
       </div>
 
       {/* Klient karta — hlavné info */}
+      {/* ═══ LV mismatch banner — VŽDY VIDITEĽNÝ keď LV existuje a údaje klienta sa nezhodujú ═══ */}
+      {klient.lv_data && isOwner && (() => {
+        const lv = klient.lv_data as Record<string, unknown>;
+        const majiteliaArr = (lv.majitelia as Array<{ meno?: string }> | undefined) ?? [];
+        const owners: string[] = [];
+        for (const m of majiteliaArr.filter(mm => mm.meno)) {
+          const parts = m.meno!.split(/\s+a\s+/i).map(n => n.trim()).filter(n => n.length > 2);
+          owners.push(...(parts.length > 1 ? parts : [m.meno!]));
+        }
+        const obecLv = lv.obec ? String(lv.obec) : "";
+        const nameCur = (klient.meno || "").trim().toLowerCase();
+        const nameOk = !nameCur || owners.length === 0 ||
+          owners.some(n => n.toLowerCase() === nameCur || nameCur.includes(n.toLowerCase()) || n.toLowerCase().includes(nameCur));
+        const locCur = (klient.lokalita || "").trim().toLowerCase();
+        const locOk = !obecLv || !locCur || locCur === obecLv.toLowerCase() ||
+          locCur.includes(obecLv.toLowerCase()) || obecLv.toLowerCase().includes(locCur);
+
+        if (nameOk && locOk) return null;
+
+        return (
+          <div style={{
+            marginBottom: "16px", padding: "14px 18px",
+            background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "12px",
+            display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap",
+          }}>
+            <span style={{ fontSize: "20px" }}>⚠️</span>
+            <div style={{ flex: 1, minWidth: "250px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: "#92400E", marginBottom: "2px" }}>
+                Údaje klienta sa nezhodujú s LV
+              </div>
+              <div style={{ fontSize: "12px", color: "#92400E" }}>
+                {!nameOk && <>Meno: <strong>{klient.meno}</strong> vs LV: <strong>{owners[0]}</strong>{owners.length > 1 ? ` (+${owners.length - 1})` : ""}</>}
+                {!nameOk && !locOk && <> · </>}
+                {!locOk && <>Lokalita: <strong>{klient.lokalita || "—"}</strong> vs LV: <strong>{obecLv}</strong></>}
+              </div>
+            </div>
+            <button onClick={() => {
+              const okres = lv.okres ? String(lv.okres) : "";
+              setLvEditOwners(owners);
+              setLvEditObec(obecLv);
+              setLvEditOkres(okres);
+              setLvEditPickedOwner(owners[0] || "");
+              setLvEditPickedLok(obecLv);
+              setLvEditFixName(!nameOk);
+              setLvEditFixLok(!locOk);
+              setShowLvEditModal(true);
+            }} style={{
+              padding: "8px 16px", background: "#D97706", color: "#fff",
+              border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+            }}>Upraviť podľa LV</button>
+          </div>
+        );
+      })()}
+
       <div style={{
         ...cardSt, marginBottom: "20px",
         display: "grid", gridTemplateColumns: "auto 1fr auto", gap: "20px", alignItems: "center",
