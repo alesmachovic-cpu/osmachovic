@@ -76,7 +76,7 @@ export async function POST(request: Request) {
           method: "POST",
           headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            from: "Machovič CRM <noreply@vianema.sk>",
+            from: "Machovič CRM <onboarding@resend.dev>",  // TODO: zmeň na noreply@vianema.sk keď overíš doménu v Resend
             to: toEmail,
             subject: "Obnovenie hesla — Machovič CRM",
             html: `
