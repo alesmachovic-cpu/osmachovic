@@ -175,84 +175,79 @@ async function processFilter(
   const newItems: (ScrapedInzerat & { db_id?: string })[] = [];
 
   try {
-    for (const portalName of portalsToScrape) {
-      const parser = PORTALS[portalName];
-      if (!parser) continue;
-
-      // 1. Stiahni HTML
-      // reality.sk a bazos.sk fungujú cez priamy fetch (bez ScrapingBee) → šetrí credits
-      // Ostatné (nehnutelnosti.sk, byty.sk, topreality.sk) → ScrapingBee s JS renderingom
-      const searchUrl = parser.buildSearchUrl(filter);
-      const needsJs = !PORTALS_NO_SCRAPINGBEE.includes(portalName);
-      let html = "";
-      try {
-        const result = await fetchPage({
-          url: searchUrl,
-          renderJs: needsJs,
-          waitMs: needsJs ? 2000 : 0,
-        });
-        html = result.html;
-      } catch (e) {
-        console.warn(`[scrape] ${portalName} fetch failed:`, e);
-        continue; // preskoč tento portál, skús ďalší
-      }
-
-      // 2. Parsuj inzeráty
-      let listings = parser.parseListings(html);
-
-      // Ak filter.len_sukromni = true, preskočíme realitky/firmy
-      if (filter.len_sukromni) {
-        listings = listings.filter((l) => l.predajca_typ !== "firma");
-      }
-
-      totalFound += listings.length;
-
-      if (listings.length === 0) continue;
-
-      // 3. Upsert do DB — UNIQUE(portal, external_id) zabráni duplikátom
-      for (const listing of listings) {
-        const { data, error } = await sb
-          .from("monitor_inzeraty")
-          .upsert(
-            {
-              portal: listing.portal,
-              external_id: listing.external_id,
-              url: listing.url,
-              nazov: listing.nazov,
-              typ: listing.typ,
-              lokalita: listing.lokalita,
-              cena: listing.cena,
-              mena: listing.mena || "EUR",
-              plocha: listing.plocha,
-              izby: listing.izby,
-              popis: listing.popis,
-              foto_url: listing.foto_url,
-              predajca_meno: listing.predajca_meno,
-              predajca_telefon: listing.predajca_telefon,
-              predajca_typ: listing.predajca_typ,
-              raw_data: listing.raw_data || {},
-              last_seen_at: new Date().toISOString(),
-              is_active: true,
-            },
-            {
-              onConflict: "portal,external_id",
-              ignoreDuplicates: false,
-            }
-          )
-          .select("id, first_seen_at, last_seen_at");
-
-        if (error) {
-          console.error(`[scrape] upsert error for ${listing.external_id}:`, error);
-          continue;
+    // 1. Stiahni + parsuj všetky portály PARALELNE (šetrí ~15-20s vs sekvenčne).
+    //    reality.sk a bazos.sk idú cez priamy fetch (scraper.ts má whitelist).
+    //    Ostatné cez ScrapingBee s JS renderingom.
+    const portalResults = await Promise.all(
+      portalsToScrape.map(async (portalName) => {
+        const parser = PORTALS[portalName];
+        if (!parser) return { portalName, listings: [] as ScrapedInzerat[] };
+        const needsJs = !PORTALS_NO_SCRAPINGBEE.includes(portalName);
+        try {
+          const { html } = await fetchPage({
+            url: parser.buildSearchUrl(filter),
+            renderJs: needsJs,
+            waitMs: needsJs ? 2000 : 0,
+          });
+          return { portalName, listings: parser.parseListings(html) };
+        } catch (e) {
+          console.warn(`[scrape] ${portalName} fetch failed:`, e);
+          return { portalName, listings: [] as ScrapedInzerat[] };
         }
+      })
+    );
 
-        if (data?.[0]) {
-          const row = data[0];
-          // Ak first_seen_at a last_seen_at sú rovnaké, je to nový
+    // 2. Zlúč listings z všetkých portálov + filtruj firmy ak treba
+    const allListings: ScrapedInzerat[] = [];
+    for (const { listings } of portalResults) {
+      const toAdd = filter.len_sukromni
+        ? listings.filter((l) => l.predajca_typ !== "firma")
+        : listings;
+      allListings.push(...toAdd);
+    }
+    totalFound = allListings.length;
+
+    // 3. Upsert do DB — PARALELNE (chunky po 20 aby sme neukatiovali Supabase)
+    const upsertRows = allListings.map((listing) => ({
+      portal: listing.portal,
+      external_id: listing.external_id,
+      url: listing.url,
+      nazov: listing.nazov,
+      typ: listing.typ,
+      lokalita: listing.lokalita,
+      cena: listing.cena,
+      mena: listing.mena || "EUR",
+      plocha: listing.plocha,
+      izby: listing.izby,
+      popis: listing.popis,
+      foto_url: listing.foto_url,
+      predajca_meno: listing.predajca_meno,
+      predajca_telefon: listing.predajca_telefon,
+      predajca_typ: listing.predajca_typ,
+      raw_data: listing.raw_data || {},
+      last_seen_at: new Date().toISOString(),
+      is_active: true,
+    }));
+
+    if (upsertRows.length > 0) {
+      const { data, error } = await sb
+        .from("monitor_inzeraty")
+        .upsert(upsertRows, {
+          onConflict: "portal,external_id",
+          ignoreDuplicates: false,
+        })
+        .select("id, portal, external_id, first_seen_at, last_seen_at");
+
+      if (error) {
+        console.error("[scrape] batch upsert error:", error);
+      } else if (data) {
+        const byKey = new Map(data.map((r) => [`${r.portal}:${r.external_id}`, r]));
+        for (const listing of allListings) {
+          const row = byKey.get(`${listing.portal}:${listing.external_id}`);
+          if (!row) continue;
           const isNew =
             row.first_seen_at === row.last_seen_at ||
             new Date(row.first_seen_at).getTime() > Date.now() - 60000;
-
           if (isNew) {
             newCount++;
             newItems.push({ ...listing, db_id: row.id });
