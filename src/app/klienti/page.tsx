@@ -62,6 +62,16 @@ function KlientiContent() {
   const [lvUploading, setLvUploading] = useState(false);
   const [lvUploadErr, setLvUploadErr] = useState("");
 
+  // Unified LV edit modal — vyskakuje HNEĎ po LV uploade
+  const [lvEditModalKlient, setLvEditModalKlient] = useState<Klient | null>(null);
+  const [lvEditOwners, setLvEditOwners] = useState<string[]>([]);
+  const [lvEditPickedOwner, setLvEditPickedOwner] = useState("");
+  const [lvEditPickedLok, setLvEditPickedLok] = useState("");
+  const [lvEditPickedAdresa, setLvEditPickedAdresa] = useState("");
+  const [lvEditFixName, setLvEditFixName] = useState(true);
+  const [lvEditFixLok, setLvEditFixLok] = useState(true);
+  const [lvEditSaving, setLvEditSaving] = useState(false);
+
   async function handleQuickLvUpload(e: React.ChangeEvent<HTMLInputElement>, klientId: string) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -81,9 +91,33 @@ function KlientiContent() {
         body: JSON.stringify({ pdf_base64: base64, filename: file.name }),
       });
       if (!res.ok) throw new Error(await res.text());
-      await supabase.from("klienti").update({ lv_data: await res.json() }).eq("id", klientId);
+      const parsed = await res.json();
+      await supabase.from("klienti").update({ lv_data: parsed }).eq("id", klientId);
       setLvPromptKlient(null);
-      fetchKlienti();
+      await fetchKlienti();
+
+      // Otvor edit modal HNEĎ po analýze
+      const klient = klienti.find(k => k.id === klientId) || lvPromptKlient;
+      if (klient) {
+        const majArr = (parsed.majitelia as Array<{ meno?: string }> | undefined) ?? [];
+        const owners: string[] = [];
+        for (const m of majArr.filter(mm => mm.meno)) {
+          const parts = m.meno!.split(/\s+a\s+/i).map(n => n.trim()).filter(n => n.length > 2);
+          owners.push(...(parts.length > 1 ? parts : [m.meno!]));
+        }
+        const obecLv = parsed.obec ? String(parsed.obec) : "";
+        const ulicaLv = parsed.ulica ? String(parsed.ulica) : "";
+        const supisneLv = parsed.supisne_cislo ? String(parsed.supisne_cislo) : "";
+        const adresaLv = [ulicaLv, supisneLv, obecLv].filter(Boolean).join(" ").trim();
+
+        setLvEditOwners(owners);
+        setLvEditPickedOwner(owners[0] || "");
+        setLvEditPickedLok(obecLv);
+        setLvEditPickedAdresa(adresaLv);
+        setLvEditFixName(!!owners.length);
+        setLvEditFixLok(!!obecLv);
+        setLvEditModalKlient({ ...klient, lv_data: parsed } as Klient);
+      }
     } catch (err) {
       setLvUploadErr("Chyba: " + (err as Error).message.slice(0, 100));
     } finally {
@@ -594,6 +628,144 @@ function KlientiContent() {
               }}>
                 {statusSaving ? "Ukladám..." : statusModal.status === "dohodnuty_naber" ? "Potvrdiť náber" : "Uložiť pripomienku"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LV edit modal — vyskočí HNEĎ po analýze LV, umožní upraviť meno + lokalitu + adresu */}
+      {lvEditModalKlient && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1001, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+          onClick={() => !lvEditSaving && setLvEditModalKlient(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "var(--bg-surface)", borderRadius: "20px", padding: "28px",
+            maxWidth: "480px", width: "100%",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+            maxHeight: "90vh", overflowY: "auto",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+              <span style={{ fontSize: "22px" }}>📋</span>
+              <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                LV analyzovaný — upraviť klienta?
+              </h2>
+            </div>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 18px" }}>
+              Skontroluj / uprav údaje podľa LV pred uložením.
+            </p>
+
+            {lvEditOwners.length > 0 && (
+              <div style={{ marginBottom: "14px", padding: "12px", background: "var(--bg-elevated)", borderRadius: "10px", border: "1px solid var(--border)" }}>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "8px", cursor: "pointer" }}>
+                  <input type="checkbox" checked={lvEditFixName} onChange={(e) => setLvEditFixName(e.target.checked)} style={{ marginTop: "3px" }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "4px" }}>
+                      Premenovať klienta
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "8px" }}>
+                      Z &quot;{lvEditModalKlient.meno}&quot; na vlastníka z LV:
+                    </div>
+                    <select value={lvEditPickedOwner} onChange={(e) => setLvEditPickedOwner(e.target.value)} disabled={!lvEditFixName}
+                      style={{ width: "100%", padding: "8px 12px", fontSize: "13px", fontWeight: 600,
+                        background: "var(--bg-surface)", color: "var(--text-primary)",
+                        border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer",
+                        opacity: lvEditFixName ? 1 : 0.5 }}>
+                      {lvEditOwners.map((n, i) => <option key={i} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {lvEditPickedLok && (
+              <div style={{ marginBottom: "14px", padding: "12px", background: "var(--bg-elevated)", borderRadius: "10px", border: "1px solid var(--border)" }}>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "8px", cursor: "pointer" }}>
+                  <input type="checkbox" checked={lvEditFixLok} onChange={(e) => setLvEditFixLok(e.target.checked)} style={{ marginTop: "3px" }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "4px" }}>
+                      Lokalita nehnuteľnosti (obec z LV)
+                    </div>
+                    <input type="text" value={lvEditPickedLok} onChange={(e) => setLvEditPickedLok(e.target.value)} disabled={!lvEditFixLok}
+                      style={{ width: "100%", padding: "8px 12px", fontSize: "13px", fontWeight: 600,
+                        background: "var(--bg-surface)", color: "var(--text-primary)",
+                        border: "1px solid var(--border)", borderRadius: "8px",
+                        opacity: lvEditFixLok ? 1 : 0.5 }} />
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+                      Súčasná: &quot;{lvEditModalKlient.lokalita || "—"}&quot;
+                    </div>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {lvEditPickedAdresa && (
+              <div style={{ marginBottom: "18px", padding: "12px", background: "var(--bg-elevated)", borderRadius: "10px", border: "1px solid var(--border)" }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "4px" }}>
+                  📍 Presná adresa nehnuteľnosti (do kalendára)
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "8px" }}>
+                  Táto adresa pôjde do Google Kalendára. Je to správne?
+                </div>
+                <input type="text" value={lvEditPickedAdresa} onChange={(e) => setLvEditPickedAdresa(e.target.value)}
+                  style={{ width: "100%", padding: "8px 12px", fontSize: "13px", fontWeight: 600,
+                    background: "var(--bg-surface)", color: "var(--text-primary)",
+                    border: "1px solid var(--border)", borderRadius: "8px" }} />
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button onClick={() => setLvEditModalKlient(null)} disabled={lvEditSaving}
+                style={{
+                  flex: 1, padding: "10px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
+                  border: "1px solid var(--border)", borderRadius: "10px",
+                  fontSize: "13px", fontWeight: 600, cursor: lvEditSaving ? "default" : "pointer",
+                }}>Ponechať pôvodné</button>
+              <button
+                disabled={lvEditSaving}
+                onClick={async () => {
+                  if (!lvEditModalKlient) return;
+                  setLvEditSaving(true);
+                  try {
+                    const updates: Record<string, unknown> = {};
+                    if (lvEditFixName && lvEditPickedOwner) updates.meno = lvEditPickedOwner;
+                    if (lvEditFixLok && lvEditPickedLok) updates.lokalita = lvEditPickedLok;
+                    if (Object.keys(updates).length > 0) {
+                      await supabase.from("klienti").update(updates).eq("id", lvEditModalKlient.id);
+                    }
+                    // Sync Google Kalendár
+                    const calEventId = (lvEditModalKlient as { calendar_event_id?: string | null }).calendar_event_id;
+                    if (calEventId && user?.id) {
+                      const finalMeno = updates.meno || lvEditModalKlient.meno;
+                      const isNaber = lvEditModalKlient.status === "dohodnuty_naber" || lvEditModalKlient.status === "nabrany";
+                      const prefix = isNaber ? "Náber" : "Zavolať";
+                      const payload: Record<string, unknown> = {
+                        userId: user.id, eventId: calEventId,
+                        summary: `${prefix} — ${finalMeno}`,
+                      };
+                      if (lvEditPickedAdresa) {
+                        payload.location = lvEditPickedAdresa;
+                        payload.description = [
+                          `Adresa: ${lvEditPickedAdresa}`,
+                          lvEditModalKlient.telefon && `Tel: ${lvEditModalKlient.telefon}`,
+                          lvEditModalKlient.email && `Email: ${lvEditModalKlient.email}`,
+                        ].filter(Boolean).join("\n");
+                      }
+                      fetch("/api/google/calendar", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                      }).catch(() => {});
+                    }
+                    setLvEditModalKlient(null);
+                    await fetchKlienti();
+                  } finally { setLvEditSaving(false); }
+                }}
+                style={{
+                  flex: 1, padding: "10px", background: "#374151", color: "#fff",
+                  border: "none", borderRadius: "10px",
+                  fontSize: "13px", fontWeight: 600,
+                  cursor: lvEditSaving ? "default" : "pointer",
+                  opacity: lvEditSaving ? 0.5 : 1,
+                }}>{lvEditSaving ? "Ukladám..." : "Uložiť"}</button>
             </div>
           </div>
         </div>
