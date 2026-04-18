@@ -55,10 +55,21 @@ export async function GET(request: Request) {
 
     const listings = parser.parseListings(html);
 
-    // Diagnostika HTML — extrahuj všetky unikátne a href vzory s /číslami/
-    // + unikátne div/article class mená (filtrované na tie čo vyzerajú relevantne)
-    const hrefMatches = Array.from(html.matchAll(/href="(\/[^"]*\/\d{5,}[^"]*)"/g)).map((m) => m[1]);
-    const uniqueHrefs = Array.from(new Set(hrefMatches)).slice(0, 15);
+    // Diagnostika HTML — extrahuj ukážky href odkazov
+    const hrefWithNum = Array.from(html.matchAll(/href="(\/[^"]*\/\d{5,}[^"]*)"/g)).map((m) => m[1]);
+    const uniqueHrefs = Array.from(new Set(hrefWithNum)).slice(0, 10);
+
+    // Všetky href obsahujúce /byty/, /domy/, /detail/, /ponuka/, /byt-, /dom- atď.
+    const listingHrefs = Array.from(
+      html.matchAll(/href="(\/(?:byty|domy|pozemky|detail|ponuka|ponuky|byt-|dom-|inzerat)[^"]*)"/g)
+    ).map((m) => m[1]);
+    const uniqueListingHrefs = Array.from(new Set(listingHrefs)).slice(0, 15);
+
+    // Absolútne URL na nehnutelnosti/byty/byt/detail
+    const absHrefs = Array.from(
+      html.matchAll(/href="(https?:\/\/[^"]*(?:byty|domy|byt-|dom-|detail|ponuka)[^"]*)"/g)
+    ).map((m) => m[1]);
+    const uniqueAbsHrefs = Array.from(new Set(absHrefs)).slice(0, 10);
 
     const classMatches = Array.from(
       html.matchAll(/<(?:div|article|li|section)[^>]*class="([^"]{5,120})"/g)
@@ -93,6 +104,8 @@ export async function GET(request: Request) {
         priceOccurrences: priceCount,
         izbyOccurrences: izbyCount,
         uniqueHrefsWithNumbers: uniqueHrefs,
+        listingLikeHrefs: uniqueListingHrefs,
+        absoluteListingHrefs: uniqueAbsHrefs,
         topContainerClasses: topClasses,
         hasNextData: !!nextDataMatch,
         nextDataPreview,
