@@ -35,8 +35,20 @@ interface FetchPageResult {
  * Stiahne HTML stránku cez ScrapingBee API.
  * Fallback na priamy fetch ak nemáme API kľúč.
  */
+/** Domény ktoré fungujú cez priamy fetch (server-rendered HTML, no anti-bot). */
+const DIRECT_FETCH_DOMAINS = ["reality.sk", "bazos.sk"];
+
 export async function fetchPage(options: FetchPageOptions): Promise<FetchPageResult> {
   const apiKey = process.env.SCRAPINGBEE_API_KEY;
+
+  // Ak doména funguje bez ScrapingBee, vždy použijeme priamy fetch —
+  // je ~10× rýchlejší a šetrí kredity. Platí aj keď ScrapingBee API key máme.
+  try {
+    const host = new URL(options.url).hostname;
+    if (DIRECT_FETCH_DOMAINS.some((d) => host.includes(d))) {
+      return await fetchDirect(options.url);
+    }
+  } catch { /* URL parse fail — fallback na štandardný flow */ }
 
   // Ak nemáme ScrapingBee, skúsime priamy fetch
   if (!apiKey) {
