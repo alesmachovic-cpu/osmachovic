@@ -76,7 +76,7 @@ const S = {
   label: { fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.04em", display: "block", marginBottom: "6px" },
   input: { width: "100%", height: "38px", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0 12px", fontSize: "14px", color: "var(--text-primary)", outline: "none", transition: "all 0.15s" },
   select: { width: "100%", height: "38px", background: "var(--bg-base)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "0 12px", fontSize: "14px", color: "var(--text-primary)", outline: "none", cursor: "pointer" },
-  btnPrimary: { height: "38px", padding: "0 18px", background: "var(--text-primary)", color: "#fff", border: "none", borderRadius: "var(--radius-sm)", fontSize: "14px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" },
+  btnPrimary: { height: "38px", padding: "0 18px", background: "var(--text-primary)", color: "var(--bg-base)", border: "none", borderRadius: "var(--radius-sm)", fontSize: "14px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" },
   btnSecondary: { height: "38px", padding: "0 14px", background: "var(--bg-base)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", fontSize: "13px", fontWeight: 500, cursor: "pointer" },
 };
 
@@ -181,7 +181,7 @@ export default function MonitorPage() {
   const [viewTyp, setViewTyp] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
-  const [lenSukromni, setLenSukromni] = useState(false);
+  const [lenSukromni, setLenSukromni] = useState(true);  // Default: zobraz len súkromných
 
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null);
@@ -236,6 +236,7 @@ export default function MonitorPage() {
     nazov: "", portal: "reality.sk", typ: "byt", lokalita: "",
     cena_od: "", cena_do: "", search_url: "",
     notify_email: true, notify_telegram: false,
+    len_sukromni: true,  // Default: len súkromní predajcovia
   });
 
   const createFilter = async () => {
@@ -254,7 +255,7 @@ export default function MonitorPage() {
     });
     if (res.ok) {
       setShowNewFilter(false);
-      setNf({ nazov: "", portal: "reality.sk", typ: "byt", lokalita: "", cena_od: "", cena_do: "", search_url: "", notify_email: true, notify_telegram: false });
+      setNf({ nazov: "", portal: "reality.sk", typ: "byt", lokalita: "", cena_od: "", cena_do: "", search_url: "", notify_email: true, notify_telegram: false, len_sukromni: true });
       loadFiltre();
       showToast("Filter vytvorený");
     } else {
@@ -315,7 +316,7 @@ export default function MonitorPage() {
         <div style={{
           position: "fixed", top: "16px", right: "16px", zIndex: 100,
           background: toast.type === "error" ? "var(--danger)" : "var(--text-primary)",
-          color: "#fff", padding: "12px 18px", borderRadius: "var(--radius-md)",
+          color: "var(--bg-base)", padding: "12px 18px", borderRadius: "var(--radius-md)",
           boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
           fontSize: "13px", fontWeight: 500, animation: "slideIn 0.25s ease",
           display: "flex", alignItems: "center", gap: "10px",
@@ -591,6 +592,24 @@ export default function MonitorPage() {
                     💡 Tip: nastav si filter na portáli a skopíruj URL z prehliadača
                   </p>
                 </div>
+                {/* Len súkromní — highlight keďže je default */}
+                <div style={{ gridColumn: "1 / -1", padding: "12px", background: "var(--warning-light)", border: "1px solid var(--warning)", borderRadius: "var(--radius-sm)" }}>
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", fontSize: "14px", color: "var(--warning)", cursor: "pointer", fontWeight: 600 }}>
+                    <input
+                      type="checkbox"
+                      checked={nf.len_sukromni}
+                      onChange={e => setNf({ ...nf, len_sukromni: e.target.checked })}
+                      style={{ width: "18px", height: "18px", marginTop: "2px", cursor: "pointer" }}
+                    />
+                    <div>
+                      👤 Len súkromní predajcovia
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 400, marginTop: "2px" }}>
+                        Odfiltruje realitné kancelárie (odporúčané — súkromní predajcovia sú potenciálne leady)
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
                 <div style={{ gridColumn: "1 / -1", display: "flex", gap: "24px", paddingTop: "4px" }}>
                   <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "var(--text-secondary)", cursor: "pointer" }}>
                     <input

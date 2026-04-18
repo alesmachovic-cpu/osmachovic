@@ -41,6 +41,7 @@ export async function POST(request: Request) {
       search_url: body.search_url || null,
       notify_email: body.notify_email ?? true,
       notify_telegram: body.notify_telegram ?? false,
+      len_sukromni: body.len_sukromni ?? true,
       is_active: true,
       makler_id: body.makler_id || null,
     })
@@ -80,6 +81,7 @@ export async function PUT(request: Request) {
       search_url: body.search_url,
       notify_email: body.notify_email,
       notify_telegram: body.notify_telegram,
+      len_sukromni: body.len_sukromni,
       is_active: body.is_active,
       updated_at: new Date().toISOString(),
     })

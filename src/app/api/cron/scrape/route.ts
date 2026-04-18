@@ -198,7 +198,13 @@ async function processFilter(
       }
 
       // 2. Parsuj inzeráty
-      const listings = parser.parseListings(html);
+      let listings = parser.parseListings(html);
+
+      // Ak filter.len_sukromni = true, preskočíme realitky/firmy
+      if (filter.len_sukromni) {
+        listings = listings.filter((l) => l.predajca_typ !== "firma");
+      }
+
       totalFound += listings.length;
 
       if (listings.length === 0) continue;

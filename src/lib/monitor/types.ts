@@ -36,6 +36,7 @@ export interface MonitorFilter {
   notify_email: boolean;
   notify_telegram: boolean;
   is_active: boolean;
+  len_sukromni?: boolean;  // ak true, scraper uloží len predajca_typ=sukromny
   makler_id?: string | null;
 }
 
