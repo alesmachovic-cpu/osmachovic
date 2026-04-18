@@ -3,9 +3,11 @@
 // Markery ktoré indikujú firmu/realitku v texte inzerátu alebo v mene predajcu.
 // Používajú sa prefixy/sub-stringy bezpečné voči false positive v slovenskom texte
 // (napr. "realit" chytí "reality", "realitná", "realitka", ale nie bežné slová).
+// Zámerne NEobsahujú "invest"/"group" — slová "investícia"/"investor" sú bežné
+// v súkromných inzerátoch ("ideálne na investíciu", "pre investora").
 const FIREMNE_MARKERY: readonly string[] = [
   "s.r.o", "s. r. o", "a.s.", "a. s.", "spol.",
-  "realit", "invest", "group", "estate", "broker", "property",
+  "realit", "estate", "broker", "property",
   "exkluzívn", "v zastúpení", "v ponuke", "ponúkame",
   " rk ", " rk:", "naša kancelária",
 ];

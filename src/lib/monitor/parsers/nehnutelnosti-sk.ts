@@ -68,8 +68,6 @@ export const nehnutelnostiSkParser: PortalParser = {
     const detailRegex =
       /href="((?:https?:\/\/[^"]*nehnutelnosti\.sk)?\/detail\/(?!developersky-projekt\/)([A-Za-z0-9_-]{8,})\/([^"\s]+?))"/g;
 
-    const priceRegex = /(\d[\d\s]*)\s*€/;
-    const areaRegex = /(\d+(?:[,.]\d+)?)\s*m[²2]/;
     const roomRegex = /(\d+)\s*[- ]?izb/i;
     const imgRegex = /<img[^>]*src="([^"]+(?:\.jpe?g|\.png|\.webp|nehnutelnosti[^"]+))"/i;
 
@@ -113,11 +111,16 @@ export const nehnutelnostiSkParser: PortalParser = {
         }
       }
 
-      // Plocha
-      const areaMatch = context.match(areaRegex);
-      const plocha = areaMatch
-        ? parseFloat(areaMatch[1].replace(",", "."))
-        : undefined;
+      // Plocha — berieme prvú hodnotu >= 15 (menej ako 15 m² pre byt/dom je nerealistické;
+      // menšie čísla bývajú "5 m od MHD" v popise, alebo počítadlá izieb).
+      let plocha: number | undefined;
+      for (const am of context.matchAll(/(\d+(?:[,.]\d+)?)\s*m[²2]/g)) {
+        const val = parseFloat(am[1].replace(",", "."));
+        if (!isNaN(val) && val >= 15 && val < 10000) {
+          plocha = val;
+          break;
+        }
+      }
 
       // Izby — "3-izbový", "3 izb", "3izb"
       const roomMatch = context.match(roomRegex);
