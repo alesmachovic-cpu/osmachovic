@@ -46,8 +46,10 @@ interface Filter {
 const PORTALS = [
   { value: "vsetky", label: "Všetky portály" },
   { value: "reality.sk", label: "Reality.sk" },
-  { value: "nehnutelnosti.sk", label: "Nehnuteľnosti.sk" },
-  { value: "topreality.sk", label: "TopReality.sk" },
+  { value: "bazos.sk", label: "Bazos.sk (najviac súkromných)" },
+  { value: "nehnutelnosti.sk", label: "Nehnuteľnosti.sk (⚡ ScrapingBee)" },
+  { value: "byty.sk", label: "Byty.sk (⚡ ScrapingBee)" },
+  { value: "topreality.sk", label: "TopReality.sk (⚡ ScrapingBee)" },
 ];
 const TYPY = [
   { value: "", label: "Všetky typy" },
@@ -63,6 +65,8 @@ const SORT_OPTIONS = [
 const PORTAL_DOT: Record<string, string> = {
   "nehnutelnosti.sk": "#007AFF",
   "reality.sk": "#34C759",
+  "bazos.sk": "#FF9500",
+  "byty.sk": "#5AC8FA",
   "topreality.sk": "#AF52DE",
 };
 
