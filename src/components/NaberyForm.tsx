@@ -245,6 +245,20 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
     for (const [key, regex] of Object.entries(map)) if (regex.test(klientNotes)) v[key] = true;
     return v;
   });
+
+  // Výmery doplnkov (m²) — zobrazujú sa keď je checkbox zaškrtnutý
+  // Kľúče: balkon, loggia, terasa, zahrada, garaz
+  const [vymery, setVymery] = useState<Record<string, string>>(() => {
+    const vm: Record<string, string> = {};
+    // Parse from existing lv_data if any (auto-fill from LV)
+    const lv = klient.lv_data as Record<string, unknown> | null | undefined;
+    if (lv) {
+      if (lv.balkon_plocha) vm.balkon = String(lv.balkon_plocha);
+      if (lv.loggia_plocha) vm.loggia = String(lv.loggia_plocha);
+      if (lv.terasa_plocha) vm.terasa = String(lv.terasa_plocha);
+    }
+    return vm;
+  });
   const [zariadeny, setZariadeny] = useState(() => parseNote([/Zariadený:\s*(.+)/i]));
 
   const [majitel, setMajitel] = useState(klient.meno || "");
@@ -480,7 +494,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       ulica: ulica || null, supisne_cislo: supisneCislo || null, cislo_orientacne: cisloOrientacne || null,
       plocha: plocha ? Number(plocha) : null, stav: stav || null,
       poznamky_vybavenie: poznamkyVybavenie || null,
-      parametre, vybavenie: { ...vybavenie, zariadeny: zariadeny || null }, oznacenie,
+      parametre, vybavenie: { ...vybavenie, zariadeny: zariadeny || null, vymery }, oznacenie,
       majitel: majitel || null, konatel: konatel || null, jednatel: jednatel || null,
       kontakt_majitel: kontaktMajitel || null, uzivatel: uzivatel || null, kontakt_uzivatel: kontaktUzivatel || null,
       predajna_cena: predajnaCena ? Number(predajnaCena) : null,
@@ -992,13 +1006,42 @@ Odpovedaj stručne po slovensky.`;
         {/* ═══ 4. VYBAVENIE — čo je v byte ═══ */}
         <div style={cardSt}>
           <div style={sectionTitle}>🛋️ Vybavenie bytu</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
-            {AMENITY_ITEMS.filter(a => a !== "Výťah").map(a => (
-              <label key={a} style={{ ...checkSt, minHeight: "44px", padding: "8px 0" }}>
-                <input type="checkbox" checked={!!vybavenie[a]} onChange={e => setVybavenie(prev => ({ ...prev, [a]: e.target.checked }))} style={{ width: "20px", height: "20px" }} />
-                {a}
-              </label>
-            ))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
+            {AMENITY_ITEMS.filter(a => a !== "Výťah").map(a => {
+              // Ak je to položka s výmerou (balkón/lodžia/terasa/garáž) → pridaj m² input
+              const vymeraKey = a === "Balkón" ? "balkon"
+                : a === "Lodžia" ? "loggia"
+                : a === "Terasa" ? "terasa"
+                : a === "Garáž" ? "garaz" : null;
+              const isChecked = !!vybavenie[a];
+              return (
+                <div key={a} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <label style={{ ...checkSt, minHeight: "44px", padding: "8px 0" }}>
+                    <input type="checkbox" checked={isChecked}
+                      onChange={e => setVybavenie(prev => ({ ...prev, [a]: e.target.checked }))}
+                      style={{ width: "20px", height: "20px" }} />
+                    {a}
+                  </label>
+                  {vymeraKey && isChecked && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "30px", marginBottom: "4px" }}>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={vymery[vymeraKey] || ""}
+                        onChange={(e) => setVymery(prev => ({ ...prev, [vymeraKey]: e.target.value }))}
+                        placeholder="Výmera"
+                        style={{
+                          width: "90px", padding: "6px 10px", fontSize: "13px",
+                          background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                          borderRadius: "8px", color: "var(--text-primary)",
+                        }}
+                      />
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>m²</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Zariadený */}
@@ -1307,6 +1350,22 @@ Odpovedaj stručne po slovensky.`;
                 <input type="checkbox" checked={zahrada} onChange={e => setZahrada(e.target.checked)} style={{ width: "20px", height: "20px" }} />
                 {zahrada ? "Áno" : "Nie"}
               </label>
+              {zahrada && (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                  <input
+                    type="number" step="0.1"
+                    value={vymery.zahrada || ""}
+                    onChange={(e) => setVymery(prev => ({ ...prev, zahrada: e.target.value }))}
+                    placeholder="Výmera"
+                    style={{
+                      width: "100px", padding: "8px 10px", fontSize: "13px",
+                      background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                      borderRadius: "8px", color: "var(--text-primary)",
+                    }}
+                  />
+                  <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>m²</span>
+                </div>
+              )}
             </div>
           </div>
           <div style={{ marginTop: "16px" }}>
@@ -1328,13 +1387,40 @@ Odpovedaj stručne po slovensky.`;
         {/* 5. VYBAVENIE */}
         <div style={cardSt}>
           <div style={sectionTitle}>🛋️ Vybavenie</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
-            {AMENITY_ITEMS.map(a => (
-              <label key={a} style={{ ...checkSt, minHeight: "44px", padding: "8px 0" }}>
-                <input type="checkbox" checked={!!vybavenie[a]} onChange={e => setVybavenie(prev => ({ ...prev, [a]: e.target.checked }))} style={{ width: "20px", height: "20px" }} />
-                {a}
-              </label>
-            ))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
+            {AMENITY_ITEMS.map(a => {
+              const vymeraKey = a === "Balkón" ? "balkon"
+                : a === "Lodžia" ? "loggia"
+                : a === "Terasa" ? "terasa"
+                : a === "Garáž" ? "garaz" : null;
+              const isChecked = !!vybavenie[a];
+              return (
+                <div key={a} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                  <label style={{ ...checkSt, minHeight: "44px", padding: "8px 0" }}>
+                    <input type="checkbox" checked={isChecked}
+                      onChange={e => setVybavenie(prev => ({ ...prev, [a]: e.target.checked }))}
+                      style={{ width: "20px", height: "20px" }} />
+                    {a}
+                  </label>
+                  {vymeraKey && isChecked && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "30px", marginBottom: "4px" }}>
+                      <input
+                        type="number" step="0.1"
+                        value={vymery[vymeraKey] || ""}
+                        onChange={(e) => setVymery(prev => ({ ...prev, [vymeraKey]: e.target.value }))}
+                        placeholder="Výmera"
+                        style={{
+                          width: "90px", padding: "6px 10px", fontSize: "13px",
+                          background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                          borderRadius: "8px", color: "var(--text-primary)",
+                        }}
+                      />
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>m²</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div style={{ marginTop: "16px" }}>
             <label style={labelSt}>Zariadený</label>
