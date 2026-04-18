@@ -50,10 +50,14 @@ export default function AuthCallback() {
         const pendingLinkId = localStorage.getItem("pending_link_user_id");
         if (pendingLinkId) {
           setStatus("Pripájam Google účet...");
-          const { error: updErr } = await supabase.from("users")
-            .update({ login_email: gmailEmail })
-            .eq("id", pendingLinkId);
-          if (updErr) console.warn("[callback] link update error:", updErr);
+          // Cez API endpoint (admin client) — users tabuľka je chránená RLS
+          try {
+            await fetch(`/api/users?id=${encodeURIComponent(pendingLinkId)}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ login_email: gmailEmail }),
+            });
+          } catch (e) { console.warn("[callback] link update error:", e); }
 
           await supabase.auth.signOut();
           localStorage.removeItem("pending_link_user_id");
@@ -82,11 +86,15 @@ export default function AuthCallback() {
           return;
         }
 
-        // Auto-naviaž login_email ak prvýkrát
+        // Auto-naviaž login_email ak prvýkrát (cez API)
         if (!matched.login_email) {
-          await supabase.from("users")
-            .update({ login_email: gmailEmail })
-            .eq("id", matched.id);
+          try {
+            await fetch(`/api/users?id=${encodeURIComponent(matched.id)}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ login_email: gmailEmail }),
+            });
+          } catch (e) { console.warn("[callback] auto-link error:", e); }
         }
 
         localStorage.setItem("crm_user", matched.id);

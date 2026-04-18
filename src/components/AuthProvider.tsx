@@ -108,24 +108,31 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   async function login(identifier: string, password: string): Promise<string | null> {
-    const q = identifier.trim().toLowerCase();
-    if (!q) return "Zadaj meno alebo email";
+    if (!identifier.trim()) return "Zadaj meno alebo email";
 
-    // Skús nájsť user podľa id, emailu alebo mena
-    const { data: list } = await supabase.from("users").select("*");
-    const accs = (list ?? []) as User[];
-    const acc = accs.find(a =>
-      a.id.toLowerCase() === q ||
-      (a.email || "").toLowerCase() === q ||
-      (a.login_email || "").toLowerCase() === q ||
-      (a.name || "").toLowerCase() === q
-    );
-    if (!acc) return "Účet neexistuje (skontroluj meno/email)";
-    if (acc.password && acc.password !== password) return "Nesprávne heslo";
+    // Cez server API — bcrypt hashovanie + rate limit + audit
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: identifier.trim(), password }),
+      });
+      const body = await res.json();
+      if (!res.ok) return body.error || "Prihlásenie zlyhalo";
 
-    localStorage.setItem("crm_user", acc.id);
-    setUser(acc);
-    return null;
+      const acc = body.user as User;
+      localStorage.setItem("crm_user", acc.id);
+      setUser(acc);
+      // Audit log
+      fetch("/api/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: acc.id, action: "login", entity_type: "user", entity_id: acc.id }),
+      }).catch(() => {});
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Chyba siete";
+    }
   }
 
   async function loginWithGoogle(): Promise<void> {
@@ -159,33 +166,42 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   async function updateAccount(updated: User) {
-    await supabase.from("users").update({
-      name: updated.name,
-      initials: updated.initials,
-      role: updated.role,
-      email: updated.email,
-      login_email: updated.login_email || null,
-      password: updated.password || "",
-    }).eq("id", updated.id);
+    // Použi API endpoint (admin client) — users tabuľka bude chránená RLS
+    await fetch(`/api/users?id=${encodeURIComponent(updated.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: updated.name,
+        initials: updated.initials,
+        role: updated.role,
+        email: updated.email,
+        login_email: updated.login_email || null,
+        password: updated.password || "",
+      }),
+    });
     await refreshAccounts();
     if (user?.id === updated.id) setUser(updated);
   }
 
   async function addAccount(account: User) {
-    await supabase.from("users").insert({
-      id: account.id,
-      name: account.name,
-      initials: account.initials,
-      role: account.role,
-      email: account.email,
-      login_email: account.login_email || null,
-      password: account.password || "",
+    await fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: account.id,
+        name: account.name,
+        initials: account.initials,
+        role: account.role,
+        email: account.email,
+        login_email: account.login_email || null,
+        password: account.password || "",
+      }),
     });
     await refreshAccounts();
   }
 
   async function deleteAccount(id: string) {
-    await supabase.from("users").delete().eq("id", id);
+    await fetch(`/api/users?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     await refreshAccounts();
   }
 
