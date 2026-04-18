@@ -86,8 +86,10 @@ export const realitySkParser: PortalParser = {
       const descMatch = block.match(/class="offer-desc[^"]*"[^>]*>([\s\S]*?)<\/p>/);
       const popis = descMatch?.[1]?.replace(/<[^>]*>/g, "").trim().slice(0, 500) || undefined;
 
-      // Detekcia firmy: nazov + popis + celý blok. undefined = neznámy (prejde filtrom len_sukromni).
-      const predajca_typ = detectFirma(nazov, popis, block) ? "firma" : undefined;
+      // Detekcia firmy: nazov + popis. undefined = neznámy (prejde filtrom len_sukromni).
+      // Zámerne NEskenujeme celý blok — obsahuje breadcrumby a related listings kde
+      // sa môže objaviť "realit" aj pri súkromnom inzeráte (false positive).
+      const predajca_typ = detectFirma(nazov, popis) ? "firma" : undefined;
 
       listings.push({
         portal: PORTAL,

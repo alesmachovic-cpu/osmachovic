@@ -101,7 +101,7 @@ export const toprealitySkParser: PortalParser = {
         /class="[^"]*(?:advertiser|seller|agent|agency|broker|company|realitka|inzerent)[^"]*"[^>]*>\s*(?:<[^>]*>\s*)*([^<]{2,100})/i
       );
       const predajca_meno = sellerMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
-      const isFirma = detectFirma(nazov, predajca_meno, context);
+      const isFirma = detectFirma(nazov, predajca_meno);
 
       listings.push({
         portal: PORTAL,

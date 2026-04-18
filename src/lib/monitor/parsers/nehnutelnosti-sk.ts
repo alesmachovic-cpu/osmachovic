@@ -135,10 +135,9 @@ export const nehnutelnostiSkParser: PortalParser = {
       );
       const predajca_meno = sellerMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
 
-      // Detekcia firma/súkromný — match na (nazov + predajca_meno + block).
-      // Ak trafí firemný marker → "firma" (filter len_sukromni ho preskočí).
-      // Inak undefined (prejde ako potenciálne súkromný).
-      const isFirma = detectFirma(nazov, predajca_meno, block);
+      // Detekcia firma/súkromný — match na (nazov + predajca_meno).
+      // Nechceme scanovať celý block — breadcrumby a navigácia môžu obsahovať "realit".
+      const isFirma = detectFirma(nazov, predajca_meno);
       const predajca_typ = isFirma ? "firma" : undefined;
 
       listings.push({
@@ -177,7 +176,7 @@ export const nehnutelnostiSkParser: PortalParser = {
         const priceMatch = context.match(priceRegex);
         const areaMatch = context.match(areaRegex);
         const nazovFallback = linkMatch[2].replace(/<[^>]*>/g, "").trim();
-        const isFirma = detectFirma(nazovFallback, context);
+        const isFirma = detectFirma(nazovFallback);
 
         listings.push({
           portal: PORTAL,
