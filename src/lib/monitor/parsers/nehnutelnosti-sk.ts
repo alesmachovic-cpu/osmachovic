@@ -4,24 +4,28 @@ import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
 import { detectFirma } from "./shared";
 
 /**
- * nehnutelnosti.sk — najväčší slovenský portál
+ * nehnutelnosti.sk — najväčší slovenský portál (Next.js + MUI, JS rendered).
  *
  * URL štruktúra vyhľadávania:
- * https://www.nehnutelnosti.sk/byty/predaj/?p[price_from]=50000&p[price_to]=150000
+ *   https://www.nehnutelnosti.sk/byty/predaj/bratislava-petrzalka/?p[price_from]=50000
  *
- * HTML štruktúra listingu (zjednodušená):
- * <div class="advertisement-item">
- *   <a href="/1234567/" class="advertisement-item--content__title">Názov</a>
- *   <span class="advertisement-item--content__price">120 000 €</span>
- *   <span class="advertisement-item--content__info">3-izbový byt, 75 m²</span>
- *   ...
- * </div>
+ * URL štruktúra listingu:
+ *   https://www.nehnutelnosti.sk/detail/{ID}/{slug}
+ *   kde ID je base64-like reťazec (napr. "JuNsD-G_cAb", "Ju8StS94aWw").
+ *
+ * Developerské projekty majú iný pattern:
+ *   /detail/developersky-projekt/{id}/{slug}  ← tieto preskakujeme (nie sú to
+ *   klasické inzeráty, ale marketingové stránky projektov).
+ *
+ * Parser stratégia: link-driven — nehnutelnosti.sk má hashnuté MUI CSS classes
+ * (napr. "mui-1blo5z7"), takže nemôžeme hľadať container blocky podľa class mena.
+ * Namiesto toho nájdeme všetky detail URL a z okolného kontextu extrahujeme
+ * metadáta (cena, plocha, izby, meno inzerenta).
  */
 
 const PORTAL = "nehnutelnosti.sk";
 const BASE_URL = "https://www.nehnutelnosti.sk";
 
-// Mapovanie typov na URL segmenty
 const TYP_URL: Record<string, string> = {
   byt: "byty",
   dom: "domy",
@@ -32,19 +36,11 @@ export const nehnutelnostiSkParser: PortalParser = {
   portal: PORTAL,
 
   buildSearchUrl(filter: MonitorFilter): string {
-    // Ak máme priamy search URL, použijeme ho
     if (filter.search_url) return filter.search_url;
 
     const typSlug = filter.typ ? TYP_URL[filter.typ] || "nehnutelnosti" : "nehnutelnosti";
     let url = `${BASE_URL}/${typSlug}/predaj/`;
 
-    const params = new URLSearchParams();
-    if (filter.cena_od) params.set("p[price_from]", String(filter.cena_od));
-    if (filter.cena_do) params.set("p[price_to]", String(filter.cena_do));
-    if (filter.plocha_od) params.set("p[area_from]", String(filter.plocha_od));
-    if (filter.plocha_do) params.set("p[area_to]", String(filter.plocha_do));
-
-    // Lokalita — ak máme napr. "bratislava-petrzalka"
     if (filter.lokalita) {
       const slug = filter.lokalita
         .toLowerCase()
@@ -53,90 +49,110 @@ export const nehnutelnostiSkParser: PortalParser = {
       url = `${BASE_URL}/${typSlug}/predaj/${slug}/`;
     }
 
+    const params = new URLSearchParams();
+    if (filter.cena_od) params.set("p[price_from]", String(filter.cena_od));
+    if (filter.cena_do) params.set("p[price_to]", String(filter.cena_do));
+    if (filter.plocha_od) params.set("p[area_from]", String(filter.plocha_od));
+    if (filter.plocha_do) params.set("p[area_to]", String(filter.plocha_do));
+
     const paramStr = params.toString();
     return paramStr ? `${url}?${paramStr}` : url;
   },
 
   parseListings(html: string): ScrapedInzerat[] {
     const listings: ScrapedInzerat[] = [];
-
-    // Regex-based parsing (robustnejšie ako DOM parser na serverless)
-    // Pattern pre advertisement items
-    const itemRegex = /<div[^>]*class="[^"]*advertisement-item[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/g;
-    // Alternatívny pattern pre novší layout
-    const altItemRegex = /<article[^>]*class="[^"]*property[^"]*"[^>]*>([\s\S]*?)<\/article>/g;
-
-    // Extrahuj všetky linky na inzeráty
-    const linkRegex = /<a[^>]*href="(\/\d{6,}\/?[^"]*)"[^>]*>([\s\S]*?)<\/a>/g;
-    const priceRegex = /(\d[\d\s,.]*)\s*€/;
-    const areaRegex = /(\d[\d,.]*)\s*m[²2]/;
-    const roomRegex = /(\d+)[- ]izb/;
-    const imgRegex = /<img[^>]*src="([^"]*(?:jpg|jpeg|png|webp)[^"]*)"/i;
-
-    // Zberieme unikátne inzeráty podľa URL
     const seenIds = new Set<string>();
 
-    // Hlavný listing pattern — hľadáme bloky s cenami a odkazmi
-    const blockRegex = /<(?:div|article|li)[^>]*class="[^"]*(?:advertisement|listing|property|result)[^"]*"[^>]*>([\s\S]*?)(?=<(?:div|article|li)[^>]*class="[^"]*(?:advertisement|listing|property|result)|$)/gi;
+    // Match /detail/{ID}/{slug} ako absolútnu aj relatívnu URL.
+    // Skipuje /detail/developersky-projekt/{id}/{slug} (marketing, nie inzeráty).
+    const detailRegex =
+      /href="((?:https?:\/\/[^"]*nehnutelnosti\.sk)?\/detail\/(?!developersky-projekt\/)([A-Za-z0-9_-]{8,})\/([^"\s]+?))"/g;
 
-    let blockMatch;
-    while ((blockMatch = blockRegex.exec(html)) !== null) {
-      const block = blockMatch[1];
+    const priceRegex = /(\d[\d\s]*)\s*€/;
+    const areaRegex = /(\d+(?:[,.]\d+)?)\s*m[²2]/;
+    const roomRegex = /(\d+)\s*[- ]?izb/i;
+    const imgRegex = /<img[^>]*src="([^"]+(?:\.jpe?g|\.png|\.webp|nehnutelnosti[^"]+))"/i;
 
-      // Extrahuj URL a ID
-      const urlMatch = block.match(/<a[^>]*href="((?:https?:\/\/[^"]*nehnutelnosti\.sk)?\/(\d{6,})\/?[^"]*)"/);
-      if (!urlMatch) continue;
+    let match: RegExpExecArray | null;
+    while ((match = detailRegex.exec(html)) !== null) {
+      const hrefRaw = match[1];
+      const externalId = match[2];
+      const slug = match[3];
 
-      const relUrl = urlMatch[1];
-      const externalId = urlMatch[2];
       if (seenIds.has(externalId)) continue;
       seenIds.add(externalId);
 
-      const fullUrl = relUrl.startsWith("http") ? relUrl : `${BASE_URL}${relUrl}`;
+      const fullUrl = hrefRaw.startsWith("http") ? hrefRaw : `${BASE_URL}${hrefRaw}`;
 
-      // Extrahuj názov — text v prvom linku alebo title atribút
-      const titleMatch = block.match(/<a[^>]*href="[^"]*\/\d{6,}[^"]*"[^>]*(?:title="([^"]*)")?[^>]*>([^<]*)</);
-      const nazov = (titleMatch?.[1] || titleMatch?.[2] || "").trim();
+      // Kontext: ~3000 znakov okolo href. Ceny a metadata bývajú v rovnakej
+      // "karte" listingu (MUI Stack/Box), blízko linku.
+      const pos = match.index;
+      const context = html.substring(
+        Math.max(0, pos - 500),
+        Math.min(html.length, pos + 3000)
+      );
 
-      // Cena
-      const priceMatch = block.match(priceRegex);
-      const cena = priceMatch
-        ? parseFloat(priceMatch[1].replace(/\s/g, "").replace(",", "."))
-        : undefined;
+      // Nazov — ak je link s text content, použijeme ho; inak derive zo slugu.
+      const anchorTextMatch = html.substring(pos, Math.min(html.length, pos + 2000))
+        .match(/<a[^>]*href="[^"]+"[^>]*>([\s\S]*?)<\/a>/);
+      let nazov = anchorTextMatch?.[1]?.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() || "";
+      // Ak je to prázdne alebo veľmi krátke, použijeme slug
+      if (nazov.length < 5) {
+        nazov = slug.replace(/-/g, " ").trim();
+      }
+      // Zachytí aj ak slug obsahuje "bratislava" alebo mesto — nechaj ho ako je.
+
+      // Cena — hľadáme v context, preferujeme hodnoty > 10k (typická cena nehnuteľnosti)
+      const priceMatches = Array.from(context.matchAll(/(\d[\d\s]{2,})\s*€/g));
+      let cena: number | undefined;
+      for (const pm of priceMatches) {
+        const num = parseFloat(pm[1].replace(/\s/g, ""));
+        if (!isNaN(num) && num >= 1000 && num < 100_000_000) {
+          cena = num;
+          break;
+        }
+      }
 
       // Plocha
-      const areaMatch = block.match(areaRegex);
+      const areaMatch = context.match(areaRegex);
       const plocha = areaMatch
         ? parseFloat(areaMatch[1].replace(",", "."))
         : undefined;
 
-      // Izby
-      const roomMatch = block.match(roomRegex);
+      // Izby — "3-izbový", "3 izb", "3izb"
+      const roomMatch = context.match(roomRegex);
       const izby = roomMatch ? parseInt(roomMatch[1]) : undefined;
 
       // Foto
-      const imgMatch = block.match(imgRegex);
-      const foto_url = imgMatch?.[1] || undefined;
+      const imgMatch = context.match(imgRegex);
+      const foto_url = imgMatch?.[1];
 
-      // Typ — odhadni z kontextu
-      let typ = "iny";
-      const blockLower = block.toLowerCase();
-      if (blockLower.includes("izb") || blockLower.includes("byt")) typ = "byt";
-      else if (blockLower.includes("dom") || blockLower.includes("rodin")) typ = "dom";
-      else if (blockLower.includes("pozem")) typ = "pozemok";
-
-      // Lokalita — hľadaj v texte
-      const lokMatch = block.match(/(?:class="[^"]*(?:location|address|city)[^"]*"[^>]*>)\s*([^<]+)/i);
-      const lokalita = lokMatch?.[1]?.trim() || undefined;
-
-      // Predajca meno — hľadaj v kontajneroch pre inzerenta/agenta/realitku
-      const sellerMatch = block.match(
-        /class="[^"]*(?:advertiser|seller|agent|agency|broker|company|realitka|inzerent)[^"]*"[^>]*>\s*(?:<[^>]*>\s*)*([^<]{2,100})/i
+      // Lokalita — heuristika: krátky text s velkým písmenom za znakom "•" alebo
+      // v context bez "Izb"/"€"
+      let lokalita: string | undefined;
+      const lokMatch = context.match(
+        /(?:Bratislava|Košice|Nitra|Žilina|Trnava|Prešov|Banská\s+Bystrica|Trenčín|Martin|Poprad|Malacky|Pezinok|Senec|Ružinov|Petržalka|Dúbravka|Staré\s+Mesto)[^<"\n]{0,60}/
       );
-      const predajca_meno = sellerMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
+      if (lokMatch) lokalita = lokMatch[0].trim();
 
-      // Detekcia firma/súkromný — match na (nazov + predajca_meno).
-      // Nechceme scanovať celý block — breadcrumby a navigácia môžu obsahovať "realit".
+      // Typ zo slugu / názvu
+      let typ = "byt";
+      const slugLower = slug.toLowerCase();
+      if (slugLower.includes("dom") || slugLower.includes("rodin")) typ = "dom";
+      else if (slugLower.includes("pozem") || slugLower.includes("parcel")) typ = "pozemok";
+      else if (slugLower.includes("byt") || slugLower.includes("izb")) typ = "byt";
+
+      // Predajca — skúsime rôzne patterny (agent, realitka, meno)
+      const sellerMatch = context.match(
+        /class="[^"]*(?:advertiser|seller|agent|agency|broker|company|realitka|inzerent|maklér)[^"]*"[^>]*>\s*(?:<[^>]*>\s*)*([^<]{2,100})/i
+      );
+      let predajca_meno = sellerMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
+      // Fallback: hľadaj "s.r.o." alebo podobné v context
+      if (!predajca_meno) {
+        const companyMatch = context.match(/([A-ZČŠĽŇŽ][A-Za-záčďéíľňóšťúýž\s&.'-]{2,50}\s+(?:s\.\s*r\.\s*o\.?|a\.s\.|reality|real|estate|broker|invest|group))/);
+        predajca_meno = companyMatch?.[1]?.trim();
+      }
+
       const isFirma = detectFirma(nazov, predajca_meno);
       const predajca_typ = isFirma ? "firma" : undefined;
 
@@ -155,40 +171,6 @@ export const nehnutelnostiSkParser: PortalParser = {
         predajca_typ,
         raw_data: {},
       });
-    }
-
-    // Fallback: ak sme nič nenašli cez bloky, skúsime jednoduchšie linky
-    if (listings.length === 0) {
-      let linkMatch;
-      while ((linkMatch = linkRegex.exec(html)) !== null) {
-        const href = linkMatch[1];
-        const idMatch = href.match(/\/(\d{6,})\/?/);
-        if (!idMatch) continue;
-
-        const externalId = idMatch[1];
-        if (seenIds.has(externalId)) continue;
-        seenIds.add(externalId);
-
-        // Skús nájsť okolný kontext (500 znakov okolo)
-        const pos = linkMatch.index;
-        const context = html.substring(Math.max(0, pos - 200), Math.min(html.length, pos + 500));
-
-        const priceMatch = context.match(priceRegex);
-        const areaMatch = context.match(areaRegex);
-        const nazovFallback = linkMatch[2].replace(/<[^>]*>/g, "").trim();
-        const isFirma = detectFirma(nazovFallback);
-
-        listings.push({
-          portal: PORTAL,
-          external_id: externalId,
-          url: `${BASE_URL}${href}`,
-          nazov: nazovFallback,
-          cena: priceMatch ? parseFloat(priceMatch[1].replace(/\s/g, "").replace(",", ".")) : undefined,
-          plocha: areaMatch ? parseFloat(areaMatch[1].replace(",", ".")) : undefined,
-          predajca_typ: isFirma ? "firma" : undefined,
-          raw_data: {},
-        });
-      }
     }
 
     return listings;
