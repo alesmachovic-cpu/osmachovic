@@ -100,6 +100,11 @@ export async function GET(request: Request) {
       htmlLength: html.length,
       parsedCount: listings.length,
       firstListing: listings[0] || null,
+      allListings: listings.map((l) => ({
+        nazov: l.nazov,
+        predajca_typ: l.predajca_typ,
+        predajca_meno: l.predajca_meno,
+      })),
       diagnostics: {
         priceOccurrences: priceCount,
         izbyOccurrences: izbyCount,
