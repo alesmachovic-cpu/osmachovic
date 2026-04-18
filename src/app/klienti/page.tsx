@@ -93,12 +93,12 @@ function KlientiContent() {
       if (!res.ok) throw new Error(await res.text());
       const parsed = await res.json();
       await supabase.from("klienti").update({ lv_data: parsed }).eq("id", klientId);
-      setLvPromptKlient(null);
-      await fetchKlienti();
 
-      // Otvor edit modal HNEĎ po analýze
-      const klient = klienti.find(k => k.id === klientId) || lvPromptKlient;
-      if (klient) {
+      // Zachyť klienta PRED setLvPromptKlient(null) aby sa neztratil
+      const targetKlient = lvPromptKlient || klienti.find(k => k.id === klientId);
+
+      // Pripraviť modal state PRED zmenou lvPromptKlient
+      if (targetKlient) {
         const majArr = (parsed.majitelia as Array<{ meno?: string }> | undefined) ?? [];
         const owners: string[] = [];
         for (const m of majArr.filter(mm => mm.meno)) {
@@ -116,8 +116,12 @@ function KlientiContent() {
         setLvEditPickedAdresa(adresaLv);
         setLvEditFixName(!!owners.length);
         setLvEditFixLok(!!obecLv);
-        setLvEditModalKlient({ ...klient, lv_data: parsed } as Klient);
+        setLvEditModalKlient({ ...targetKlient, lv_data: parsed } as Klient);
       }
+
+      // Teraz zatvor "Analyzujem" modal a refresh list
+      setLvPromptKlient(null);
+      fetchKlienti();  // v background, netreba await
     } catch (err) {
       setLvUploadErr("Chyba: " + (err as Error).message.slice(0, 100));
     } finally {
