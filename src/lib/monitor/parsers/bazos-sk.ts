@@ -1,6 +1,7 @@
 /* ── Parser pre bazos.sk (reality.bazos.sk) ── */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
+import { detectFirma } from "./shared";
 
 const PORTAL = "bazos.sk";
 const BASE_URL = "https://reality.bazos.sk";
@@ -70,6 +71,13 @@ export const bazosSkParser: PortalParser = {
       if (seenIds.has(externalId)) continue;
       seenIds.add(externalId);
 
+      // Skip prenájmy / podnájmy — bazos niekedy v /predaj/ výsledkoch
+      // zobrazuje aj boosted prenájmy (slug obsahuje "prenajom"/"podnajom").
+      const slugLow = relUrl.toLowerCase();
+      if (slugLow.includes("prenajom") || slugLow.includes("prenájom") || slugLow.includes("podnajom")) {
+        continue;
+      }
+
       // Title z href textu (druhá časť URL) alebo z anchor textu
       const titleMatch = block.match(/href="\/inzerat\/\d+\/[^"]+"[^>]*>([^<]+)<\/a>/);
       let nazov = titleMatch?.[1]?.trim() || "";
@@ -109,7 +117,15 @@ export const bazosSkParser: PortalParser = {
       const sellerMatch = block.match(/odeslatakci\('rating','[^']+','[^']+','([^']+)'\)/);
       const sellerNameRaw = sellerMatch?.[1] || "";
       const sellerName = sellerNameRaw ? decodeBazosName(sellerNameRaw) : "";
-      const predajca_typ = sellerName ? detectPredajca(sellerName) : "sukromny";
+      // RK detekcia: najprv striktná na meno predajcu (detectPredajca),
+      // potom shared detectFirma aj na názov + popis (zachytí "RK", "exkluzívne", "v ponuke"
+      // aj keď je meno predajcu čisté osobné meno RK agenta).
+      let predajca_typ: "sukromny" | "firma" = sellerName
+        ? detectPredajca(sellerName)
+        : "sukromny";
+      if (predajca_typ === "sukromny" && detectFirma(nazov, popis)) {
+        predajca_typ = "firma";
+      }
 
       // Typ from URL
       let typ = "iny";
