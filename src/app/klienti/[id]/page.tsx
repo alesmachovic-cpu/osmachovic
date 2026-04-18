@@ -23,12 +23,7 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
 }) {
   const [parsing, setParsing] = useState(false);
   const [err, setErr] = useState("");
-  const [showPrompt, setShowPrompt] = useState(false);
-  const [promptOwner, setPromptOwner] = useState("");
-  const [promptLokalita, setPromptLokalita] = useState("");
-  const [promptFixName, setPromptFixName] = useState(true);
-  const [promptFixLoc, setPromptFixLoc] = useState(true);
-  const [promptSaving, setPromptSaving] = useState(false);
+  // Modal už nie je v LVSection — spravuje ho rodič cez onParsed callback
 
   async function handleLVUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -55,47 +50,14 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
       // Ulož do klienta
       const { supabase: sb } = await import("@/lib/supabase");
       await sb.from("klienti").update({ lv_data: parsed }).eq("id", klientId);
+      console.log("[LVSection] LV uložené do DB, volám onParsed...");
       onParsed(parsed);
-
-      // Ihneď zobraz aktívny modal na úpravu mena + lokality podľa LV
-      // Adresa nehnuteľnosti je z časti A LV (obec/ulica), NIE z adresy vlastníka (časť B)
-      const majiteliaNew = (parsed.majitelia as Array<{ meno?: string }> | undefined) ?? [];
-      const ownerNamesNew: string[] = [];
-      for (const m of majiteliaNew.filter(m => m.meno)) {
-        const parts = m.meno!.split(/\s+a\s+/i).map(n => n.trim()).filter(n => n.length > 2);
-        ownerNamesNew.push(...(parts.length > 1 ? parts : [m.meno!]));
-      }
-      const obecLv = parsed.obec ? String(parsed.obec) : "";
-      const nameCur = (klientMeno || "").trim().toLowerCase();
-      const nameOk = !nameCur || ownerNamesNew.length === 0 ||
-        ownerNamesNew.some(n => n.toLowerCase() === nameCur ||
-                                nameCur.includes(n.toLowerCase()) ||
-                                n.toLowerCase().includes(nameCur));
-      const locCur = (klientLokalita || "").trim().toLowerCase();
-      const locOk = !obecLv || !locCur || locCur === obecLv.toLowerCase() ||
-        locCur.includes(obecLv.toLowerCase()) || obecLv.toLowerCase().includes(locCur);
-
-      if (!nameOk || !locOk) {
-        setPromptOwner(ownerNamesNew[0] || "");
-        setPromptLokalita(obecLv);
-        setPromptFixName(!nameOk);
-        setPromptFixLoc(!locOk);
-        setShowPrompt(true);
-      }
+      console.log("[LVSection] onParsed hotové, rodičovský modal by mal byť otvorený");
     } catch (e) {
       setErr("Chyba pri analýze LV: " + (e as Error).message.slice(0, 120));
     } finally {
       setParsing(false);
     }
-  }
-
-  async function savePrompt() {
-    setPromptSaving(true);
-    try {
-      if (promptFixName && promptOwner && onFixName) await onFixName(promptOwner);
-      if (promptFixLoc && promptLokalita && onFixLocation) await onFixLocation(promptLokalita);
-      setShowPrompt(false);
-    } finally { setPromptSaving(false); }
   }
 
   const lv = lvData as Record<string, unknown> | null | undefined;
@@ -164,92 +126,6 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
       </div>
       {err && <div style={{ fontSize: "12px", color: "#EF4444", marginTop: "8px" }}>{err}</div>}
 
-      {/* Aktívny modal hneď po uploadu LV — ponúkne prepis mena + lokality */}
-      {showPrompt && canEdit && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
-          onClick={() => !promptSaving && setShowPrompt(false)}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background: "var(--bg-surface)", borderRadius: "20px", padding: "28px",
-            maxWidth: "460px", width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
-              <span style={{ fontSize: "22px" }}>📋</span>
-              <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-                LV analyzovaný — upraviť klienta?
-              </h2>
-            </div>
-            <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 18px" }}>
-              Údaje klienta sa líšia od LV. Vyber čo chceš prepísať.
-            </p>
-
-            {ownerNames.length > 0 && (
-              <div style={{ marginBottom: "14px", padding: "12px", background: "var(--bg-elevated)", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                <label style={{ display: "flex", alignItems: "flex-start", gap: "8px", cursor: "pointer" }}>
-                  <input type="checkbox" checked={promptFixName} onChange={(e) => setPromptFixName(e.target.checked)}
-                    style={{ marginTop: "3px", cursor: "pointer" }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "4px" }}>
-                      Premenovať klienta
-                    </div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "8px" }}>
-                      Z &quot;{klientMeno || "—"}&quot; na vlastníka z LV:
-                    </div>
-                    <select value={promptOwner} onChange={(e) => setPromptOwner(e.target.value)} disabled={!promptFixName}
-                      style={{ width: "100%", padding: "8px 12px", fontSize: "13px", fontWeight: 600,
-                        background: "var(--bg-surface)", color: "var(--text-primary)",
-                        border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer",
-                        opacity: promptFixName ? 1 : 0.5 }}>
-                      {ownerNames.map((n, i) => <option key={i} value={n}>{n}</option>)}
-                    </select>
-                  </div>
-                </label>
-              </div>
-            )}
-
-            {lvObec && (
-              <div style={{ marginBottom: "18px", padding: "12px", background: "var(--bg-elevated)", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                <label style={{ display: "flex", alignItems: "flex-start", gap: "8px", cursor: "pointer" }}>
-                  <input type="checkbox" checked={promptFixLoc} onChange={(e) => setPromptFixLoc(e.target.checked)}
-                    style={{ marginTop: "3px", cursor: "pointer" }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "4px" }}>
-                      Prepísať lokalitu nehnuteľnosti
-                    </div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "8px" }}>
-                      Adresa nehnuteľnosti podľa LV (nie adresa vlastníka):
-                    </div>
-                    <input type="text" value={promptLokalita} onChange={(e) => setPromptLokalita(e.target.value)} disabled={!promptFixLoc}
-                      style={{ width: "100%", padding: "8px 12px", fontSize: "13px", fontWeight: 600,
-                        background: "var(--bg-surface)", color: "var(--text-primary)",
-                        border: "1px solid var(--border)", borderRadius: "8px",
-                        opacity: promptFixLoc ? 1 : 0.5 }} />
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
-                      Zo súčasnej: &quot;{klientLokalita || "—"}&quot;{lvOkres ? ` · okres ${lvOkres}` : ""}
-                    </div>
-                  </div>
-                </label>
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button onClick={() => setShowPrompt(false)} disabled={promptSaving} style={{
-                flex: 1, padding: "10px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
-                border: "1px solid var(--border)", borderRadius: "10px",
-                fontSize: "13px", fontWeight: 600, cursor: promptSaving ? "default" : "pointer",
-              }}>Ponechať pôvodné</button>
-              <button onClick={savePrompt}
-                disabled={promptSaving || (!promptFixName && !promptFixLoc)}
-                style={{
-                  flex: 1, padding: "10px", background: "#374151", color: "#fff",
-                  border: "none", borderRadius: "10px",
-                  fontSize: "13px", fontWeight: 600,
-                  cursor: (promptSaving || (!promptFixName && !promptFixLoc)) ? "default" : "pointer",
-                  opacity: (promptSaving || (!promptFixName && !promptFixLoc)) ? 0.5 : 1,
-                }}>{promptSaving ? "Ukladám..." : "Upraviť klienta"}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {lv && canEdit && (!nameMatches || !locMatches) && (
         <div style={{ marginTop: "12px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "10px", padding: "14px" }}>
