@@ -197,13 +197,12 @@ async function processFilter(
       })
     );
 
-    // 2. Zlúč listings z všetkých portálov + filtruj firmy ak treba
+    // 2. Zlúč listings z všetkých portálov.
+    //    Do DB upsertneme VŠETKO (aby mali staré rows správny predajca_typ).
+    //    Filter len_sukromni sa aplikuje až pri tvorbe newItems pre notifikácie.
     const allListings: ScrapedInzerat[] = [];
     for (const { listings } of portalResults) {
-      const toAdd = filter.len_sukromni
-        ? listings.filter((l) => l.predajca_typ !== "firma")
-        : listings;
-      allListings.push(...toAdd);
+      allListings.push(...listings);
     }
     totalFound = allListings.length;
 
@@ -250,7 +249,12 @@ async function processFilter(
             new Date(row.first_seen_at).getTime() > Date.now() - 60000;
           if (isNew) {
             newCount++;
-            newItems.push({ ...listing, db_id: row.id });
+            // Ak filter len_sukromni, zo zoznamu newItems vynechaj firmy —
+            // chceme aby email obsahoval len súkromné (ale v DB máme aj firmy
+            // s predajca_typ="firma" pre budúcu filtráciu a štatistiky).
+            if (!filter.len_sukromni || listing.predajca_typ !== "firma") {
+              newItems.push({ ...listing, db_id: row.id });
+            }
           } else {
             updatedCount++;
           }
