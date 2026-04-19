@@ -537,22 +537,40 @@ export default function Dashboard() {
     };
   }
 
-  /** Malé tlačítko na cyklovanie veľkosti — render len v edit mode. */
-  function SizeButton({ tileKey }: { tileKey: TileKey }) {
+  /** Šípky + size button (render len v edit mode). Šípky fungujú všade,
+   *  size button má zmysel len na desktop — skrytý cez CSS na mobile. */
+  function TileControls({ tileKey }: { tileKey: TileKey }) {
     if (!showTileEditor) return null;
     const w = tileWidths[tileKey] ?? DEFAULT_TILE_WIDTHS[tileKey];
+    const idx = tiles.indexOf(tileKey);
+    const moveTile = (dir: -1 | 1) => {
+      setTiles((prev) => {
+        const next = [...prev];
+        const from = next.indexOf(tileKey);
+        const to = from + dir;
+        if (from === -1 || to < 0 || to >= next.length) return prev;
+        [next[from], next[to]] = [next[to], next[from]];
+        if (user?.id) setUserItem(user.id, "dashboard_tiles", JSON.stringify(next));
+        return next;
+      });
+    };
+    const btnSt: React.CSSProperties = {
+      padding: "4px 10px", background: "#374151", color: "#fff",
+      border: "none", borderRadius: "6px", fontSize: "13px",
+      fontWeight: 700, cursor: "pointer",
+      boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+      minWidth: "32px", lineHeight: 1,
+    };
     return (
-      <button
-        onClick={(e) => { e.stopPropagation(); cycleTileWidth(tileKey); }}
-        title="Zmeniť šírku"
-        style={{
-          position: "absolute", top: 10, right: 10, zIndex: 2,
-          padding: "4px 10px", background: "#374151", color: "#fff",
-          border: "none", borderRadius: "6px", fontSize: "11px",
-          fontWeight: 700, cursor: "pointer",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-        }}
-      >{SIZE_LABEL[w]}</button>
+      <div style={{ position: "absolute", top: 10, right: 10, zIndex: 2, display: "flex", gap: "4px" }}>
+        <button onClick={(e) => { e.stopPropagation(); moveTile(-1); }}
+          disabled={idx <= 0} title="Posunúť hore" style={{ ...btnSt, opacity: idx <= 0 ? 0.3 : 1 }}>↑</button>
+        <button onClick={(e) => { e.stopPropagation(); moveTile(1); }}
+          disabled={idx === -1 || idx >= tiles.length - 1} title="Posunúť dole" style={{ ...btnSt, opacity: idx >= tiles.length - 1 ? 0.3 : 1 }}>↓</button>
+        <button onClick={(e) => { e.stopPropagation(); cycleTileWidth(tileKey); }}
+          title="Zmeniť šírku" className="tile-size-btn"
+          style={{ ...btnSt, fontSize: "11px" }}>{SIZE_LABEL[w]}</button>
+      </div>
     );
   }
 
@@ -626,7 +644,7 @@ export default function Dashboard() {
       <div className="dash-grid" style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: "20px" }}>
         {has("overenie") && (
           <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("overenie") }} {...tileDragProps("overenie")}>
-            <SizeButton tileKey="overenie" />
+            <TileControls tileKey="overenie" />
             <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Overenie čísla</div>
               <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Automatické overenie pri zadaní čísla</div>
               <div style={{ position: "relative" }}>
@@ -670,7 +688,7 @@ export default function Dashboard() {
 
         {has("vyhladavanie") && (
           <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("vyhladavanie") }} {...tileDragProps("vyhladavanie")}>
-            <SizeButton tileKey="vyhladavanie" />
+            <TileControls tileKey="vyhladavanie" />
             <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Vyhľadávanie</div>
             <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Klienti, nehnuteľnosti, funkcie</div>
             <SystemSearch />
@@ -679,7 +697,7 @@ export default function Dashboard() {
 
         {has("ciele") && (
           <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("ciele") }} {...tileDragProps("ciele")}>
-            <SizeButton tileKey="ciele" />
+            <TileControls tileKey="ciele" />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
               <Link href="/nastavenia" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Mesačné ciele →</Link>
             </div>
@@ -693,7 +711,7 @@ export default function Dashboard() {
 
         {has("prehlad") && (
           <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("prehlad") }} {...tileDragProps("prehlad")}>
-            <SizeButton tileKey="prehlad" />
+            <TileControls tileKey="prehlad" />
               <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Prehľad →</Link>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 {[
@@ -715,7 +733,7 @@ export default function Dashboard() {
 
         {has("kalendar") && (
           <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("kalendar") }} {...tileDragProps("kalendar")}>
-            <SizeButton tileKey="kalendar" />
+            <TileControls tileKey="kalendar" />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
               <Link href="/kalendar" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Kalendár →</Link>
               <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
@@ -728,7 +746,7 @@ export default function Dashboard() {
 
         {has("pipeline") && (
           <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("pipeline") }} {...tileDragProps("pipeline")}>
-            <SizeButton tileKey="pipeline" />
+            <TileControls tileKey="pipeline" />
           <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Pipeline →</Link>
           {(() => {
             const stages = [
@@ -771,7 +789,7 @@ export default function Dashboard() {
 
         {has("aktivita") && (
           <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("aktivita") }} {...tileDragProps("aktivita")}>
-            <SizeButton tileKey="aktivita" />
+            <TileControls tileKey="aktivita" />
           <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px", display: "block", textDecoration: "none" }}>Posledná aktivita →</Link>
           {loadingActivity && <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px 0" }}>Načítavam...</div>}
           {!loadingActivity && activity.length === 0 && (

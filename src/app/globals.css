@@ -178,6 +178,8 @@ input:focus, select:focus, textarea:focus {
      per-tile gridColumn: span N ktoré sa používa na desktop). */
   .dash-grid { grid-template-columns: 1fr !important; }
   .dash-grid > * { grid-column: 1 / -1 !important; }
+  /* Size cycle button nemá na mobile význam (tiles sú vždy full-width) */
+  .tile-size-btn { display: none !important; }
 
   /* Nastavenia: stack goal inputs */
   .goals-grid { grid-template-columns: 1fr !important; }
