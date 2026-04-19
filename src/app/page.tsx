@@ -4,6 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import {
+  DndContext, useDraggable, useDroppable, type DragEndEvent,
+  PointerSensor, useSensor, useSensors,
+} from "@dnd-kit/core";
 import type { Klient } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
@@ -87,11 +91,48 @@ async function fetchCalendarEvents(userId?: string): Promise<CalEvent[]> {
   return parseCalEvents();
 }
 
+/** Jeden deň v mini week view — droppable target pre event drop. */
+function DroppableDay({ dateStr, children }: { dateStr: string; children: React.ReactNode }) {
+  const { isOver, setNodeRef } = useDroppable({ id: `day-${dateStr}` });
+  return (
+    <div ref={setNodeRef} style={{
+      textAlign: "center", flex: 1,
+      outline: isOver ? "2px dashed var(--accent)" : "none",
+      outlineOffset: "2px",
+      borderRadius: "8px",
+      transition: "outline 0.1s",
+    }}>
+      {children}
+    </div>
+  );
+}
+
+/** Jeden event v dennom výpise — draggable. */
+function DraggableEvent({
+  event, children,
+}: { event: CalEvent; children: (listeners: Record<string, unknown>) => React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `event-${event.id}`,
+    data: { event },
+  });
+  return (
+    <div ref={setNodeRef} {...attributes} style={{
+      transform: transform ? `translate3d(${transform.x}px,${transform.y}px,0)` : undefined,
+      opacity: isDragging ? 0.5 : 1,
+      cursor: isDragging ? "grabbing" : "grab",
+      touchAction: "none",
+    }}>
+      {children(listeners as unknown as Record<string, unknown>)}
+    </div>
+  );
+}
+
 function CalendarWidget({ userId }: { userId?: string }) {
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>("");
 
   const [loading, setLoading] = useState(true);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   useEffect(() => {
     setSelectedDate(new Date().toISOString().slice(0, 10));
@@ -144,9 +185,45 @@ function CalendarWidget({ userId }: { userId?: string }) {
     .filter(e => e.start.slice(0, 10) === selectedDate)
     .sort((a, b) => a.start.localeCompare(b.start));
 
+  async function handleDragEnd(e: DragEndEvent) {
+    if (!e.over || !userId) return;
+    const overId = String(e.over.id);
+    if (!overId.startsWith("day-")) return;
+    const newDate = overId.slice(4); // "YYYY-MM-DD"
+    const dragged = (e.active.data.current as { event?: CalEvent } | undefined)?.event;
+    if (!dragged || dragged.start.slice(0, 10) === newDate) return;
+
+    // Zachová čas (len posunie deň)
+    const oldStart = new Date(dragged.start);
+    const oldEnd = new Date(dragged.end);
+    const diffMs =
+      new Date(newDate + "T00:00:00").getTime() -
+      new Date(dragged.start.slice(0, 10) + "T00:00:00").getTime();
+    const newStart = new Date(oldStart.getTime() + diffMs).toISOString();
+    const newEnd = new Date(oldEnd.getTime() + diffMs).toISOString();
+
+    // Optimistic update
+    setEvents((prev) => prev.map((ev) => ev.id === dragged.id ? { ...ev, start: newStart, end: newEnd } : ev));
+    setSelectedDate(newDate);
+
+    try {
+      const res = await fetch("/api/google/calendar", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, eventId: dragged.id, start: newStart, end: newEnd }),
+      });
+      if (!res.ok) throw new Error("patch_failed");
+    } catch {
+      // Rollback na pôvodné hodnoty + refetch
+      setEvents((prev) => prev.map((ev) => ev.id === dragged.id ? { ...ev, start: dragged.start, end: dragged.end } : ev));
+      fetchCalendarEvents(userId).then(setEvents);
+    }
+  }
+
   return (
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
     <div>
-      {/* Mini week view — clickable days */}
+      {/* Mini week view — clickable + droppable days */}
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
         {days.map((d, i) => {
           const ds = d.toISOString().slice(0, 10);
@@ -154,29 +231,31 @@ function CalendarWidget({ userId }: { userId?: string }) {
           const isSelected = ds === selectedDate;
           const hasEvents = eventsForDay(d).length > 0;
           return (
-            <div key={i} style={{ textAlign: "center", flex: 1, cursor: "pointer" }} onClick={() => setSelectedDate(ds)}>
-              <div style={{ fontSize: "10px", color: "var(--text-muted)", fontWeight: "600", marginBottom: "4px" }}>
-                {dayNames[i]}
-              </div>
-              <div style={{
-                width: "32px", height: "32px", borderRadius: "50%", margin: "0 auto",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "13px", fontWeight: isToday || isSelected ? "800" : "500",
-                background: isSelected ? "#374151" : "transparent",
-                color: isSelected ? "#fff" : isToday ? "var(--accent)" : "var(--text-primary)",
-                border: isToday && !isSelected ? "2px solid var(--accent)" : "2px solid transparent",
-                transition: "all 0.15s",
-              }}>
-                {d.getDate()}
-              </div>
-              {hasEvents && (
+            <DroppableDay key={i} dateStr={ds}>
+              <div onClick={() => setSelectedDate(ds)} style={{ cursor: "pointer" }}>
+                <div style={{ fontSize: "10px", color: "var(--text-muted)", fontWeight: "600", marginBottom: "4px" }}>
+                  {dayNames[i]}
+                </div>
                 <div style={{
-                  width: "4px", height: "4px", borderRadius: "50%",
-                  background: isSelected ? "#374151" : "var(--accent)",
-                  margin: "3px auto 0",
-                }} />
-              )}
-            </div>
+                  width: "32px", height: "32px", borderRadius: "50%", margin: "0 auto",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "13px", fontWeight: isToday || isSelected ? "800" : "500",
+                  background: isSelected ? "#374151" : "transparent",
+                  color: isSelected ? "#fff" : isToday ? "var(--accent)" : "var(--text-primary)",
+                  border: isToday && !isSelected ? "2px solid var(--accent)" : "2px solid transparent",
+                  transition: "all 0.15s",
+                }}>
+                  {d.getDate()}
+                </div>
+                {hasEvents && (
+                  <div style={{
+                    width: "4px", height: "4px", borderRadius: "50%",
+                    background: isSelected ? "#374151" : "var(--accent)",
+                    margin: "3px auto 0",
+                  }} />
+                )}
+              </div>
+            </DroppableDay>
           );
         })}
       </div>
@@ -185,31 +264,35 @@ function CalendarWidget({ userId }: { userId?: string }) {
       {selectedDayEvents.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {selectedDayEvents.map(e => (
-            <div key={e.id} style={{
-              display: "flex", gap: "10px", alignItems: "flex-start",
-              padding: "8px 10px", borderRadius: "8px",
-              background: "rgba(0,122,255,0.05)",
-              borderLeft: "3px solid var(--accent)",
-            }}>
-              <div style={{ minWidth: "42px", textAlign: "right" }}>
-                <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--accent)" }}>
-                  {fmtTime(e.start)}
-                </div>
-                <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-                  {fmtTime(e.end)}
-                </div>
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: "12.5px", fontWeight: "600", color: "var(--text-primary)" }}>
-                  {e.summary}
-                </div>
-                {e.location && (
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    📍 {e.location.split(",")[0]}
+            <DraggableEvent key={e.id} event={e}>
+              {(listeners) => (
+                <div {...listeners} style={{
+                  display: "flex", gap: "10px", alignItems: "flex-start",
+                  padding: "8px 10px", borderRadius: "8px",
+                  background: "rgba(0,122,255,0.05)",
+                  borderLeft: "3px solid var(--accent)",
+                }}>
+                  <div style={{ minWidth: "42px", textAlign: "right" }}>
+                    <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--accent)" }}>
+                      {fmtTime(e.start)}
+                    </div>
+                    <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                      {fmtTime(e.end)}
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: "12.5px", fontWeight: "600", color: "var(--text-primary)" }}>
+                      {e.summary}
+                    </div>
+                    {e.location && (
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        📍 {e.location.split(",")[0]}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </DraggableEvent>
           ))}
         </div>
       ) : (
@@ -219,6 +302,7 @@ function CalendarWidget({ userId }: { userId?: string }) {
         </div>
       )}
     </div>
+    </DndContext>
   );
 }
 
