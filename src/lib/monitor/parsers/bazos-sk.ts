@@ -43,9 +43,15 @@ export const bazosSkParser: PortalParser = {
     // Base URL: https://reality.bazos.sk/byty/predaj/
     let url = typSlug ? `${BASE_URL}/${typSlug}/predaj/` : `${BASE_URL}/byty/predaj/`;
 
-    // Bazos podporuje filter cez query params — ?hledat=XXX&cenaod=&cenado=&Okres=
+    // Bazos hlokalita akceptuje len mesto, nie mestskú časť.
+    // Z "Bratislava - Ružinov" vezmeme len "Bratislava" pre URL — MČ filtruje
+    // post-filter matchesFilter() v scrape cron.
+    const mesto = filter.lokalita
+      ? filter.lokalita.split(/\s*[-,]\s*/)[0].trim()
+      : "";
+
     const params = new URLSearchParams();
-    if (filter.lokalita) params.set("hlokalita", filter.lokalita);
+    if (mesto) params.set("hlokalita", mesto);
     if (filter.cena_od) params.set("cenaod", String(filter.cena_od));
     if (filter.cena_do) params.set("cenado", String(filter.cena_do));
     const qs = params.toString();
