@@ -45,6 +45,15 @@ const ALL_TILES: TileConfig[] = [
 
 const DEFAULT_TILES: TileKey[] = ["overenie", "vyhladavanie", "ciele", "prehlad", "kalendar", "pipeline", "aktivita"];
 
+/** Šírka tile-ov v 12-col gride: 4 = 1/3, 6 = 1/2, 12 = celá šírka. */
+const DEFAULT_TILE_WIDTHS: Record<TileKey, number> = {
+  overenie: 6, vyhladavanie: 6, ciele: 6, prehlad: 6,
+  kalendar: 12, pipeline: 12, aktivita: 12,
+};
+/** Cyklus veľkostí pri klikaní na resize tlačidlo. */
+const SIZE_CYCLE = [4, 6, 12];
+const SIZE_LABEL: Record<number, string> = { 4: "1/3", 6: "1/2", 12: "1/1" };
+
 interface CalEvent {
   id: string;
   summary: string;
@@ -342,8 +351,32 @@ export default function Dashboard() {
   const [tiles, setTiles] = useState<TileKey[]>(DEFAULT_TILES);
   const [showTileEditor, setShowTileEditor] = useState(false);
   const [dragTile, setDragTile] = useState<TileKey | null>(null);
+  const [tileWidths, setTileWidths] = useState<Record<TileKey, number>>(DEFAULT_TILE_WIDTHS);
 
-  useEffect(() => { if (user?.id) setTiles(loadTiles(user.id)); }, [user?.id]);
+  useEffect(() => {
+    if (!user?.id) return;
+    setTiles(loadTiles(user.id));
+    try {
+      const raw = getUserItem(user.id, "dashboard_tile_widths");
+      if (raw) setTileWidths({ ...DEFAULT_TILE_WIDTHS, ...JSON.parse(raw) });
+    } catch { /* ignore */ }
+  }, [user?.id]);
+
+  function cycleTileWidth(key: TileKey) {
+    setTileWidths((prev) => {
+      const cur = prev[key] ?? DEFAULT_TILE_WIDTHS[key];
+      const idx = SIZE_CYCLE.indexOf(cur);
+      const nextW = SIZE_CYCLE[(idx + 1) % SIZE_CYCLE.length];
+      const next = { ...prev, [key]: nextW };
+      if (user?.id) setUserItem(user.id, "dashboard_tile_widths", JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function resetTileWidths() {
+    setTileWidths(DEFAULT_TILE_WIDTHS);
+    if (user?.id) setUserItem(user.id, "dashboard_tile_widths", JSON.stringify(DEFAULT_TILE_WIDTHS));
+  }
 
   function toggleTile(key: TileKey) {
     setTiles(prev => {
@@ -477,14 +510,35 @@ export default function Dashboard() {
 
   const cardSt: React.CSSProperties = {
     background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px", padding: "20px",
+    position: "relative",
   };
   const tileClass = showTileEditor ? "tile-editing" : "";
-
   const has = (key: TileKey) => tiles.includes(key);
 
-  // Build grid rows from active tiles (respecting order)
-  const topRow = tiles.filter(k => k === "overenie" || k === "vyhladavanie");
-  const midRow = tiles.filter(k => k === "ciele" || k === "prehlad");
+  /** Obalí tile divom s CSS grid span + resize tlačidlom v edit mode. */
+  function tileWrapStyle(key: TileKey): React.CSSProperties {
+    const w = tileWidths[key] ?? DEFAULT_TILE_WIDTHS[key];
+    return { gridColumn: `span ${w}` };
+  }
+
+  /** Malé tlačítko na cyklovanie veľkosti — render len v edit mode. */
+  function SizeButton({ tileKey }: { tileKey: TileKey }) {
+    if (!showTileEditor) return null;
+    const w = tileWidths[tileKey] ?? DEFAULT_TILE_WIDTHS[tileKey];
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); cycleTileWidth(tileKey); }}
+        title="Zmeniť šírku"
+        style={{
+          position: "absolute", top: 10, right: 10, zIndex: 2,
+          padding: "4px 10px", background: "#374151", color: "#fff",
+          border: "none", borderRadius: "6px", fontSize: "11px",
+          fontWeight: 700, cursor: "pointer",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+        }}
+      >{SIZE_LABEL[w]}</button>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -508,11 +562,20 @@ export default function Dashboard() {
       {/* Tile editor */}
       {showTileEditor && (
         <div style={{ ...cardSt, padding: "16px 20px" }}>
-          <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>
-            Zapni/vypni dlaždice
-          </div>
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "12px" }}>
-            Potiahni dlaždicu pre zmenu poradia
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", gap: "12px" }}>
+            <div>
+              <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>
+                Zapni/vypni dlaždice
+              </div>
+              <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                Potiahni dlaždicu pre zmenu poradia · klikni na veľkosť (1/3 · 1/2 · 1/1) pri dlaždici pre zmenu šírky
+              </div>
+            </div>
+            <button onClick={resetTileWidths} style={{
+              padding: "6px 12px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
+              border: "1px solid var(--border)", borderRadius: "8px",
+              fontSize: "11px", fontWeight: "500", cursor: "pointer", whiteSpace: "nowrap",
+            }}>Obnoviť šírky</button>
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {ALL_TILES.map(t => {
@@ -543,12 +606,12 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Top row: Phone check + Search */}
-      {topRow.length > 0 && (
-        <div className="dash-grid" style={{ display: "grid", gridTemplateColumns: topRow.length === 2 ? "1fr 1fr" : "1fr", gap: "20px" }}>
-          {has("overenie") && (
-            <div className={tileClass} style={cardSt}>
-              <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Overenie čísla</div>
+      {/* === 12-col grid — každý tile má "gridColumn: span N" z tileWidths === */}
+      <div className="dash-grid" style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: "20px" }}>
+        {has("overenie") && (
+          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("overenie") }}>
+            <SizeButton tileKey="overenie" />
+            <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Overenie čísla</div>
               <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Automatické overenie pri zadaní čísla</div>
               <div style={{ position: "relative" }}>
                 <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
@@ -589,34 +652,32 @@ export default function Dashboard() {
             </div>
           )}
 
-          {has("vyhladavanie") && (
-            <div className={tileClass} style={cardSt}>
-              <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Vyhľadávanie</div>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Klienti, nehnuteľnosti, funkcie</div>
-              <SystemSearch />
-            </div>
-          )}
-        </div>
-      )}
+        {has("vyhladavanie") && (
+          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("vyhladavanie") }}>
+            <SizeButton tileKey="vyhladavanie" />
+            <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Vyhľadávanie</div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Klienti, nehnuteľnosti, funkcie</div>
+            <SystemSearch />
+          </div>
+        )}
 
-      {/* Middle row: Rings + Stats */}
-      {midRow.length > 0 && (
-        <div className="dash-grid" style={{ display: "grid", gridTemplateColumns: midRow.length === 2 ? "1fr 1fr" : "1fr", gap: "20px" }}>
-          {has("ciele") && (
-            <div className={tileClass} style={cardSt}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <Link href="/nastavenia" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Mesačné ciele →</Link>
-              </div>
-              <ActivityRings
-                obrat={{ current: stats.mesacnyObrat, target: goals.obrat }}
-                zmluvy={{ current: stats.zmluvy, target: goals.zmluvy }}
-                nabery={{ current: stats.nabery, target: goals.nabery }}
-              />
+        {has("ciele") && (
+          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("ciele") }}>
+            <SizeButton tileKey="ciele" />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <Link href="/nastavenia" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Mesačné ciele →</Link>
             </div>
-          )}
+            <ActivityRings
+              obrat={{ current: stats.mesacnyObrat, target: goals.obrat }}
+              zmluvy={{ current: stats.zmluvy, target: goals.zmluvy }}
+              nabery={{ current: stats.nabery, target: goals.nabery }}
+            />
+          </div>
+        )}
 
-          {has("prehlad") && (
-            <div className={tileClass} style={cardSt}>
+        {has("prehlad") && (
+          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("prehlad") }}>
+            <SizeButton tileKey="prehlad" />
               <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Prehľad →</Link>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 {[
@@ -635,25 +696,23 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Calendar */}
-      {has("kalendar") && (
-        <div className={tileClass} style={cardSt}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-            <Link href="/kalendar" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Kalendár →</Link>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
-              {new Date().toLocaleDateString("sk", { weekday: "long", day: "numeric", month: "long" })}
+        {has("kalendar") && (
+          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("kalendar") }}>
+            <SizeButton tileKey="kalendar" />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+              <Link href="/kalendar" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Kalendár →</Link>
+              <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
+                {new Date().toLocaleDateString("sk", { weekday: "long", day: "numeric", month: "long" })}
+              </div>
             </div>
+            <CalendarWidget userId={user?.id} />
           </div>
-          <CalendarWidget userId={user?.id} />
-        </div>
-      )}
+        )}
 
-      {/* Pipeline funnel */}
-      {has("pipeline") && (
-        <div className={tileClass} style={cardSt}>
+        {has("pipeline") && (
+          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("pipeline") }}>
+            <SizeButton tileKey="pipeline" />
           <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Pipeline →</Link>
           {(() => {
             const stages = [
@@ -694,9 +753,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Activity feed */}
-      {has("aktivita") && (
-        <div className={tileClass} style={cardSt}>
+        {has("aktivita") && (
+          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("aktivita") }}>
+            <SizeButton tileKey="aktivita" />
           <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px", display: "block", textDecoration: "none" }}>Posledná aktivita →</Link>
           {loadingActivity && <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px 0" }}>Načítavam...</div>}
           {!loadingActivity && activity.length === 0 && (
@@ -726,8 +785,9 @@ export default function Dashboard() {
               </Link>
             ))}
           </div>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {modal && <NewKlientModal open initialPhone={modalPhone} showTypKlienta defaultTyp="predavajuci" onClose={() => setModal(false)} onSaved={() => { setPhone(""); setFound(null); setChecked(false); loadDashboard(); }} />}
     </div>
