@@ -4,6 +4,65 @@ import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
 import { detectFirma } from "./shared";
 
 /**
+ * Stiahne detail stránku listingu a vráti predajca info.
+ * Detail HTML obsahuje JSON-ified React props s kľúčmi `advertiser.name`
+ * a `advertiser.agencyName`. Ak má listing agencyName → RK. Ak meno obsahuje
+ * s.r.o./a.s./spol. → RK. Inak súkromný.
+ *
+ * Direct fetch (bez ScrapingBee) — nehnutelnosti.sk detail pages sú SSR.
+ */
+export async function fetchNehnDetailInfo(url: string): Promise<{
+  predajca_meno?: string;
+  predajca_typ: "firma" | "sukromny";
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "sk-SK,sk;q=0.9",
+      },
+    });
+    if (!res.ok) return { predajca_typ: "firma" }; // safe default
+    const html = await res.text();
+
+    // React-serialized JSON má escaped quotes: \"advertiser\":{...}
+    // Try both escaped a non-escaped varianty.
+    const agencyMatch =
+      html.match(/\\"agencyName\\":\\"([^"\\]+)\\"/) ||
+      html.match(/"agencyName":"([^"]+)"/);
+    const nameMatch =
+      html.match(/\\"advertiser\\":\{[^}]*?\\"name\\":\\"([^"\\]+)\\"/) ||
+      html.match(/"advertiser":\{[^}]*?"name":"([^"]+)"/);
+
+    const agencyName = agencyMatch?.[1];
+    const advertiserName = nameMatch?.[1];
+
+    const predajca_meno = advertiserName || agencyName || undefined;
+
+    // Rozhodovanie:
+    // 1. Ak má agencyName → firma
+    // 2. Ak meno obsahuje s.r.o./a.s./spol. atď. (detectFirma) → firma
+    // 3. Inak súkromný
+    let predajca_typ: "firma" | "sukromny" = "sukromny";
+    if (agencyName && agencyName !== "$undefined") {
+      predajca_typ = "firma";
+    } else if (detectFirma(advertiserName, agencyName)) {
+      predajca_typ = "firma";
+    }
+
+    return { predajca_meno, predajca_typ };
+  } catch {
+    return { predajca_typ: "firma" }; // safe default
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * nehnutelnosti.sk — najväčší slovenský portál (Next.js + MUI, JS rendered).
  *
  * URL štruktúra vyhľadávania:

@@ -5,6 +5,7 @@ import {
   ALL_PORTALS,
   PORTALS_NO_SCRAPINGBEE,
   fetchPage,
+  fetchNehnDetailInfo,
   sendEmailNotification,
   sendTelegramNotification,
 } from "@/lib/monitor";
@@ -269,6 +270,50 @@ async function processFilter(
     const allListings: ScrapedInzerat[] = [];
     for (const { listings } of portalResults) {
       allListings.push(...listings);
+    }
+
+    // 2b. Enrichment: pre nehnutelnosti.sk listings stiahni detail stránku
+    //     a z JSONu v HTML extrahuj skutočného predajcu (advertiser.name +
+    //     agencyName). Aplikuje sa len na listingy ktoré ešte NIE SÚ v DB,
+    //     aby sme šetrili čas (existujúce už majú zapísaný predajca_typ).
+    const nehnListings = allListings.filter((l) => l.portal === "nehnutelnosti.sk");
+    if (nehnListings.length > 0) {
+      const externalIds = nehnListings.map((l) => l.external_id);
+      const { data: existing } = await sb
+        .from("monitor_inzeraty")
+        .select("external_id, predajca_typ, predajca_meno")
+        .eq("portal", "nehnutelnosti.sk")
+        .in("external_id", externalIds);
+
+      const existingMap = new Map(
+        (existing || []).map((r) => [r.external_id as string, r])
+      );
+
+      // Pre nové listingy: fetch detail paralelne (max ~10s pre celý batch).
+      const newNehnListings = nehnListings.filter(
+        (l) => !existingMap.has(l.external_id)
+      );
+      await Promise.all(
+        newNehnListings.map(async (listing) => {
+          try {
+            const info = await fetchNehnDetailInfo(listing.url);
+            listing.predajca_typ = info.predajca_typ;
+            if (info.predajca_meno) listing.predajca_meno = info.predajca_meno;
+          } catch {
+            // fallback na default "firma" nastavený v parseri
+          }
+        })
+      );
+
+      // Pre existujúce: použijeme už uložený predajca_typ (nemeníme ho pri
+      // každom scrape — raz správne detekované stačí).
+      for (const listing of nehnListings) {
+        const e = existingMap.get(listing.external_id);
+        if (e && e.predajca_typ) {
+          listing.predajca_typ = e.predajca_typ as typeof listing.predajca_typ;
+          if (e.predajca_meno) listing.predajca_meno = e.predajca_meno as string;
+        }
+      }
     }
 
     // Post-parse filter — portály v search URL čiastočne rešpektujú filter kritéria
