@@ -7,6 +7,17 @@ import PhoneInput from "@/components/PhoneInput";
 import { ALL_FEATURES, loadFeatureToggles, saveFeatureToggles } from "@/lib/featureToggles";
 import type { FeatureId, FeatureToggles } from "@/lib/featureToggles";
 import { getUserItem, setUserItem } from "@/lib/userStorage";
+import { detectPushState, enableBrowserPush, type PushState } from "@/lib/pushClient";
+import { supabase } from "@/lib/supabase";
+
+type NotifPrefs = { monitor: boolean; odklik: boolean; lv: boolean; naklady: boolean };
+const DEFAULT_NOTIF_PREFS: NotifPrefs = { monitor: true, odklik: true, lv: true, naklady: true };
+const NOTIF_TYPES: Array<{ key: keyof NotifPrefs; label: string; detail: string; icon: string }> = [
+  { key: "monitor", label: "Nový súkromný inzerát", detail: "Monitor nájde nový byt/dom v tvojich filtroch", icon: "🏠" },
+  { key: "odklik", label: "Odklik — auto-presun klienta", detail: "Klient nereagoval 24h a systém ho presunul", icon: "📥" },
+  { key: "lv", label: "Pripomienka na LV", detail: "Dnes máš náber a ešte nemáš list vlastníctva", icon: "📋" },
+  { key: "naklady", label: "Pravidelné náklady", detail: "Nový výdavok sa blíži k splatnosti", icon: "💰" },
+];
 
 const DEFAULT_GOALS = { obrat: 5000, zmluvy: 10, nabery: 20 };
 
@@ -60,8 +71,36 @@ export default function NastaveniaPage() {
 
   // Active category
   const [activeCategory, setActiveCategory] = useState("profil");
+  const [pushState, setPushState] = useState<PushState>("unknown");
+  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(DEFAULT_NOTIF_PREFS);
+  const [notifSaved, setNotifSaved] = useState(false);
 
   const uid = authUser?.id || "";
+
+  // Notifikačné preferencie — load z DB a sleduj push state
+  useEffect(() => {
+    setPushState(detectPushState());
+    if (!uid) return;
+    supabase.from("users").select("notification_prefs").eq("id", uid).single()
+      .then(({ data }) => {
+        const prefs = data?.notification_prefs as Partial<NotifPrefs> | undefined;
+        if (prefs) setNotifPrefs({ ...DEFAULT_NOTIF_PREFS, ...prefs });
+      });
+  }, [uid]);
+
+  const handleToggleNotif = async (key: keyof NotifPrefs) => {
+    const next = { ...notifPrefs, [key]: !notifPrefs[key] };
+    setNotifPrefs(next);
+    await supabase.from("users").update({ notification_prefs: next }).eq("id", uid);
+    setNotifSaved(true);
+    setTimeout(() => setNotifSaved(false), 2000);
+  };
+
+  const handleEnableBrowserPush = async () => {
+    const res = await enableBrowserPush({ userId: uid });
+    setPushState(res.state);
+    if (res.error) alert(res.error);
+  };
 
   useEffect(() => {
     if (!uid) return;
@@ -210,6 +249,7 @@ export default function NastaveniaPage() {
 
   const categories = [
     { id: "profil", label: "Profil makléra", icon: "👤" },
+    { id: "notifikacie", label: "Notifikácie", icon: "🔔" },
     { id: "inzercia", label: "AI Inzercia", icon: "✍️" },
     { id: "ciele", label: "Ciele a kalkulácie", icon: "🎯" },
     { id: "integracie", label: "Integrácie", icon: "🔗" },
@@ -290,6 +330,97 @@ export default function NastaveniaPage() {
                 <span style={{ fontSize: "13px", color: "#065F46", fontWeight: "500" }}>Uložené</span>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Notifikácie ═══ */}
+      {activeCategory === "notifikacie" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div style={cardSt}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
+              <div style={{
+                width: "36px", height: "36px", borderRadius: "50%",
+                background: "linear-gradient(135deg, #F59E0B, #EF4444)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "16px",
+              }}>🔔</div>
+              <div>
+                <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)" }}>Push notifikácie</div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>Automatické udalosti posielané na plochu / mobil</div>
+              </div>
+            </div>
+
+            {/* Browser push toggle */}
+            <div style={{
+              padding: "14px 16px", marginBottom: "20px",
+              borderRadius: "10px",
+              background: pushState === "granted" ? "#ECFDF5" : pushState === "denied" ? "#FEF2F2" : "var(--bg-elevated)",
+              border: `1px solid ${pushState === "granted" ? "#A7F3D0" : pushState === "denied" ? "#FECACA" : "var(--border)"}`,
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+            }}>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
+                  {pushState === "granted" ? "✓ Tento prehliadač je povolený" :
+                   pushState === "denied" ? "⚠ Notifikácie sú zablokované v prehliadači" :
+                   pushState === "unsupported" ? "Prehliadač nepodporuje notifikácie" :
+                   "Notifikácie v prehliadači nie sú aktívne"}
+                </div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                  {pushState === "denied" ?
+                    "Povoľ ich v nastaveniach prehliadača → notifikácie pre crmvianema.vercel.app" :
+                    "Prehliadač ti pop-upne okienko s novou udalosťou aj keď máš Chrome zatvorený"}
+                </div>
+              </div>
+              {pushState !== "granted" && pushState !== "unsupported" && (
+                <button onClick={handleEnableBrowserPush} style={{
+                  padding: "10px 18px", background: "#374151", color: "#fff", border: "none",
+                  borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}>
+                  Povoliť na tomto zariadení
+                </button>
+              )}
+            </div>
+
+            {/* Typy notifikácií */}
+            <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)", marginBottom: "10px" }}>
+              Ktoré udalosti chceš dostávať
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {NOTIF_TYPES.map((t) => {
+                const enabled = notifPrefs[t.key];
+                return (
+                  <label key={t.key} style={{
+                    display: "flex", alignItems: "center", gap: "12px",
+                    padding: "12px 14px",
+                    borderRadius: "10px",
+                    border: "1px solid var(--border)",
+                    background: enabled ? "var(--bg-elevated)" : "var(--bg-surface)",
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={() => handleToggleNotif(t.key)}
+                      style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#374151" }}
+                    />
+                    <span style={{ fontSize: "18px" }}>{t.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>{t.label}</div>
+                      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{t.detail}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {notifSaved && (
+              <div style={{ marginTop: "12px", fontSize: "12px", color: "#059669", fontWeight: "500" }}>
+                ✓ Uložené
+              </div>
+            )}
           </div>
         </div>
       )}

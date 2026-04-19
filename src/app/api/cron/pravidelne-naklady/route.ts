@@ -56,10 +56,10 @@ export async function GET() {
   if (created.length > 0) {
     try {
       await sendPushToAll({
+        type: "naklady",
         title: `💰 ${created.length} ${created.length === 1 ? "nový výdavok" : "nových výdavkov"} blíži splatnosť`,
         body: created.slice(0, 3).join(", ") + (created.length > 3 ? ` +${created.length - 3} ďalších` : ""),
         url: "/prehlad",
-        tag: "pravidelne-naklady",
       });
     } catch (e) {
       console.warn("[pravidelne-naklady] push failed:", e);

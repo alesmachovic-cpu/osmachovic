@@ -133,10 +133,10 @@ export async function GET(request: Request) {
     if (movedCount > 0) {
       try {
         await sendPushToAll({
+          type: "odklik",
           title: `📥 ${movedCount} ${movedCount === 1 ? "klient sa presunul" : "klientov sa presunulo"} do Odkliku`,
           body: "Po 24h bez akcie. Skontroluj v Odklik taba.",
           url: "/odklik",
-          tag: "odklik",
         });
       } catch (e) {
         console.warn("[odklik] push failed:", e);

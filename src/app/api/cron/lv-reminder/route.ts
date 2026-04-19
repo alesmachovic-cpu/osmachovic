@@ -98,10 +98,10 @@ export async function GET() {
       const mena = klienti.slice(0, 3).map((k) => k.meno).join(", ");
       const extra = klienti.length > 3 ? ` +${klienti.length - 3} ďalších` : "";
       await sendPushToAll({
+        type: "lv",
         title: `📋 Dnes máš ${klienti.length} ${klienti.length === 1 ? "náber" : "náberov"} bez LV`,
         body: `${mena}${extra}. Pridaj LV pred obhliadkou.`,
         url: "/klienti",
-        tag: "lv-reminder",
       });
     } catch (e) {
       console.warn("[lv-reminder] push failed:", e);
