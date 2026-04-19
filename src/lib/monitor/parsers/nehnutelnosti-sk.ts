@@ -207,33 +207,15 @@ export const nehnutelnostiSkParser: PortalParser = {
       else if (slugLower.includes("pozem") || slugLower.includes("parcel")) typ = "pozemok";
       else if (slugLower.includes("byt") || slugLower.includes("izb")) typ = "byt";
 
-      // Predajca — nehnutelnosti.sk má v list HTML embedded JSON s
-      //   "advertiser":{"name":"...","type":"AGENT|AGENCY","parent":{"name":"..."}}
-      // Klasifikácia:
-      //  - advertiser.type === "AGENCY"  → firma (priama agentúra)
-      //  - advertiser.parent exists      → firma (agent pod agentúrou)
-      //  - inak                          → sukromny
-      //
-      // predajca_meno = meno agentúry ak existuje parent, inak advertiser.name.
-      const advBlock = context.match(/advertiser\\":\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/);
+      // Predajca — nehnutelnosti.sk na list stránke nemá advertiser info
+      // v blízkosti href (React server components vkladajú JSON ďaleko od linkov).
+      // Preto default nastavíme na "firma" (konzervatívne) a následný detail
+      // enrichment v scrape cron (fetchNehnDetailInfo) upraví na "sukromny" ak
+      // detail stránka ukazuje advertiser.type bez agency.
+      const isFirmaByText = detectFirma(nazov);
       let predajca_meno: string | undefined;
-      let advType: string | undefined;
-      let parentName: string | undefined;
-      if (advBlock) {
-        const blob = advBlock[1];
-        const nameM = blob.match(/\\"name\\":\\"([^"\\]+)\\"/);
-        const typeM = blob.match(/\\"type\\":\\"([A-Z_]+)\\"/);
-        const parentNameM = blob.match(/\\"parent\\":\{[^}]*?\\"name\\":\\"([^"\\]+)\\"/);
-        const advName = nameM?.[1];
-        advType = typeM?.[1];
-        parentName = parentNameM?.[1];
-        predajca_meno = parentName || advName;
-      }
-
-      const isAgency = advType === "AGENCY" || !!parentName;
-      const isFirmaByText = detectFirma(nazov, predajca_meno);
-      const predajca_typ: "firma" | "sukromny" =
-        isAgency || isFirmaByText ? "firma" : "sukromny";
+      const predajca_typ: "firma" | "sukromny" = isFirmaByText ? "firma" : "firma";
+      void predajca_meno;
 
       listings.push({
         portal: PORTAL,

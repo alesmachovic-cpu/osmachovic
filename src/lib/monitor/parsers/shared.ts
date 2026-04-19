@@ -12,8 +12,12 @@ const FIREMNE_MARKERY: readonly string[] = [
   "realit", "estate", "broker", "property",
   // Typické slovenské RK formulácie
   "exkluzívn", "v zastúpení", "v ponuke", "ponúkame",
-  "provízia rk", "provizia rk", "+ provízia", "+ provizia",
+  "provízia rk", "provizia rk",
+  "provízia pre rk", "provizia pre rk",
+  "+ provízia", "+ provizia",
+  "plus provízia", "plus provizia",
   "cena + provízia", "cena + provizia",
+  "+rk", "+ rk",
   " rk ", " rk:", "naša kancelária",
   // Známe slovenské RK brandy (často ako prefix v názve inzerátu)
   "herrys", "mikelssen", "re/max", "remax", "century 21",
