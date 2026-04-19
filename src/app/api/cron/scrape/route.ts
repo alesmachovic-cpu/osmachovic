@@ -273,13 +273,12 @@ async function processFilter(
       // Enrich listingy kde:
       // 1. NIE SÚ v DB (nové), ALEBO
       // 2. V DB majú predajca_typ = NULL (staré rows pred enrichmentom)
-      // Limit na max 8 fetches per run aby sme zmestili do 30s Vercel limitu.
-      const needsEnrich = nehnListings
-        .filter((l) => {
-          const e = existingMap.get(l.external_id);
-          return !e || !e.predajca_typ;
-        })
-        .slice(0, 8);
+      // Fetch-es bežia paralelne cez Promise.all — direct HTTP do nehnutelnosti.sk
+      // (~1-2s per page). 30 listings × paralelne ~2-3s. Pod 30s Vercel limit.
+      const needsEnrich = nehnListings.filter((l) => {
+        const e = existingMap.get(l.external_id);
+        return !e || !e.predajca_typ;
+      });
 
       await Promise.all(
         needsEnrich.map(async (listing) => {
