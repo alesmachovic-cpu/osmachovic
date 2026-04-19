@@ -289,12 +289,19 @@ async function processFilter(
         (existing || []).map((r) => [r.external_id as string, r])
       );
 
-      // Pre nové listingy: fetch detail paralelne (max ~10s pre celý batch).
-      const newNehnListings = nehnListings.filter(
-        (l) => !existingMap.has(l.external_id)
-      );
+      // Enrich listingy kde:
+      // 1. NIE SÚ v DB (nové), ALEBO
+      // 2. V DB majú predajca_typ = NULL (staré rows pred enrichmentom)
+      // Limit na max 8 fetches per run aby sme zmestili do 30s Vercel limitu.
+      const needsEnrich = nehnListings
+        .filter((l) => {
+          const e = existingMap.get(l.external_id);
+          return !e || !e.predajca_typ;
+        })
+        .slice(0, 8);
+
       await Promise.all(
-        newNehnListings.map(async (listing) => {
+        needsEnrich.map(async (listing) => {
           try {
             const info = await fetchNehnDetailInfo(listing.url);
             listing.predajca_typ = info.predajca_typ;
@@ -305,9 +312,9 @@ async function processFilter(
         })
       );
 
-      // Pre existujúce: použijeme už uložený predajca_typ (nemeníme ho pri
-      // každom scrape — raz správne detekované stačí).
+      // Pre ostatné existujúce: použijeme uložený predajca_typ.
       for (const listing of nehnListings) {
+        if (needsEnrich.includes(listing)) continue;
         const e = existingMap.get(listing.external_id);
         if (e && e.predajca_typ) {
           listing.predajca_typ = e.predajca_typ as typeof listing.predajca_typ;
