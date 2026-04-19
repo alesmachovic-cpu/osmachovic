@@ -8,6 +8,7 @@ import {
   fetchNehnDetailInfo,
   sendEmailNotification,
   sendTelegramNotification,
+  sendPushForNewListings,
 } from "@/lib/monitor";
 import type { ScrapedInzerat, MonitorFilter, ScrapeResult } from "@/lib/monitor";
 
@@ -204,6 +205,17 @@ export async function GET(request: Request) {
               error_msg: tgResult.error || null,
             }))
           );
+        }
+
+        // Web push notifikácie — posiela sa všetkým subscribnutým zariadeniam
+        // (každý prehliadač/mobil používateľa). Bez ohľadu na filter.notify_email,
+        // pretože push je "realtime" kanál pre rýchle zachytenie.
+        if (newItems.length > 0) {
+          try {
+            await sendPushForNewListings(newItems);
+          } catch (e) {
+            console.warn("[scrape] push failed:", e);
+          }
         }
       }
     }

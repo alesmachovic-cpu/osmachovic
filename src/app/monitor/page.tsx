@@ -4,6 +4,16 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
 import { useAuth } from "@/components/AuthProvider";
 
+/** VAPID public key je base64url-encoded. Web Push API vyžaduje Uint8Array. */
+function urlBase64ToUint8Array(base64: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const base64Std = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64Std);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
 /* ── Typy ── */
 interface Inzerat {
   id: string;
@@ -337,6 +347,73 @@ export default function MonitorPage() {
   };
 
   const [scraping, setScraping] = useState(false);
+  const [pushState, setPushState] = useState<"unknown" | "granted" | "denied" | "unsupported">("unknown");
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setPushState("unsupported");
+      return;
+    }
+    setPushState(Notification.permission === "granted" ? "granted" : Notification.permission === "denied" ? "denied" : "unknown");
+  }, []);
+
+  const enablePushNotifications = async () => {
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        showToast("Tento prehliadač notifikácie nepodporuje", "error");
+        return;
+      }
+
+      // 1. Vyžiadaj povolenie
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") {
+        setPushState(perm === "denied" ? "denied" : "unknown");
+        showToast("Notifikácie neboli povolené", "error");
+        return;
+      }
+
+      // 2. Zaregistruj Service Worker
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+
+      // 3. Zisti existujúcu subscription alebo vytvor novú
+      const pub = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!pub) {
+        showToast("VAPID public key chýba v prostredí", "error");
+        return;
+      }
+      const existing = await reg.pushManager.getSubscription();
+      const sub =
+        existing ||
+        (await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(pub) as BufferSource,
+        }));
+
+      // 4. Pošli na server
+      const res = await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subscription: sub.toJSON(),
+          userId: user?.id,
+          userAgent: navigator.userAgent,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        showToast(d.error || "Chyba pri registrácii", "error");
+        return;
+      }
+
+      setPushState("granted");
+      showToast("✓ Notifikácie povolené na tomto zariadení");
+    } catch (e) {
+      console.error("[push] enable error:", e);
+      showToast("Chyba pri povoľovaní notifikácií", "error");
+    }
+  };
+
   const runScrape = async () => {
     setScraping(true);
     try {
@@ -392,23 +469,39 @@ export default function MonitorPage() {
             Sledovanie nových inzerátov na slovenských portáloch
           </p>
         </div>
-        <button
-          onClick={runScrape}
-          disabled={scraping || aktivneFiltre === 0}
-          style={{
-            ...S.btnPrimary,
-            opacity: (scraping || aktivneFiltre === 0) ? 0.4 : 1,
-            cursor: (scraping || aktivneFiltre === 0) ? "not-allowed" : "pointer",
-            display: "flex", alignItems: "center", gap: "8px",
-          }}
-        >
-          {scraping ? (
-            <>
-              <span style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
-              Scrapujem...
-            </>
-          ) : aktivneFiltre === 0 ? "Pridaj filter" : "Spustiť scrape"}
-        </button>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {pushState !== "granted" && pushState !== "unsupported" && (
+            <button
+              onClick={enablePushNotifications}
+              title={pushState === "denied" ? "Notifikácie sú zablokované v prehliadači. Povoľ ich v nastaveniach." : "Povoliť push notifikácie v prehliadači / mobile"}
+              style={{ ...S.btnSecondary, display: "flex", alignItems: "center", gap: "8px" }}
+            >
+              🔔 Povoliť notifikácie
+            </button>
+          )}
+          {pushState === "granted" && (
+            <span style={{ ...S.btnSecondary, display: "flex", alignItems: "center", gap: "6px", color: "#059669", borderColor: "#A7F3D0", background: "#ECFDF5" }}>
+              ✓ Notifikácie zapnuté
+            </span>
+          )}
+          <button
+            onClick={runScrape}
+            disabled={scraping || aktivneFiltre === 0}
+            style={{
+              ...S.btnPrimary,
+              opacity: (scraping || aktivneFiltre === 0) ? 0.4 : 1,
+              cursor: (scraping || aktivneFiltre === 0) ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", gap: "8px",
+            }}
+          >
+            {scraping ? (
+              <>
+                <span style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+                Scrapujem...
+              </>
+            ) : aktivneFiltre === 0 ? "Pridaj filter" : "Spustiť scrape"}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
