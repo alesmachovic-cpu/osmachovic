@@ -174,8 +174,10 @@ input:focus, select:focus, textarea:focus {
   /* Add padding at bottom for tab bar */
   main { padding-bottom: 80px !important; }
 
-  /* Dashboard grids: stack on mobile */
+  /* Dashboard grids: stack on mobile — všetky tiles full-width (prepíše
+     per-tile gridColumn: span N ktoré sa používa na desktop). */
   .dash-grid { grid-template-columns: 1fr !important; }
+  .dash-grid > * { grid-column: 1 / -1 !important; }
 
   /* Nastavenia: stack goal inputs */
   .goals-grid { grid-template-columns: 1fr !important; }
