@@ -843,7 +843,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       // Lokalita — priorita: ulica > obec > okres
       const lokalitaFull = [f.ulica_verejna, f.obec, f.okres, f.kraj].filter(Boolean).join(", ");
 
-      // Load makler profile from settings (per-user)
+      // Load makler profile z localStorage (per-device)
       let maklerMeno = "", maklerTelefon = "", maklerEmail = "", vzorovyInzerat = "";
       try {
         const mp = getUserItem(uid, "makler_profile");
@@ -853,10 +853,22 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
           maklerTelefon = p.telefon || "";
           maklerEmail = p.email || "";
         }
-        const vi = getUserItem(uid, "vzorove_inzeraty");
-        if (vi) {
-          const links = JSON.parse(vi) as string[];
-          vzorovyInzerat = links.filter(Boolean).join("\n");
+      } catch { /* ignore */ }
+      // Vzorové inzeráty — primárne z DB (cross-device), fallback localStorage
+      try {
+        if (uid) {
+          const { data } = await supabase.from("users").select("vzorove_inzeraty").eq("id", uid).single();
+          const dbVal = data?.vzorove_inzeraty;
+          if (Array.isArray(dbVal) && dbVal.length > 0) {
+            vzorovyInzerat = dbVal.filter(Boolean).join("\n");
+          }
+        }
+        if (!vzorovyInzerat) {
+          const vi = getUserItem(uid, "vzorove_inzeraty");
+          if (vi) {
+            const links = JSON.parse(vi) as string[];
+            vzorovyInzerat = links.filter(Boolean).join("\n");
+          }
         }
       } catch { /* ignore */ }
 

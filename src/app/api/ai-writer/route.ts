@@ -245,44 +245,57 @@ async function researchLocationGPT(lokalita: string): Promise<string> {
   } catch { return ""; }
 }
 
-/* ── Claude: generate text (with optional photos) ── */
+/* ── Claude: generate text (s fotkami ak sú dostupné).
+ *  Stratégia: Opus 4.7 (bohatší text) primárne, Sonnet 4.5 fallback pri chybe. */
 async function generateClaude(details: string, locationInfo: string, images?: { data: string; mimeType: string }[]): Promise<Record<string, string>> {
   if (!process.env.ANTHROPIC_API_KEY) return {};
-  try {
-    const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    // Build multimodal content if photos available
-    const content: Array<{ type: string; source?: { type: string; media_type: string; data: string }; text?: string }> = [];
-    if (images && images.length > 0) {
-      for (const img of images) {
-        content.push({
-          type: "image",
-          source: { type: "base64", media_type: img.mimeType, data: img.data },
-        });
-      }
+  const { default: Anthropic } = await import("@anthropic-ai/sdk");
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  // Build multimodal content if photos available
+  const content: Array<{ type: string; source?: { type: string; media_type: string; data: string }; text?: string }> = [];
+  if (images && images.length > 0) {
+    for (const img of images) {
       content.push({
-        type: "text",
-        text: `Vyššie sú REÁLNE fotky nehnuteľnosti. Opíš FAKTY ktoré sú jasné (farby, typ kuchyne), NEPREHÁŇAJ materiály — ak nevieš, píš "laminátové podlahy" nie "dubové". Nikdy nepíš "na fotkách vidíme". Píš ako maklér po obhliadke.\n\n${USER_PROMPT(details, locationInfo)}`,
+        type: "image",
+        source: { type: "base64", media_type: img.mimeType, data: img.data },
       });
-    } else {
-      content.push({ type: "text", text: USER_PROMPT(details, locationInfo) });
     }
-
-    const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 2000,
-      system: VIANEMA_SYSTEM,
-      messages: [{ role: "user", content: content as never }],
+    content.push({
+      type: "text",
+      text: `Vyššie sú REÁLNE fotky nehnuteľnosti. Opíš FAKTY ktoré sú jasné (farby, typ kuchyne), NEPREHÁŇAJ materiály — ak nevieš, píš "laminátové podlahy" nie "dubové". Nikdy nepíš "na fotkách vidíme". Píš ako maklér po obhliadke.\n\n${USER_PROMPT(details, locationInfo)}`,
     });
-    const raw = (msg.content[0] as { type: string; text: string }).text.trim();
-    const parsed = extractJSON(raw);
-    if (!parsed.emotivny) return { __err: `Claude parse fail (raw ${raw.length} ch): ${raw.slice(0,200)}` };
-    return parsed;
-  } catch (e) {
-    console.error("[ai-writer] Claude failed:", e);
-    return { __err: `Claude exception: ${String(e).slice(0,200)}` };
+  } else {
+    content.push({ type: "text", text: USER_PROMPT(details, locationInfo) });
   }
+
+  async function call(model: string): Promise<Record<string, string>> {
+    try {
+      const msg = await anthropic.messages.create({
+        model,
+        max_tokens: 2000,
+        system: VIANEMA_SYSTEM,
+        messages: [{ role: "user", content: content as never }],
+      });
+      const raw = (msg.content[0] as { type: string; text: string }).text.trim();
+      const parsed = extractJSON(raw);
+      if (!parsed.emotivny) return { __err: `${model} parse fail (raw ${raw.length} ch): ${raw.slice(0,200)}` };
+      return parsed;
+    } catch (e) {
+      return { __err: `${model} exception: ${String(e).slice(0,200)}` };
+    }
+  }
+
+  // Primárny: Opus 4.7 — bohatší, presnejší text
+  const opus = await call("claude-opus-4-7");
+  if (opus.emotivny) return opus;
+
+  console.warn("[ai-writer] Opus failed, fallback na Sonnet:", opus.__err);
+  const sonnet = await call("claude-sonnet-4-5");
+  if (sonnet.emotivny) return sonnet;
+
+  return { __err: opus.__err || sonnet.__err || "Claude obe modely zlyhali" };
 }
 
 /* ── GPT: generate text ── */

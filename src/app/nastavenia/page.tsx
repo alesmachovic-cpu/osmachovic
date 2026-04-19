@@ -126,9 +126,19 @@ export default function NastaveniaPage() {
         setMaklerEmail(authUser.email || "");
       }
 
-      // Load vzorové inzeráty (per-user)
-      const vi = getUserItem(uid, "vzorove_inzeraty");
-      if (vi) setVzorLinks(JSON.parse(vi));
+      // Load vzorové inzeráty z DB (cross-device). Fallback na localStorage pre legacy.
+      supabase.from("users").select("vzorove_inzeraty").eq("id", uid).single()
+        .then(({ data }) => {
+          const dbVal = data?.vzorove_inzeraty;
+          if (Array.isArray(dbVal) && dbVal.length > 0) {
+            // Padding na 3 slots
+            setVzorLinks([dbVal[0] || "", dbVal[1] || "", dbVal[2] || ""]);
+          } else {
+            // Migrácia z localStorage pri prvej návšteve po deploy
+            const vi = getUserItem(uid, "vzorove_inzeraty");
+            if (vi) setVzorLinks(JSON.parse(vi));
+          }
+        });
 
       // Load company info (admin only, from Supabase)
       if (isAdmin) {
@@ -191,8 +201,12 @@ export default function NastaveniaPage() {
     setTimeout(() => setMaklerSaved(false), 2000);
   }
 
-  function handleSaveVzory() {
+  async function handleSaveVzory() {
     if (!uid) return;
+    // Filter out empty slots pred uložením do DB
+    const nonEmpty = vzorLinks.filter((l) => l && l.trim());
+    await supabase.from("users").update({ vzorove_inzeraty: nonEmpty }).eq("id", uid);
+    // Zachovaj aj localStorage pre spätnú kompatibilitu
     setUserItem(uid, "vzorove_inzeraty", JSON.stringify(vzorLinks));
     setVzorSaved(true);
     setTimeout(() => setVzorSaved(false), 2000);
