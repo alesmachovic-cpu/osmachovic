@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { sendPushToAll } from "@/lib/monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -88,6 +89,22 @@ export async function GET() {
       } catch (e) {
         console.error("[lv-reminder] email error:", e);
       }
+    }
+  }
+
+  // Push notifikácia pre klientov s chýbajúcim LV
+  if (klienti.length > 0) {
+    try {
+      const mena = klienti.slice(0, 3).map((k) => k.meno).join(", ");
+      const extra = klienti.length > 3 ? ` +${klienti.length - 3} ďalších` : "";
+      await sendPushToAll({
+        title: `📋 Dnes máš ${klienti.length} ${klienti.length === 1 ? "náber" : "náberov"} bez LV`,
+        body: `${mena}${extra}. Pridaj LV pred obhliadkou.`,
+        url: "/klienti",
+        tag: "lv-reminder",
+      });
+    } catch (e) {
+      console.warn("[lv-reminder] push failed:", e);
     }
   }
 

@@ -1,4 +1,4 @@
-/* ── Web Push notifikácie pre monitor ── */
+/* ── Web Push notifikácie pre monitor + ostatné automatické eventy ── */
 
 import webpush from "web-push";
 import type { ScrapedInzerat } from "./types";
@@ -11,6 +11,52 @@ function ensureVapid() {
   if (!pub || !prv) return false;
   webpush.setVapidDetails(sub, pub, prv);
   return true;
+}
+
+/**
+ * Generic push sender — pošle jednu notifikáciu všetkým registrovaným zariadeniam.
+ * Použitie v ľubovoľnom cron alebo API route ktorý chce notifikovať usera o
+ * automatickej udalosti (odklik, LV reminder, API alert...).
+ *
+ * Mŕtve subscriptions (410/404) automaticky cleanujeme.
+ */
+export async function sendPushToAll(payload: {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+}): Promise<{ sent: number; failed: number }> {
+  if (!ensureVapid()) return { sent: 0, failed: 0 };
+  const sb = getSupabaseAdmin();
+  const { data: subs } = await sb.from("push_subscriptions").select("*");
+  if (!subs || subs.length === 0) return { sent: 0, failed: 0 };
+
+  const msg = JSON.stringify({
+    title: payload.title,
+    body: payload.body,
+    url: payload.url || "/",
+    tag: payload.tag || "event",
+  });
+
+  let sent = 0, failed = 0;
+  await Promise.all(
+    subs.map(async (s) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+          msg
+        );
+        sent++;
+      } catch (e: unknown) {
+        failed++;
+        const err = e as { statusCode?: number };
+        if (err?.statusCode === 410 || err?.statusCode === 404) {
+          await sb.from("push_subscriptions").delete().eq("endpoint", s.endpoint);
+        }
+      }
+    })
+  );
+  return { sent, failed };
 }
 
 /**

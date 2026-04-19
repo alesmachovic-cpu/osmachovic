@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { sendPushToAll } from "@/lib/monitor";
 
 // Spustí sa denne cez Vercel cron (vercel.json).
 // Pre každý aktívny pravidelný náklad: ak je dnes 0–2 dni pred dňom splatnosti
@@ -49,6 +50,20 @@ export async function GET() {
       kategoria: p.kategoria || "Pravidelný náklad",
     });
     created.push(p.nazov);
+  }
+
+  // Push keď sa vytvoril aspoň jeden nový záznam výdavku
+  if (created.length > 0) {
+    try {
+      await sendPushToAll({
+        title: `💰 ${created.length} ${created.length === 1 ? "nový výdavok" : "nových výdavkov"} blíži splatnosť`,
+        body: created.slice(0, 3).join(", ") + (created.length > 3 ? ` +${created.length - 3} ďalších` : ""),
+        url: "/prehlad",
+        tag: "pravidelne-naklady",
+      });
+    } catch (e) {
+      console.warn("[pravidelne-naklady] push failed:", e);
+    }
   }
 
   return NextResponse.json({ ok: true, created, count: created.length });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { sendPushToAll } from "@/lib/monitor";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -125,6 +126,20 @@ export async function GET(request: Request) {
           .eq("id", k.id);
 
         if (!error) movedCount++;
+      }
+    }
+
+    // Push notifikácia keď sa niekto presunul — nie tichá akcia, maklér to má vedieť
+    if (movedCount > 0) {
+      try {
+        await sendPushToAll({
+          title: `📥 ${movedCount} ${movedCount === 1 ? "klient sa presunul" : "klientov sa presunulo"} do Odkliku`,
+          body: "Po 24h bez akcie. Skontroluj v Odklik taba.",
+          url: "/odklik",
+          tag: "odklik",
+        });
+      } catch (e) {
+        console.warn("[odklik] push failed:", e);
       }
     }
 

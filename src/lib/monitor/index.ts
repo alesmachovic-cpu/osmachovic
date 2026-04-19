@@ -7,7 +7,7 @@ export { bazosSkParser } from "./parsers/bazos-sk";
 export { bytySkParser } from "./parsers/byty-sk";
 export { fetchPage, getScrapingBeeCredits } from "./scraper";
 export { sendEmailNotification, sendTelegramNotification } from "./notifications";
-export { sendPushForNewListings } from "./push";
+export { sendPushForNewListings, sendPushToAll } from "./push";
 export type { ScrapedInzerat, MonitorFilter, ScrapeResult, PortalParser } from "./types";
 
 import { nehnutelnostiSkParser } from "./parsers/nehnutelnosti-sk";
