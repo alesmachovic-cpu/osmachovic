@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
 import { useAuth } from "@/components/AuthProvider";
 
-const SUPER_ADMIN_EMAIL = "ales.machovic@gmail.com";
-
 /* ── Typy ── */
 interface Inzerat {
   id: string;
@@ -188,8 +186,15 @@ export default function MonitorPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { user } = useAuth();
-  const isSuperAdmin =
-    user?.email === SUPER_ADMIN_EMAIL || user?.login_email === SUPER_ADMIN_EMAIL;
+  const SUPER_ADMIN_EMAILS = [
+    "ales.machovic@gmail.com",
+    "ales.machovic@vianema.eu",
+    "ales@vianema.eu",
+  ];
+  const userEmails = [user?.email, user?.login_email]
+    .filter((e): e is string => typeof e === "string")
+    .map((e) => e.toLowerCase());
+  const isSuperAdmin = userEmails.some((e) => SUPER_ADMIN_EMAILS.includes(e));
 
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null);
@@ -242,11 +247,14 @@ export default function MonitorPage() {
     const count = selectedIds.size;
     if (!confirm(`Naozaj zmazať ${count} inzerátov? Táto akcia sa nedá vrátiť.`)) return;
 
-    const email = user?.email || user?.login_email || "";
     const res = await fetch("/api/monitor/inzeraty", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: Array.from(selectedIds), actorEmail: email }),
+      body: JSON.stringify({
+        ids: Array.from(selectedIds),
+        actorEmail: user?.email || "",
+        actorLoginEmail: user?.login_email || "",
+      }),
     });
     const d = await res.json();
     if (res.ok) {

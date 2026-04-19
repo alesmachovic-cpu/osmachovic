@@ -10,17 +10,28 @@ export const runtime = "nodejs";
  * Zmaže viacero inzerátov naraz. Super-admin only (ales.machovic@gmail.com).
  * UI posiela body s actorEmail, serverom over (jednoduchá kontrola pre personal CRM).
  */
-const SUPER_ADMIN_EMAIL = "ales.machovic@gmail.com";
+// Super-admin môže byť prihlásený cez Google (gmail) aj cez business email.
+// Akceptujeme obe varianty (user.email alebo user.login_email z UI).
+const SUPER_ADMIN_EMAILS = [
+  "ales.machovic@gmail.com",
+  "ales.machovic@vianema.eu",
+  "ales@vianema.eu",
+];
 
 export async function DELETE(request: Request) {
-  let body: { ids?: string[]; actorEmail?: string };
+  let body: { ids?: string[]; actorEmail?: string; actorLoginEmail?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 });
   }
 
-  if (body.actorEmail !== SUPER_ADMIN_EMAIL) {
+  const candidateEmails = [body.actorEmail, body.actorLoginEmail]
+    .filter((e): e is string => typeof e === "string")
+    .map((e) => e.toLowerCase());
+
+  const isSuperAdmin = candidateEmails.some((e) => SUPER_ADMIN_EMAILS.includes(e));
+  if (!isSuperAdmin) {
     return NextResponse.json({ error: "Nedostatočné oprávnenia" }, { status: 403 });
   }
 
