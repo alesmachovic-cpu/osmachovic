@@ -33,6 +33,41 @@ function decodeBazosName(encoded: string): string {
   }
 }
 
+/**
+ * Stiahne bazos detail stránku a overí či popis obsahuje RK markery.
+ * List page popis je obmedzený / neúplný — detail má plný text kde býva
+ * "+ provízia RK" alebo podobné indikácie skrytej agentúry.
+ * Vracia true ak listing je firma (inak ponecháva sukromny klasifikáciu).
+ */
+export async function isBazosListingFirma(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "sk-SK,sk;q=0.9",
+      },
+    });
+    if (!res.ok) return false;
+    const html = await res.text();
+    // Import detectFirma a spusti na plný text stránky (bez HTML tagov).
+    const { detectFirma } = await import("./shared");
+    const text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
+    // Dodatočná jednoduchá kontrola — tieto slová jednoznačne znamenajú RK.
+    const strictRkWords = ["provízia rk", "provizia rk", "+ provízia", "+ provizia", "realitná kancelária", "realitna kancelaria", "makléra prosím nekontaktuj", "maklera prosim nekontaktuj"];
+    const low = text.toLowerCase();
+    if (strictRkWords.some((w) => low.includes(w))) return true;
+    return detectFirma(text.slice(0, 5000));
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export const bazosSkParser: PortalParser = {
   portal: PORTAL,
 

@@ -6,6 +6,7 @@ import {
   PORTALS_NO_SCRAPINGBEE,
   fetchPage,
   fetchNehnDetailInfo,
+  isBazosListingFirma,
   sendPushForNewListings,
 } from "@/lib/monitor";
 import type { ScrapedInzerat, MonitorFilter, ScrapeResult } from "@/lib/monitor";
@@ -301,6 +302,24 @@ async function processFilter(
           if (e.predajca_meno) listing.predajca_meno = e.predajca_meno as string;
         }
       }
+    }
+
+    // 2c. Bazos enrichment — pre listingy klasifikované ako "sukromny" (podľa
+    //     mena predajcu) skontrolujeme detail stránku. Makléri často používajú
+    //     osobné meno, ale v popise majú "+ provízia RK". List page popis býva
+    //     orezaný, detail page ma plný text.
+    const bazosCandidates = allListings.filter(
+      (l) => l.portal === "bazos.sk" && l.predajca_typ === "sukromny"
+    );
+    if (bazosCandidates.length > 0) {
+      await Promise.all(
+        bazosCandidates.map(async (listing) => {
+          try {
+            const isFirma = await isBazosListingFirma(listing.url);
+            if (isFirma) listing.predajca_typ = "firma";
+          } catch { /* fail-safe: keep sukromny */ }
+        })
+      );
     }
 
     // Post-parse filter — portály v search URL čiastočne rešpektujú filter kritéria

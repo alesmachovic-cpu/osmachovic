@@ -3,7 +3,7 @@
 export { nehnutelnostiSkParser, fetchNehnDetailInfo } from "./parsers/nehnutelnosti-sk";
 export { realitySkParser } from "./parsers/reality-sk";
 export { toprealitySkParser } from "./parsers/topreality-sk";
-export { bazosSkParser } from "./parsers/bazos-sk";
+export { bazosSkParser, isBazosListingFirma } from "./parsers/bazos-sk";
 export { bytySkParser } from "./parsers/byty-sk";
 export { fetchPage, getScrapingBeeCredits } from "./scraper";
 export { sendEmailNotification, sendTelegramNotification } from "./notifications";
