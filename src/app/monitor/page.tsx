@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
+import { useAuth } from "@/components/AuthProvider";
+
+const SUPER_ADMIN_EMAIL = "ales.machovic@gmail.com";
 
 /* ── Typy ── */
 interface Inzerat {
@@ -182,6 +185,11 @@ export default function MonitorPage() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [lenSukromni, setLenSukromni] = useState(true);  // Default: zobraz len súkromných
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const { user } = useAuth();
+  const isSuperAdmin =
+    user?.email === SUPER_ADMIN_EMAIL || user?.login_email === SUPER_ADMIN_EMAIL;
 
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null);
@@ -206,6 +214,48 @@ export default function MonitorPage() {
     const res = await fetch("/api/monitor/filtre");
     const d = await res.json();
     setFiltre(d.filtre || []);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllVisible = (ids: string[]) => {
+    setSelectedIds((prev) => {
+      const allSelected = ids.every((id) => prev.has(id));
+      if (allSelected) {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      }
+      return new Set([...prev, ...ids]);
+    });
+  };
+
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    if (!confirm(`Naozaj zmazať ${count} inzerátov? Táto akcia sa nedá vrátiť.`)) return;
+
+    const email = user?.email || user?.login_email || "";
+    const res = await fetch("/api/monitor/inzeraty", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: Array.from(selectedIds), actorEmail: email }),
+    });
+    const d = await res.json();
+    if (res.ok) {
+      showToast(`Zmazaných ${d.deleted} inzerátov`);
+      setSelectedIds(new Set());
+      await loadInzeraty();
+    } else {
+      showToast(d.error || "Chyba pri mazaní", "error");
+    }
   };
 
   useEffect(() => {
@@ -426,8 +476,40 @@ export default function MonitorPage() {
             </button>
           </div>
 
-          <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "12px" }}>
-            {filtered.length === total ? `${total} inzerátov` : `${filtered.length} z ${total}`}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+              {filtered.length === total ? `${total} inzerátov` : `${filtered.length} z ${total}`}
+              {isSuperAdmin && filtered.length > 0 && (
+                <>
+                  {" · "}
+                  <button
+                    onClick={() => selectAllVisible(filtered.map((f) => f.id))}
+                    style={{ background: "none", border: "none", color: "var(--text-link, #007AFF)", cursor: "pointer", fontSize: "13px", padding: 0 }}
+                  >
+                    {filtered.every((f) => selectedIds.has(f.id)) ? "Zrušiť výber" : "Vybrať všetky"}
+                  </button>
+                </>
+              )}
+            </div>
+            {isSuperAdmin && selectedIds.size > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                  Vybrané: {selectedIds.size}
+                </span>
+                <button
+                  onClick={deleteSelected}
+                  style={{ ...S.btnSecondary, background: "#FEE2E2", color: "#B91C1C", borderColor: "#FCA5A5", fontWeight: 600 }}
+                >
+                  🗑️ Zmazať vybrané
+                </button>
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  style={S.btnSecondary}
+                >
+                  Zrušiť
+                </button>
+              </div>
+            )}
           </div>
 
           {filtered.length === 0 ? (
@@ -460,10 +542,24 @@ export default function MonitorPage() {
                     display: "flex", gap: "16px",
                     textDecoration: "none", color: "inherit",
                     transition: "all 0.15s",
+                    background: selectedIds.has(i.id) ? "var(--warning-light, #FEF3C7)" : S.card.background,
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = "none"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border-subtle)"; }}
                 >
+                  {isSuperAdmin && (
+                    <div
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(i.id); }}
+                      style={{ display: "flex", alignItems: "center", paddingRight: "4px", cursor: "pointer" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(i.id)}
+                        onChange={() => {}}
+                        style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                      />
+                    </div>
+                  )}
                   <div style={{ width: "120px", height: "90px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", overflow: "hidden", flexShrink: 0 }}>
                     {i.foto_url ? (
                       <img src={i.foto_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
