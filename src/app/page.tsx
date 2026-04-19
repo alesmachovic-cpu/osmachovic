@@ -640,12 +640,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* === 12-col grid — každý tile má "gridColumn: span N" z tileWidths === */}
+      {/* === 12-col grid — iteruje cez `tiles` array aby sa rešpektovalo poradie
+           (posuny šípkami/drag). Každý tile má gridColumn: span N z tileWidths. === */}
       <div className="dash-grid" style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: "20px" }}>
-        {has("overenie") && (
-          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("overenie") }} {...tileDragProps("overenie")}>
-            <TileControls tileKey="overenie" />
-            <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Overenie čísla</div>
+        {tiles.map((key) => (
+          <div key={key} className={tileClass} style={{ ...cardSt, ...tileWrapStyle(key) }} {...tileDragProps(key)}>
+            <TileControls tileKey={key} />
+            {key === "overenie" && (<>
+              <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Overenie čísla</div>
               <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Automatické overenie pri zadaní čísla</div>
               <div style={{ position: "relative" }}>
                 <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
@@ -683,35 +685,23 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-        {has("vyhladavanie") && (
-          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("vyhladavanie") }} {...tileDragProps("vyhladavanie")}>
-            <TileControls tileKey="vyhladavanie" />
-            <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Vyhľadávanie</div>
-            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Klienti, nehnuteľnosti, funkcie</div>
-            <SystemSearch />
-          </div>
-        )}
-
-        {has("ciele") && (
-          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("ciele") }} {...tileDragProps("ciele")}>
-            <TileControls tileKey="ciele" />
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <Link href="/nastavenia" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Mesačné ciele →</Link>
-            </div>
-            <ActivityRings
-              obrat={{ current: stats.mesacnyObrat, target: goals.obrat }}
-              zmluvy={{ current: stats.zmluvy, target: goals.zmluvy }}
-              nabery={{ current: stats.nabery, target: goals.nabery }}
-            />
-          </div>
-        )}
-
-        {has("prehlad") && (
-          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("prehlad") }} {...tileDragProps("prehlad")}>
-            <TileControls tileKey="prehlad" />
+            </>)}
+            {key === "vyhladavanie" && (<>
+              <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Vyhľadávanie</div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Klienti, nehnuteľnosti, funkcie</div>
+              <SystemSearch />
+            </>)}
+            {key === "ciele" && (<>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <Link href="/nastavenia" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Mesačné ciele →</Link>
+              </div>
+              <ActivityRings
+                obrat={{ current: stats.mesacnyObrat, target: goals.obrat }}
+                zmluvy={{ current: stats.zmluvy, target: goals.zmluvy }}
+                nabery={{ current: stats.nabery, target: goals.nabery }}
+              />
+            </>)}
+            {key === "prehlad" && (<>
               <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Prehľad →</Link>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 {[
@@ -728,99 +718,88 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-        {has("kalendar") && (
-          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("kalendar") }} {...tileDragProps("kalendar")}>
-            <TileControls tileKey="kalendar" />
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-              <Link href="/kalendar" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Kalendár →</Link>
-              <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
-                {new Date().toLocaleDateString("sk", { weekday: "long", day: "numeric", month: "long" })}
+            </>)}
+            {key === "kalendar" && (<>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                <Link href="/kalendar" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Kalendár →</Link>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
+                  {new Date().toLocaleDateString("sk", { weekday: "long", day: "numeric", month: "long" })}
+                </div>
               </div>
-            </div>
-            <CalendarWidget userId={user?.id} />
-          </div>
-        )}
-
-        {has("pipeline") && (
-          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("pipeline") }} {...tileDragProps("pipeline")}>
-            <TileControls tileKey="pipeline" />
-          <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Pipeline →</Link>
-          {(() => {
-            const stages = [
-              { label: "Klienti", value: stats.klienti, icon: "👥", color: "#3B82F6", route: "/klienti" },
-              { label: "Nábery", value: stats.naberyTotal, icon: "📝", color: "#8B5CF6", route: "/naber" },
-              { label: "Inzeráty", value: stats.inzeraty, icon: "📰", color: "#0891B2", route: "/portfolio" },
-              { label: "Objednávky", value: stats.objednavky, icon: "📋", color: "#F59E0B", route: "/kupujuci" },
-              { label: "Predané", value: stats.predane, icon: "🏆", color: "#059669", route: "/portfolio" },
-            ];
-            const maxVal = Math.max(...stages.map(s => s.value), 1);
-            return (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {stages.map((s, i) => (
-                  <div key={s.label} onClick={() => router.push(s.route)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: "28px", fontSize: "16px", textAlign: "center", flexShrink: 0 }}>{s.icon}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                        <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>{s.label}</span>
-                        <span style={{ fontSize: "12px", fontWeight: "800", color: s.color }}>{s.value}</span>
+              <CalendarWidget userId={user?.id} />
+            </>)}
+            {key === "pipeline" && (<>
+              <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Pipeline →</Link>
+              {(() => {
+                const stages = [
+                  { label: "Klienti", value: stats.klienti, icon: "👥", color: "#3B82F6", route: "/klienti" },
+                  { label: "Nábery", value: stats.naberyTotal, icon: "📝", color: "#8B5CF6", route: "/naber" },
+                  { label: "Inzeráty", value: stats.inzeraty, icon: "📰", color: "#0891B2", route: "/portfolio" },
+                  { label: "Objednávky", value: stats.objednavky, icon: "📋", color: "#F59E0B", route: "/kupujuci" },
+                  { label: "Predané", value: stats.predane, icon: "🏆", color: "#059669", route: "/portfolio" },
+                ];
+                const maxVal = Math.max(...stages.map(s => s.value), 1);
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {stages.map((s, i) => (
+                      <div key={s.label} onClick={() => router.push(s.route)} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div style={{ width: "28px", fontSize: "16px", textAlign: "center", flexShrink: 0 }}>{s.icon}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                            <span style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>{s.label}</span>
+                            <span style={{ fontSize: "12px", fontWeight: "800", color: s.color }}>{s.value}</span>
+                          </div>
+                          <div style={{ height: "6px", background: "var(--bg-elevated)", borderRadius: "3px", overflow: "hidden" }}>
+                            <div style={{
+                              height: "100%", borderRadius: "3px",
+                              width: `${Math.max((s.value / maxVal) * 100, s.value > 0 ? 8 : 0)}%`,
+                              background: s.color,
+                              transition: "width 0.5s ease",
+                            }} />
+                          </div>
+                        </div>
+                        {i < stages.length - 1 && (
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", flexShrink: 0, width: "16px", textAlign: "center" }}>→</div>
+                        )}
                       </div>
-                      <div style={{ height: "6px", background: "var(--bg-elevated)", borderRadius: "3px", overflow: "hidden" }}>
-                        <div style={{
-                          height: "100%", borderRadius: "3px",
-                          width: `${Math.max((s.value / maxVal) * 100, s.value > 0 ? 8 : 0)}%`,
-                          background: s.color,
-                          transition: "width 0.5s ease",
-                        }} />
-                      </div>
-                    </div>
-                    {i < stages.length - 1 && (
-                      <div style={{ fontSize: "10px", color: "var(--text-muted)", flexShrink: 0, width: "16px", textAlign: "center" }}>→</div>
-                    )}
+                    ))}
                   </div>
+                );
+              })()}
+            </>)}
+            {key === "aktivita" && (<>
+              <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px", display: "block", textDecoration: "none" }}>Posledná aktivita →</Link>
+              {loadingActivity && <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px 0" }}>Načítavam...</div>}
+              {!loadingActivity && activity.length === 0 && (
+                <div style={{ color: "var(--text-muted)", fontSize: "13px", textAlign: "center", padding: "20px 0" }}>Zatiaľ žiadna aktivita</div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                {activity.map(a => (
+                  <Link key={a.id + a.type} href={a.type === "klient" ? `/klienti/${a.id}` : `/portfolio`} style={{
+                    display: "flex", gap: "10px", alignItems: "center", textDecoration: "none",
+                    padding: "8px 10px", borderRadius: "10px", transition: "background 0.1s", cursor: "pointer",
+                  }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                    <div style={{
+                      width: "28px", height: "28px", borderRadius: "50%", flexShrink: 0,
+                      background: "#F5F5F5",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "12px", color: "var(--text-muted)",
+                    }}>
+                      {a.type === "klient" ? "👤" : "🏠"}
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>{a.title}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{a.sub}</div>
+                    </div>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)", flexShrink: 0 }}>→</span>
+                  </Link>
                 ))}
               </div>
-            );
-          })()}
-        </div>
-      )}
-
-        {has("aktivita") && (
-          <div className={tileClass} style={{ ...cardSt, ...tileWrapStyle("aktivita") }} {...tileDragProps("aktivita")}>
-            <TileControls tileKey="aktivita" />
-          <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px", display: "block", textDecoration: "none" }}>Posledná aktivita →</Link>
-          {loadingActivity && <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px 0" }}>Načítavam...</div>}
-          {!loadingActivity && activity.length === 0 && (
-            <div style={{ color: "var(--text-muted)", fontSize: "13px", textAlign: "center", padding: "20px 0" }}>Zatiaľ žiadna aktivita</div>
-          )}
-          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-            {activity.map(a => (
-              <Link key={a.id + a.type} href={a.type === "klient" ? `/klienti/${a.id}` : `/portfolio`} style={{
-                display: "flex", gap: "10px", alignItems: "center", textDecoration: "none",
-                padding: "8px 10px", borderRadius: "10px", transition: "background 0.1s", cursor: "pointer",
-              }}
-                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                <div style={{
-                  width: "28px", height: "28px", borderRadius: "50%", flexShrink: 0,
-                  background: "#F5F5F5",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "12px", color: "var(--text-muted)",
-                }}>
-                  {a.type === "klient" ? "👤" : "🏠"}
-                </div>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>{a.title}</div>
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{a.sub}</div>
-                </div>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)", flexShrink: 0 }}>→</span>
-              </Link>
-            ))}
+            </>)}
           </div>
-          </div>
-        )}
+        ))}
       </div>
 
       {modal && <NewKlientModal open initialPhone={modalPhone} showTypKlienta defaultTyp="predavajuci" onClose={() => setModal(false)} onSaved={() => { setPhone(""); setFound(null); setChecked(false); loadDashboard(); }} />}
