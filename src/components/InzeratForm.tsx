@@ -885,16 +885,35 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      const text = (data.emotivny || data.technicky || "").replace(/SEP_SEO\s*\[[^\]]*\]/g, "").replace(/SEP_TAGS\s*\[[^\]]*\]/g, "").trim();
-      const seoMatch = (data.emotivny || "").match(/SEP_SEO\s*\[([^\]]+)\]/);
-      const tagMatch = (data.emotivny || "").match(/SEP_TAGS\s*\[([^\]]+)\]/);
+
+      // Čistenie textu — Claude niekedy napriek zákazu pridá SEP_SEO/SEP_TAGS blok.
+      // Podporujeme 3 varianty: "SEP_SEO [...]", "SEP_SEO\n...", alebo na konci bez zátvorky.
+      const rawText = data.emotivny || data.technicky || "";
+      const extractBlock = (marker: string): string | null => {
+        // Format 1: "SEP_SEO [ content ]"
+        const brackets = rawText.match(new RegExp(`${marker}\\s*\\[([^\\]]+)\\]`));
+        if (brackets) return brackets[1].trim();
+        // Format 2: "SEP_SEO\n content \n\n" or end of text
+        const newline = rawText.match(new RegExp(`${marker}\\s*\\n([\\s\\S]+?)(?:\\n\\s*\\n|$)`));
+        if (newline) return newline[1].trim();
+        return null;
+      };
+      const seoFromText = extractBlock("SEP_SEO");
+      const tagFromText = extractBlock("SEP_TAGS");
+
+      const text = rawText
+        .replace(/SEP_SEO[\s\S]*?(?=SEP_TAGS|$)/g, "")
+        .replace(/SEP_TAGS[\s\S]*$/g, "")
+        .trim();
+
       setF(prev => {
         const updates: Partial<typeof prev> = {
           nazov: data.nazov || prev.nazov,
           text_popis: text,
           intro: data.intro || data.kratky || prev.intro,
-          seo_keywords: seoMatch ? seoMatch[1].trim() : generateSEO(prev),
-          tagy: tagMatch ? tagMatch[1].trim() : prev.tagy,
+          // Preferujeme seo_keywords pole z JSON, fallback na extrahovaný blok, inak auto-generate
+          seo_keywords: data.seo_keywords || seoFromText || generateSEO(prev),
+          tagy: data.tagy || tagFromText || prev.tagy,
           meta_description: data.meta_description || "",
           h1: data.h1 || data.nazov || prev.nazov,
         };
