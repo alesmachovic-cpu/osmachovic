@@ -156,8 +156,18 @@ export const nehnutelnostiSkParser: PortalParser = {
         predajca_meno = companyMatch?.[1]?.trim();
       }
 
+      // nehnutelnosti.sk je dominantne RK portál (>95% inzerátov je od realitiek).
+      // Stratégia: ak detectFirma trafí → firma. Inak hľadáme explicitné
+      // súkromné markery. Ak ich nie je → konzervatívny default "firma"
+      // (radšej prepásť súkromného ako spamovať používateľa realitkami).
       const isFirma = detectFirma(nazov, predajca_meno);
-      const predajca_typ = isFirma ? "firma" : undefined;
+      const privateMarkers = ["súkromný predaj", "sukromny predaj", "predám byt", "predam byt", "predám dom", "predam dom"];
+      const textLow = (nazov + " " + (predajca_meno || "")).toLowerCase();
+      const hasPrivateMarker = privateMarkers.some((m) => textLow.includes(m));
+      let predajca_typ: "firma" | "sukromny" | undefined;
+      if (isFirma) predajca_typ = "firma";
+      else if (hasPrivateMarker) predajca_typ = "sukromny";
+      else predajca_typ = "firma";
 
       listings.push({
         portal: PORTAL,

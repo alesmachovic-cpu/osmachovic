@@ -36,6 +36,27 @@ export const maxDuration = 30; // Vercel hobby limit
 
 const MAX_FILTERS_PER_RUN = 3;
 
+/** Normalizuje lokalitu: lowercase, bez diakritiky, bez interpunkcie. */
+function normLok(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Skontroluje či všetky relevantné slová z `needle` (filter lokalita) sú prítomné
+ * aspoň v jednom z `haystackParts` polí (lokalita/nazov/url inzerátu).
+ * Ignoruje slová kratšie ako 3 znaky (napr. "a", "do", "ul").
+ */
+function matchesLokalita(needle: string, haystackParts: Array<string | undefined | null>): boolean {
+  const needleTokens = normLok(needle).split(" ").filter((t) => t.length >= 3);
+  if (needleTokens.length === 0) return true;
+  const haystack = normLok(haystackParts.filter(Boolean).join(" "));
+  return needleTokens.every((t) => haystack.includes(t));
+}
+
 export async function GET(request: Request) {
   const startTime = Date.now();
 
@@ -204,10 +225,19 @@ async function processFilter(
     for (const { listings } of portalResults) {
       allListings.push(...listings);
     }
-    totalFound = allListings.length;
+
+    // Post-parse lokalita filter — reality.sk ignoruje lokalitu v URL a bazos.sk
+    // query-param nie je spoľahlivý. Ak filter má lokalitu, vyžadujeme že všetky
+    // jej slová (bez diakritiky) sú prítomné v listing.lokalita + nazov + url.
+    const filteredByLokalita = filter.lokalita
+      ? allListings.filter((l) =>
+          matchesLokalita(filter.lokalita!, [l.lokalita, l.nazov, l.url])
+        )
+      : allListings;
+    totalFound = filteredByLokalita.length;
 
     // 3. Upsert do DB — PARALELNE (chunky po 20 aby sme neukatiovali Supabase)
-    const upsertRows = allListings.map((listing) => ({
+    const upsertRows = filteredByLokalita.map((listing) => ({
       portal: listing.portal,
       external_id: listing.external_id,
       url: listing.url,
@@ -241,7 +271,7 @@ async function processFilter(
         console.error("[scrape] batch upsert error:", error);
       } else if (data) {
         const byKey = new Map(data.map((r) => [`${r.portal}:${r.external_id}`, r]));
-        for (const listing of allListings) {
+        for (const listing of filteredByLokalita) {
           const row = byKey.get(`${listing.portal}:${listing.external_id}`);
           if (!row) continue;
           const isNew =
