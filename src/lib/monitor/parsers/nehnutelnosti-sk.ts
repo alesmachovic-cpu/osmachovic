@@ -42,10 +42,13 @@ export const nehnutelnostiSkParser: PortalParser = {
     let url = `${BASE_URL}/${typSlug}/predaj/`;
 
     if (filter.lokalita) {
+      // nehnutelnosti.sk URL pattern: /byty/predaj/bratislava-ruzinov/
+      // "Bratislava - Ružinov" → "bratislava-ruzinov" (collapsing whitespace/dashes).
       const slug = filter.lokalita
         .toLowerCase()
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s+/g, "-");
+        .replace(/[\s-]+/g, "-")
+        .replace(/^-|-$/g, "");
       url = `${BASE_URL}/${typSlug}/predaj/${slug}/`;
     }
 

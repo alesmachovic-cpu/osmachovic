@@ -46,15 +46,24 @@ function normLok(s: string): string {
 }
 
 /**
- * Skontroluje či všetky relevantné slová z `needle` (filter lokalita) sú prítomné
- * aspoň v jednom z `haystackParts` polí (lokalita/nazov/url inzerátu).
- * Ignoruje slová kratšie ako 3 znaky (napr. "a", "do", "ul").
+ * Skontroluje či listing zodpovedá filter lokality.
+ *
+ * Stratégia: vezmeme NAJŠPECIFICKEJŠÍ komponent lokality (najmä mestskú časť,
+ * ak existuje), napr. z "Bratislava - Ružinov" vezmeme "Ružinov". Ak sa nenájde
+ * v haystacku, skúsime ešte celý reťazec (napr. "bratislava" pre filtre bez MČ).
  */
 function matchesLokalita(needle: string, haystackParts: Array<string | undefined | null>): boolean {
-  const needleTokens = normLok(needle).split(" ").filter((t) => t.length >= 3);
-  if (needleTokens.length === 0) return true;
+  const parts = needle.split(/\s*[-,/]\s*/).map((p) => p.trim()).filter(Boolean);
+  const specific = parts[parts.length - 1] || needle;
+  const specificNorm = normLok(specific);
+  if (!specificNorm) return true;
   const haystack = normLok(haystackParts.filter(Boolean).join(" "));
-  return needleTokens.every((t) => haystack.includes(t));
+  if (haystack.includes(specificNorm)) return true;
+  // Fallback: ak filter je len jednoslovný (len mesto), skús celý reťazec
+  if (parts.length === 1) {
+    return haystack.includes(normLok(needle));
+  }
+  return false;
 }
 
 export async function GET(request: Request) {
