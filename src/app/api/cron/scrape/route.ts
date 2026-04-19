@@ -66,6 +66,42 @@ function matchesLokalita(needle: string, haystackParts: Array<string | undefined
   return false;
 }
 
+/**
+ * Komplexný post-parse filter: typ (byt/dom/pozemok), cena od/do, plocha, izby,
+ * prenájom/predaj (podľa URL/nazvu), lokalita. Vracia true ak listing prejde všetky.
+ */
+function matchesFilter(listing: ScrapedInzerat, filter: MonitorFilter): boolean {
+  // Typ (byt/dom/pozemok/iny) — ak filter.typ je nastavený, vyžadujeme presný match.
+  // Zámerne tvrdé: "iny" (napr. garáž, sklad, pozemok) sa NEbude matchovať ak user chce byt.
+  if (filter.typ && listing.typ && listing.typ !== filter.typ) return false;
+
+  // Predaj vs prenájom — bazos.sk niekedy prepúšťa prenájmy do /predaj/ listu.
+  // Ak URL alebo názov obsahuje "prenajom"/"prenájom"/"podnajom" → vyradíme.
+  const textLow = ((listing.url || "") + " " + (listing.nazov || "")).toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (/\bprena?jom|podna?jom|na\s+prenaj/i.test(textLow)) return false;
+
+  // Cena — ak máme cena_od/do, vyžadujeme aby listing cena bola v rozsahu.
+  // Ak listing nemá cenu (undefined), nechávame ju ako potenciálne relevantnú (nechytí všetko).
+  if (filter.cena_od && listing.cena !== undefined && listing.cena < filter.cena_od) return false;
+  if (filter.cena_do && listing.cena !== undefined && listing.cena > filter.cena_do) return false;
+
+  // Plocha
+  if (filter.plocha_od && listing.plocha !== undefined && listing.plocha < filter.plocha_od) return false;
+  if (filter.plocha_do && listing.plocha !== undefined && listing.plocha > filter.plocha_do) return false;
+
+  // Izby
+  if (filter.izby_od && listing.izby !== undefined && listing.izby < filter.izby_od) return false;
+  if (filter.izby_do && listing.izby !== undefined && listing.izby > filter.izby_do) return false;
+
+  // Lokalita
+  if (filter.lokalita && !matchesLokalita(filter.lokalita, [listing.lokalita, listing.nazov, listing.url])) {
+    return false;
+  }
+
+  return true;
+}
+
 export async function GET(request: Request) {
   const startTime = Date.now();
 
@@ -235,18 +271,14 @@ async function processFilter(
       allListings.push(...listings);
     }
 
-    // Post-parse lokalita filter — reality.sk ignoruje lokalitu v URL a bazos.sk
-    // query-param nie je spoľahlivý. Ak filter má lokalitu, vyžadujeme že všetky
-    // jej slová (bez diakritiky) sú prítomné v listing.lokalita + nazov + url.
-    const filteredByLokalita = filter.lokalita
-      ? allListings.filter((l) =>
-          matchesLokalita(filter.lokalita!, [l.lokalita, l.nazov, l.url])
-        )
-      : allListings;
-    totalFound = filteredByLokalita.length;
+    // Post-parse filter — portály v search URL čiastočne rešpektujú filter kritéria
+    // (cena/lokalita/typ), ale nie všetky a nie spoľahlivo. Aplikujeme striktný
+    // post-filter lokality, typu, ceny, plochy, izieb + vyradíme prenájmy.
+    const filteredListings = allListings.filter((l) => matchesFilter(l, filter));
+    totalFound = filteredListings.length;
 
     // 3. Upsert do DB — PARALELNE (chunky po 20 aby sme neukatiovali Supabase)
-    const upsertRows = filteredByLokalita.map((listing) => ({
+    const upsertRows = filteredListings.map((listing) => ({
       portal: listing.portal,
       external_id: listing.external_id,
       url: listing.url,
@@ -280,7 +312,7 @@ async function processFilter(
         console.error("[scrape] batch upsert error:", error);
       } else if (data) {
         const byKey = new Map(data.map((r) => [`${r.portal}:${r.external_id}`, r]));
-        for (const listing of filteredByLokalita) {
+        for (const listing of filteredListings) {
           const row = byKey.get(`${listing.portal}:${listing.external_id}`);
           if (!row) continue;
           const isNew =
