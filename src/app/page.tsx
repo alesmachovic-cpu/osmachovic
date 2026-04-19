@@ -3,71 +3,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import {
   DndContext, useDraggable, useDroppable, type DragEndEvent,
   PointerSensor, useSensor, useSensors,
 } from "@dnd-kit/core";
-import "react-grid-layout/css/styles.css";
-import "react-resizable/css/styles.css";
 import type { Klient } from "@/lib/database.types";
-
-/** Jedna tile definícia v gride. */
-interface LayoutItem {
-  i: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  minW?: number;
-  minH?: number;
-}
-
-// Responsive grid layout — dynamicky len na klientovi (ssr:false). react-grid-layout
-// má export=namespace pattern ktorý zlyhá pri SSR hydration (client-side exception).
-const ResponsiveGridLayout = dynamic(
-  async () => {
-    const mod = await import("react-grid-layout");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const m = mod as any;
-    const RGL = m.default || m;
-    const WP = m.WidthProvider || RGL.WidthProvider;
-    return { default: WP(RGL) };
-  },
-  { ssr: false }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-) as unknown as React.ComponentType<any>;
-
-const DEFAULT_LAYOUT: Record<string, { w: number; h: number; x: number; y: number; minW: number; minH: number }> = {
-  overenie:     { x: 0, y: 0,  w: 6,  h: 5, minW: 3, minH: 4 },
-  vyhladavanie: { x: 6, y: 0,  w: 6,  h: 5, minW: 3, minH: 3 },
-  ciele:        { x: 0, y: 5,  w: 6,  h: 6, minW: 4, minH: 5 },
-  prehlad:      { x: 6, y: 5,  w: 6,  h: 6, minW: 4, minH: 4 },
-  kalendar:     { x: 0, y: 11, w: 12, h: 7, minW: 6, minH: 5 },
-  pipeline:     { x: 0, y: 18, w: 12, h: 6, minW: 6, minH: 4 },
-  aktivita:     { x: 0, y: 24, w: 12, h: 6, minW: 6, minH: 4 },
-};
-
-function buildLayoutArray(
-  tiles: string[],
-  saved: Partial<Record<string, LayoutItem>>
-): LayoutItem[] {
-  return tiles.map((key) => {
-    const savedItem = saved[key];
-    const def = DEFAULT_LAYOUT[key];
-    return {
-      i: key,
-      x: savedItem?.x ?? def.x,
-      y: savedItem?.y ?? def.y,
-      w: savedItem?.w ?? def.w,
-      h: savedItem?.h ?? def.h,
-      minW: def.minW,
-      minH: def.minH,
-    };
-  });
-}
-
 import { STATUS_LABELS } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import ActivityRings from "@/components/ActivityRings";
@@ -400,30 +341,9 @@ export default function Dashboard() {
   // Tile customization
   const [tiles, setTiles] = useState<TileKey[]>(DEFAULT_TILES);
   const [showTileEditor, setShowTileEditor] = useState(false);
-  const [savedLayouts, setSavedLayouts] = useState<Partial<Record<string, LayoutItem>>>({});
+  const [dragTile, setDragTile] = useState<TileKey | null>(null);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    setTiles(loadTiles(user.id));
-    try {
-      const raw = getUserItem(user.id, "dashboard_layout");
-      if (raw) setSavedLayouts(JSON.parse(raw));
-    } catch { /* ignore */ }
-  }, [user?.id]);
-
-  const layoutArray = buildLayoutArray(tiles, savedLayouts);
-  const handleLayoutChange = (next: ReadonlyArray<LayoutItem>) => {
-    const map: Partial<Record<string, LayoutItem>> = {};
-    for (const item of next) {
-      map[item.i] = { i: item.i, x: item.x, y: item.y, w: item.w, h: item.h };
-    }
-    setSavedLayouts(map);
-    if (user?.id) setUserItem(user.id, "dashboard_layout", JSON.stringify(map));
-  };
-  const resetLayout = () => {
-    setSavedLayouts({});
-    if (user?.id) setUserItem(user.id, "dashboard_layout", JSON.stringify({}));
-  };
+  useEffect(() => { if (user?.id) setTiles(loadTiles(user.id)); }, [user?.id]);
 
   function toggleTile(key: TileKey) {
     setTiles(prev => {
@@ -433,6 +353,28 @@ export default function Dashboard() {
     });
   }
 
+  function handleDragStart(key: TileKey) {
+    setDragTile(key);
+  }
+
+  function handleDragOver(e: React.DragEvent, targetKey: TileKey) {
+    e.preventDefault();
+    if (!dragTile || dragTile === targetKey) return;
+    setTiles(prev => {
+      const next = [...prev];
+      const fromIdx = next.indexOf(dragTile);
+      const toIdx = next.indexOf(targetKey);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, dragTile);
+      if (user?.id) setUserItem(user.id, "dashboard_tiles", JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function handleDragEnd() {
+    setDragTile(null);
+  }
 
   // Load goals from localStorage (per-user)
   const uid = user?.id || "";
@@ -537,7 +479,12 @@ export default function Dashboard() {
     background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px", padding: "20px",
   };
   const tileClass = showTileEditor ? "tile-editing" : "";
+
   const has = (key: TileKey) => tiles.includes(key);
+
+  // Build grid rows from active tiles (respecting order)
+  const topRow = tiles.filter(k => k === "overenie" || k === "vyhladavanie");
+  const midRow = tiles.filter(k => k === "ciele" || k === "prehlad");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -561,35 +508,33 @@ export default function Dashboard() {
       {/* Tile editor */}
       {showTileEditor && (
         <div style={{ ...cardSt, padding: "16px 20px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", gap: "12px" }}>
-            <div>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>
-                Zapni/vypni dlaždice
-              </div>
-              <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                V tomto móde môžeš chytiť dlaždicu a presunúť alebo jej zmeniť veľkosť (pravý-dolný roh).
-              </div>
-            </div>
-            <button onClick={resetLayout} style={{
-              padding: "6px 12px", background: "var(--bg-elevated)", color: "var(--text-secondary)",
-              border: "1px solid var(--border)", borderRadius: "8px",
-              fontSize: "11px", fontWeight: "500", cursor: "pointer", whiteSpace: "nowrap",
-            }}>Obnoviť rozloženie</button>
+          <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>
+            Zapni/vypni dlaždice
+          </div>
+          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "12px" }}>
+            Potiahni dlaždicu pre zmenu poradia
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {ALL_TILES.map(t => {
               const isActive = tiles.includes(t.key);
+              const isDragging = dragTile === t.key;
               return (
                 <button key={t.key}
+                  draggable={isActive}
+                  onDragStart={() => handleDragStart(t.key)}
+                  onDragOver={e => handleDragOver(e, t.key)}
+                  onDragEnd={handleDragEnd}
                   onClick={() => toggleTile(t.key)}
                   style={{
                     padding: "8px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "500",
-                    cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
+                    cursor: isActive ? "grab" : "pointer", display: "flex", alignItems: "center", gap: "6px",
                     background: isActive ? "#374151" : "var(--bg-elevated)",
                     color: isActive ? "#fff" : "var(--text-secondary)",
                     border: isActive ? "1px solid #111" : "1px solid var(--border)",
+                    opacity: isDragging ? 0.5 : 1,
                     transition: "all 0.15s",
                   }}>
+                  {isActive && <span style={{ fontSize: "10px", opacity: 0.6 }}>⠿</span>}
                   <span>{t.icon}</span> {t.label}
                 </button>
               );
@@ -598,20 +543,11 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* === Resizable / draggable grid layout === */}
-      <ResponsiveGridLayout
-        className="dash-layout"
-        layout={layoutArray}
-        onLayoutChange={handleLayoutChange}
-        cols={12}
-        rowHeight={40}
-        margin={[16, 16]}
-        isDraggable={showTileEditor}
-        isResizable={showTileEditor}
-        compactType="vertical"
-      >
-        {has("overenie") && (
-          <div key="overenie" className={tileClass} style={cardSt}>
+      {/* Top row: Phone check + Search */}
+      {topRow.length > 0 && (
+        <div className="dash-grid" style={{ display: "grid", gridTemplateColumns: topRow.length === 2 ? "1fr 1fr" : "1fr", gap: "20px" }}>
+          {has("overenie") && (
+            <div className={tileClass} style={cardSt}>
               <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Overenie čísla</div>
               <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Automatické overenie pri zadaní čísla</div>
               <div style={{ position: "relative" }}>
@@ -653,29 +589,34 @@ export default function Dashboard() {
             </div>
           )}
 
-        {has("vyhladavanie") && (
-          <div key="vyhladavanie" className={tileClass} style={cardSt}>
-            <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Vyhľadávanie</div>
-            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Klienti, nehnuteľnosti, funkcie</div>
-            <SystemSearch />
-          </div>
-        )}
-
-        {has("ciele") && (
-          <div key="ciele" className={tileClass} style={cardSt}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <Link href="/nastavenia" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Mesačné ciele →</Link>
+          {has("vyhladavanie") && (
+            <div className={tileClass} style={cardSt}>
+              <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Vyhľadávanie</div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Klienti, nehnuteľnosti, funkcie</div>
+              <SystemSearch />
             </div>
-            <ActivityRings
-              obrat={{ current: stats.mesacnyObrat, target: goals.obrat }}
-              zmluvy={{ current: stats.zmluvy, target: goals.zmluvy }}
-              nabery={{ current: stats.nabery, target: goals.nabery }}
-            />
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        {has("prehlad") && (
-          <div key="prehlad" className={tileClass} style={cardSt}>
+      {/* Middle row: Rings + Stats */}
+      {midRow.length > 0 && (
+        <div className="dash-grid" style={{ display: "grid", gridTemplateColumns: midRow.length === 2 ? "1fr 1fr" : "1fr", gap: "20px" }}>
+          {has("ciele") && (
+            <div className={tileClass} style={cardSt}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <Link href="/nastavenia" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Mesačné ciele →</Link>
+              </div>
+              <ActivityRings
+                obrat={{ current: stats.mesacnyObrat, target: goals.obrat }}
+                zmluvy={{ current: stats.zmluvy, target: goals.zmluvy }}
+                nabery={{ current: stats.nabery, target: goals.nabery }}
+              />
+            </div>
+          )}
+
+          {has("prehlad") && (
+            <div className={tileClass} style={cardSt}>
               <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Prehľad →</Link>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 {[
@@ -691,24 +632,28 @@ export default function Dashboard() {
                     <div style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", lineHeight: 1.1 }}>{s.value}</div>
                   </div>
                 ))}
-            </div>
-          </div>
-        )}
-
-        {has("kalendar") && (
-          <div key="kalendar" className={tileClass} style={cardSt}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-              <Link href="/kalendar" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Kalendár →</Link>
-              <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
-                {new Date().toLocaleDateString("sk", { weekday: "long", day: "numeric", month: "long" })}
               </div>
             </div>
-            <CalendarWidget userId={user?.id} />
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        {has("pipeline") && (
-          <div key="pipeline" className={tileClass} style={cardSt}>
+      {/* Calendar */}
+      {has("kalendar") && (
+        <div className={tileClass} style={cardSt}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+            <Link href="/kalendar" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", textDecoration: "none" }}>Kalendár →</Link>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
+              {new Date().toLocaleDateString("sk", { weekday: "long", day: "numeric", month: "long" })}
+            </div>
+          </div>
+          <CalendarWidget userId={user?.id} />
+        </div>
+      )}
+
+      {/* Pipeline funnel */}
+      {has("pipeline") && (
+        <div className={tileClass} style={cardSt}>
           <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px", display: "block", textDecoration: "none" }}>Pipeline →</Link>
           {(() => {
             const stages = [
@@ -749,40 +694,40 @@ export default function Dashboard() {
         </div>
       )}
 
-        {has("aktivita") && (
-          <div key="aktivita" className={tileClass} style={cardSt}>
-            <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px", display: "block", textDecoration: "none" }}>Posledná aktivita →</Link>
-            {loadingActivity && <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px 0" }}>Načítavam...</div>}
-            {!loadingActivity && activity.length === 0 && (
-              <div style={{ color: "var(--text-muted)", fontSize: "13px", textAlign: "center", padding: "20px 0" }}>Zatiaľ žiadna aktivita</div>
-            )}
-            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-              {activity.map(a => (
-                <Link key={a.id + a.type} href={a.type === "klient" ? `/klienti/${a.id}` : `/portfolio`} style={{
-                  display: "flex", gap: "10px", alignItems: "center", textDecoration: "none",
-                  padding: "8px 10px", borderRadius: "10px", transition: "background 0.1s", cursor: "pointer",
-                }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                  <div style={{
-                    width: "28px", height: "28px", borderRadius: "50%", flexShrink: 0,
-                    background: "#F5F5F5",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "12px", color: "var(--text-muted)",
-                  }}>
-                    {a.type === "klient" ? "👤" : "🏠"}
-                  </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>{a.title}</div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{a.sub}</div>
-                  </div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)", flexShrink: 0 }}>→</span>
-                </Link>
-              ))}
-            </div>
+      {/* Activity feed */}
+      {has("aktivita") && (
+        <div className={tileClass} style={cardSt}>
+          <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px", display: "block", textDecoration: "none" }}>Posledná aktivita →</Link>
+          {loadingActivity && <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px 0" }}>Načítavam...</div>}
+          {!loadingActivity && activity.length === 0 && (
+            <div style={{ color: "var(--text-muted)", fontSize: "13px", textAlign: "center", padding: "20px 0" }}>Zatiaľ žiadna aktivita</div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+            {activity.map(a => (
+              <Link key={a.id + a.type} href={a.type === "klient" ? `/klienti/${a.id}` : `/portfolio`} style={{
+                display: "flex", gap: "10px", alignItems: "center", textDecoration: "none",
+                padding: "8px 10px", borderRadius: "10px", transition: "background 0.1s", cursor: "pointer",
+              }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                <div style={{
+                  width: "28px", height: "28px", borderRadius: "50%", flexShrink: 0,
+                  background: "#F5F5F5",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "12px", color: "var(--text-muted)",
+                }}>
+                  {a.type === "klient" ? "👤" : "🏠"}
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-primary)" }}>{a.title}</div>
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{a.sub}</div>
+                </div>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)", flexShrink: 0 }}>→</span>
+              </Link>
+            ))}
           </div>
-        )}
-      </ResponsiveGridLayout>
+        </div>
+      )}
 
       {modal && <NewKlientModal open initialPhone={modalPhone} showTypKlienta defaultTyp="predavajuci" onClose={() => setModal(false)} onSaved={() => { setPhone(""); setFound(null); setChecked(false); loadDashboard(); }} />}
     </div>
