@@ -102,6 +102,36 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     return () => { clearTimeout(safetyTimeout); };
   }, []);
 
+  // Auto-logout po 30 min nečinnosti (mouse/key/touch/scroll).
+  // Timestamp posledných aktivít je v localStorage, aby to prežilo reload.
+  // Kontrola každých 60s — ak od poslednej aktivity > 30 min, logout.
+  useEffect(() => {
+    if (!user) return;
+    const IDLE_LIMIT_MS = 30 * 60 * 1000;
+    const KEY = "crm_last_activity";
+    const bump = () => localStorage.setItem(KEY, String(Date.now()));
+    bump(); // inicializácia pri prihlásení/refreshi
+
+    const events: Array<keyof WindowEventMap> = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"];
+    events.forEach((e) => window.addEventListener(e, bump, { passive: true }));
+
+    const interval = setInterval(() => {
+      const last = Number(localStorage.getItem(KEY) || "0");
+      if (last && Date.now() - last > IDLE_LIMIT_MS) {
+        localStorage.removeItem(KEY);
+        localStorage.removeItem("crm_user");
+        setUser(null);
+        supabase.auth.signOut().catch(() => {});
+        if (typeof window !== "undefined") window.location.href = "/?logout=idle";
+      }
+    }, 60_000);
+
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, bump));
+      clearInterval(interval);
+    };
+  }, [user]);
+
   async function refreshAccounts() {
     const accs = await loadAccounts();
     setAccounts(accs);
