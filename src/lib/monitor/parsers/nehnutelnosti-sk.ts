@@ -207,29 +207,33 @@ export const nehnutelnostiSkParser: PortalParser = {
       else if (slugLower.includes("pozem") || slugLower.includes("parcel")) typ = "pozemok";
       else if (slugLower.includes("byt") || slugLower.includes("izb")) typ = "byt";
 
-      // Predajca — skúsime rôzne patterny (agent, realitka, meno)
-      const sellerMatch = context.match(
-        /class="[^"]*(?:advertiser|seller|agent|agency|broker|company|realitka|inzerent|maklér)[^"]*"[^>]*>\s*(?:<[^>]*>\s*)*([^<]{2,100})/i
-      );
-      let predajca_meno = sellerMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
-      // Fallback: hľadaj "s.r.o." alebo podobné v context
-      if (!predajca_meno) {
-        const companyMatch = context.match(/([A-ZČŠĽŇŽ][A-Za-záčďéíľňóšťúýž\s&.'-]{2,50}\s+(?:s\.\s*r\.\s*o\.?|a\.s\.|reality|real|estate|broker|invest|group))/);
-        predajca_meno = companyMatch?.[1]?.trim();
+      // Predajca — nehnutelnosti.sk má v list HTML embedded JSON s
+      //   "advertiser":{"name":"...","type":"AGENT|AGENCY","parent":{"name":"..."}}
+      // Klasifikácia:
+      //  - advertiser.type === "AGENCY"  → firma (priama agentúra)
+      //  - advertiser.parent exists      → firma (agent pod agentúrou)
+      //  - inak                          → sukromny
+      //
+      // predajca_meno = meno agentúry ak existuje parent, inak advertiser.name.
+      const advBlock = context.match(/advertiser\\":\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/);
+      let predajca_meno: string | undefined;
+      let advType: string | undefined;
+      let parentName: string | undefined;
+      if (advBlock) {
+        const blob = advBlock[1];
+        const nameM = blob.match(/\\"name\\":\\"([^"\\]+)\\"/);
+        const typeM = blob.match(/\\"type\\":\\"([A-Z_]+)\\"/);
+        const parentNameM = blob.match(/\\"parent\\":\{[^}]*?\\"name\\":\\"([^"\\]+)\\"/);
+        const advName = nameM?.[1];
+        advType = typeM?.[1];
+        parentName = parentNameM?.[1];
+        predajca_meno = parentName || advName;
       }
 
-      // nehnutelnosti.sk je dominantne RK portál (>95% inzerátov je od realitiek).
-      // Stratégia: ak detectFirma trafí → firma. Inak hľadáme explicitné
-      // súkromné markery. Ak ich nie je → konzervatívny default "firma"
-      // (radšej prepásť súkromného ako spamovať používateľa realitkami).
-      const isFirma = detectFirma(nazov, predajca_meno);
-      const privateMarkers = ["súkromný predaj", "sukromny predaj", "predám byt", "predam byt", "predám dom", "predam dom"];
-      const textLow = (nazov + " " + (predajca_meno || "")).toLowerCase();
-      const hasPrivateMarker = privateMarkers.some((m) => textLow.includes(m));
-      let predajca_typ: "firma" | "sukromny" | undefined;
-      if (isFirma) predajca_typ = "firma";
-      else if (hasPrivateMarker) predajca_typ = "sukromny";
-      else predajca_typ = "firma";
+      const isAgency = advType === "AGENCY" || !!parentName;
+      const isFirmaByText = detectFirma(nazov, predajca_meno);
+      const predajca_typ: "firma" | "sukromny" =
+        isAgency || isFirmaByText ? "firma" : "sukromny";
 
       listings.push({
         portal: PORTAL,
