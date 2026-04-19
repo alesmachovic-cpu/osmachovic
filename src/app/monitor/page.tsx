@@ -183,6 +183,7 @@ export default function MonitorPage() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [lenSukromni, setLenSukromni] = useState(true);  // Default: zobraz len súkromných
+  const [onlyToday, setOnlyToday] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { user } = useAuth();
@@ -278,6 +279,7 @@ export default function MonitorPage() {
   const filtered = inzeraty
     .filter(i => {
       if (lenSukromni && i.predajca_typ !== "sukromny") return false;
+      if (onlyToday && !(i.first_seen_at || "").startsWith(today)) return false;
       if (search) {
         const q = search.toLowerCase();
         if (!(i.nazov || "").toLowerCase().includes(q) && !(i.lokalita || "").toLowerCase().includes(q)) return false;
@@ -414,15 +416,43 @@ export default function MonitorPage() {
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
         {[
-          { label: "Celkom inzerátov", value: total, color: "var(--text-primary)" },
-          { label: "Nové dnes", value: noveDnes, color: noveDnes > 0 ? "var(--accent)" : "var(--text-primary)" },
-          { label: "Súkromní", value: sukromniCount, color: sukromniCount > 0 ? "var(--warning)" : "var(--text-primary)" },
-          { label: "Aktívne filtre", value: aktivneFiltre, color: aktivneFiltre > 0 ? "var(--success)" : "var(--text-muted)" },
+          {
+            label: "Celkom inzerátov", value: total, color: "var(--text-primary)",
+            onClick: () => { setTab("inzeraty"); setSearch(""); setViewPortal(""); setViewTyp(""); setLenSukromni(false); setOnlyToday(false); },
+            active: tab === "inzeraty" && !lenSukromni && !onlyToday && !search && !viewPortal && !viewTyp,
+          },
+          {
+            label: "Nové dnes", value: noveDnes, color: noveDnes > 0 ? "var(--accent)" : "var(--text-primary)",
+            onClick: () => { setTab("inzeraty"); setOnlyToday(true); },
+            active: tab === "inzeraty" && onlyToday,
+          },
+          {
+            label: "Súkromní", value: sukromniCount, color: sukromniCount > 0 ? "var(--warning)" : "var(--text-primary)",
+            onClick: () => { setTab("inzeraty"); setLenSukromni(true); },
+            active: tab === "inzeraty" && lenSukromni,
+          },
+          {
+            label: "Aktívne filtre", value: aktivneFiltre, color: aktivneFiltre > 0 ? "var(--success)" : "var(--text-muted)",
+            onClick: () => setTab("filtre"),
+            active: tab === "filtre",
+          },
         ].map((s, i) => (
-          <div key={i} style={{ ...S.card, padding: "16px 18px" }}>
+          <button
+            key={i}
+            onClick={s.onClick}
+            style={{
+              ...S.card, padding: "16px 18px",
+              textAlign: "left" as const, cursor: "pointer",
+              transition: "all 0.15s",
+              borderColor: s.active ? "var(--text-primary)" : "var(--border-subtle)",
+              boxShadow: s.active ? "0 0 0 2px var(--text-primary)20" : "none",
+            }}
+            onMouseEnter={e => { if (!s.active) (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
+            onMouseLeave={e => { if (!s.active) (e.currentTarget as HTMLElement).style.borderColor = "var(--border-subtle)"; }}
+          >
             <div style={{ fontSize: "28px", fontWeight: 700, color: s.color, letterSpacing: "-0.02em" }}>{s.value}</div>
             <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px", fontWeight: 500 }}>{s.label}</div>
-          </div>
+          </button>
         ))}
       </div>
 

@@ -6,8 +6,6 @@ import {
   PORTALS_NO_SCRAPINGBEE,
   fetchPage,
   fetchNehnDetailInfo,
-  sendEmailNotification,
-  sendTelegramNotification,
   sendPushForNewListings,
 } from "@/lib/monitor";
 import type { ScrapedInzerat, MonitorFilter, ScrapeResult } from "@/lib/monitor";
@@ -178,38 +176,9 @@ export async function GET(request: Request) {
         const newItems = (result as ScrapeResult & { newItems?: ScrapedInzerat[] }).newItems!;
         allNewInzeraty.push(...newItems);
 
-        // Pošli notifikácie
-        if (filter.notify_email && newItems.length > 0) {
-          const emailResult = await sendEmailNotification(newItems, filter);
-          await sb.from("monitor_notifikacie").insert(
-            newItems.slice(0, 5).map((i) => ({
-              inzerat_id: (i as ScrapedInzerat & { db_id?: string }).db_id || null,
-              filter_id: filter.id,
-              typ: "email",
-              prijemca: process.env.MANAGER_EMAIL || "",
-              status: emailResult.success ? "sent" : "failed",
-              error_msg: emailResult.error || null,
-            }))
-          );
-        }
-
-        if (filter.notify_telegram && newItems.length > 0) {
-          const tgResult = await sendTelegramNotification(newItems, filter);
-          await sb.from("monitor_notifikacie").insert(
-            newItems.slice(0, 5).map((i) => ({
-              inzerat_id: (i as ScrapedInzerat & { db_id?: string }).db_id || null,
-              filter_id: filter.id,
-              typ: "telegram",
-              prijemca: process.env.TELEGRAM_CHAT_ID || "",
-              status: tgResult.success ? "sent" : "failed",
-              error_msg: tgResult.error || null,
-            }))
-          );
-        }
-
-        // Web push notifikácie — posiela sa všetkým subscribnutým zariadeniam
-        // (každý prehliadač/mobil používateľa). Bez ohľadu na filter.notify_email,
-        // pretože push je "realtime" kanál pre rýchle zachytenie.
+        // Web push notifikácie — jediný kanál notifikácií pre Monitor.
+        // Pošle sa všetkým subscribnutým zariadeniam maklérov ktorí majú
+        // 'monitor' povolený v users.notification_prefs.
         if (newItems.length > 0) {
           try {
             await sendPushForNewListings(newItems);
@@ -338,7 +307,11 @@ async function processFilter(
     // Post-parse filter — portály v search URL čiastočne rešpektujú filter kritéria
     // (cena/lokalita/typ), ale nie všetky a nie spoľahlivo. Aplikujeme striktný
     // post-filter lokality, typu, ceny, plochy, izieb + vyradíme prenájmy.
-    const filteredListings = allListings.filter((l) => matchesFilter(l, filter));
+    // DODATOČNE: Monitor slúži VÝLUČNE na súkromnú inzerciu. Firma listings
+    // sa vôbec neukladajú (RK analýza je samostatná feature).
+    const filteredListings = allListings
+      .filter((l) => l.predajca_typ !== "firma")
+      .filter((l) => matchesFilter(l, filter));
     totalFound = filteredListings.length;
 
     // 3. Upsert do DB — PARALELNE (chunky po 20 aby sme neukatiovali Supabase)
@@ -384,12 +357,8 @@ async function processFilter(
             new Date(row.first_seen_at).getTime() > Date.now() - 60000;
           if (isNew) {
             newCount++;
-            // Ak filter len_sukromni, zo zoznamu newItems vynechaj firmy —
-            // chceme aby email obsahoval len súkromné (ale v DB máme aj firmy
-            // s predajca_typ="firma" pre budúcu filtráciu a štatistiky).
-            if (!filter.len_sukromni || listing.predajca_typ !== "firma") {
-              newItems.push({ ...listing, db_id: row.id });
-            }
+            // Monitor ukladá len súkromné, takže všetky newItems idú do push.
+            newItems.push({ ...listing, db_id: row.id });
           } else {
             updatedCount++;
           }
