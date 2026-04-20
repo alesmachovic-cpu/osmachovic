@@ -7,6 +7,7 @@ import { KRAJE } from "@/lib/database.types";
 import { useAuth } from "@/components/AuthProvider";
 import { getUserItem } from "@/lib/userStorage";
 import { saveKlientDokument } from "@/lib/klientDokumenty";
+import { uploadFoto, deleteFoto, normalizeVideoUrl, normalizeTour3D } from "@/lib/inzeratFotky";
 
 /* ── Design tokens ── */
 const s = {
@@ -308,7 +309,9 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   const [chatInput, setChatInput] = useState("");
   const [lvParsed, setLvParsed] = useState<Record<string, string> | null>(null);
   const [dropOver, setDropOver] = useState(false);
-  const [photos, setPhotos] = useState<{ name: string; url: string; size: number }[]>([]);
+  const [photos, setPhotos] = useState<{ id: string; name: string; url: string; thumb?: string; path?: string; size: number; uploading?: boolean; error?: string }[]>([]);
+  const [videos, setVideos] = useState<string[]>([]);
+  const [videoInput, setVideoInput] = useState("");
   const [docs, setDocs] = useState<{ name: string; type: string; size: number; text?: string; pdf_base64?: string }[]>([]);
   const klientIdForDocs = (prefilledData?.klient_id as string | undefined) || undefined;
   const [docQuery, setDocQuery] = useState("");
@@ -343,6 +346,25 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     document.addEventListener("drop", prevent);
     return () => { document.removeEventListener("dragover", prevent); document.removeEventListener("drop", prevent); };
   }, []);
+
+  /* ── Načítaj existujúce fotky/videá pri edit móde ── */
+  useEffect(() => {
+    if (!prefilledData) return;
+    const urls = (prefilledData.fotky_urls as string[]) || [];
+    const thumbs = (prefilledData.fotky_thumbs as string[]) || [];
+    if (urls.length > 0) {
+      setPhotos(urls.map((u, i) => ({
+        id: `db-${i}`,
+        name: u.split("/").pop() || `foto-${i}`,
+        url: u,
+        thumb: thumbs[i] || u,
+        path: u.includes("/inzerat-fotky/") ? u.split("/inzerat-fotky/")[1] : undefined,
+        size: 0,
+      })));
+    }
+    const vids = (prefilledData.videa_urls as string[]) || [];
+    if (vids.length > 0) setVideos(vids);
+  }, [prefilledData]);
 
   /* ── Rotácia vtipných hlášok pri úprave existujúceho textu ── */
   useEffect(() => {
@@ -419,14 +441,22 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       const isDocx = ext === "docx" || file.type.includes("wordprocessingml");
 
       if (isImg) {
-        setPhotos(prev => [...prev, { name: file.name, url: URL.createObjectURL(file), size: file.size }]);
-        if (klientIdForDocs) {
-          file.arrayBuffer().then(buf => {
-            const bytes = new Uint8Array(buf);
-            let bin = ""; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-            saveKlientDokument({ klient_id: klientIdForDocs, name: file.name, type: "Foto", size: file.size, source: "inzerat", mime: file.type, data_base64: btoa(bin) });
-          }).catch(() => {});
-        }
+        // Okamžitý blob-URL preview + paralelný upload do Supabase Storage.
+        const localId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const blobUrl = URL.createObjectURL(file);
+        setPhotos(prev => [...prev, { id: localId, name: file.name, url: blobUrl, size: file.size, uploading: true }]);
+        (async () => {
+          try {
+            const up = await uploadFoto(file, { userId: uid, inzeratId: editId });
+            setPhotos(prev => prev.map(p => p.id === localId ? {
+              id: localId, name: up.name, url: up.url, thumb: up.thumb, path: up.path, size: up.size, uploading: false,
+            } : p));
+            URL.revokeObjectURL(blobUrl);
+          } catch (e) {
+            console.error("[upload] foto failed:", e);
+            setPhotos(prev => prev.map(p => p.id === localId ? { ...p, uploading: false, error: String((e as Error)?.message || e).slice(0, 100) } : p));
+          }
+        })();
       } else if (isDocx) {
         setUploadingFile(file.name);
         setParsingLV(true);
@@ -1050,9 +1080,15 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
 
   async function handleSave(publish: boolean) {
     if (!f.cena) { setError("Cena je povinná"); return; }
+    if (photos.some(p => p.uploading)) { setError("Počkaj, fotky sa ešte nahrávajú…"); return; }
     setSaving(true); setError("");
 
+    const uploadedPhotos = photos.filter(p => p.path && p.url && !p.error);
+
     const payload = {
+      fotky_urls: uploadedPhotos.map(p => p.url),
+      fotky_thumbs: uploadedPhotos.map(p => p.thumb || p.url),
+      videa_urls: videos,
       nazov: f.nazov.trim(), typ: f.typ,
       lokalita: [f.obec, f.okres, f.kraj].filter(Boolean).join(", ") || f.lokalita,
       cena: Number(f.cena), plocha: f.plocha ? Number(f.plocha) : null,
@@ -1137,14 +1173,68 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
               <div style={{ marginBottom: "16px" }}>
                 <div style={{ fontSize: "11px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>Fotky ({photos.length})</div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {photos.map((p, i) => (
-                    <div key={i} style={{ width: "72px", height: "72px", borderRadius: "10px", overflow: "hidden", position: "relative", background: "#F3F4F6" }}>
-                      <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      <button onClick={() => { URL.revokeObjectURL(p.url); setPhotos(prev => prev.filter((_, j) => j !== i)); }}
+                  {photos.map(p => (
+                    <div key={p.id} style={{ width: "72px", height: "72px", borderRadius: "10px", overflow: "hidden", position: "relative", background: "#F3F4F6" }}>
+                      <img src={p.thumb || p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: p.uploading ? 0.5 : 1 }} />
+                      {p.uploading && (
+                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", color: "#fff", background: "rgba(0,0,0,0.3)" }}>…</div>
+                      )}
+                      {p.error && (
+                        <div title={p.error} style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", color: "#fff", background: "rgba(239,68,68,0.7)" }}>✕</div>
+                      )}
+                      <button onClick={() => {
+                        if (p.url.startsWith("blob:")) URL.revokeObjectURL(p.url);
+                        if (p.path) deleteFoto(p.path).catch(() => {});
+                        setPhotos(prev => prev.filter(x => x.id !== p.id));
+                      }}
                         style={{ position: "absolute", top: "3px", right: "3px", width: "18px", height: "18px", borderRadius: "9px", border: "none", background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+            {videos.length > 0 && (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ fontSize: "11px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>Videá ({videos.length})</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {videos.map((v, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "8px", background: "var(--bg-elevated)", fontSize: "12px" }}>
+                      <span style={{ flex: 1, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
+                      <button onClick={() => setVideos(prev => prev.filter((_, j) => j !== i))}
+                        style={{ width: "20px", height: "20px", borderRadius: "10px", border: "none", background: "rgba(0,0,0,0.1)", cursor: "pointer", fontSize: "11px", color: "var(--text-primary)" }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ marginBottom: "16px", display: "flex", gap: "6px" }}>
+              <input
+                placeholder="YouTube / Vimeo link…"
+                value={videoInput}
+                onChange={e => setVideoInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== "Enter") return;
+                  const n = normalizeVideoUrl(videoInput);
+                  if (n) { setVideos(prev => [...prev, n]); setVideoInput(""); }
+                  else setError("Neplatný YouTube/Vimeo link.");
+                }}
+                style={{ ...s.input, flex: 1, fontSize: "12px", padding: "8px 12px" }}
+              />
+              <input
+                placeholder="Matterport / Kuula 3D link…"
+                value={f.url_virtualka}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (!v.trim()) { set("url_virtualka", ""); return; }
+                  const n = normalizeTour3D(v);
+                  set("url_virtualka", n || v);
+                }}
+                style={{ ...s.input, flex: 1, fontSize: "12px", padding: "8px 12px" }}
+              />
+            </div>
+            {photos.some(p => p.uploading) && (
+              <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "10px" }}>
+                Fotky sa nahrávajú na server…
               </div>
             )}
             {f.lv_text && (
