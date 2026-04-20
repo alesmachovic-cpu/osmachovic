@@ -1591,8 +1591,21 @@ Odpovedaj stručne po slovensky.`;
         <div style={sectionTitle}>💰 Financie</div>
         <div className="naber-grid" style={gridSt}>
           <div>
-            <label style={labelSt}>Predajná cena (€)</label>
-            <input type="number" value={predajnaCena} onChange={e => setPredajnaCena(e.target.value)} style={inputSt} />
+            <label style={labelSt}>Predajná cena (€) <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "400" }}>— automaticky Baťovská pri opustení políčka</span></label>
+            <input
+              type="number"
+              value={predajnaCena}
+              onChange={e => setPredajnaCena(e.target.value)}
+              onBlur={e => {
+                const n = Number(e.target.value);
+                if (n >= 1000) {
+                  // Baťovská: zaokrúhliť nahor na X900
+                  const batovska = Math.ceil(n / 1000) * 1000 - 100;
+                  setPredajnaCena(String(batovska));
+                }
+              }}
+              style={inputSt}
+            />
           </div>
           {typ !== "pozemok" && (
             <div>

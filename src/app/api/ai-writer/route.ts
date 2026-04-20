@@ -199,11 +199,55 @@ Vráť IBA JSON (bez markdown, bez \`\`\`):
   "cena_batova": "Ak je cena a NIE JE nájom, zaokrúhli na Baťovskú cenu (končí 900 alebo 99 900). String s medzerou a €. Ak nie je cena, prázdny string."
 }`;
 
+/** Baťovská cena: zaokrúhli nahor na X900 / 99 900.
+ *  150 200 → 150 900, 85 000 → 84 900, 200 000 → 199 900, 100 000 → 99 900. */
+export function batovskaCena(n: number): number {
+  if (!n || n < 1000) return n;
+  return Math.ceil(n / 1000) * 1000 - 100;
+}
+
+/** Formátuje telefón do tvaru "+421 XXX XXX XXX". */
+function formatPhone(raw: string): string {
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 9) return raw; // nezmysel, vráť ako je
+  // Ak sa začína 421, 00421, alebo len 9 číslic SK
+  let nat = digits;
+  if (nat.startsWith("00421")) nat = nat.slice(5);
+  else if (nat.startsWith("421")) nat = nat.slice(3);
+  else if (nat.length === 10 && nat.startsWith("0")) nat = nat.slice(1);
+  if (nat.length !== 9) return raw;
+  return `+421 ${nat.slice(0, 3)} ${nat.slice(3, 6)} ${nat.slice(6)}`;
+}
+
+/** Header blok pred textom inzerátu. */
+function buildHeader(opts: {
+  obec?: string;
+  okres?: string;
+  ulica?: string;
+  izby?: number | string;
+  plocha?: number | string;
+  cena?: number;
+  typCeny?: "predaj" | "prenajom";
+}): string {
+  // Lokalita: preferujeme "Obec, Okres/MČ, Ulica" poradie
+  const lokParts = [opts.obec, opts.okres, opts.ulica].filter((x) => x && String(x).trim());
+  const lines: string[] = [];
+  if (lokParts.length > 0) lines.push(`Lokalita: ${lokParts.join(", ")}`);
+  if (opts.izby) lines.push(`Izby: ${opts.izby}`);
+  if (opts.plocha) lines.push(`Výmera: ${opts.plocha} m²`);
+  if (opts.cena && opts.cena > 0) {
+    const cena = opts.typCeny === "prenajom" ? opts.cena : batovskaCena(opts.cena);
+    lines.push(`Financie: ${cena.toLocaleString("sk-SK")} €${opts.typCeny === "prenajom" ? " / mesiac" : ""}`);
+  }
+  return lines.length > 0 ? lines.join("\n") + "\n\n" : "";
+}
+
 /**
  * Post-processing emotivny textu — garancia správneho formátu bez ohľadu na to,
- * čo Claude/GPT vygenerovali. Odstráni zakázané začiatky ("VIANEMA ponúka..."),
- * odstráni existujúci záver (ak nejaký je) a nahradí ho presným VIANEMA blokom
- * s reálnymi údajmi makléra a cenou.
+ * čo Claude/GPT vygenerovali. Pridá header blok, odstráni zakázané začiatky,
+ * odstráni existujúci záver a nahradí ho presným VIANEMA blokom s reálnymi
+ * údajmi makléra a Baťovskou cenou.
  */
 function enforceVianemaClosing(
   text: string,
@@ -213,6 +257,12 @@ function enforceVianemaClosing(
     maklerTelefon?: string;
     maklerEmail?: string;
     typ?: string;
+    obec?: string;
+    okres?: string;
+    ulica?: string;
+    izby?: number | string;
+    plocha?: number | string;
+    typCeny?: "predaj" | "prenajom";
   },
 ): string {
   if (!text) return text;
@@ -249,18 +299,29 @@ function enforceVianemaClosing(
     cleaned = cleaned.substring(0, vianemaEnd).trim();
   }
 
-  // 3. Vybuduj záver s reálnymi údajmi
-  const cenaStr = opts.cena && opts.cena > 0 ? `${opts.cena.toLocaleString("sk-SK")} €` : "[CENA] €";
-  const kontakt = [opts.maklerMeno, opts.maklerTelefon, opts.maklerEmail]
-    .filter(Boolean).join(" ") || "+421 915 627 008 machovic@vianema.eu";
+  // 3. Vybuduj záver s reálnymi údajmi (Baťovská cena pre predaj)
+  const finalCena = opts.cena && opts.cena > 0
+    ? (opts.typCeny === "prenajom" ? opts.cena : batovskaCena(opts.cena))
+    : 0;
+  const cenaStr = finalCena > 0 ? `${finalCena.toLocaleString("sk-SK")} €` : "[CENA] €";
+  const telFormatted = formatPhone(opts.maklerTelefon || "");
+  const kontakt = [opts.maklerMeno, telFormatted, opts.maklerEmail]
+    .filter(Boolean).join(" ") || "Aleš Machovič +421 915 627 008 machovic@vianema.eu";
   const typLow = (opts.typ || "").toLowerCase();
   const tohtoX = typLow.includes("dom") || typLow.includes("rodin") ? "tohto domu"
     : typLow.includes("pozem") || typLow.includes("parcel") ? "tohto pozemku"
     : "tohto bytu";
 
+  // Header blok na začiatku
+  const header = buildHeader({
+    obec: opts.obec, okres: opts.okres, ulica: opts.ulica,
+    izby: opts.izby, plocha: opts.plocha,
+    cena: finalCena || opts.cena, typCeny: opts.typCeny,
+  });
+
   const closing = `\n\nCena: ${cenaStr} vrátane kompletného realitného servisu spoločnosti Vianema.\n\nDohodnite si obhliadku ${tohtoX}, radi vám ho ukážeme. Kontakt: ${kontakt}\n\nVIANEMA. Komplexné služby pre váš Projekt Bývanie a Investície pod jednou strechou. Právny servis a poradenstvo, finančné služby a investičné poradenstvo, poistenie, služby znalca a znalecké posudky, odkup nehnuteľností, development, rekonštrukcie vrátane architektonickej a dizajnérskej expertízy, sťahovacie služby, manažment prenajatých nehnuteľností, kúpa - predaj, import áut.`;
 
-  return cleaned + closing;
+  return header + cleaned + closing;
 }
 
 function extractJSON(raw: string): Record<string, string> {
@@ -566,7 +627,7 @@ async function fetchVzorInzerat(input: string): Promise<string> {
 
 /* ══════ MAIN HANDLER ══════ */
 export async function POST(req: NextRequest) {
-  const { nazov, typ, lokalita, cena, plocha, izby, stav, popis, photos, maklerMeno, maklerTelefon, maklerEmail, vzorovyInzerat: vzorovyInzeratRaw } = await req.json();
+  const { nazov, typ, lokalita, cena, plocha, izby, stav, popis, photos, maklerMeno, maklerTelefon, maklerEmail, vzorovyInzerat: vzorovyInzeratRaw, obec, okres, ulica, typCeny } = await req.json();
   const vzorovyInzerat = await fetchVzorInzerat(vzorovyInzeratRaw || "");
 
   // popis teraz obsahuje KOMPLETNÝ kontext vrátane LV textu, dokumentov, vybavenia, vykurovania atď.
@@ -639,10 +700,17 @@ export async function POST(req: NextRequest) {
     // Bez ohľadu na to čo AI vygenerovala, vynútime začiatok bez "VIANEMA ponúka"
     // a kompletný záver s reálnymi údajmi makléra + cenou.
     if (final.emotivny) {
+      const cenaNum = typeof cena === "number" ? cena : Number(cena) || undefined;
       final.emotivny = enforceVianemaClosing(final.emotivny, {
-        cena: typeof cena === "number" ? cena : Number(cena) || undefined,
-        maklerMeno, maklerTelefon, maklerEmail, typ,
+        cena: cenaNum, maklerMeno, maklerTelefon, maklerEmail, typ,
+        obec, okres, ulica,
+        izby, plocha,
+        typCeny: (typCeny === "prenajom" ? "prenajom" : "predaj"),
       });
+      // Tiež vráť Baťovskú cenu v samostatnom poli pre frontend (auto-fill)
+      if (cenaNum && cenaNum > 0 && typCeny !== "prenajom") {
+        final.cena_batova = batovskaCena(cenaNum).toLocaleString("sk-SK") + " €";
+      }
     }
 
     return NextResponse.json({

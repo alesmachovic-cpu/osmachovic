@@ -877,8 +877,11 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         body: JSON.stringify({
           nazov: `${f.typ} ${[f.obec, f.okres].filter(Boolean).join(", ")}`.trim(),
           typ: f.typ, lokalita: lokalitaFull,
+          obec: f.obec, okres: f.okres, ulica: f.ulica_verejna,
           cena: Number(f.cena) || 0, plocha: Number(f.plocha) || null,
           izby: Number(f.typ.match(/(\d+)-izb/)?.[1] || f.izby) || null, stav: f.stav, popis: ctx,
+          // typCeny: "predaj" (default) alebo "prenajom" — určuje či sa aplikuje Baťovská
+          typCeny: /prenaj/i.test(f.typ_ceny || f.kategoria || "") ? "prenajom" : "predaj",
           photos: photoB64,
           maklerMeno, maklerTelefon, maklerEmail, vzorovyInzerat,
         }),
