@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import type { TypNehnutelnosti, StavNehnutelnosti } from "@/lib/database.types";
 import { KRAJE } from "@/lib/database.types";
@@ -42,59 +42,6 @@ function Progress({ active, text }: { active: boolean; text: string }) {
   );
 }
 
-/* ── Veselé loading správy pre AI Writer — rotujú každé 2.5s ── */
-const AI_LOADING_MESSAGES: Array<{ emoji: string; text: string }> = [
-  { emoji: "🤖", text: "Claude si dáva kávu a pozerá fotky..." },
-  { emoji: "🗺️", text: "Gemini sa prechádza po ulici na Mapách..." },
-  { emoji: "✍️", text: "AI kombinuje slová, aby to bolo cool..." },
-  { emoji: "🏠", text: "Maklér si predstavuje, ako to opíše klientovi..." },
-  { emoji: "💰", text: "Zaokrúhľuje cenu na Baťovskú, 900 na konci je mágia..." },
-  { emoji: "🎨", text: "Vkladá SEO keywords, aby Google zaspieval..." },
-  { emoji: "📐", text: "Meria odsadenie odrážok, žiadne marže sa nesmú pomýliť..." },
-  { emoji: "🔍", text: "Kontroluje či tam nedrieme nejaká halucinácia..." },
-  { emoji: "☕", text: "Ešte jeden espresso a bude hotovo..." },
-  { emoji: "🚀", text: "Text je skoro hotový, naberá svoje krídla..." },
-];
-
-function AIWriterLoading() {
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setIdx((i) => (i + 1) % AI_LOADING_MESSAGES.length), 2500);
-    return () => clearInterval(t);
-  }, []);
-  const m = AI_LOADING_MESSAGES[idx];
-  return (
-    <div style={{ padding: "32px 24px", textAlign: "center" }}>
-      <div
-        key={`emoji-${idx}`}
-        style={{
-          fontSize: "56px", marginBottom: "12px", display: "inline-block",
-          animation: "wiggle 1.6s ease-in-out infinite",
-        }}
-      >{m.emoji}</div>
-      <div
-        key={`text-${idx}`}
-        style={{
-          fontSize: "15px", fontWeight: "500", color: "var(--text-primary)",
-          animation: "fade 0.4s ease-out",
-        }}
-      >{m.text}</div>
-      <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "14px" }}>
-        {[0, 1, 2].map((i) => (
-          <div key={i} style={{
-            width: "8px", height: "8px", borderRadius: "4px",
-            background: "#3B82F6",
-            animation: `bounce 1.2s ease-in-out ${i * 0.15}s infinite`,
-          }} />
-        ))}
-      </div>
-      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "10px", fontStyle: "italic" }}>
-        Claude + Gemini + GPT pracujú súbežne
-      </div>
-    </div>
-  );
-}
-
 const OKRESY: Record<string, string[]> = {
   "Bratislavský kraj": ["Bratislava I","Bratislava II","Bratislava III","Bratislava IV","Bratislava V","Malacky","Pezinok","Senec"],
   "Trnavský kraj": ["Dunajská Streda","Galanta","Hlohovec","Piešťany","Senica","Skalica","Trnava"],
@@ -105,6 +52,29 @@ const OKRESY: Record<string, string[]> = {
   "Prešovský kraj": ["Bardejov","Humenné","Kežmarok","Levoča","Medzilaborce","Poprad","Prešov","Sabinov","Snina","Stará Ľubovňa","Stropkov","Svidník","Vranov nad Topľou"],
   "Košický kraj": ["Gelnica","Košice I","Košice II","Košice III","Košice IV","Košice-okolie","Michalovce","Rožňava","Sobrance","Spišská Nová Ves","Trebišov"],
 };
+
+const FUNNY_MSGS = [
+  "Leštím formulácie…",
+  "Hľadám lepšie slová…",
+  "Prepisujem s citom…",
+  "Ladím rytmus vety…",
+  "Škrtám zbytočnosti…",
+  "Vyberám to najlepšie…",
+  "Cizelujem detaily…",
+  "Premýšľam nad tónom…",
+  "Dolaďujem obraty…",
+  "Preformulovávam vety…",
+  "Skúšam alternatívy…",
+  "Upravujem tempo…",
+  "Prispôsobujem štýl…",
+  "Volím presné slová…",
+  "Hľadám rovnováhu…",
+  "Upresňujem význam…",
+  "Vyvažujem vety…",
+  "Dotýkam sa detailov…",
+  "Zjemňujem prechody…",
+  "Pribrusujem nuansy…",
+];
 
 const PORTALY = [
   { key: "nehnutelnosti_sk", label: "Nehnutelnosti.sk" },
@@ -333,9 +303,9 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [refineMsgIdx, setRefineMsgIdx] = useState(0);
   const [parsingLV, setParsingLV] = useState(false);
   const [chatInput, setChatInput] = useState("");
-  const [refineMsgIdx, setRefineMsgIdx] = useState(0);
   const [lvParsed, setLvParsed] = useState<Record<string, string> | null>(null);
   const [dropOver, setDropOver] = useState(false);
   const [photos, setPhotos] = useState<{ name: string; url: string; size: number }[]>([]);
@@ -374,11 +344,14 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     return () => { document.removeEventListener("dragover", prevent); document.removeEventListener("drop", prevent); };
   }, []);
 
-  // Rotácia funny správy pri AI refine (keď generating && text_popis existuje)
+  /* ── Rotácia vtipných hlášok pri úprave existujúceho textu ── */
   useEffect(() => {
     if (!generating) return;
-    const t = setInterval(() => setRefineMsgIdx((i) => (i + 1) % AI_LOADING_MESSAGES.length), 2500);
-    return () => clearInterval(t);
+    setRefineMsgIdx(Math.floor(Math.random() * FUNNY_MSGS.length));
+    const id = setInterval(() => {
+      setRefineMsgIdx(i => (i + 1) % FUNNY_MSGS.length);
+    }, 1800);
+    return () => clearInterval(id);
   }, [generating]);
 
   function set(k: string, v: string | boolean | number) { setF(p => ({ ...p, [k]: v })); }
@@ -1436,11 +1409,35 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
               <div>
                 <div style={{ fontSize: "15px", fontWeight: "600", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
                   AI Writer
-                  {generating && <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "500", color: "#3B82F6", background: "rgba(59,130,246,0.12)", padding: "2px 10px", borderRadius: "10px" }}><span style={{ width: "8px", height: "8px", borderRadius: "4px", background: "#3B82F6", animation: "pulse 1s ease-in-out infinite" }} />Generujem...</span>}
+                  {generating && <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "500", color: "#3B82F6", background: "rgba(59,130,246,0.12)", padding: "2px 10px", borderRadius: "10px" }}><span style={{ width: "8px", height: "8px", borderRadius: "4px", background: "#3B82F6", animation: "pulse 1s ease-in-out infinite" }} />{f.text_popis ? FUNNY_MSGS[refineMsgIdx] : "Generujem..."}</span>}
                 </div>
-                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "2px" }}>
-                  {[f.typ, f.izby ? `${f.izby}-izb.` : "", f.plocha ? `${f.plocha} m²` : "", f.cena ? `${f.cena} €` : "", [f.obec, f.okres].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "Vyplň údaje vyššie"}
-                </div>
+                {(() => {
+                  const rawLok = [f.obec, f.ulica_verejna, f.okres].filter(Boolean).join(", ");
+                  const seen = new Set<string>();
+                  const lokalita = rawLok.split(",").map(s => s.trim()).filter(Boolean).filter(p => {
+                    const k = p.toLowerCase();
+                    if (seen.has(k)) return false;
+                    seen.add(k);
+                    return true;
+                  }).join(", ");
+                  const extras = [f.balkon && "balkón", f.loggia && "loggia", f.terasa && "terasa", f.garaz && "garáž", f.pivnica && "pivnica"].filter(Boolean) as string[];
+                  const izby = f.izby ? `${f.izby}${extras.length ? " + " + extras.join(", ") : ""}` : "";
+                  const plochaVal = f.plocha || f.uzitkova_plocha || f.podlahova_plocha || f.celkova_plocha || f.zastavana_plocha;
+                  const vymera = plochaVal ? `${plochaVal} m²` : "";
+                  const cena = f.cena ? `${Number(String(f.cena).replace(/\s/g, "")).toLocaleString("sk-SK")} €` : "";
+                  const rows = [["Lokalita", lokalita], ["Izby", izby], ["Výmera", vymera], ["Financie", cena]].filter(([, v]) => v);
+                  if (!rows.length) return <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "2px" }}>Vyplň údaje vyššie</div>;
+                  return (
+                    <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "4px", display: "grid", gridTemplateColumns: "auto 1fr", gap: "2px 10px" }}>
+                      {rows.map(([k, v]) => (
+                        <React.Fragment key={k}>
+                          <span style={{ fontWeight: "500", color: "var(--text-secondary)" }}>{k}</span>
+                          <span style={{ color: "var(--text-primary)" }}>{v}</span>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
               <button onClick={handleGenerate} disabled={generating || !canGenerate}
                 style={{ padding: "8px 18px", borderRadius: "8px", border: "none", background: generating ? "transparent" : "var(--text-primary)", color: generating ? "transparent" : "var(--bg-base)", fontSize: "12px", fontWeight: "600", cursor: generating ? "default" : "pointer", opacity: generating ? 0 : 1 }}>
@@ -1456,7 +1453,14 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
               </div>
             )}
 
-            {generating && !f.text_popis && <AIWriterLoading />}
+            {generating && !f.text_popis && (
+              <div style={{ padding: "32px 24px", textAlign: "center" }}>
+                <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginBottom: "12px" }}>
+                  {[0, 1, 2].map(i => <div key={i} style={{ width: "8px", height: "8px", borderRadius: "4px", background: "#3B82F6", animation: `bounce 1.2s ease-in-out ${i * 0.15}s infinite` }} />)}
+                </div>
+                <div style={{ fontSize: "14px", fontWeight: "500", color: "var(--text-primary)" }}>AI píše text inzerátu</div>
+              </div>
+            )}
 
             {f.text_popis && (
               <div style={{ background: generating ? "#F9FAFB" : "transparent", transition: "background 0.3s" }}>
@@ -1469,20 +1473,6 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
 
                 <div style={{ padding: "12px 20px 0" }}>
                   <label style={s.label}>Popis inzerátu</label>
-                  {generating && (
-                    <div style={{
-                      marginBottom: "8px", padding: "10px 14px",
-                      background: "#EFF6FF", border: "1px solid #BFDBFE",
-                      borderRadius: "10px", display: "flex", alignItems: "center", gap: "10px",
-                    }}>
-                      <span style={{ fontSize: "22px", animation: "wiggle 1.6s ease-in-out infinite" }}>
-                        {AI_LOADING_MESSAGES[refineMsgIdx].emoji}
-                      </span>
-                      <span style={{ fontSize: "13px", color: "#1D4ED8", fontWeight: "500" }}>
-                        {AI_LOADING_MESSAGES[refineMsgIdx].text}
-                      </span>
-                    </div>
-                  )}
                   <textarea style={{ ...s.input, resize: "vertical", minHeight: "180px", fontSize: "14px", lineHeight: 1.7, background: "var(--bg-elevated)", color: "var(--text-primary)" }} value={f.text_popis} onChange={e => set("text_popis", e.target.value)} readOnly={generating} />
                 </div>
 
