@@ -225,15 +225,29 @@ function buildHeader(opts: {
   obec?: string;
   okres?: string;
   ulica?: string;
+  lokalita?: string;
   izby?: number | string;
   plocha?: number | string;
   cena?: number;
   typCeny?: "predaj" | "prenajom";
 }): string {
-  // Lokalita: preferujeme "Obec, Okres/MČ, Ulica" poradie
-  const lokParts = [opts.obec, opts.okres, opts.ulica].filter((x) => x && String(x).trim());
+  // Lokalita: preferujeme separate polia (Obec, Okres, Ulica). Ak chýbajú,
+  // fallback na joined string (napr. "Bratislava, Ružinov, Korenicova").
+  let lokStr = "";
+  const lokParts = [opts.obec, opts.okres, opts.ulica]
+    .filter((x) => x && String(x).trim());
+  if (lokParts.length > 0) {
+    lokStr = lokParts.join(", ");
+  } else if (opts.lokalita && opts.lokalita.trim()) {
+    // Z "Kadnárová, Bratislava, Bratislava III, Bratislavský kraj" vezmi prvé 3
+    const parts = opts.lokalita.split(",").map((s) => s.trim()).filter(Boolean);
+    // Bez "kraj" sufixu (posledná časť, ak obsahuje "kraj")
+    const clean = parts.filter((p) => !/kraj$/i.test(p));
+    lokStr = clean.slice(0, 3).join(", ");
+  }
+
   const lines: string[] = [];
-  if (lokParts.length > 0) lines.push(`Lokalita: ${lokParts.join(", ")}`);
+  if (lokStr) lines.push(`Lokalita: ${lokStr}`);
   if (opts.izby) lines.push(`Izby: ${opts.izby}`);
   if (opts.plocha) lines.push(`Výmera: ${opts.plocha} m²`);
   if (opts.cena && opts.cena > 0) {
@@ -260,6 +274,7 @@ function enforceVianemaClosing(
     obec?: string;
     okres?: string;
     ulica?: string;
+    lokalita?: string;
     izby?: number | string;
     plocha?: number | string;
     typCeny?: "predaj" | "prenajom";
@@ -315,6 +330,7 @@ function enforceVianemaClosing(
   // Header blok na začiatku
   const header = buildHeader({
     obec: opts.obec, okres: opts.okres, ulica: opts.ulica,
+    lokalita: opts.lokalita,
     izby: opts.izby, plocha: opts.plocha,
     cena: finalCena || opts.cena, typCeny: opts.typCeny,
   });
@@ -703,7 +719,7 @@ export async function POST(req: NextRequest) {
       const cenaNum = typeof cena === "number" ? cena : Number(cena) || undefined;
       final.emotivny = enforceVianemaClosing(final.emotivny, {
         cena: cenaNum, maklerMeno, maklerTelefon, maklerEmail, typ,
-        obec, okres, ulica,
+        obec, okres, ulica, lokalita,
         izby, plocha,
         typCeny: (typCeny === "prenajom" ? "prenajom" : "predaj"),
       });
