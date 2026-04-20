@@ -1193,45 +1193,6 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
                 </div>
               </div>
             )}
-            {videos.length > 0 && (
-              <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "11px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>Videá ({videos.length})</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  {videos.map((v, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "8px", background: "var(--bg-elevated)", fontSize: "12px" }}>
-                      <span style={{ flex: 1, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
-                      <button onClick={() => setVideos(prev => prev.filter((_, j) => j !== i))}
-                        style={{ width: "20px", height: "20px", borderRadius: "10px", border: "none", background: "rgba(0,0,0,0.1)", cursor: "pointer", fontSize: "11px", color: "var(--text-primary)" }}>×</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div style={{ marginBottom: "16px", display: "flex", gap: "6px" }}>
-              <input
-                placeholder="YouTube / Vimeo link…"
-                value={videoInput}
-                onChange={e => setVideoInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key !== "Enter") return;
-                  const n = normalizeVideoUrl(videoInput);
-                  if (n) { setVideos(prev => [...prev, n]); setVideoInput(""); }
-                  else setError("Neplatný YouTube/Vimeo link.");
-                }}
-                style={{ ...s.input, flex: 1, fontSize: "12px", padding: "8px 12px" }}
-              />
-              <input
-                placeholder="Matterport / Kuula 3D link…"
-                value={f.url_virtualka}
-                onChange={e => {
-                  const v = e.target.value;
-                  if (!v.trim()) { set("url_virtualka", ""); return; }
-                  const n = normalizeTour3D(v);
-                  set("url_virtualka", n || v);
-                }}
-                style={{ ...s.input, flex: 1, fontSize: "12px", padding: "8px 12px" }}
-              />
-            </div>
             {photos.some(p => p.uploading) && (
               <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "10px" }}>
                 Fotky sa nahrávajú na server…
@@ -1292,6 +1253,49 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
             )}
           </div>
         )}
+      </div>
+
+      {/* ═══ VIDEÁ & 3D OBHLIADKA ═══ */}
+      <div style={{ ...s.card, padding: "16px 20px" }}>
+        <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "10px" }}>Videá a 3D obhliadka</div>
+        {videos.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "10px" }}>
+            {videos.map((v, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "8px", background: "var(--bg-elevated)", fontSize: "12px" }}>
+                <span>🎬</span>
+                <span style={{ flex: 1, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v}</span>
+                <button onClick={() => setVideos(prev => prev.filter((_, j) => j !== i))}
+                  style={{ width: "20px", height: "20px", borderRadius: "10px", border: "none", background: "rgba(0,0,0,0.1)", cursor: "pointer", fontSize: "11px", color: "var(--text-primary)" }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+          <input
+            placeholder="🎬 YouTube / Vimeo link (Enter)"
+            value={videoInput}
+            onChange={e => setVideoInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              const n = normalizeVideoUrl(videoInput);
+              if (n) { setVideos(prev => [...prev, n]); setVideoInput(""); }
+              else setError("Neplatný YouTube/Vimeo link.");
+            }}
+            style={{ ...s.input, fontSize: "12px", padding: "8px 12px" }}
+          />
+          <input
+            placeholder="🏠 Matterport / Kuula 3D link"
+            value={f.url_virtualka}
+            onChange={e => {
+              const v = e.target.value;
+              if (!v.trim()) { set("url_virtualka", ""); return; }
+              const n = normalizeTour3D(v);
+              set("url_virtualka", n || v);
+            }}
+            style={{ ...s.input, fontSize: "12px", padding: "8px 12px" }}
+          />
+        </div>
       </div>
 
       {/* Ctrl+V LV */}
