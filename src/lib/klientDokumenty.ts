@@ -1,4 +1,11 @@
-import { supabase } from "./supabase";
+/**
+ * Klientské dokumenty — CRUD helpers.
+ *
+ * Všetky operácie idú cez server-side API /api/klient-dokumenty
+ * aby sa dáta (data_base64 PDF/DOCX, text_content LV) pred uložením
+ * zašifrovali AES-256-GCM s kľúčom DOC_ENCRYPTION_KEY v env vars.
+ * Browser nikdy nemá access k master key.
+ */
 
 export type KlientDokument = {
   id?: string;
@@ -13,47 +20,41 @@ export type KlientDokument = {
   created_at?: string;
 };
 
-const MAX_BASE64_BYTES = 5 * 1024 * 1024; // 5MB
-
 export async function saveKlientDokument(doc: KlientDokument): Promise<{ id?: string; error?: string }> {
   if (!doc.klient_id) return { error: "klient_id chýba" };
-  // Skontroluj duplicitu (rovnaký názov + size pre toho istého klienta)
   try {
-    const { data: existing } = await supabase
-      .from("klient_dokumenty")
-      .select("id")
-      .eq("klient_id", doc.klient_id)
-      .eq("name", doc.name)
-      .eq("size", doc.size ?? 0)
-      .maybeSingle();
-    if (existing?.id) return { id: existing.id };
-  } catch { /* ignore */ }
-
-  const payload: KlientDokument = { ...doc };
-  if (payload.data_base64 && payload.data_base64.length > MAX_BASE64_BYTES) {
-    delete payload.data_base64;
+    const res = await fetch("/api/klient-dokumenty", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(doc),
+    });
+    const d = await res.json();
+    if (!res.ok) return { error: d.error || "Upload zlyhal" };
+    return { id: d.id };
+  } catch (e) {
+    return { error: String(e).slice(0, 200) };
   }
-
-  const { data, error } = await supabase
-    .from("klient_dokumenty")
-    .insert(payload)
-    .select("id")
-    .single();
-  if (error) return { error: error.message };
-  return { id: data?.id };
 }
 
 export async function listKlientDokumenty(klientId: string): Promise<KlientDokument[]> {
-  const { data, error } = await supabase
-    .from("klient_dokumenty")
-    .select("*")
-    .eq("klient_id", klientId)
-    .order("created_at", { ascending: false });
-  if (error) return [];
-  return (data || []) as KlientDokument[];
+  if (!klientId) return [];
+  try {
+    const res = await fetch(`/api/klient-dokumenty?klientId=${encodeURIComponent(klientId)}`);
+    if (!res.ok) return [];
+    const d = await res.json();
+    return (d.dokumenty || []) as KlientDokument[];
+  } catch {
+    return [];
+  }
 }
 
 export async function deleteKlientDokument(id: string): Promise<boolean> {
-  const { error } = await supabase.from("klient_dokumenty").delete().eq("id", id);
-  return !error;
+  try {
+    const res = await fetch(`/api/klient-dokumenty?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
