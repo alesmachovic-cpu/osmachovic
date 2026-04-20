@@ -37,7 +37,60 @@ function Progress({ active, text }: { active: boolean; text: string }) {
     <div style={{ padding: "12px 20px", background: "#EFF6FF", borderRadius: "10px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "10px" }}>
       <div style={{ width: "16px", height: "16px", border: "2px solid #93C5FD", borderTopColor: "#3B82F6", borderRadius: "50%", animation: "spin 0.6s linear infinite", flexShrink: 0 }} />
       <span style={{ fontSize: "13px", fontWeight: "500", color: "#1D4ED8" }}>{text}</span>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes bounce{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes bounce{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}@keyframes wiggle{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}@keyframes fade{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}`}</style>
+    </div>
+  );
+}
+
+/* ── Veselé loading správy pre AI Writer — rotujú každé 2.5s ── */
+const AI_LOADING_MESSAGES: Array<{ emoji: string; text: string }> = [
+  { emoji: "🤖", text: "Claude si dáva kávu a pozerá fotky..." },
+  { emoji: "🗺️", text: "Gemini sa prechádza po ulici na Mapách..." },
+  { emoji: "✍️", text: "AI kombinuje slová, aby to bolo cool..." },
+  { emoji: "🏠", text: "Maklér si predstavuje, ako to opíše klientovi..." },
+  { emoji: "💰", text: "Zaokrúhľuje cenu na Baťovskú, 900 na konci je mágia..." },
+  { emoji: "🎨", text: "Vkladá SEO keywords, aby Google zaspieval..." },
+  { emoji: "📐", text: "Meria odsadenie odrážok, žiadne marže sa nesmú pomýliť..." },
+  { emoji: "🔍", text: "Kontroluje či tam nedrieme nejaká halucinácia..." },
+  { emoji: "☕", text: "Ešte jeden espresso a bude hotovo..." },
+  { emoji: "🚀", text: "Text je skoro hotový, naberá svoje krídla..." },
+];
+
+function AIWriterLoading() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % AI_LOADING_MESSAGES.length), 2500);
+    return () => clearInterval(t);
+  }, []);
+  const m = AI_LOADING_MESSAGES[idx];
+  return (
+    <div style={{ padding: "32px 24px", textAlign: "center" }}>
+      <div
+        key={`emoji-${idx}`}
+        style={{
+          fontSize: "56px", marginBottom: "12px", display: "inline-block",
+          animation: "wiggle 1.6s ease-in-out infinite",
+        }}
+      >{m.emoji}</div>
+      <div
+        key={`text-${idx}`}
+        style={{
+          fontSize: "15px", fontWeight: "500", color: "var(--text-primary)",
+          animation: "fade 0.4s ease-out",
+        }}
+      >{m.text}</div>
+      <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "14px" }}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} style={{
+            width: "8px", height: "8px", borderRadius: "4px",
+            background: "#3B82F6",
+            animation: `bounce 1.2s ease-in-out ${i * 0.15}s infinite`,
+          }} />
+        ))}
+      </div>
+      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "10px", fontStyle: "italic" }}>
+        Claude + Gemini + GPT pracujú súbežne
+      </div>
     </div>
   );
 }
@@ -282,6 +335,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   const [generating, setGenerating] = useState(false);
   const [parsingLV, setParsingLV] = useState(false);
   const [chatInput, setChatInput] = useState("");
+  const [refineMsgIdx, setRefineMsgIdx] = useState(0);
   const [lvParsed, setLvParsed] = useState<Record<string, string> | null>(null);
   const [dropOver, setDropOver] = useState(false);
   const [photos, setPhotos] = useState<{ name: string; url: string; size: number }[]>([]);
@@ -319,6 +373,13 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     document.addEventListener("drop", prevent);
     return () => { document.removeEventListener("dragover", prevent); document.removeEventListener("drop", prevent); };
   }, []);
+
+  // Rotácia funny správy pri AI refine (keď generating && text_popis existuje)
+  useEffect(() => {
+    if (!generating) return;
+    const t = setInterval(() => setRefineMsgIdx((i) => (i + 1) % AI_LOADING_MESSAGES.length), 2500);
+    return () => clearInterval(t);
+  }, [generating]);
 
   function set(k: string, v: string | boolean | number) { setF(p => ({ ...p, [k]: v })); }
   function setPr(k: string, v: boolean) { setF(p => ({ ...p, pripojenie: { ...p.pripojenie, [k]: v } })); }
@@ -1395,15 +1456,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
               </div>
             )}
 
-            {generating && !f.text_popis && (
-              <div style={{ padding: "32px 24px", textAlign: "center" }}>
-                <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginBottom: "12px" }}>
-                  {[0, 1, 2].map(i => <div key={i} style={{ width: "8px", height: "8px", borderRadius: "4px", background: "#3B82F6", animation: `bounce 1.2s ease-in-out ${i * 0.15}s infinite` }} />)}
-                </div>
-                <div style={{ fontSize: "14px", fontWeight: "500", color: "var(--text-primary)" }}>AI píše text inzerátu</div>
-                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "4px" }}>Gemini skúma lokalitu · Claude a GPT píšu text</div>
-              </div>
-            )}
+            {generating && !f.text_popis && <AIWriterLoading />}
 
             {f.text_popis && (
               <div style={{ background: generating ? "#F9FAFB" : "transparent", transition: "background 0.3s" }}>
@@ -1416,6 +1469,20 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
 
                 <div style={{ padding: "12px 20px 0" }}>
                   <label style={s.label}>Popis inzerátu</label>
+                  {generating && (
+                    <div style={{
+                      marginBottom: "8px", padding: "10px 14px",
+                      background: "#EFF6FF", border: "1px solid #BFDBFE",
+                      borderRadius: "10px", display: "flex", alignItems: "center", gap: "10px",
+                    }}>
+                      <span style={{ fontSize: "22px", animation: "wiggle 1.6s ease-in-out infinite" }}>
+                        {AI_LOADING_MESSAGES[refineMsgIdx].emoji}
+                      </span>
+                      <span style={{ fontSize: "13px", color: "#1D4ED8", fontWeight: "500" }}>
+                        {AI_LOADING_MESSAGES[refineMsgIdx].text}
+                      </span>
+                    </div>
+                  )}
                   <textarea style={{ ...s.input, resize: "vertical", minHeight: "180px", fontSize: "14px", lineHeight: 1.7, background: "var(--bg-elevated)", color: "var(--text-primary)" }} value={f.text_popis} onChange={e => set("text_popis", e.target.value)} readOnly={generating} />
                 </div>
 
