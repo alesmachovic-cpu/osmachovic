@@ -363,7 +363,13 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       })));
     }
     const vids = (prefilledData.videa_urls as string[]) || [];
-    if (vids.length > 0) setVideos(vids);
+    const legacyVideo = (prefilledData.video_url as string) || "";
+    const merged = [...vids];
+    if (legacyVideo && !merged.includes(legacyVideo)) {
+      const n = normalizeVideoUrl(legacyVideo);
+      merged.push(n || legacyVideo);
+    }
+    if (merged.length > 0) setVideos(merged);
   }, [prefilledData]);
 
   /* ── Rotácia vtipných hlášok pri úprave existujúceho textu ── */
@@ -1507,11 +1513,6 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
             </div>
           )}
 
-          {/* Video */}
-          <div style={s.card}>
-            <div style={s.title}>Video</div>
-            <input style={s.input} placeholder="https://youtube.com/..." value={f.video_url} onChange={e => set("video_url", e.target.value)} />
-          </div>
 
           {/* ═══ AI WRITER — NA SPODKU ═══ */}
           <div ref={aiRef} style={{
