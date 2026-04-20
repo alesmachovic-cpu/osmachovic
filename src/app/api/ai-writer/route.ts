@@ -199,6 +199,70 @@ Vráť IBA JSON (bez markdown, bez \`\`\`):
   "cena_batova": "Ak je cena a NIE JE nájom, zaokrúhli na Baťovskú cenu (končí 900 alebo 99 900). String s medzerou a €. Ak nie je cena, prázdny string."
 }`;
 
+/**
+ * Post-processing emotivny textu — garancia správneho formátu bez ohľadu na to,
+ * čo Claude/GPT vygenerovali. Odstráni zakázané začiatky ("VIANEMA ponúka..."),
+ * odstráni existujúci záver (ak nejaký je) a nahradí ho presným VIANEMA blokom
+ * s reálnymi údajmi makléra a cenou.
+ */
+function enforceVianemaClosing(
+  text: string,
+  opts: {
+    cena?: number;
+    maklerMeno?: string;
+    maklerTelefon?: string;
+    maklerEmail?: string;
+    typ?: string;
+  },
+): string {
+  if (!text) return text;
+  let cleaned = text.trim();
+
+  // 1. Odstráň "VIANEMA ponúka ..." alebo podobné zakázané úvodné vety
+  const forbiddenOpenings = [
+    /^\s*VIANEMA\s+ponúka[^.!?]*[.!?]\s*/i,
+    /^\s*Vianema\s+ponúka[^.!?]*[.!?]\s*/i,
+    /^\s*Spoločnosť\s+VIANEMA[^.!?]*[.!?]\s*/i,
+    /^\s*Realitná\s+kancelária\s+VIANEMA[^.!?]*[.!?]\s*/i,
+    /^\s*Na\s+predaj\s+[^,]+,\s+ktor[ýé][^.!?]*[.!?]\s*/i,
+  ];
+  for (const re of forbiddenOpenings) {
+    if (re.test(cleaned)) {
+      cleaned = cleaned.replace(re, "").trim();
+      break;
+    }
+  }
+
+  // 2. Odstráň existujúci záver — všetko od "Cena:" alebo "Kontakt:" dolu
+  const closingStart = cleaned.search(/(?:^|\n)\s*Cena:\s*[\d\[]/);
+  if (closingStart > 0) {
+    cleaned = cleaned.substring(0, closingStart).trim();
+  }
+  // Fallback: ak "Cena:" nie je, strip od "Kontakt:" / "Dohodnite"
+  const kontaktStart = cleaned.search(/(?:^|\n)\s*(?:Kontakt:|Dohodnite\s+si\s+obhliadku)/);
+  if (kontaktStart > 0) {
+    cleaned = cleaned.substring(0, kontaktStart).trim();
+  }
+  // Strip "VIANEMA. Komplexné služby..." ak je niekde zvyšku
+  const vianemaEnd = cleaned.search(/(?:^|\n)\s*VIANEMA\.\s+Komplexné/);
+  if (vianemaEnd > 0) {
+    cleaned = cleaned.substring(0, vianemaEnd).trim();
+  }
+
+  // 3. Vybuduj záver s reálnymi údajmi
+  const cenaStr = opts.cena && opts.cena > 0 ? `${opts.cena.toLocaleString("sk-SK")} €` : "[CENA] €";
+  const kontakt = [opts.maklerMeno, opts.maklerTelefon, opts.maklerEmail]
+    .filter(Boolean).join(" ") || "+421 915 627 008 machovic@vianema.eu";
+  const typLow = (opts.typ || "").toLowerCase();
+  const tohtoX = typLow.includes("dom") || typLow.includes("rodin") ? "tohto domu"
+    : typLow.includes("pozem") || typLow.includes("parcel") ? "tohto pozemku"
+    : "tohto bytu";
+
+  const closing = `\n\nCena: ${cenaStr} vrátane kompletného realitného servisu spoločnosti Vianema.\n\nDohodnite si obhliadku ${tohtoX}, radi vám ho ukážeme. Kontakt: ${kontakt}\n\nVIANEMA. Komplexné služby pre váš Projekt Bývanie a Investície pod jednou strechou. Právny servis a poradenstvo, finančné služby a investičné poradenstvo, poistenie, služby znalca a znalecké posudky, odkup nehnuteľností, development, rekonštrukcie vrátane architektonickej a dizajnérskej expertízy, sťahovacie služby, manažment prenajatých nehnuteľností, kúpa - predaj, import áut.`;
+
+  return cleaned + closing;
+}
+
 function extractJSON(raw: string): Record<string, string> {
   if (!raw) return {};
   const cleaned = raw.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
@@ -569,6 +633,16 @@ export async function POST(req: NextRequest) {
         gemini.__err && `Gemini: ${gemini.__err}`,
       ].filter(Boolean).join(" | ");
       return NextResponse.json({ error: `Žiadna AI nevrátila text. ${errs || "(no errors captured)"}` }, { status: 500 });
+    }
+
+    // Post-processing: garancia správneho VIANEMA formátu.
+    // Bez ohľadu na to čo AI vygenerovala, vynútime začiatok bez "VIANEMA ponúka"
+    // a kompletný záver s reálnymi údajmi makléra + cenou.
+    if (final.emotivny) {
+      final.emotivny = enforceVianemaClosing(final.emotivny, {
+        cena: typeof cena === "number" ? cena : Number(cena) || undefined,
+        maklerMeno, maklerTelefon, maklerEmail, typ,
+      });
     }
 
     return NextResponse.json({
