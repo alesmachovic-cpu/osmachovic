@@ -1,5 +1,3 @@
-import { supabase } from "./supabase";
-
 /** Výstup uploadu jednej fotky — verejné URL-s z Supabase Storage. */
 export type UploadedPhoto = {
   name: string;
@@ -37,8 +35,9 @@ async function resizeToBlob(file: File, maxW: number, quality: number): Promise<
 }
 
 /**
- * Resize na dve varianty (1600px veľká, 400px thumbnail) a upload do
- * Storage bucketu `inzerat-fotky`. Vráti verejné URL-s.
+ * Resize na dve varianty (1600px veľká, 400px thumbnail) a upload cez
+ * server-side endpoint `/api/fotky/upload` (service role obchádza RLS,
+ * keďže CRM používa custom auth, nie Supabase auth session).
  *
  * Cesta v bucketi: {userId}/{inzeratId-or-draft}/{timestamp}-{random}.jpg
  */
@@ -46,49 +45,34 @@ export async function uploadFoto(
   file: File,
   opts: { userId: string; inzeratId?: string | null },
 ): Promise<UploadedPhoto> {
-  const folder = opts.inzeratId || "draft";
-  const rnd = Math.random().toString(36).slice(2, 8);
-  const ts = Date.now();
-  const baseName = `${opts.userId}/${folder}/${ts}-${rnd}`;
-  const pathLarge = `${baseName}.jpg`;
-  const pathThumb = `${baseName}-thumb.jpg`;
-
-  const [large, thumb] = await Promise.all([
+  const [largeBlob, thumbBlob] = await Promise.all([
     resizeToBlob(file, 1600, 0.85),
     resizeToBlob(file, 400, 0.8),
   ]);
 
-  const [upLarge, upThumb] = await Promise.all([
-    supabase.storage.from("inzerat-fotky").upload(pathLarge, large, {
-      contentType: "image/jpeg",
-      cacheControl: "31536000",
-      upsert: false,
-    }),
-    supabase.storage.from("inzerat-fotky").upload(pathThumb, thumb, {
-      contentType: "image/jpeg",
-      cacheControl: "31536000",
-      upsert: false,
-    }),
-  ]);
-  if (upLarge.error) throw upLarge.error;
-  if (upThumb.error) throw upThumb.error;
+  const fd = new FormData();
+  fd.append("large", new File([largeBlob], "large.jpg", { type: "image/jpeg" }));
+  fd.append("thumb", new File([thumbBlob], "thumb.jpg", { type: "image/jpeg" }));
+  fd.append("userId", opts.userId);
+  fd.append("inzeratId", opts.inzeratId || "draft");
+  fd.append("name", file.name);
 
-  const { data: pubLarge } = supabase.storage.from("inzerat-fotky").getPublicUrl(pathLarge);
-  const { data: pubThumb } = supabase.storage.from("inzerat-fotky").getPublicUrl(pathThumb);
+  const res = await fetch("/api/fotky/upload", { method: "POST", body: fd });
+  const data = await res.json().catch(() => ({ error: "Neplatná odpoveď zo servera" }));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
   return {
     name: file.name,
-    url: pubLarge.publicUrl,
-    thumb: pubThumb.publicUrl,
-    path: pathLarge,
-    size: large.size,
+    url: data.url,
+    thumb: data.thumb,
+    path: data.path,
+    size: data.size,
   };
 }
 
-/** Zmaže fotku zo Storage (veľkú aj thumb podľa konvencie názvu). */
+/** Zmaže fotku zo Storage (veľkú aj thumb) cez server endpoint. */
 export async function deleteFoto(path: string): Promise<void> {
-  const thumbPath = path.replace(/\.jpg$/i, "-thumb.jpg");
-  await supabase.storage.from("inzerat-fotky").remove([path, thumbPath]);
+  await fetch(`/api/fotky/upload?path=${encodeURIComponent(path)}`, { method: "DELETE" });
 }
 
 /**
