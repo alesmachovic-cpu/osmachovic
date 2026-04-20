@@ -906,6 +906,10 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         }
       } catch { /* ignore */ }
 
+      const extrasArr = [
+        f.balkon && "balkón", f.loggia && "loggia", f.terasa && "terasa",
+        f.garaz && "garáž", f.pivnica && "pivnica",
+      ].filter(Boolean) as string[];
       const res = await globalThis.fetch("/api/ai-writer", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -913,6 +917,11 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
           typ: f.typ, lokalita: lokalitaFull,
           obec: f.obec, okres: f.okres, ulica: f.ulica_verejna,
           cena: Number(f.cena) || 0, plocha: Number(f.plocha) || null,
+          uzitkovaPlocha: Number(f.uzitkova_plocha) || null,
+          podlahovaPlocha: Number(f.podlahova_plocha) || null,
+          celkovaPlocha: Number(f.celkova_plocha) || null,
+          zastavanaPlocha: Number(f.zastavana_plocha) || null,
+          extras: extrasArr,
           izby: Number(f.typ.match(/(\d+)-izb/)?.[1] || f.izby) || null, stav: f.stav, popis: ctx,
           // typCeny: "predaj" (default) alebo "prenajom" — určuje či sa aplikuje Baťovská
           typCeny: /prenaj/i.test(f.typ_ceny || f.kategoria || "") ? "prenajom" : "predaj",
@@ -1010,12 +1019,22 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         if (mp) { const p = JSON.parse(mp); rMeno = p.meno || ""; rTel = p.telefon || ""; rEmail = p.email || ""; }
       } catch { /* ignore */ }
 
+      const extrasArr = [
+        f.balkon && "balkón", f.loggia && "loggia", f.terasa && "terasa",
+        f.garaz && "garáž", f.pivnica && "pivnica",
+      ].filter(Boolean) as string[];
       const res = await globalThis.fetch("/api/ai-writer", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nazov: f.nazov || "Úprava", typ: f.typ,
           lokalita: [f.ulica_verejna, f.obec, f.okres, f.kraj].filter(Boolean).join(", "),
+          obec: f.obec, okres: f.okres, ulica: f.ulica_verejna,
           cena: Number(f.cena) || 0, plocha: Number(f.plocha) || null,
+          uzitkovaPlocha: Number(f.uzitkova_plocha) || null,
+          podlahovaPlocha: Number(f.podlahova_plocha) || null,
+          celkovaPlocha: Number(f.celkova_plocha) || null,
+          zastavanaPlocha: Number(f.zastavana_plocha) || null,
+          extras: extrasArr,
           izby: Number(f.izby) || null, stav: f.stav,
           popis: `${buildContext()}\n\nPožiadavka: ${msg}\n\nAktuálny text:\n${f.text_popis}`,
           photos: photoB64,

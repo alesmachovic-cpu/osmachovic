@@ -249,28 +249,39 @@ function buildHeader(opts: {
   lokalita?: string;
   izby?: number | string;
   plocha?: number | string;
+  uzitkovaPlocha?: number | string;
+  podlahovaPlocha?: number | string;
+  celkovaPlocha?: number | string;
+  zastavanaPlocha?: number | string;
+  extras?: string[];
   cena?: number;
   typCeny?: "predaj" | "prenajom";
 }): string {
-  // Lokalita: preferujeme separate polia (Obec, Okres, Ulica). Ak chýbajú,
-  // fallback na joined string (napr. "Bratislava, Ružinov, Korenicova").
-  let lokStr = "";
-  const lokParts = [opts.obec, opts.okres, opts.ulica]
-    .filter((x) => x && String(x).trim());
-  if (lokParts.length > 0) {
-    lokStr = lokParts.join(", ");
-  } else if (opts.lokalita && opts.lokalita.trim()) {
-    // Z "Kadnárová, Bratislava, Bratislava III, Bratislavský kraj" vezmi prvé 3
-    const parts = opts.lokalita.split(",").map((s) => s.trim()).filter(Boolean);
-    // Bez "kraj" sufixu (posledná časť, ak obsahuje "kraj")
-    const clean = parts.filter((p) => !/kraj$/i.test(p));
-    lokStr = clean.slice(0, 3).join(", ");
-  }
+  // Lokalita: zober VŠETKY dostupné zdroje (obec, okres, ulica, lokalita free-text),
+  // rozseknúť po čiarke, dedupovať case-insensitive, odstrániť "kraj" sufix.
+  const rawLok = [opts.obec, opts.okres, opts.ulica, opts.lokalita]
+    .filter((x) => x && String(x).trim())
+    .map((x) => String(x))
+    .join(", ");
+  const seen = new Set<string>();
+  const lokStr = rawLok.split(",").map((s) => s.trim()).filter(Boolean)
+    .filter((p) => !/kraj$/i.test(p))
+    .filter((p) => {
+      const k = p.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .join(", ");
+
+  const plochaVal = opts.plocha || opts.uzitkovaPlocha || opts.podlahovaPlocha || opts.celkovaPlocha || opts.zastavanaPlocha;
+  const extras = (opts.extras || []).filter(Boolean);
+  const izbyStr = opts.izby ? `${opts.izby}${extras.length ? " + " + extras.join(", ") : ""}` : "";
 
   const lines: string[] = [];
   if (lokStr) lines.push(`Lokalita: ${lokStr}`);
-  if (opts.izby) lines.push(`Izby: ${opts.izby}`);
-  if (opts.plocha) lines.push(`Výmera: ${opts.plocha} m²`);
+  if (izbyStr) lines.push(`Izby: ${izbyStr}`);
+  if (plochaVal) lines.push(`Výmera: ${plochaVal} m²`);
   if (opts.cena && opts.cena > 0) {
     const cena = opts.typCeny === "prenajom" ? opts.cena : batovskaCena(opts.cena);
     lines.push(`Financie: ${cena.toLocaleString("sk-SK")} €${opts.typCeny === "prenajom" ? " / mesiac" : ""}`);
@@ -298,19 +309,26 @@ function enforceVianemaClosing(
     lokalita?: string;
     izby?: number | string;
     plocha?: number | string;
+    uzitkovaPlocha?: number | string;
+    podlahovaPlocha?: number | string;
+    celkovaPlocha?: number | string;
+    zastavanaPlocha?: number | string;
+    extras?: string[];
     typCeny?: "predaj" | "prenajom";
   },
 ): string {
   if (!text) return text;
   let cleaned = text.trim();
 
-  // 1. Odstráň "VIANEMA ponúka ..." alebo podobné zakázané úvodné vety
+  // 1. Odstráň "VIANEMA ponúka ..." alebo podobné zakázané úvodné vety.
+  // Strihá až po koniec vety kde nasleduje ďalšia veta začínajúca veľkým písmenom
+  // (aby sa nestrihalo na ordináloch ako "3." alebo "5.").
+  const CAP = "A-ZÁÄČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ";
   const forbiddenOpenings = [
-    /^\s*VIANEMA\s+ponúka[^.!?]*[.!?]\s*/i,
-    /^\s*Vianema\s+ponúka[^.!?]*[.!?]\s*/i,
-    /^\s*Spoločnosť\s+VIANEMA[^.!?]*[.!?]\s*/i,
-    /^\s*Realitná\s+kancelária\s+VIANEMA[^.!?]*[.!?]\s*/i,
-    /^\s*Na\s+predaj\s+[^,]+,\s+ktor[ýé][^.!?]*[.!?]\s*/i,
+    new RegExp(`^\\s*VIANEMA\\s+ponúka[\\s\\S]*?[.!?]\\s+(?=[${CAP}])`, "i"),
+    new RegExp(`^\\s*Spoločnosť\\s+VIANEMA[\\s\\S]*?[.!?]\\s+(?=[${CAP}])`, "i"),
+    new RegExp(`^\\s*Realitná\\s+kancelária\\s+VIANEMA[\\s\\S]*?[.!?]\\s+(?=[${CAP}])`, "i"),
+    new RegExp(`^\\s*Na\\s+predaj\\s+[^,]+,\\s+ktor[ýé][\\s\\S]*?[.!?]\\s+(?=[${CAP}])`, "i"),
   ];
   for (const re of forbiddenOpenings) {
     if (re.test(cleaned)) {
@@ -353,6 +371,9 @@ function enforceVianemaClosing(
     obec: opts.obec, okres: opts.okres, ulica: opts.ulica,
     lokalita: opts.lokalita,
     izby: opts.izby, plocha: opts.plocha,
+    uzitkovaPlocha: opts.uzitkovaPlocha, podlahovaPlocha: opts.podlahovaPlocha,
+    celkovaPlocha: opts.celkovaPlocha, zastavanaPlocha: opts.zastavanaPlocha,
+    extras: opts.extras,
     cena: finalCena || opts.cena, typCeny: opts.typCeny,
   });
 
@@ -664,7 +685,7 @@ async function fetchVzorInzerat(input: string): Promise<string> {
 
 /* ══════ MAIN HANDLER ══════ */
 export async function POST(req: NextRequest) {
-  const { nazov, typ, lokalita, cena, plocha, izby, stav, popis, photos, maklerMeno, maklerTelefon, maklerEmail, vzorovyInzerat: vzorovyInzeratRaw, obec, okres, ulica, typCeny } = await req.json();
+  const { nazov, typ, lokalita, cena, plocha, izby, stav, popis, photos, maklerMeno, maklerTelefon, maklerEmail, vzorovyInzerat: vzorovyInzeratRaw, obec, okres, ulica, typCeny, uzitkovaPlocha, podlahovaPlocha, celkovaPlocha, zastavanaPlocha, extras } = await req.json();
   const vzorovyInzerat = await fetchVzorInzerat(vzorovyInzeratRaw || "");
 
   // popis teraz obsahuje KOMPLETNÝ kontext vrátane LV textu, dokumentov, vybavenia, vykurovania atď.
@@ -742,6 +763,8 @@ export async function POST(req: NextRequest) {
         cena: cenaNum, maklerMeno, maklerTelefon, maklerEmail, typ,
         obec, okres, ulica, lokalita,
         izby, plocha,
+        uzitkovaPlocha, podlahovaPlocha, celkovaPlocha, zastavanaPlocha,
+        extras,
         typCeny: (typCeny === "prenajom" ? "prenajom" : "predaj"),
       });
       // Tiež vráť Baťovskú cenu v samostatnom poli pre frontend (auto-fill)
