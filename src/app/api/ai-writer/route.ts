@@ -73,6 +73,27 @@ Príklad: "Predaj 2-izbový byt Karlova Ves, 62 m², s terasou"
 Predajné ceny (NIE nájom) zaokrúhli tak, aby končili na 900 alebo 99 900.
 Príklad: 150 200 € → 150 900 €, 85 000 € → 84 900 €, 200 000 € → 199 900 €
 
+══ PORADIE SEKCIÍ — STRIKTNÉ ══
+Text MUSÍ byť presne v tomto poradí:
+  1) DESCRIPTION (2-3 odseky popis nehnuteľnosti a miestností)
+  2) LOKALITA (1 odsek o okolí)
+  3) ODRÁŽKY (5-8 bullet-ov • )
+  4) ZÁVER (3-paragraf: Cena / Dohodnite / VIANEMA boilerplate)
+
+ZAKÁZANÉ: odrážky uprostred textu, popis miestností PO odrážkach, lokalita PRED description. Ak porušíš poradie — text je nepoužiteľný.
+
+══ ORIENTÁCIA — POVOLENÉ HODNOTY ══
+Pri spomínaní svetových strán používaj IBA:
+  sever, juh, východ, západ, severovýchod, severozápad, juhovýchod, juhozápad.
+ZÁKAZ vymýšľať kombinácie s krajinami, regiónmi alebo mestami ("rakúsko-juhozápad", "maďarsko-východ", "slovensko-sever" — všetko nepoužiteľné halucinácie).
+Ak orientácia nie je v dokumentoch ani v úlohe — NESPOMÍNAJ ju vôbec.
+
+══ ANTI-REDUNDANCIA ══
+Každá informácia sa smie objaviť BUĎ v odrážkach ALEBO v odstavci — NIE v oboch.
+Odrážky = rýchly overview (kľúčové parametre).
+Odstavce = detailný popis miestností, materiálov, dispozície.
+Ak je "Vstavané skrine v chodbe" v bullete, NESPOMÍNAJ ich znovu v odstavci (a naopak).
+
 ══ KRITICKÉ PRAVIDLÁ ══
 1. DOKUMENTY (LV, zmluvy, posudky) majú VŽDY PREDNOSŤ pred formulárom pre VÝMERY a ADRESY. Ak zmluva uvádza inú plochu alebo adresu — POUŽI údaj z dokumentu!
 2. POČET IZIEB: Ak dokument EXPLICITNE uvádza "1-izbový"/"jednoizbový"/"garsónka" → 1-izbový (NIKDY 3-izbový!). "2-izbový"→2, "3-izbový"→3. Dokument má prednosť pred formulárom. NIKDY nehádaj počet izieb z opisu miestností.

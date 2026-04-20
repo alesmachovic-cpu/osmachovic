@@ -1412,7 +1412,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
                   {generating && <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "500", color: "#3B82F6", background: "rgba(59,130,246,0.12)", padding: "2px 10px", borderRadius: "10px" }}><span style={{ width: "8px", height: "8px", borderRadius: "4px", background: "#3B82F6", animation: "pulse 1s ease-in-out infinite" }} />{f.text_popis ? FUNNY_MSGS[refineMsgIdx] : "Generujem..."}</span>}
                 </div>
                 {(() => {
-                  const rawLok = [f.obec, f.ulica_verejna, f.okres].filter(Boolean).join(", ");
+                  const rawLok = [f.lokalita, f.obec, f.ulica_verejna, f.okres].filter(Boolean).join(", ");
                   const seen = new Set<string>();
                   const lokalita = rawLok.split(",").map(s => s.trim()).filter(Boolean).filter(p => {
                     const k = p.toLowerCase();
@@ -1459,6 +1459,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
                   {[0, 1, 2].map(i => <div key={i} style={{ width: "8px", height: "8px", borderRadius: "4px", background: "#3B82F6", animation: `bounce 1.2s ease-in-out ${i * 0.15}s infinite` }} />)}
                 </div>
                 <div style={{ fontSize: "14px", fontWeight: "500", color: "var(--text-primary)" }}>AI píše text inzerátu</div>
+                <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "6px", minHeight: "16px" }}>{FUNNY_MSGS[refineMsgIdx]}</div>
               </div>
             )}
 
