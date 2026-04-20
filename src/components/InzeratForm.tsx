@@ -1177,11 +1177,40 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
           <div style={{ padding: "20px" }}>
             {photos.length > 0 && (
               <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "11px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>Fotky ({photos.length})</div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {photos.map(p => (
-                    <div key={p.id} style={{ width: "72px", height: "72px", borderRadius: "10px", overflow: "hidden", position: "relative", background: "#F3F4F6" }}>
-                      <img src={p.thumb || p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: p.uploading ? 0.5 : 1 }} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "10px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: "600", color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>Fotky ({photos.length})</div>
+                  <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>Ťahaj pre zmenu poradia · prvá = titulná</div>
+                </div>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  {photos.map((p, idx) => (
+                    <div key={p.id}
+                      draggable={!p.uploading}
+                      onDragStart={e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); }}
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                      onDrop={e => {
+                        e.preventDefault();
+                        const draggedId = e.dataTransfer.getData("text/plain");
+                        if (!draggedId || draggedId === p.id) return;
+                        setPhotos(prev => {
+                          const from = prev.findIndex(x => x.id === draggedId);
+                          const to = prev.findIndex(x => x.id === p.id);
+                          if (from < 0 || to < 0) return prev;
+                          const next = [...prev];
+                          const [moved] = next.splice(from, 1);
+                          next.splice(to, 0, moved);
+                          return next;
+                        });
+                      }}
+                      style={{ width: "96px", height: "96px", borderRadius: "10px", overflow: "hidden", position: "relative", background: "#F3F4F6", cursor: p.uploading ? "default" : "grab", border: idx === 0 ? "2px solid #3B82F6" : "2px solid transparent" }}>
+                      <img src={p.thumb || p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: p.uploading ? 0.5 : 1, pointerEvents: "none" }} />
+                      {idx === 0 && !p.uploading && !p.error && (
+                        <div style={{ position: "absolute", bottom: "3px", left: "3px", padding: "2px 6px", borderRadius: "6px", background: "#3B82F6", color: "#fff", fontSize: "9px", fontWeight: "700", letterSpacing: "0.03em" }}>TITULNÁ</div>
+                      )}
+                      {idx > 0 && !p.uploading && (
+                        <button onClick={() => setPhotos(prev => { const next = [...prev]; const [moved] = next.splice(idx, 1); next.unshift(moved); return next; })}
+                          title="Nastaviť ako titulnú"
+                          style={{ position: "absolute", bottom: "3px", left: "3px", padding: "2px 6px", borderRadius: "6px", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "9px", fontWeight: "600", cursor: "pointer" }}>★ titulnú</button>
+                      )}
                       {p.uploading && (
                         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", color: "#fff", background: "rgba(0,0,0,0.3)" }}>…</div>
                       )}
@@ -1193,7 +1222,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
                         if (p.path) deleteFoto(p.path).catch(() => {});
                         setPhotos(prev => prev.filter(x => x.id !== p.id));
                       }}
-                        style={{ position: "absolute", top: "3px", right: "3px", width: "18px", height: "18px", borderRadius: "9px", border: "none", background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+                        style={{ position: "absolute", top: "3px", right: "3px", width: "20px", height: "20px", borderRadius: "10px", border: "none", background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
                     </div>
                   ))}
                 </div>

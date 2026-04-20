@@ -1756,18 +1756,21 @@ export default function KlientDetailPage() {
               }
             }
           }} />
-          {/* Ostatné dokumenty */}
+          {/* Ostatné dokumenty — fotky idú do vlastnej kategórie (Supabase Storage), nie sem */}
+          {(() => {
+            const dokumentyBezFotiek = klientDokumenty.filter(d => d.type !== "Foto");
+            return (
           <div style={cardSt}>
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
-              📁 Dokumenty ({klientDokumenty.length})
+              📁 Dokumenty ({dokumentyBezFotiek.length})
             </div>
-            {klientDokumenty.length === 0 ? (
+            {dokumentyBezFotiek.length === 0 ? (
               <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
                 Žiadne dokumenty. Nahrané v náberáku, inzeráte alebo rezervácii sa zobrazia tu.
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {klientDokumenty.map(d => (
+                {dokumentyBezFotiek.map(d => (
                   <div key={d.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px" }}>
                     <span style={{ fontSize: "18px" }}>📄</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1808,6 +1811,8 @@ export default function KlientDetailPage() {
               </div>
             )}
           </div>
+            );
+          })()}
         </div>
       )}
 
