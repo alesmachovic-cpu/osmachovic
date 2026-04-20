@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+// foto-rotation touches DB columns only (nehnutelnosti table) — getSupabaseAdmin
+// (sb_secret_*) works fine for PostgREST; Storage is NOT called here.
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { getStorageClient } from "@/lib/supabase-storage";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     const pathLarge = `${base}.jpg`;
     const pathThumb = `${base}-thumb.jpg`;
 
-    const sb = getSupabaseAdmin();
+    const sb = getStorageClient();
     const bucket = sb.storage.from("inzerat-fotky");
 
     const [largeBuf, thumbBuf] = await Promise.all([
@@ -97,7 +97,7 @@ export async function DELETE(req: NextRequest) {
     const path = searchParams.get("path");
     if (!path) return NextResponse.json({ error: "Missing path" }, { status: 400 });
     const thumb = path.replace(/\.jpg$/i, "-thumb.jpg");
-    const sb = getSupabaseAdmin();
+    const sb = getStorageClient();
     const { error } = await sb.storage.from("inzerat-fotky").remove([path, thumb]);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
