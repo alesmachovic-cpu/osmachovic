@@ -241,6 +241,22 @@ function formatPhone(raw: string): string {
   return `+421 ${nat.slice(0, 3)} ${nat.slice(3, 6)} ${nat.slice(6)}`;
 }
 
+/** Extrahuje výmeru v m² z textu (hľadá prefix + číslo + m²). */
+function extractPlochaFromText(text: string): number | null {
+  if (!text) return null;
+  const prefixed = text.match(
+    /(?:úžitková\s+plocha|celková\s+plocha|podlahová\s+plocha|zastavaná\s+plocha|výmera|rozloha|plocha)[\s:]*?(\d+(?:[,.]\d+)?)\s*m[²2]/i,
+  );
+  if (prefixed) return parseFloat(prefixed[1].replace(",", "."));
+  const any = text.match(/(\d+(?:[,.]\d+)?)\s*m[²2]/);
+  if (any) {
+    const n = parseFloat(any[1].replace(",", "."));
+    // Ignoruj absurdne malé hodnoty (napr. "2 m²" = obklad nie byt)
+    if (n >= 15) return n;
+  }
+  return null;
+}
+
 /** Header blok pred textom inzerátu. */
 function buildHeader(opts: {
   obec?: string;
@@ -366,13 +382,15 @@ function enforceVianemaClosing(
     : typLow.includes("pozem") || typLow.includes("parcel") ? "tohto pozemku"
     : "tohto bytu";
 
+  // Ak žiadne plocha pole vo formulári, extrahuj z AI textu (napr. "Úžitková plocha 62 m²").
+  const formPlocha = opts.plocha || opts.uzitkovaPlocha || opts.podlahovaPlocha || opts.celkovaPlocha || opts.zastavanaPlocha;
+  const plochaForHeader = formPlocha || extractPlochaFromText(cleaned) || undefined;
+
   // Header blok na začiatku
   const header = buildHeader({
     obec: opts.obec, okres: opts.okres, ulica: opts.ulica,
     lokalita: opts.lokalita,
-    izby: opts.izby, plocha: opts.plocha,
-    uzitkovaPlocha: opts.uzitkovaPlocha, podlahovaPlocha: opts.podlahovaPlocha,
-    celkovaPlocha: opts.celkovaPlocha, zastavanaPlocha: opts.zastavanaPlocha,
+    izby: opts.izby, plocha: plochaForHeader,
     extras: opts.extras,
     cena: finalCena || opts.cena, typCeny: opts.typCeny,
   });
