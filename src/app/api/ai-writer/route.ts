@@ -88,6 +88,19 @@ Pri spomínaní svetových strán používaj IBA:
 ZÁKAZ vymýšľať kombinácie s krajinami, regiónmi alebo mestami ("rakúsko-juhozápad", "maďarsko-východ", "slovensko-sever" — všetko nepoužiteľné halucinácie).
 Ak orientácia nie je v dokumentoch ani v úlohe — NESPOMÍNAJ ju vôbec.
 
+══ OCHRANA PRESNEJ ADRESY — POVINNÉ ══
+V texte inzerátu (ani v intro, meta_description, seo_keywords, tagy, h1)
+NIKDY nespomínaj:
+  - Súpisné číslo budovy (napr. "č. 1234", "súpisné č. 16")
+  - Popisné číslo
+  - Orientačné číslo (napr. "Majerníkova 21" → správne je len "Majerníkova")
+  - Parcelné číslo z LV (napr. "parc. 1656/5")
+  - Kompletnú adresu s číslom domu
+
+Ulicu SPOMÍNAŤ MÔŽEŠ (napr. "na Majerníkovej ulici"), ale **bez čísla**.
+Pre portálové inzeráty je presná adresa citlivá informácia — maklér ju
+dá záujemcom súkromne pri obhliadke, nie do verejného textu.
+
 ══ ANTI-REDUNDANCIA ══
 Každá informácia sa smie objaviť BUĎ v odrážkach ALEBO v odstavci — NIE v oboch.
 Odrážky = rýchly overview (kľúčové parametre).
