@@ -373,6 +373,99 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     if (merged.length > 0) setVideos(merged);
   }, [prefilledData]);
 
+  /* ── Náberák fallback: pri editácii existujúceho inzerátu, ak niektoré polia
+     sú prázdne a linkovaný náberový list klienta ich má, vyplň z neho.
+     Maklérove manuálne hodnoty sa nikdy neprepíšu (len prázdne polia). ── */
+  const [naberakFilledFields, setNaberakFilledFields] = useState<string[]>([]);
+  useEffect(() => {
+    if (!editId || !klientId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("naberove_listy")
+        .select("*")
+        .eq("klient_id", klientId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!data) return;
+      const n = data as Record<string, unknown>;
+      const params = (n.parametre || {}) as Record<string, unknown>;
+      const vyb = (n.vybavenie || {}) as Record<string, unknown>;
+      const vymery = (vyb.vymery || {}) as Record<string, unknown>;
+      const stavBytu = (params.stav_bytu || {}) as Record<string, unknown>;
+
+      const filled: string[] = [];
+      setF(prev => {
+        const next: typeof prev = { ...prev };
+        // Pomocník — nastav iba ak je aktuálne prázdne a nová hodnota existuje
+        function fillEmpty<K extends keyof typeof prev>(key: K, value: unknown) {
+          if (value === null || value === undefined || value === "") return;
+          const cur = prev[key];
+          if (cur !== "" && cur !== null && cur !== undefined && cur !== false) return;
+          (next as Record<string, unknown>)[key as string] = value;
+          filled.push(String(key));
+        }
+
+        // Lokalita
+        fillEmpty("kraj", n.kraj);
+        fillEmpty("okres", n.okres);
+        fillEmpty("obec", n.obec);
+        fillEmpty("ulica_verejna", n.ulica);
+        // Základné
+        fillEmpty("plocha", n.plocha);
+        fillEmpty("stav", n.stav);
+        fillEmpty("cena", n.predajna_cena);
+        fillEmpty("popis", n.popis);
+        fillEmpty("typ", n.typ_nehnutelnosti);
+        fillEmpty("makler", n.makler);
+        // Parametre JSONB
+        fillEmpty("izby", params.pocet_izieb);
+        fillEmpty("poschodie", params.poschodie);
+        fillEmpty("poschodia_vyssie", params.z_kolko);
+        fillEmpty("vlastnictvo", params.vlastnictvo);
+        fillEmpty("mesacne_naklady", params.mesacne_poplatky);
+        fillEmpty("typ_budovy", params.typ_domu);
+        fillEmpty("rok_vystavby", params.rok_vystavby);
+        fillEmpty("rok_rekonstrukcie", stavBytu.rok_rekonstrukcie);
+        fillEmpty("pravne_vady", params.tarcha_text);
+        fillEmpty("provizia_typ", params.provizia_typ);
+        // Vybavenie toggles
+        fillEmpty("balkon", vyb.balkon || vyb["Balkón"]);
+        fillEmpty("loggia", vyb.loggia || vyb["Loggia"]);
+        fillEmpty("terasa", vyb.terasa || vyb["Terasa"]);
+        fillEmpty("garaz", vyb.garaz || vyb["Garáž"]);
+        fillEmpty("pivnica", vyb.pivnica || vyb["Pivnica"]);
+        fillEmpty("vytah", vyb.vytah || vyb["Výťah"]);
+        fillEmpty("typ_vybavy", vyb.zariadeny);
+        // Výmery
+        fillEmpty("uzitkova_plocha", vymery.uzitkova);
+        fillEmpty("balkon_plocha", vymery.balkon);
+        fillEmpty("loggia_plocha", vymery.loggia);
+        fillEmpty("terasa_plocha", vymery.terasa);
+        fillEmpty("pivnica_plocha", vymery.pivnica);
+        // Provízia — extrahuj číslo z textu
+        if ((prev.provizia_hodnota === "" || prev.provizia_hodnota === null) && typeof n.provizia === "string") {
+          const num = n.provizia.match(/\d+/)?.[0];
+          if (num) { next.provizia_hodnota = num; filled.push("provizia_hodnota"); }
+        }
+        // Kurenie string → vykurovanie toggles
+        if (typeof params.kurenie === "string" && params.kurenie) {
+          const kur = params.kurenie.toLowerCase();
+          const vyk = { ...prev.vykurovanie };
+          let changed = false;
+          if (kur.includes("central") && !vyk.centralne) { vyk.centralne = true; changed = true; }
+          if (kur.includes("podlah") && !vyk.podlahove) { vyk.podlahove = true; changed = true; }
+          if (kur.includes("lokal") && !vyk.lokalne) { vyk.lokalne = true; changed = true; }
+          if (kur.includes("kozub") && !vyk.kozub) { vyk.kozub = true; changed = true; }
+          if (kur.includes("klima") && !vyk.klimatizacia) { vyk.klimatizacia = true; changed = true; }
+          if (changed) { next.vykurovanie = vyk; filled.push("vykurovanie"); }
+        }
+        return next;
+      });
+      if (filled.length > 0) setNaberakFilledFields(filled);
+    })().catch(e => console.warn("[naberak fallback] failed:", e));
+  }, [editId, klientId]);
+
   /* ── Rotácia vtipných hlášok pri úprave existujúceho textu ── */
   useEffect(() => {
     if (!generating) return;
@@ -1159,6 +1252,23 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         <h1 style={{ fontSize: "26px", fontWeight: "700", color: "#374151", letterSpacing: "-0.03em" }}>Nový inzerát</h1>
         <p style={{ fontSize: "14px", color: "#9CA3AF", marginTop: "4px" }}>Nahraj súbory, skontroluj údaje a publikuj</p>
       </div>
+
+      {/* ═══ NÁBERÁK FALLBACK INFO ═══ */}
+      {naberakFilledFields.length > 0 && (
+        <div style={{
+          padding: "10px 14px", borderRadius: "10px", marginBottom: "12px",
+          background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.25)",
+          display: "flex", alignItems: "center", gap: "10px", fontSize: "12px",
+          color: "var(--text-primary)",
+        }}>
+          <span style={{ fontSize: "14px" }}>📋</span>
+          <span>
+            Z <strong>náberového listu</strong> doplnené {naberakFilledFields.length} {naberakFilledFields.length === 1 ? "pole" : naberakFilledFields.length < 5 ? "polia" : "polí"}
+            <span style={{ color: "var(--text-tertiary)", marginLeft: "8px" }}>({naberakFilledFields.slice(0, 8).join(", ")}{naberakFilledFields.length > 8 ? "…" : ""})</span>
+          </span>
+          <button onClick={() => setNaberakFilledFields([])} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "14px" }}>×</button>
+        </div>
+      )}
 
       {/* ═══ GLOBAL PROGRESS ═══ */}
       <Progress active={!!uploadingFile} text={`Nahrávam ${uploadingFile}...`} />
