@@ -1100,7 +1100,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       cena: Number(f.cena), plocha: f.plocha ? Number(f.plocha) : null,
       izby: f.izby ? Number(f.izby) : null, poschodie: f.poschodie ? Number(f.poschodie) : null,
       stav: (f.stav || null) as StavNehnutelnosti | null,
-      popis: f.text_popis || f.popis || null, url_inzercia: f.url_inzercia || null,
+      url_inzercia: f.url_inzercia || null,
       intro: f.intro || null, text_popis: f.text_popis || null,
       zobrazovat_cenu: f.zobrazovat_cenu, zobrazovat_mapu: f.zobrazovat_mapu,
       zobrazovat_hypoteku: f.zobrazovat_hypoteku, so_zmluvou: f.so_zmluvou,
