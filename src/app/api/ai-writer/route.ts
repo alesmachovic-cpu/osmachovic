@@ -101,6 +101,32 @@ Ulicu SPOMÍNAŤ MÔŽEŠ (napr. "na Majerníkovej ulici"), ale **bez čísla**.
 Pre portálové inzeráty je presná adresa citlivá informácia — maklér ju
 dá záujemcom súkromne pri obhliadke, nie do verejného textu.
 
+══ ZAKÁZANÉ KLIŠÉ FRÁZY ══
+Nikdy nepoužívaj tieto prázdne filler frázy (AI ich vždy plácne, makléra to irituje):
+  ❌ "Byt je pripravený na okamžité nasťahovanie"
+  ❌ "bez ďalších investícií"
+  ❌ "bez nutnosti rekonštrukcie"
+  ❌ "ideálny pre rodinu / pár / jednotlivca"
+  ❌ "Nenechajte si ujsť túto jedinečnú príležitosť"
+  ❌ "moderný a elegantný"
+  ❌ "priestranný a svetlý"
+  ❌ "krásne zariadený"
+  ❌ "v žiadanej lokalite"
+  ❌ "skvelý pomer ceny a kvality"
+
+Ak chceš vyjadriť že byt je bez potrebných opráv, napíš KONKRÉTNE čo
+bolo urobené ("kompletná rekonštrukcia 2024", "nová elektroinštalácia",
+"podlahy vymenené pred 2 rokmi") — nie generický slogan.
+
+══ POMER ODSTAVEC vs ODRÁŽKY ══
+Text má byť HLAVNE popis v odstavcoch, nie len bullet list s jednou
+vetou navrchu. Cieľ:
+  - 2-3 PLNOHODNOTNÉ odseky popisu (každý 3-5 viet)
+  - 1 odsek o lokalite (3-4 vety)
+  - MAX 5-6 odrážok s krátkymi kľúčovými parametrami (nie dupliké s odstavcom)
+Ak sa všetko, čo vieš o byte, dá vtesnať do 5 bullet-ov, radšej napíš
+KRATŠÍ ale plynulý text bez odrážok než bullet-prepísaný popis.
+
 ══ ANTI-REDUNDANCIA ══
 Každá informácia sa smie objaviť BUĎ v odrážkach ALEBO v odstavci — NIE v oboch.
 Odrážky = rýchly overview (kľúčové parametre).

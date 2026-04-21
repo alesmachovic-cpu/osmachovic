@@ -8,6 +8,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { getUserItem } from "@/lib/userStorage";
 import { saveKlientDokument } from "@/lib/klientDokumenty";
 import { uploadFoto, deleteFoto, normalizeVideoUrl, normalizeTour3D } from "@/lib/inzeratFotky";
+import { getMaklerUuid } from "@/lib/maklerMap";
 
 /* ── Design tokens ── */
 const s = {
@@ -1123,7 +1124,11 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       export_portaly: {},
       // Linking + status
       klient_id: klientId || null,
-      makler_id: uid || null,
+      // Portfólio filtruje podľa UUID z tabuľky `makleri` (nie user.id
+      // z tabuľky `users`). Mapujeme cez getMaklerUuid; ak nie je
+      // namapovaný, padneme na user.id (lepšie ako null).
+      makler_id: (uid ? await getMaklerUuid(uid).catch(() => null) : null) || uid || null,
+      makler_email: authUser?.email || null,
       status: publish ? "aktivny" : "koncept",
     };
 
