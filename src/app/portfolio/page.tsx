@@ -73,7 +73,9 @@ export default function Portfolio() {
   const router = useRouter();
   const isAdmin = user?.id === "ales";
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
-  const [filterMakler, setFilterMakler] = useState<"mine" | "all">("mine");
+  // "mine" = moje inzeráty, "all" = všetky, inak meno makléra
+  const [filterMakler, setFilterMakler] = useState<string>("mine");
+  const [makleriList, setMakleriList] = useState<{ meno: string; email: string; id: string }[]>([]);
   const [items, setItems] = useState<DBNehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<SortKey>("created_at");
@@ -92,6 +94,12 @@ export default function Portfolio() {
   useEffect(() => {
     if (user?.id) getMaklerUuid(user.id).then(uuid => setMyMaklerUuid(uuid ?? null));
   }, [user?.id]);
+
+  useEffect(() => {
+    supabase.from("makleri").select("id, meno, email").then(({ data }) => {
+      if (data) setMakleriList(data as { meno: string; email: string; id: string }[]);
+    });
+  }, []);
 
   useEffect(() => { loadItems(); }, [sort, sortDir]);
 
@@ -166,9 +174,32 @@ export default function Portfolio() {
     }
     if (filterTyp && n.typ_transakcie !== filterTyp && n.kategoria !== filterTyp) return false;
     if (filterStatus && (n.status || "aktivny") !== filterStatus) return false;
-    // Makler filter — rovnaké pravidlá ako pri klientoch
-    if (!isAdmin && filterMakler === "mine" && myMaklerUuid) {
-      if (n.makler_id !== myMaklerUuid && n.makler_email !== user?.email) return false;
+    // Makler filter
+    if (filterMakler === "all") {
+      // ukáž všetky — žiadny filter
+    } else if (filterMakler === "mine") {
+      // Moje inzeráty — lenivý match (ktorékoľvek z makler_id/email/meno)
+      const meno = user?.name?.toLowerCase() || "";
+      const email = user?.email?.toLowerCase() || "";
+      const nMakler = (n as unknown as { makler?: string }).makler?.toLowerCase() || "";
+      const nMaklerEmail = (n.makler_email || "").toLowerCase();
+      const nMaklerId = n.makler_id || "";
+      const matchesId = myMaklerUuid && nMaklerId === myMaklerUuid;
+      const matchesUidFallback = user?.id && nMaklerId === user.id;
+      const matchesEmail = email && nMaklerEmail === email;
+      const matchesMeno = meno && nMakler === meno;
+      // Ak user nie je v makleri table (myMaklerUuid null) a inzerát nemá
+      // makler_id ani email → zobraz (legacy / stare zaznamy)
+      const isOrphan = !nMaklerId && !nMaklerEmail;
+      if (!matchesId && !matchesUidFallback && !matchesEmail && !matchesMeno && !isOrphan) {
+        if (!isAdmin) return false;
+      }
+    } else {
+      // Konkrétny makler (meno alebo UUID)
+      const sel = makleriList.find(m => m.meno === filterMakler);
+      if (sel) {
+        if (n.makler_id !== sel.id && (n.makler_email || "").toLowerCase() !== (sel.email || "").toLowerCase() && (n as unknown as { makler?: string }).makler !== sel.meno) return false;
+      }
     }
     return true;
   });
@@ -218,15 +249,17 @@ export default function Portfolio() {
           <option value="archivovany">Archív</option>
         </select>
 
-        {isAdmin && (
-          <select value={filterMakler} onChange={e => setFilterMakler(e.target.value as "mine" | "all")} style={{
-            padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
-            appearance: "none" as const, backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
-          }}>
-            <option value="mine">Moje inzeráty</option>
-            <option value="all">Všetci makléri</option>
-          </select>
-        )}
+        <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={{
+          padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
+          appearance: "none" as const, backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+        }}>
+          <option value="mine">Moje inzeráty</option>
+          <option value="all">Všetky inzeráty</option>
+          {makleriList.length > 0 && <option disabled>──────────</option>}
+          {makleriList.map(m => (
+            <option key={m.id} value={m.meno}>{m.meno}</option>
+          ))}
+        </select>
 
         <button onClick={runBatchAnalysis} disabled={analyzing || items.length === 0} style={{
           padding: "8px 16px", fontSize: "12px", fontWeight: "600", borderRadius: "8px", cursor: analyzing ? "wait" : "pointer",
