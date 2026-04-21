@@ -409,6 +409,52 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       const vyb = (n.vybavenie || {}) as Record<string, unknown>;
       const vymery = (vyb.vymery || {}) as Record<string, unknown>;
       const stavBytu = (params.stav_bytu || {}) as Record<string, unknown>;
+      const stavDomu = (params.stav_domu || {}) as Record<string, unknown>;
+
+      // Banner list: čo náberák reálne má (nezáleží či initial state to už doplnil)
+      const hasLabels: string[] = [];
+      const addIf = (cond: unknown, label: string) => { if (cond) hasLabels.push(label); };
+      addIf(n.kraj, "kraj");
+      addIf(n.okres, "okres");
+      addIf(n.obec, "obec");
+      addIf(n.ulica, "ulica");
+      addIf(n.plocha, "plocha");
+      addIf(n.stav, "stav");
+      addIf(n.predajna_cena, "cena");
+      addIf(n.popis, "popis");
+      addIf(n.typ_nehnutelnosti, "typ");
+      addIf(params.pocet_izieb, "izby");
+      addIf(params.poschodie, "poschodie");
+      addIf(params.z_kolko, "celkom poschodí");
+      addIf(params.vlastnictvo, "vlastníctvo");
+      addIf(params.mesacne_poplatky, "mesačné poplatky");
+      addIf(params.typ_domu, "typ budovy");
+      addIf(params.rok_vystavby, "rok výstavby");
+      addIf(stavBytu.rok_rekonstrukcie, "rok rekonštrukcie");
+      addIf(params.kurenie, "kúrenie");
+      addIf(params.vyhlad, "výhľad");
+      addIf(params.typ_podlahy, "typ podlahy");
+      addIf(params.tarcha_text, "právne ťarchy");
+      addIf(stavDomu.zatepleny, "zatepl. dom");
+      addIf(stavDomu.strecha_robena, "strecha");
+      addIf(stavDomu.plasty_okna, "plast. okná");
+      addIf(stavDomu.poznamka, "poznámka k stavu");
+      addIf(vyb.balkon || vyb["Balkón"], "balkón");
+      addIf(vyb.loggia || vyb["Loggia"], "loggia");
+      addIf(vyb.terasa || vyb["Terasa"], "terasa");
+      addIf(vyb.garaz || vyb["Garáž"], "garáž");
+      addIf(vyb.pivnica || vyb["Pivnica"], "pivnica");
+      addIf(vyb.vytah || vyb["Výťah"], "výťah");
+      addIf(vyb.internet || vyb["Internet"], "internet");
+      addIf(vyb.klimatizacia || vyb["Klimatizácia"], "klimatizácia");
+      addIf(vyb.zariadeny, "zariadený");
+      addIf(vymery.uzitkova, "úžitková plocha");
+      addIf(vymery.balkon, "výmera balkóna");
+      addIf(vymery.loggia, "výmera loggie");
+      addIf(vymery.terasa, "výmera terasy");
+      addIf(vymery.pivnica, "výmera pivnice");
+      addIf(n.provizia, "provízia");
+      setNaberakFilledFields(hasLabels);
 
       const filled: string[] = [];
       setF(prev => {
@@ -488,7 +534,9 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         }
         return next;
       });
-      if (filled.length > 0) setNaberakFilledFields(filled);
+      // filled zoznam (čo sa reálne prepísalo) ostáva pre debug/log, banner už
+      // riadi hasLabels vyššie
+      void filled;
     }
   }, [editId, klientId, prefilledData]);
 
