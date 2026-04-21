@@ -102,21 +102,27 @@ Pre portálové inzeráty je presná adresa citlivá informácia — maklér ju
 dá záujemcom súkromne pri obhliadke, nie do verejného textu.
 
 ══ KLIŠÉ FRÁZY — ŠETRNE, NIE SPAM ══
-V inzeráte môžeš použiť MAX 1 (jedno) klišé z tohto zoznamu, nie viac.
-AI má tendenciu ich plantať do každého odseku a potom text znie ako
-generátor prázdnych fráz. Pri výbere klišé vyber to ktoré najlepšie
-sedí konkrétnym faktom (napr. ak je byt reálne zariadený, "plne
+V inzeráte môžeš použiť MAX 2-3 klišé frázy z tohto zoznamu (zvyčajne
+2 stačia — jedno v úvode, jedno v lokalite). Nie viac — inak text
+začne pôsobiť ako generátor prázdnych fráz. Vyber tie ktoré reálne
+sedia na túto nehnuteľnosť (napr. ak je byt reálne zariadený, "plne
 zariadený" je OK; ak nie, nepoužívaj):
-  ▪ "pripravený na okamžité nasťahovanie"
-  ▪ "bez ďalších investícií"
-  ▪ "ideálny pre rodinu / pár"
-  ▪ "moderný a elegantný"
-  ▪ "priestranný a svetlý"
-  ▪ "krásne zariadený"
-  ▪ "v žiadanej lokalite"
+  ▪ "pripravený na nasťahovanie"
+  ▪ "ideálny pre rodinu / pár / investíciu"
+  ▪ "moderné / slnečné / priestranné bývanie"
+  ▪ "pokojná rodinná lokalita"
+  ▪ "vyhľadávaná lokalita"
+  ▪ "výborná dostupnosť MHD"
+  ▪ "v blízkosti občianskej vybavenosti"
+  ▪ "skvelá investičná príležitosť"
 
 Ostatné konkrétne detaily napíš **faktograficky** — čo bolo urobené,
 s akými materiálmi, kedy. Konkrétnosť predáva, klišé len vyplňuje.
+
+ÚPLNE ZAKÁZANÉ (nikdy nepoužívaj — príliš prázdne):
+  ❌ "Byt je pripravený na okamžité nasťahovanie bez ďalších investícií"
+  ❌ "Nenechajte si ujsť túto jedinečnú príležitosť"
+  ❌ "skvelý pomer ceny a kvality"
 
 ══ POMER ODSTAVEC vs ODRÁŽKY ══
 Text má byť HLAVNE popis v odstavcoch, nie len bullet list s jednou
