@@ -981,7 +981,7 @@ export default function KlientDetailPage() {
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>📝 Vyplniť náberový list</button>
           )}
-          {workflowStep === 2 && (
+          {workflowStep === 2 && isAdmin && (
             <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
               marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
@@ -1376,7 +1376,7 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📋</div>
             <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Objednávka</div>
           </button>
-        ) : (
+        ) : isAdmin ? (
           <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
             padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
             borderRadius: "12px", cursor: "pointer", textAlign: "center",
@@ -1388,7 +1388,7 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📰</div>
             <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Inzerát</div>
           </button>
-        )}
+        ) : null}
         <button onClick={() => { if (klient.telefon) window.open(`tel:${klient.telefon}`); }} style={{
           padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
           borderRadius: "12px", cursor: "pointer", textAlign: "center",

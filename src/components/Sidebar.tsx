@@ -136,6 +136,9 @@ export default function Sidebar() {
 
   const filterNav = (items: NavItem[]) =>
     user ? items.filter(item => {
+      // "Inzerát" v sidebar vidí iba admin (Aleš). Ostatní makléri inzerát
+      // nevytvárajú — dostanú ho z Portfolia až keď admin vytvorí.
+      if (item.href === "/inzerat" && user.id !== "ales") return false;
       const feat = ROUTE_FEATURE_MAP[item.href];
       return !feat || isFeatureEnabled(user.id, feat);
     }) : items;

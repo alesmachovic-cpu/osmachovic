@@ -224,11 +224,6 @@ export default function Portfolio() {
             {filtered.length} {filtered.length === 1 ? "nehnuteľnosť" : filtered.length < 5 ? "nehnuteľnosti" : "nehnuteľností"} v ponuke
           </p>
         </div>
-        <button onClick={() => router.push("/inzerat")} style={{
-          padding: "10px 20px", background: "#374151", color: "#fff", borderRadius: "10px",
-          fontSize: "13px", fontWeight: "600", border: "none", cursor: "pointer",
-          display: "flex", alignItems: "center", gap: "6px",
-        }}>+ Nový inzerát</button>
       </div>
 
       {/* Toolbar */}
@@ -307,9 +302,8 @@ export default function Portfolio() {
             {search ? "Žiadne výsledky" : "Portfólio je prázdne"}
           </div>
           <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "20px" }}>
-            {search ? "Skús zmeniť vyhľadávanie" : "Vytvor prvý inzerát a začni budovať ponuku"}
+            {search ? "Skús zmeniť vyhľadávanie" : "Zatiaľ žiadne inzeráty v portfóliu"}
           </div>
-          {!search && <button onClick={() => router.push("/inzerat")} style={{ display: "inline-flex", padding: "10px 24px", background: "#374151", color: "#fff", borderRadius: "10px", fontSize: "13px", fontWeight: "600", border: "none", cursor: "pointer" }}>+ Nový inzerát</button>}
         </div>
       )}
 
