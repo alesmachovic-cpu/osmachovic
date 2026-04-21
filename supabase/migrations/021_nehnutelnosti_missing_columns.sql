@@ -1,0 +1,40 @@
+-- 021 — Dopĺňanie chýbajúcich stĺpcov v `nehnutelnosti` (schema drift fix)
+-- Klient (InzeratForm) posiela tieto polia v save payloade, ale niektoré
+-- v DB chýbajú → "Could not find the '<col>' column in schema cache".
+-- Všetko additive, existujúce dáta zachované.
+
+alter table nehnutelnosti
+  add column if not exists cena_za_energie     text,
+  add column if not exists text_k_cene         text,
+  add column if not exists typ_ceny            text,
+  add column if not exists tagy                text,
+  add column if not exists vlastnictvo         text,
+  add column if not exists exkluzivne          boolean default false,
+  add column if not exists url_virtualka       text,
+  add column if not exists vhodne_pre_studentov boolean default false,
+  add column if not exists video_url           text,
+  add column if not exists kategoria           text,
+  add column if not exists projekt             boolean default false,
+  add column if not exists so_zmluvou          boolean default false,
+  add column if not exists specialne_oznacenie text,
+  add column if not exists seo_keywords        text,
+  add column if not exists zobrazovat_cenu     boolean default true,
+  add column if not exists zobrazovat_mapu     boolean default true,
+  add column if not exists zobrazovat_hypoteku boolean default true,
+  add column if not exists intro               text,
+  add column if not exists text_popis          text,
+  add column if not exists url_inzercia        text,
+  add column if not exists stat                text,
+  add column if not exists kraj                text,
+  add column if not exists okres               text,
+  add column if not exists obec                text,
+  add column if not exists ulica_privatna      text,
+  add column if not exists makler              text,
+  add column if not exists interne_id          text,
+  add column if not exists provizia_hodnota    numeric,
+  add column if not exists provizia_typ        text,
+  add column if not exists poznamka_interna    text,
+  add column if not exists orientacia          text,
+  add column if not exists pripojenie          jsonb default '{}'::jsonb,
+  add column if not exists export_portaly      jsonb default '{}'::jsonb,
+  add column if not exists poschodie           integer;

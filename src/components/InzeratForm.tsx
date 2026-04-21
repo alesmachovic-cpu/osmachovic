@@ -1117,7 +1117,10 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       cena_za_energie: f.cena_za_energie || null, exkluzivne: f.exkluzivne,
       url_virtualka: f.url_virtualka || null, vhodne_pre_studentov: f.vhodne_pre_studentov,
       video_url: f.video_url || null, kategoria: f.kategoria || null,
-      export_portaly: publish ? f.export_portaly : {},
+      // Export na portály ešte nie je zapojený — ukladáme vždy prázdny objekt.
+      // Keď budeme mať integráciu (Nehnutelnosti.sk, TopReality atď.),
+      // separátne tlačidlo spustí export.
+      export_portaly: {},
       // Linking + status
       klient_id: klientId || null,
       makler_id: uid || null,
@@ -1708,7 +1711,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       <div style={{ position: "sticky", bottom: 0, background: "var(--bg-surface)", borderTop: "1px solid var(--border)", padding: "14px 0", marginTop: "20px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
         <button onClick={() => { setF(defaultForm); onCancel?.(); }} style={{ padding: "9px 18px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>Zahodiť</button>
         <button onClick={() => handleSave(false)} disabled={saving} style={{ padding: "9px 22px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>{editId ? "Uložiť zmeny" : "Uložiť koncept"}</button>
-        <button onClick={() => handleSave(true)} disabled={saving} style={{ padding: "9px 24px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>{saving ? "..." : "Publikovať"}</button>
+        <button onClick={() => handleSave(true)} disabled={saving} style={{ padding: "9px 24px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>{saving ? "..." : "Pridať do portfólia"}</button>
       </div>
     </div>
   );
