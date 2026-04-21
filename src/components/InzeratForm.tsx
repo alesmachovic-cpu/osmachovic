@@ -373,12 +373,23 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     if (merged.length > 0) setVideos(merged);
   }, [prefilledData]);
 
-  /* ── Náberák fallback: pri editácii existujúceho inzerátu, ak niektoré polia
-     sú prázdne a linkovaný náberový list klienta ich má, vyplň z neho.
-     Maklérove manuálne hodnoty sa nikdy neprepíšu (len prázdne polia). ── */
+  /* ── Náberák fallback — dva scenáre:
+     A) Nový inzerát z náberáku (/inzerat?klient_id=X) — prefilledData JE náberák.
+     B) Edit existujúceho inzerátu — fetchneme najnovší náberák klienta z DB.
+     V oboch: len prázdne inzerátové polia dopĺňame. ── */
   const [naberakFilledFields, setNaberakFilledFields] = useState<string[]>([]);
   const [naberakRaw, setNaberakRaw] = useState<Record<string, unknown> | null>(null);
   useEffect(() => {
+    // Scenario A: prefilledData vyzerá ako náberák (má .parametre alebo .typ_nehnutelnosti)
+    const prefillIsNaberak =
+      prefilledData &&
+      (prefilledData.parametre !== undefined || prefilledData.typ_nehnutelnosti !== undefined) &&
+      !editId;
+    if (prefillIsNaberak && prefilledData) {
+      processNaberak(prefilledData as Record<string, unknown>);
+      return;
+    }
+    // Scenario B: edit mode — fetch
     if (!editId || !klientId) return;
     (async () => {
       const { data } = await supabase
@@ -389,7 +400,10 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         .limit(1)
         .maybeSingle();
       if (!data) return;
-      const n = data as Record<string, unknown>;
+      processNaberak(data as Record<string, unknown>);
+    })().catch(e => console.warn("[naberak fallback] failed:", e));
+
+    function processNaberak(n: Record<string, unknown>) {
       setNaberakRaw(n);
       const params = (n.parametre || {}) as Record<string, unknown>;
       const vyb = (n.vybavenie || {}) as Record<string, unknown>;
@@ -475,8 +489,8 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         return next;
       });
       if (filled.length > 0) setNaberakFilledFields(filled);
-    })().catch(e => console.warn("[naberak fallback] failed:", e));
-  }, [editId, klientId]);
+    }
+  }, [editId, klientId, prefilledData]);
 
   /* ── Rotácia vtipných hlášok pri úprave existujúceho textu ── */
   useEffect(() => {
