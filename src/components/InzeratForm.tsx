@@ -38,7 +38,7 @@ function Progress({ active, text }: { active: boolean; text: string }) {
     <div style={{ padding: "12px 20px", background: "#EFF6FF", borderRadius: "10px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "10px" }}>
       <div style={{ width: "16px", height: "16px", border: "2px solid #93C5FD", borderTopColor: "#3B82F6", borderRadius: "50%", animation: "spin 0.6s linear infinite", flexShrink: 0 }} />
       <span style={{ fontSize: "13px", fontWeight: "500", color: "#1D4ED8" }}>{text}</span>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes bounce{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-3px);opacity:1}}@keyframes wiggle{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}@keyframes fade{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes bounce{0%,60%,100%{transform:translateY(0) scale(.85);opacity:.3}30%{transform:translateY(-6px) scale(1);opacity:1}}@keyframes wiggle{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}@keyframes fade{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}`}</style>
     </div>
   );
 }

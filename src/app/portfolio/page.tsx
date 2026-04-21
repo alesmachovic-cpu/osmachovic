@@ -74,7 +74,9 @@ export default function Portfolio() {
   const isAdmin = user?.id === "ales";
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
   // "mine" = moje inzeráty, "all" = všetky, inak meno makléra
-  const [filterMakler, setFilterMakler] = useState<string>("mine");
+  // Default "all" aby užívateľ po otvorení portfolia videl všetky záznamy
+  // (vrátane legacy bez makler_id). Môže si potom prefiltrovať.
+  const [filterMakler, setFilterMakler] = useState<string>("all");
   const [makleriList, setMakleriList] = useState<{ meno: string; email: string; id: string }[]>([]);
   const [items, setItems] = useState<DBNehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -178,7 +180,6 @@ export default function Portfolio() {
     if (filterMakler === "all") {
       // ukáž všetky — žiadny filter
     } else if (filterMakler === "mine") {
-      // Moje inzeráty — lenivý match (ktorékoľvek z makler_id/email/meno)
       const meno = user?.name?.toLowerCase() || "";
       const email = user?.email?.toLowerCase() || "";
       const nMakler = (n as unknown as { makler?: string }).makler?.toLowerCase() || "";
@@ -188,19 +189,20 @@ export default function Portfolio() {
       const matchesUidFallback = user?.id && nMaklerId === user.id;
       const matchesEmail = email && nMaklerEmail === email;
       const matchesMeno = meno && nMakler === meno;
-      // Kontrola či inzerát nepatrí INÉMU maklérovi z DB
-      const otherMakler = makleriList.find(m =>
-        m.id === nMaklerId || (m.email && m.email.toLowerCase() === nMaklerEmail) || m.meno.toLowerCase() === nMakler
-      );
-      const belongsToOther = !!otherMakler &&
-        otherMakler.id !== myMaklerUuid &&
-        otherMakler.email?.toLowerCase() !== email &&
-        otherMakler.meno.toLowerCase() !== meno;
-      // Legacy / orphan: nikto iný si to neclaim-ne → zobraz ako "moje" (inak by sa stratil)
-      if (belongsToOther) return false;
       if (!matchesId && !matchesUidFallback && !matchesEmail && !matchesMeno) {
-        // Nepatrí inému, ale nesedí ani mne — zobrazím (legacy / orphan)
-        // okrem prípadu kde to je evidentne iný makler (belongsToOther vyššie).
+        // Neseadí mi — skry len ak patrí konkrétnemu inému maklérovi z DB.
+        const otherMakler = makleriList.find(m =>
+          m.id === nMaklerId ||
+          (m.email && nMaklerEmail && m.email.toLowerCase() === nMaklerEmail) ||
+          (m.meno && nMakler && m.meno.toLowerCase() === nMakler)
+        );
+        const belongsToSomeoneElse = !!otherMakler && (
+          (myMaklerUuid ? otherMakler.id !== myMaklerUuid : true) &&
+          (email ? (otherMakler.email || "").toLowerCase() !== email : true) &&
+          (meno ? otherMakler.meno.toLowerCase() !== meno : true)
+        );
+        if (belongsToSomeoneElse) return false;
+        // Legacy / orphan → necháme vidieť.
       }
     } else {
       // Konkrétny makler (meno alebo UUID)
