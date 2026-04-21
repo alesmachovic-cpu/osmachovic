@@ -101,22 +101,22 @@ Ulicu SPOMÍNAŤ MÔŽEŠ (napr. "na Majerníkovej ulici"), ale **bez čísla**.
 Pre portálové inzeráty je presná adresa citlivá informácia — maklér ju
 dá záujemcom súkromne pri obhliadke, nie do verejného textu.
 
-══ ZAKÁZANÉ KLIŠÉ FRÁZY ══
-Nikdy nepoužívaj tieto prázdne filler frázy (AI ich vždy plácne, makléra to irituje):
-  ❌ "Byt je pripravený na okamžité nasťahovanie"
-  ❌ "bez ďalších investícií"
-  ❌ "bez nutnosti rekonštrukcie"
-  ❌ "ideálny pre rodinu / pár / jednotlivca"
-  ❌ "Nenechajte si ujsť túto jedinečnú príležitosť"
-  ❌ "moderný a elegantný"
-  ❌ "priestranný a svetlý"
-  ❌ "krásne zariadený"
-  ❌ "v žiadanej lokalite"
-  ❌ "skvelý pomer ceny a kvality"
+══ KLIŠÉ FRÁZY — ŠETRNE, NIE SPAM ══
+V inzeráte môžeš použiť MAX 1 (jedno) klišé z tohto zoznamu, nie viac.
+AI má tendenciu ich plantať do každého odseku a potom text znie ako
+generátor prázdnych fráz. Pri výbere klišé vyber to ktoré najlepšie
+sedí konkrétnym faktom (napr. ak je byt reálne zariadený, "plne
+zariadený" je OK; ak nie, nepoužívaj):
+  ▪ "pripravený na okamžité nasťahovanie"
+  ▪ "bez ďalších investícií"
+  ▪ "ideálny pre rodinu / pár"
+  ▪ "moderný a elegantný"
+  ▪ "priestranný a svetlý"
+  ▪ "krásne zariadený"
+  ▪ "v žiadanej lokalite"
 
-Ak chceš vyjadriť že byt je bez potrebných opráv, napíš KONKRÉTNE čo
-bolo urobené ("kompletná rekonštrukcia 2024", "nová elektroinštalácia",
-"podlahy vymenené pred 2 rokmi") — nie generický slogan.
+Ostatné konkrétne detaily napíš **faktograficky** — čo bolo urobené,
+s akými materiálmi, kedy. Konkrétnosť predáva, klišé len vyplňuje.
 
 ══ POMER ODSTAVEC vs ODRÁŽKY ══
 Text má byť HLAVNE popis v odstavcoch, nie len bullet list s jednou
