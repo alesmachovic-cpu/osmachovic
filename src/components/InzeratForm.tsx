@@ -379,6 +379,15 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
      V oboch: len prázdne inzerátové polia dopĺňame. ── */
   const [naberakFilledFields, setNaberakFilledFields] = useState<string[]>([]);
   const [naberakRaw, setNaberakRaw] = useState<Record<string, unknown> | null>(null);
+  const [maklerList, setMaklerList] = useState<string[]>(["Aleš Machovič"]);
+
+  /* ── Načítaj zoznam maklérov z DB ── */
+  useEffect(() => {
+    supabase.from("makleri").select("meno").then(({ data }) => {
+      const names = (data || []).map(m => String((m as { meno: string }).meno)).filter(Boolean);
+      setMaklerList(Array.from(new Set(["Aleš Machovič", ...names])));
+    });
+  }, []);
   useEffect(() => {
     // Scenario A: prefilledData vyzerá ako náberák (má .parametre alebo .typ_nehnutelnosti)
     const prefillIsNaberak =
@@ -1608,7 +1617,11 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
               <div><label style={s.label}>Výmera (m²)</label><input style={s.input} type="number" placeholder="65" value={f.plocha} onChange={e => set("plocha", e.target.value)} /></div>
             </div>
             <div style={s.g2}>
-              <div><label style={s.label}>Maklér</label><select style={s.select} value={f.makler} onChange={e => set("makler", e.target.value)}><option value="Aleš Machovič">Aleš Machovič</option></select></div>
+              <div><label style={s.label}>Maklér</label><select style={s.select} value={f.makler} onChange={e => set("makler", e.target.value)}>
+                {(maklerList.includes(f.makler) ? maklerList : [f.makler, ...maklerList]).filter(Boolean).map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select></div>
               <div><label style={s.label}>Interné ID</label><input style={s.input} value={f.interne_id} onChange={e => set("interne_id", e.target.value)} /></div>
             </div>
           </div>
