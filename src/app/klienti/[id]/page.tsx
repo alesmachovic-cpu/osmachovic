@@ -477,6 +477,10 @@ export default function KlientDetailPage() {
   const initials = klient.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
   const statusColor = STATUS_COLORS[klient.status] || "#6B7280";
   const workflowStep = getWorkflowStep();
+  const naberakPodpisany = nabery.some(n => {
+    const podpis = (n as { podpis_data?: unknown }).podpis_data;
+    return typeof podpis === "string" && podpis.length > 0;
+  }) || klient.status === "uzavrety";
 
   // Rýchle nahratie LV priamo z banneru/promptu
   async function handleQuickLvUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -811,11 +815,20 @@ export default function KlientDetailPage() {
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>📝 Vyplniť náberový list</button>
           )}
-          {workflowStep === 2 && (
+          {workflowStep === 2 && naberakPodpisany && (
             <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
               marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>📰 Vytvoriť inzerát</button>
+          )}
+          {workflowStep === 2 && !naberakPodpisany && (
+            <div style={{
+              marginTop: "14px", padding: "10px 14px", background: "var(--bg-elevated)",
+              border: "1px dashed var(--border)", borderRadius: "10px",
+              fontSize: "12px", color: "var(--text-muted)", textAlign: "center",
+            }}>
+              ✍️ Náberový list musí byť podpísaný, aby si mohol vytvoriť inzerát.
+            </div>
           )}
           {klient.datum_naberu && (
             <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
@@ -1063,12 +1076,20 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Objednávka</div>
           </button>
         ) : (
-          <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
-            padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-            borderRadius: "12px", cursor: "pointer", textAlign: "center",
-            transition: "border-color 0.15s",
-          }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
+          <button
+            onClick={() => {
+              if (!naberakPodpisany) return;
+              router.push(`/inzerat?klient_id=${klient.id}`);
+            }}
+            disabled={!naberakPodpisany}
+            title={naberakPodpisany ? "" : "Najprv podpíš náberový list"}
+            style={{
+              padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+              borderRadius: "12px", cursor: naberakPodpisany ? "pointer" : "not-allowed", textAlign: "center",
+              transition: "border-color 0.15s",
+              opacity: naberakPodpisany ? 1 : 0.5,
+            }}
+            onMouseEnter={e => { if (naberakPodpisany) e.currentTarget.style.borderColor = "#374151"; }}
             onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
           >
             <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📰</div>
