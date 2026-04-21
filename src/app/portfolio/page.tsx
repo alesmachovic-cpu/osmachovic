@@ -167,8 +167,10 @@ export default function Portfolio() {
     if (filterTyp && n.typ_transakcie !== filterTyp && n.kategoria !== filterTyp) return false;
     if (filterStatus && (n.status || "aktivny") !== filterStatus) return false;
     // Makler filter — rovnaké pravidlá ako pri klientoch
+    // Staré inzeráty bez priradenia (makler_id aj makler_email NULL) sa zobrazujú všetkým.
     if (!isAdmin && filterMakler === "mine" && myMaklerUuid) {
-      if (n.makler_id !== myMaklerUuid && n.makler_email !== user?.email) return false;
+      const unassigned = !n.makler_id && !n.makler_email;
+      if (!unassigned && n.makler_id !== myMaklerUuid && n.makler_email !== user?.email) return false;
     }
     return true;
   });
