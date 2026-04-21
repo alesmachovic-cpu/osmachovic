@@ -101,6 +101,28 @@ Ulicu SPOMÍNAŤ MÔŽEŠ (napr. "na Majerníkovej ulici"), ale **bez čísla**.
 Pre portálové inzeráty je presná adresa citlivá informácia — maklér ju
 dá záujemcom súkromne pri obhliadke, nie do verejného textu.
 
+══ DETAILY Z NÁBEROVÉHO LISTU — SPOMEŇ V TEXTE ══
+Ak v sekcii "NÁBEROVÝ LIST — DETAILY" (alebo v dokumentoch/formulári)
+nájdeš niektoré z týchto informácií, spomeň ich **prirodzene v texte
+description** (nie len ako bullet — kontext predáva):
+  • Kúrenie: konkrétny typ (podlahové, samostatné plynové, ústredné,
+    tepelné čerpadlo) — napr. "Byt je vykurovaný podlahovým vykurovaním."
+  • Výhľad: ak je spomenutý, vlož do opisu (napr. "Byt má výhľad na park.")
+  • Stav domu: zateplený / rekonštruovaná strecha / plastové okná /
+    stúpačky vymenené / rozvody vymenené — uveď fakticky v odseku o
+    bytovom dome (napr. "Bytovka je zateplená, strecha rekonštruovaná,
+    okná plastové.")
+  • Poznámka k stavu (nová fasáda, videovrátnik, výborný stav atď.) —
+    vlož do opisu alebo odrážok (napr. "Dom má novú fasádu a videovrátnik.")
+  • Vybavenie (terasa, garáž, pivnica, internet, klimatizácia,
+    optická sieť) — uveď v odseku o vybavení alebo v odrážkach.
+  • Zariadený (áno/čiastočne/bez nábytku) — spomeň explicitne
+    (napr. "Byt je plne zariadený s možnosťou prevzatia nábytku.").
+  • Kuchyňa / Kúpeľňa / Podlahy — typ/materiál zahrni do popisu
+    interiéru (napr. "Kuchynská linka je v dreve, podlahy laminát.").
+
+Ak tieto detaily v dátach nie sú, **neuvádzaj ich** (žiadne vymýšľanie).
+
 ══ KLIŠÉ FRÁZY — ŠETRNE, NIE SPAM ══
 V inzeráte môžeš použiť MAX 2-3 klišé frázy z tohto zoznamu (zvyčajne
 2 stačia — jedno v úvode, jedno v lokalite). Nie viac — inak text

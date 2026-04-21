@@ -377,6 +377,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
      sú prázdne a linkovaný náberový list klienta ich má, vyplň z neho.
      Maklérove manuálne hodnoty sa nikdy neprepíšu (len prázdne polia). ── */
   const [naberakFilledFields, setNaberakFilledFields] = useState<string[]>([]);
+  const [naberakRaw, setNaberakRaw] = useState<Record<string, unknown> | null>(null);
   useEffect(() => {
     if (!editId || !klientId) return;
     (async () => {
@@ -389,6 +390,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         .maybeSingle();
       if (!data) return;
       const n = data as Record<string, unknown>;
+      setNaberakRaw(n);
       const params = (n.parametre || {}) as Record<string, unknown>;
       const vyb = (n.vybavenie || {}) as Record<string, unknown>;
       const vymery = (vyb.vymery || {}) as Record<string, unknown>;
@@ -437,6 +439,16 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         fillEmpty("pivnica", vyb.pivnica || vyb["Pivnica"]);
         fillEmpty("vytah", vyb.vytah || vyb["Výťah"]);
         fillEmpty("typ_vybavy", vyb.zariadeny);
+        // Pripojenie z vybavenia
+        if ((vyb.internet || vyb["Internet"]) && !prev.pripojenie?.internet) {
+          next.pripojenie = { ...prev.pripojenie, internet: true };
+          filled.push("pripojenie.internet");
+        }
+        // Klimatizácia → vykurovanie.klimatizacia
+        if ((vyb.klimatizacia || vyb["Klimatizácia"]) && !prev.vykurovanie?.klimatizacia) {
+          next.vykurovanie = { ...prev.vykurovanie, klimatizacia: true };
+          filled.push("vykurovanie.klimatizacia");
+        }
         // Výmery
         fillEmpty("uzitkova_plocha", vymery.uzitkova);
         fillEmpty("balkon_plocha", vymery.balkon);
@@ -947,6 +959,34 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     const prip = Object.entries(f.pripojenie).filter(([, v]) => v).map(([k]) => k);
     if (prip.length > 0) l.push(`Pripojenie: ${prip.join(", ")}`);
     if (f.popis) l.push(`Poznámka makléra: ${f.popis}`);
+
+    // ── Extra údaje z náberového listu (pre AI text, nie všetky polia formulára) ──
+    if (naberakRaw) {
+      const np = (naberakRaw.parametre || {}) as Record<string, unknown>;
+      const nv = (naberakRaw.vybavenie || {}) as Record<string, unknown>;
+      const sd = (np.stav_domu || {}) as Record<string, unknown>;
+      const sb = (np.stav_bytu || {}) as Record<string, unknown>;
+      const extras: string[] = [];
+      if (np.kurenie) extras.push(`Kúrenie (z náberáku): ${np.kurenie}`);
+      if (np.vyhlad) extras.push(`Výhľad: ${np.vyhlad}`);
+      if (np.typ_podlahy) extras.push(`Typ podlahy: ${np.typ_podlahy}`);
+      if (sd.zatepleny) extras.push("Zateplený dom");
+      if (sd.strecha_robena) extras.push("Strecha robená (rekonštruovaná)");
+      if (sd.plasty_okna) extras.push("Plastové okná");
+      if (sd.stupacky_menene) extras.push("Stúpačky vymenené");
+      if (sd.rozvody_menene) extras.push("Rozvody vymenené");
+      if (sd.poznamka) extras.push(`Poznámka k stavu domu: ${sd.poznamka}`);
+      if (sb.energ_certifikat) extras.push("Má energetický certifikát");
+      if (sb.kuchyna && Array.isArray(sb.kuchyna) && sb.kuchyna.length) extras.push(`Kuchyňa: ${(sb.kuchyna as string[]).join(", ")}`);
+      if (sb.kupelna && Array.isArray(sb.kupelna) && sb.kupelna.length) extras.push(`Kúpeľňa: ${(sb.kupelna as string[]).join(", ")}`);
+      if (sb.podlahy && Array.isArray(sb.podlahy) && sb.podlahy.length) extras.push(`Podlahy: ${(sb.podlahy as string[]).join(", ")}`);
+      if (nv.zariadeny && typeof nv.zariadeny === "string") extras.push(`Zariadený: ${nv.zariadeny}`);
+      if (naberakRaw.poznamky_vybavenie) extras.push(`Poznámky k vybaveniu: ${naberakRaw.poznamky_vybavenie}`);
+      if (extras.length > 0) {
+        l.push(`\n═══ NÁBEROVÝ LIST — DETAILY (použi v texte inzerátu ak sedia) ═══`);
+        extras.forEach(e => l.push(`• ${e}`));
+      }
+    }
 
     l.push("\n═══ DOKUMENTY (AUTORITATÍVNE — tieto údaje majú PREDNOSŤ pred formulárom) ═══");
     l.push("⚠️ Ak dokumenty uvádzajú iný počet izieb, plochu alebo adresu než formulár — POUŽI ÚDAJ Z DOKUMENTOV!");
