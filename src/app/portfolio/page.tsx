@@ -188,11 +188,19 @@ export default function Portfolio() {
       const matchesUidFallback = user?.id && nMaklerId === user.id;
       const matchesEmail = email && nMaklerEmail === email;
       const matchesMeno = meno && nMakler === meno;
-      // Ak user nie je v makleri table (myMaklerUuid null) a inzerát nemá
-      // makler_id ani email → zobraz (legacy / stare zaznamy)
-      const isOrphan = !nMaklerId && !nMaklerEmail;
-      if (!matchesId && !matchesUidFallback && !matchesEmail && !matchesMeno && !isOrphan) {
-        if (!isAdmin) return false;
+      // Kontrola či inzerát nepatrí INÉMU maklérovi z DB
+      const otherMakler = makleriList.find(m =>
+        m.id === nMaklerId || (m.email && m.email.toLowerCase() === nMaklerEmail) || m.meno.toLowerCase() === nMakler
+      );
+      const belongsToOther = !!otherMakler &&
+        otherMakler.id !== myMaklerUuid &&
+        otherMakler.email?.toLowerCase() !== email &&
+        otherMakler.meno.toLowerCase() !== meno;
+      // Legacy / orphan: nikto iný si to neclaim-ne → zobraz ako "moje" (inak by sa stratil)
+      if (belongsToOther) return false;
+      if (!matchesId && !matchesUidFallback && !matchesEmail && !matchesMeno) {
+        // Nepatrí inému, ale nesedí ani mne — zobrazím (legacy / orphan)
+        // okrem prípadu kde to je evidentne iný makler (belongsToOther vyššie).
       }
     } else {
       // Konkrétny makler (meno alebo UUID)

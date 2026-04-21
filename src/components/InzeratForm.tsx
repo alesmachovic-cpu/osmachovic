@@ -8,7 +8,6 @@ import { useAuth } from "@/components/AuthProvider";
 import { getUserItem } from "@/lib/userStorage";
 import { saveKlientDokument } from "@/lib/klientDokumenty";
 import { uploadFoto, deleteFoto, normalizeVideoUrl, normalizeTour3D } from "@/lib/inzeratFotky";
-import { getMaklerUuid } from "@/lib/maklerMap";
 
 /* ── Design tokens ── */
 const s = {
@@ -379,13 +378,12 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
      V oboch: len prázdne inzerátové polia dopĺňame. ── */
   const [naberakFilledFields, setNaberakFilledFields] = useState<string[]>([]);
   const [naberakRaw, setNaberakRaw] = useState<Record<string, unknown> | null>(null);
-  const [maklerList, setMaklerList] = useState<string[]>(["Aleš Machovič"]);
+  const [maklerList, setMaklerList] = useState<{ id: string; meno: string; email: string }[]>([]);
 
   /* ── Načítaj zoznam maklérov z DB ── */
   useEffect(() => {
-    supabase.from("makleri").select("meno").then(({ data }) => {
-      const names = (data || []).map(m => String((m as { meno: string }).meno)).filter(Boolean);
-      setMaklerList(Array.from(new Set(["Aleš Machovič", ...names])));
+    supabase.from("makleri").select("id, meno, email").then(({ data }) => {
+      if (data) setMaklerList(data as { id: string; meno: string; email: string }[]);
     });
   }, []);
   useEffect(() => {
@@ -1328,11 +1326,18 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       export_portaly: {},
       // Linking + status
       klient_id: klientId || null,
-      // Portfólio filtruje podľa UUID z tabuľky `makleri` (nie user.id
-      // z tabuľky `users`). Mapujeme cez getMaklerUuid; ak nie je
-      // namapovaný, padneme na user.id (lepšie ako null).
-      makler_id: (uid ? await getMaklerUuid(uid).catch(() => null) : null) || uid || null,
-      makler_email: authUser?.email || null,
+      // Makler inzerátu = ten kto je v f.makler (preberá sa z náberového
+      // listu), NIE prihlásený user. Toto rozhoduje pre portfolio filter.
+      // Lookup UUID + email cez maklerList (z `makleri` tabuľky).
+      ...(() => {
+        const m = maklerList.find(x => x.meno === f.makler);
+        if (m) return { makler_id: m.id, makler_email: m.email || null };
+        // Fallback: ak makler nie je v tabuľke, skús prihláseného usera
+        return {
+          makler_id: (uid ? maklerList.find(x => x.email === authUser?.email)?.id : null) || uid || null,
+          makler_email: authUser?.email || null,
+        };
+      })(),
       status: publish ? "aktivny" : "koncept",
     };
 
@@ -1618,9 +1623,11 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
             </div>
             <div style={s.g2}>
               <div><label style={s.label}>Maklér</label><select style={s.select} value={f.makler} onChange={e => set("makler", e.target.value)}>
-                {(maklerList.includes(f.makler) ? maklerList : [f.makler, ...maklerList]).filter(Boolean).map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+                {(() => {
+                  const names = maklerList.map(m => m.meno);
+                  const list = names.includes(f.makler) ? names : [f.makler, ...names];
+                  return list.filter(Boolean).map(m => <option key={m} value={m}>{m}</option>);
+                })()}
               </select></div>
               <div><label style={s.label}>Interné ID</label><input style={s.input} value={f.interne_id} onChange={e => set("interne_id", e.target.value)} /></div>
             </div>
