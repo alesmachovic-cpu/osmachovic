@@ -275,7 +275,7 @@ export default function KlientDetailPage() {
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
-  const [activeTab, setActiveTab] = useState<"timeline" | "nabery" | "objednavky" | "dokumenty">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "dokumenty">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   useEffect(() => {
     if (!id) return;
@@ -655,9 +655,65 @@ export default function KlientDetailPage() {
     borderRadius: "14px", padding: "20px",
   };
 
+  // Nehnuteľnosti klienta: každý inzerát + každý orphan náberák (bez inzerátu) = 1 karta.
+  // Jednoduché MVP matchovanie: predpokladáme ze všetky náberáky a inzeráty tohto klienta
+  // patria k samostatným nehnuteľnostiam; prepojenie sa spresní keď sa vyplní naberak_id.
+  type PropertyCard = {
+    key: string;
+    titulok: string;
+    podtitulok?: string;
+    status: "aktivny" | "koncept" | "predany" | "archivovany" | "pripravujeme";
+    cena?: number | null;
+    inzerat?: Record<string, unknown> | null;
+    naberak?: Record<string, unknown> | null;
+  };
+  const propertyCards: PropertyCard[] = (() => {
+    const cards: PropertyCard[] = [];
+    const linkedNaberakIds = new Set<string>();
+    // 1. Každý inzerát = jedna karta, s náberákom ak ho má
+    for (const inz of inzeraty) {
+      const inzRec = inz as Record<string, unknown>;
+      const nid = inzRec.naberak_id as string | null;
+      const linkedNab = nid ? nabery.find(n => (n as Record<string, unknown>).id === nid) : null;
+      // Fallback: ak nie je naberak_id, priraď najnovší ešte neprepojený
+      const fallback = !linkedNab ? nabery.find(n => !linkedNaberakIds.has((n as Record<string, unknown>).id as string)) : null;
+      const naberak = linkedNab || fallback || null;
+      if (naberak) linkedNaberakIds.add((naberak as Record<string, unknown>).id as string);
+      const ulica = String(inzRec.ulica_privatna || inzRec.ulica || "");
+      const izby = inzRec.izby ? `${inzRec.izby}-izb` : "";
+      cards.push({
+        key: `inz-${inzRec.id}`,
+        titulok: (inzRec.nazov as string) || [ulica, izby].filter(Boolean).join(", ") || "Nehnuteľnosť",
+        podtitulok: (inzRec.lokalita as string) || undefined,
+        status: (inzRec.status as PropertyCard["status"]) || "koncept",
+        cena: inzRec.cena as number | null,
+        inzerat: inzRec,
+        naberak,
+      });
+    }
+    // 2. Orphan náberáky (nemajú inzerát) = samostatné "pripravujeme" karty
+    for (const nab of nabery) {
+      const nRec = nab as Record<string, unknown>;
+      if (linkedNaberakIds.has(nRec.id as string)) continue;
+      const ulica = String(nRec.ulica || "");
+      const params = (nRec.parametre || {}) as Record<string, unknown>;
+      const izby = params.pocet_izieb ? `${params.pocet_izieb}-izb` : "";
+      cards.push({
+        key: `nab-${nRec.id}`,
+        titulok: [ulica, izby].filter(Boolean).join(", ") || "Nehnuteľnosť (náberák)",
+        podtitulok: [nRec.obec, nRec.okres].filter(Boolean).join(", ") || undefined,
+        status: "pripravujeme",
+        cena: nRec.predajna_cena as number | null,
+        inzerat: null,
+        naberak: nRec,
+      });
+    }
+    return cards;
+  })();
+
   const tabs = [
     { key: "timeline", label: "Aktivita", count: timeline.length },
-    { key: "nabery", label: "Nábery", count: nabery.length },
+    { key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length },
     { key: "objednavky", label: "Objednávky", count: objednavky.length },
     { key: "dokumenty", label: "Dokumenty", count: 0 },
   ];
@@ -1493,7 +1549,7 @@ export default function KlientDetailPage() {
                   return (
                     <div key={ev.id}
                       onClick={() => {
-                        if (ev.type === "naber") setActiveTab("nabery");
+                        if (ev.type === "naber") setActiveTab("nehnutelnosti");
                         else if (ev.type === "objednavka") setActiveTab("objednavky");
                       }}
                       style={{
@@ -1537,64 +1593,96 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {activeTab === "nabery" && (
+      {activeTab === "nehnutelnosti" && (
         <div style={cardSt}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
-              📝 Náberové listy
+              🏠 Nehnuteľnosti klienta
             </div>
             <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
               padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
-            }}>+ Vyplniť náberový list</button>
+            }}>+ Pridať nehnuteľnosť</button>
           </div>
-          {nabery.length === 0 ? (
+          {propertyCards.length === 0 ? (
             <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
-              Žiadne nábery
+              Žiadne nehnuteľnosti. Vyplň náberový list — objaví sa karta.
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {nabery.map((n: Record<string, unknown>) => {
-                const adresa = [n.ulica, n.cislo_orientacne, n.obec, n.okres].filter(Boolean).map(String).join(", ");
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {propertyCards.map(card => {
+                const cfg: Record<PropertyCard["status"], { bg: string; text: string; label: string }> = {
+                  aktivny:      { bg: "#DCFCE7", text: "#16A34A", label: "Aktívny" },
+                  koncept:      { bg: "#FEF3C7", text: "#D97706", label: "Koncept" },
+                  predany:      { bg: "#E5E7EB", text: "#4B5563", label: "Predaný" },
+                  archivovany:  { bg: "#F3F4F6", text: "#6B7280", label: "Archív" },
+                  pripravujeme: { bg: "#F5F3FF", text: "#7C3AED", label: "Pripravujeme" },
+                };
+                const s = cfg[card.status];
+                const nInzDocs = klientDokumenty.filter(d => (d as unknown as { nehnutelnost_id?: string }).nehnutelnost_id === (card.inzerat?.id as string | undefined)).length;
+                const naberakId = (card.naberak as Record<string, unknown> | null)?.id as string | undefined;
+                const inzId = card.inzerat?.id as string | undefined;
+                const hasInzerat = !!inzId;
                 return (
-                  <div key={n.id as string} style={{
-                    display: "flex", alignItems: "center", gap: "14px",
-                    padding: "14px 16px", borderRadius: "10px", background: "var(--bg-elevated)",
-                    border: "1px solid var(--border)",
+                  <div key={card.key} style={{
+                    padding: "16px 18px", borderRadius: "12px",
+                    background: "var(--bg-elevated)", border: "1px solid var(--border)",
                   }}>
-                    <div style={{
-                      width: "40px", height: "40px", borderRadius: "10px",
-                      background: "#F5F3FF", display: "flex", alignItems: "center",
-                      justifyContent: "center", fontSize: "18px", flexShrink: 0,
-                    }}>📝</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
-                        {String(n.typ_nehnutelnosti || "—")}
-                        {n.plocha ? <span style={{ fontWeight: "400", color: "var(--text-muted)" }}> · {String(n.plocha)} m²</span> : ""}
-                      </div>
-                      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                        {adresa || "—"}
-                      </div>
-                      {!!n.predajna_cena && (
-                        <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)", marginTop: "2px" }}>
-                          {Number(n.predajna_cena).toLocaleString("sk")} €
+                    {/* Header */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "10px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", lineHeight: 1.3 }}>
+                          🏠 {card.titulok}
                         </div>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                        {new Date(n.created_at as string).toLocaleDateString("sk")}
+                        {card.podtitulok && (
+                          <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "3px" }}>
+                            {card.podtitulok}
+                          </div>
+                        )}
                       </div>
-                      <button onClick={() => {
-                        setPendingStatus(null);
-                        setShowDatePicker(true);
-                      }} style={{
-                        padding: "3px 8px", background: "#F5F3FF", border: "1px solid #DDD6FE",
-                        borderRadius: "6px", fontSize: "10px", fontWeight: "600", color: "#7C3AED",
-                        cursor: "pointer",
-                      }}>
-                        📅 Kalendár
-                      </button>
+                      <span style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", background: s.bg, color: s.text, whiteSpace: "nowrap" }}>
+                        {s.label}
+                      </span>
+                    </div>
+                    {/* Info row */}
+                    <div style={{ display: "flex", gap: "16px", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "12px", flexWrap: "wrap" }}>
+                      {card.cena != null && (
+                        <span>💰 <strong style={{ color: "var(--text-primary)" }}>{Number(card.cena).toLocaleString("sk")} €</strong></span>
+                      )}
+                      <span>{card.naberak ? "📝 Náberák ✓" : "📝 Bez náberáku"}</span>
+                      <span>{hasInzerat ? "📰 Inzerát ✓" : "📰 Bez inzerátu"}</span>
+                      {nInzDocs > 0 && <span>📎 {nInzDocs} dokumentov</span>}
+                    </div>
+                    {/* Actions */}
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      {naberakId && hasInzerat ? (
+                        <button onClick={() => router.push(`/naber?klient_id=${klient.id}&parent=${naberakId}`)}
+                          title="Originálny náberák sa nedá editovať — vytvoríš dodatok"
+                          style={{ padding: "6px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>
+                          📝 + Dodatok k náberáku
+                        </button>
+                      ) : naberakId ? (
+                        <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)}
+                          style={{ padding: "6px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>
+                          📝 Upraviť náberák
+                        </button>
+                      ) : (
+                        <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)}
+                          style={{ padding: "6px 12px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}>
+                          📝 Vyplniť náberák
+                        </button>
+                      )}
+                      {hasInzerat ? (
+                        <button onClick={() => router.push(`/inzerat?id=${inzId}`)}
+                          style={{ padding: "6px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>
+                          📰 Otvoriť inzerát
+                        </button>
+                      ) : card.naberak && (
+                        <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)}
+                          style={{ padding: "6px 12px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}>
+                          📰 Vytvoriť inzerát
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
