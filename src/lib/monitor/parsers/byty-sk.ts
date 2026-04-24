@@ -27,23 +27,15 @@ export const bytySkParser: PortalParser = {
 
     const typSlug = filter.typ ? TYP_URL[filter.typ] || "nehnutelnosti" : "nehnutelnosti";
 
-    // byty.sk očakáva lokalitu ako URL slug, nie ako query param. Ak pošleme
-    // `?lokalita=Bratislava - Petržalka`, portál vráti prázdnu stránku (81 KB).
-    // Normalize: lowercase, bez diakritiky, medzery a " - " → "-".
-    const lokSlug = filter.lokalita
-      ? filter.lokalita
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .replace(/\s*-\s*/g, "-")
-          .replace(/\s+/g, "-")
-          .replace(/[^a-z0-9-]/g, "")
-      : "";
+    // Lokalitu zámerne NEDÁVAME do URL — byty.sk má prísny slug whitelist
+    // (`bratislava-petrzalka` OK, `bratislava-ruzinov` vracia prázdnu stránku).
+    // Namiesto toho fetch root listingov a post-filter matchesFilter() filtruje
+    // podľa `listing.lokalita`/`nazov`/`url`. Získame tak 18–19 najnovších na
+    // prvej stránke — pagináciu necháme na neskoršiu iteráciu.
+    let url = `${BASE_URL}/${typSlug}/predaj/`;
 
-    let url = lokSlug
-      ? `${BASE_URL}/${typSlug}/predaj/${lokSlug}/`
-      : `${BASE_URL}/${typSlug}/predaj/`;
-
+    // Cena ide ako query param — byty.sk ich na root URL akceptuje bez toho
+    // aby sa stránka vymazala.
     const params = new URLSearchParams();
     if (filter.cena_od) params.set("cena_od", String(filter.cena_od));
     if (filter.cena_do) params.set("cena_do", String(filter.cena_do));
