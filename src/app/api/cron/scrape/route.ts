@@ -266,12 +266,17 @@ async function processFilter(
 
     // 2a. Lokalita injection: portály ktoré URL-filtrujú lokalitou (bazos cez
     //     ?hlokalita=, byty.sk cez URL slug) garantujú že všetky výsledky sú
-    //     v danej lokalite. Parser ale nemusí listing.lokalita extrahovať z
-    //     karty → matchesLokalita by zlyhalo. Ak filter má lokalitu, propagujú
-    //     ju do všetkých listingu bez vlastnej lokality.
+    //     v danej lokalite. Parser ich lokalitu však extrahuje nespoľahlivo
+    //     (bazos napr. vráti literál "Lokalita" ako hodnotu headingu).
+    //     Ak filter má lokalitu, pre tieto portály ju override-ujeme vždy.
+    const URL_FILTERED_LOCATION = new Set(["bazos.sk", "byty.sk"]);
     if (filter.lokalita) {
       for (const l of allListings) {
-        if (!l.lokalita) l.lokalita = filter.lokalita;
+        if (URL_FILTERED_LOCATION.has(l.portal)) {
+          l.lokalita = filter.lokalita;
+        } else if (!l.lokalita) {
+          l.lokalita = filter.lokalita;
+        }
       }
     }
 
