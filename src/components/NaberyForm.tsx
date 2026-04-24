@@ -150,9 +150,12 @@ interface Props {
   klient: Klient;
   onBack: () => void;
   onSubmit: (data: { id: string }) => void;
+  /** Ak nastavený, nový záznam sa uloží ako DODATOK k existujúcemu náberáku.
+   *  Originál zostáva nedotknutý — tak vyžaduje model (audit / legalita). */
+  parentNaberakId?: string | null;
 }
 
-export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
+export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNaberakId }: Props) {
   const { user: authUser } = useAuth();
   const uid = authUser?.id || "";
   const [saving, setSaving] = useState(false);
@@ -459,6 +462,38 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
   async function handleSubmit() {
     if (!provizia?.trim()) { setError("Provízia je povinné pole"); return; }
     if (!podpisData) { setError("Chýba podpis klienta"); return; }
+
+    // Kolízna kontrola — či nejaký iný maklér už eviduje rovnakú nehnuteľnosť
+    // (rovnaká lokalita + typ + izby v aktívnych inzerátoch). Blokujeme save
+    // kým maklér výslovne nepotvrdí.
+    try {
+      const izbyNum = typ === "byt" ? parseInt(pocetIzieb || "0", 10) : null;
+      const collisionBody = {
+        lokalita: obec || null,
+        typ_nehnutelnosti: typ,
+        izby: izbyNum || null,
+        makler_email: authUser?.email || null,
+        makler_meno: makler || null,
+      };
+      if (collisionBody.lokalita && izbyNum) {
+        const res = await fetch("/api/kolize/nehnutelnosti", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(collisionBody),
+        });
+        const out = await res.json().catch(() => ({}));
+        const high = (out.kolize || []).filter((k: { zavaznost?: string }) => k.zavaznost === "high");
+        if (high.length > 0) {
+          const names = high.map((k: { data?: { makler_a_meno?: string } }) => k.data?.makler_a_meno || "iný maklér").join(", ");
+          const ok = window.confirm(
+            `⚠️ KOLÍZIA\n\nRovnakú nehnuteľnosť (${obec}, ${typ}, ${izbyNum}-izb) už eviduje: ${names}.\n\nNapriek tomu pokračovať v nábere?`
+          );
+          if (!ok) return;
+        }
+      }
+    } catch (e) {
+      console.warn("[kolizia] check failed, pokračujem:", e);
+    }
+
     setSaving(true);
     setError("");
     const parametre: Record<string, unknown> = {};
@@ -518,6 +553,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit }: Props) {
       makler: makler || null, zmluva, typ_zmluvy: zmluva ? typZmluvy : null,
       datum_podpisu: datumPodpisu || null, zmluva_do: zmluvaDo || null,
       provizia: provizia || null, popis: popis || null, podpis_data: podpisData,
+      parent_naberak_id: parentNaberakId || null,
     };
     const { data, error: dbError } = await supabase.from("naberove_listy").insert(record).select("id").single();
     if (dbError) { setSaving(false); setError("Chyba pri ukladaní: " + dbError.message); return; }

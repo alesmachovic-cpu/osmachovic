@@ -61,6 +61,7 @@ function inferTypFromKlient(k: Klient): TypNaber | null {
 function NaberPageContent() {
   const searchParams = useSearchParams();
   const preselectedKlientId = searchParams.get("klient_id");
+  const parentNaberakId = searchParams.get("parent");
   const { user } = useAuth();
   const isAdmin = user?.id === "ales";
   const [filterMakler, setFilterMakler] = useState<string>(isAdmin ? "all" : "mine");
@@ -638,11 +639,23 @@ function NaberPageContent() {
         <div style={{ maxWidth: "720px" }}>
           {renderStepper()}
         </div>
+        {parentNaberakId && (
+          <div style={{
+            maxWidth: "720px", marginBottom: "16px",
+            padding: "12px 16px", background: "#FEF3C7",
+            border: "1px solid #F59E0B", borderRadius: "12px",
+            fontSize: "13px", color: "#92400E",
+          }}>
+            <strong>📝 Dodatok k náberáku</strong><br />
+            Originál náberáka sa nedá prepisovať — uloží sa samostatne ako dodatok ku existujúcej nehnuteľnosti.
+          </div>
+        )}
         <NaberyForm
           typ={selectedType}
           klient={selectedKlient}
           onBack={() => setStep("typ")}
           onSubmit={handleNaberSubmit}
+          parentNaberakId={parentNaberakId}
         />
       </div>
     );
