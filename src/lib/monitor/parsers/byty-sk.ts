@@ -27,22 +27,13 @@ export const bytySkParser: PortalParser = {
 
     const typSlug = filter.typ ? TYP_URL[filter.typ] || "nehnutelnosti" : "nehnutelnosti";
 
-    // Lokalitu zámerne NEDÁVAME do URL — byty.sk má prísny slug whitelist
-    // (`bratislava-petrzalka` OK, `bratislava-ruzinov` vracia prázdnu stránku).
-    // Namiesto toho fetch root listingov a post-filter matchesFilter() filtruje
-    // podľa `listing.lokalita`/`nazov`/`url`. Získame tak 18–19 najnovších na
-    // prvej stránke — pagináciu necháme na neskoršiu iteráciu.
-    let url = `${BASE_URL}/${typSlug}/predaj/`;
-
-    // Cena ide ako query param — byty.sk ich na root URL akceptuje bez toho
-    // aby sa stránka vymazala.
-    const params = new URLSearchParams();
-    if (filter.cena_od) params.set("cena_od", String(filter.cena_od));
-    if (filter.cena_do) params.set("cena_do", String(filter.cena_do));
-
-    const qs = params.toString();
-    if (qs) url += `?${qs}`;
-    return url;
+    // Lokalitu ani cenu NEDÁVAME do URL — byty.sk oba z nich odmieta
+    // (vráti prázdnu 81KB stránku s 0 listings):
+    //   - neplatný slug lokality ('bratislava-ruzinov' → 0)
+    //   - `?cena_od=`/`?cena_do=` query param (iný názov v skutočnom form-e)
+    // Fetchneme root /byty/predaj/ (18–19 najnovších) a všetky filter kritériá
+    // aplikuje post-filter matchesFilter() v cron scrape.
+    return `${BASE_URL}/${typSlug}/predaj/`;
   },
 
   parseListings(html: string): ScrapedInzerat[] {
