@@ -28,10 +28,11 @@ const typLabels: Record<string, string> = {
   kupujuci: "Kupujúci",
   predavajuci: "Predávajúci",
   oboje: "Kupujúci + Predávajúci",
+  prenajimatel: "Prenajímateľ",
 };
 
 type FilterStatus = "" | "novy" | "aktivny" | "pasivny" | "uzavrety" | "caka_na_schvalenie" | "dohodnuty_naber" | "volat_neskor" | "nabrany" | "novy_kontakt";
-type FilterTyp = "" | "kupujuci" | "predavajuci" | "oboje";
+type FilterTyp = "" | "kupujuci" | "predavajuci" | "oboje" | "prenajimatel";
 
 export default function KlientiPage() {
   return <Suspense><KlientiContent /></Suspense>;
@@ -363,6 +364,7 @@ function KlientiContent() {
           <option value="kupujuci">Kupujúci</option>
           <option value="predavajuci">Predávajúci</option>
           <option value="oboje">Oboje</option>
+          <option value="prenajimatel">Prenajímateľ</option>
         </select>
         {makleri.length > 0 && (
           <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={selectSt}>

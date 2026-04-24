@@ -431,9 +431,6 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
   const [email, setEmail] = useState(editKlient?.email || "");
   const [status, setStatus] = useState(editKlient?.status || "novy_kontakt");
   const [typKlienta, setTypKlienta] = useState<string>(editKlient?.typ || defaultTyp);
-  const [typTransakcie, setTypTransakcie] = useState<string>(
-    ((editKlient as unknown as { typ_transakcie?: string })?.typ_transakcie) || ""
-  );
   const [typNehnutelnosti, setTypNehnutelnosti] = useState("");
   const [lokalitaInput, setLokalitaInput] = useState(editKlient?.lokalita || "");
   // lokalitaValue = "confirmed" DB value — len ak je v LOKALITY_DB (edit mode: overíme)
@@ -625,12 +622,6 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     if (!telefon.trim() || !meno.trim()) return;
     if (!isEdit && !typNehnutelnosti) return;
     if (!isEdit && dupLevel === "critical" && !forceCreate) return;
-    // Typ transakcie je povinný pre predávajúceho / oboje
-    const needsTypTransakcie = typKlienta === "predavajuci" || typKlienta === "oboje";
-    if (needsTypTransakcie && !typTransakcie) {
-      setSaveError("Vyber typ transakcie (predaj / prenájom)");
-      return;
-    }
 
     // Validácia adresy — lokalita musí byť vybraná z dropdownu
     const addrErrors: typeof fieldErrors = {};
@@ -667,13 +658,6 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     }
     if (!isEdit || typKlienta !== editKlient?.typ) {
       basePayload.typ = typKlienta;
-    }
-    // Typ transakcie — uložiť ak je vyplnený (môže byť NULL pre kupujúceho)
-    if (needsTypTransakcie) {
-      basePayload.typ_transakcie = typTransakcie;
-    } else if (isEdit) {
-      // Ak zmenil typ z predávajúceho na kupujúceho, vynuluj typ_transakcie
-      basePayload.typ_transakcie = null;
     }
     // For non-edit, always include
     if (!isEdit) {
@@ -918,22 +902,11 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
                   <option value="kupujuci">Kupujúci</option>
                   <option value="predavajuci">Predávajúci</option>
                   <option value="oboje">Kupujúci + Predávajúci</option>
+                  <option value="prenajimatel">Prenajímateľ</option>
                 </select>
               </div>
             )}
           </div>
-
-          {/* Typ transakcie — iba pre predávajúceho/oboje */}
-          {(typKlienta === "predavajuci" || typKlienta === "oboje") && (
-            <div>
-              <div style={labelSt}>Typ transakcie *</div>
-              <select value={typTransakcie} onChange={e => setTypTransakcie(e.target.value)} style={selectSt}>
-                <option value="">— vyberte —</option>
-                <option value="na-predaj">Predaj</option>
-                <option value="na-prenajom">Prenájom</option>
-              </select>
-            </div>
-          )}
 
           {/* Dohodnutý náber — checklist */}
           {status === "dohodnuty_naber" && (() => {

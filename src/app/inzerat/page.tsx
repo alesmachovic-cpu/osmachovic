@@ -48,16 +48,21 @@ function InzeratPageContent() {
     // Over či klient má náber
     const [naberRes, klientRes] = await Promise.all([
       supabase.from("naberove_listy").select("*").eq("klient_id", klientId).order("created_at", { ascending: false }).limit(1),
-      supabase.from("klienti").select("meno, typ_transakcie").eq("id", klientId).single(),
+      supabase.from("klienti").select("meno, typ").eq("id", klientId).single(),
     ]);
 
     if (klientRes.data) setKlientName(klientRes.data.meno);
 
     if (naberRes.data && naberRes.data.length > 0) {
-      // Zapoj klient.typ_transakcie do prefillu — InzeratForm ho použije ako default kategoria
-      const klientTypTrans = (klientRes.data as unknown as { typ_transakcie?: string })?.typ_transakcie || null;
-      const merged = klientTypTrans
-        ? { ...naberRes.data[0], _klient_typ_transakcie: klientTypTrans }
+      // Zapoj klient.typ do prefillu — InzeratForm ho použije ako default kategoria:
+      //   - "predavajuci" / "oboje" → na-predaj
+      //   - "prenajimatel" → na-najom
+      const klientTyp = klientRes.data?.typ || null;
+      const derivedKategoria = klientTyp === "prenajimatel" ? "na-prenajom"
+        : (klientTyp === "predavajuci" || klientTyp === "oboje") ? "na-predaj"
+        : null;
+      const merged = derivedKategoria
+        ? { ...naberRes.data[0], _klient_typ_transakcie: derivedKategoria }
         : naberRes.data[0];
       setHasNaber(true);
       setNaberData(merged);

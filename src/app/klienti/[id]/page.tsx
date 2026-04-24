@@ -250,6 +250,7 @@ const TYP_LABELS: Record<string, string> = {
   predavajuci: "Predávajúci",
   kupujuci: "Kupujúci",
   oboje: "Predávajúci aj kupujúci",
+  prenajimatel: "Prenajímateľ",
 };
 
 // Workflow kroky
@@ -923,7 +924,7 @@ export default function KlientDetailPage() {
       )}
 
       {/* Workflow progress */}
-      {(klient.typ === "predavajuci" || klient.typ === "oboje") && (
+      {(klient.typ === "predavajuci" || klient.typ === "oboje" || klient.typ === "prenajimatel") && (
         <div style={{
           ...cardSt, marginBottom: "20px", padding: "16px 20px",
         }}>

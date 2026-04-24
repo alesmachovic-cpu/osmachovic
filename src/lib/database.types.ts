@@ -63,7 +63,7 @@ export interface Klient {
   telefon: string | null;
   email: string | null;
   lokalita: string | null;
-  typ: "kupujuci" | "predavajuci" | "oboje";
+  typ: "kupujuci" | "predavajuci" | "oboje" | "prenajimatel";
   status: KlientStatus;
   makler_id: string | null;
   priorita: string | null;
