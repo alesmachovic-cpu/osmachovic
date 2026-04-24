@@ -593,15 +593,16 @@ async function generateClaude(details: string, locationInfo: string, images?: { 
     }
   }
 
-  // Primárny: Opus 4.7 — bohatší, presnejší text
+  // Primárny: Sonnet 4.6 — 2–3× rýchlejší než Opus pri porovnateľnej kvalite
+  // pre real-estate popisy. Opus ponecháme ako fallback ak Sonnet zlyhá.
+  const sonnet = await call("claude-sonnet-4-6");
+  if (sonnet.emotivny) return sonnet;
+
+  console.warn("[ai-writer] Sonnet failed, fallback na Opus:", sonnet.__err);
   const opus = await call("claude-opus-4-7");
   if (opus.emotivny) return opus;
 
-  console.warn("[ai-writer] Opus failed, fallback na Sonnet:", opus.__err);
-  const sonnet = await call("claude-sonnet-4-5");
-  if (sonnet.emotivny) return sonnet;
-
-  return { __err: opus.__err || sonnet.__err || "Claude obe modely zlyhali" };
+  return { __err: sonnet.__err || opus.__err || "Claude obe modely zlyhali" };
 }
 
 /* ── GPT: generate text ── */

@@ -1104,21 +1104,21 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     }
     setGenerating(true);
     try {
-      // Konvertuj fotky na base64 (max 6 reprezentatívnych, 900px, q 0.6) — pod 3.5MB payload
+      // Konvertuj fotky na base64 (max 3 reprezentatívnych, 720px, q 0.6) — rýchlejšia vision inferencia
       const photoB64: string[] = [];
-      // Vyber rovnomerne rozložené fotky (nie len prvých 6)
-      const PHOTO_LIMIT = 6;
+      // Vyber rovnomerne rozložené fotky (nie len prvých)
+      const PHOTO_LIMIT = 3;
       const step = Math.max(1, Math.floor(photos.length / PHOTO_LIMIT));
       const sampled = photos.filter((_, i) => i % step === 0).slice(0, PHOTO_LIMIT);
       let totalBytes = 0;
-      const PHOTO_BUDGET = 3 * 1024 * 1024;
+      const PHOTO_BUDGET = 2 * 1024 * 1024;
       for (const p of sampled) {
         try {
           const img = new Image();
           img.crossOrigin = "anonymous";
           await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = p.url; });
           const canvas = document.createElement("canvas");
-          const maxW = 900;
+          const maxW = 720;
           const scale = Math.min(1, maxW / img.width);
           canvas.width = img.width * scale;
           canvas.height = img.height * scale;
@@ -1375,7 +1375,11 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     }
 
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) {
+      console.error("[inzerat save] failed:", err);
+      setError(err.message || "Uloženie zlyhalo. Skontroluj konzolu.");
+      return;
+    }
     // Úspešný save — zahoď rozpracovaný draft.
     if (draftKey && typeof window !== "undefined") {
       try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
@@ -1964,13 +1968,29 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
         </div>
       </div>
 
-      {/* Notifications */}
+      {/* Notifications — fixed toast v rohu aby bol vždy vidieť */}
       {error && (
-        <div style={{ margin: "12px 0", padding: "10px 16px", background: "#FEF2F2", borderRadius: "10px", fontSize: "13px", color: "#DC2626", display: "flex", justifyContent: "space-between" }}>
-          {error}<button onClick={() => setError("")} style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontWeight: "600" }}>×</button>
+        <div style={{
+          position: "fixed", top: "20px", right: "20px", zIndex: 9999,
+          maxWidth: "420px", padding: "14px 18px", background: "#FEF2F2",
+          border: "1px solid #FCA5A5", borderRadius: "12px", fontSize: "13px",
+          color: "#B91C1C", display: "flex", alignItems: "flex-start", gap: "10px",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+        }}>
+          <span style={{ flex: 1, lineHeight: 1.4 }}>⚠️ {error}</span>
+          <button onClick={() => setError("")} style={{ background: "none", border: "none", color: "#B91C1C", cursor: "pointer", fontWeight: "600", fontSize: "16px", padding: 0, lineHeight: 1 }}>×</button>
         </div>
       )}
-      {saved && <div style={{ margin: "12px 0", padding: "10px 16px", background: "#F0FDF4", borderRadius: "10px", fontSize: "13px", color: "#16A34A" }}>✓ Uložené</div>}
+      {saved && (
+        <div style={{
+          position: "fixed", top: "20px", right: "20px", zIndex: 9999,
+          padding: "14px 18px", background: "#F0FDF4",
+          border: "1px solid #86EFAC", borderRadius: "12px", fontSize: "13px",
+          color: "#166534", boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+        }}>
+          ✓ Uložené
+        </div>
+      )}
 
       {/* Bottom bar */}
       <div style={{ position: "sticky", bottom: 0, background: "var(--bg-surface)", borderTop: "1px solid var(--border)", padding: "14px 0", marginTop: "20px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
