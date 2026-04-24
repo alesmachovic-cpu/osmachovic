@@ -1378,23 +1378,15 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
     };
 
     console.log("[inzerat save] payload keys:", Object.keys(payload).join(","), "editId=", editId);
-    let err;
-    let resultData: unknown[] | null = null;
-    if (editId) {
-      const r = await supabase.from("nehnutelnosti").update(payload).eq("id", editId).select();
-      err = r.error; resultData = r.data;
-    } else {
-      const r = await supabase.from("nehnutelnosti").insert(payload).select();
-      err = r.error; resultData = r.data;
-    }
-    console.log("[inzerat save] result: err=", err, "| rowsReturned=", resultData?.length, "| firstId=", (resultData?.[0] as { id?: string })?.id);
-    if (!err && (!resultData || resultData.length === 0)) {
-      console.error("[inzerat save] SILENT FAILURE — Supabase returned no error but 0 rows!", payload);
-      if (typeof window !== "undefined") window.alert("⚠️ Supabase nevrátil error, ale inzerát sa neuložil (0 rows). Skontroluj RLS policy na tabuľke nehnutelnosti.");
-      setError("Tichá chyba DB — 0 rows inserted. Pozri Console.");
-      setSaving(false);
-      return;
-    }
+    // Save cez server-side API (service_role — obchádza RLS)
+    const res = await globalThis.fetch("/api/inzerat/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload, editId }),
+    });
+    const out = await res.json().catch(() => ({ error: "Neplatná odpoveď servera" }));
+    console.log("[inzerat save] API result:", res.status, out);
+    const err = res.ok ? null : { message: out.error || `HTTP ${res.status}`, code: out.code, details: out.details };
 
     setSaving(false);
     if (err) {
