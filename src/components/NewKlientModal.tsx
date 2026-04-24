@@ -16,6 +16,7 @@ interface DuplicateHit {
   typ?: string;
   lokalita?: string;
   poznamka?: string;
+  makler_id?: string | null;
   created_at: string;
 }
 
@@ -426,6 +427,10 @@ function getLastDigits(phone: string, count: number): string {
 export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLvPrompt, initialPhone, showTypKlienta = false, defaultTyp = "predavajuci", editKlient }: Props) {
   const { user: authUser } = useAuth();
   const isEdit = !!editKlient;
+  const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
+  useEffect(() => {
+    if (authUser?.id) getMaklerUuid(authUser.id).then(setMyMaklerUuid);
+  }, [authUser?.id]);
   const [telefon, setTelefon] = useState(editKlient?.telefon || initialPhone || "");
   const [meno, setMeno] = useState(editKlient?.meno || "");
   const [email, setEmail] = useState(editKlient?.email || "");
@@ -537,7 +542,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
       const last9 = getLastDigits(norm, 9);
       const { data } = await supabase
         .from("klienti")
-        .select("id, meno, telefon, email, status, typ, lokalita, poznamka, created_at")
+        .select("id, meno, telefon, email, status, typ, lokalita, poznamka, makler_id, created_at")
         .ilike("telefon", `%${last9}%`);
       const hits = (data as DuplicateHit[] | null) ?? [];
       setDuplicates(hits);
@@ -834,6 +839,38 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
                 ✅ Číslo nie je v databáze
               </div>
             )}
+            {/* MÔJ KLIENT — ak duplicate patrí prihlásenému maklerovi, navigujeme do jeho karty namiesto vytvárania nového klienta */}
+            {checked && myMaklerUuid && duplicates.some(d => d.makler_id === myMaklerUuid) && (() => {
+              const myHits = duplicates.filter(d => d.makler_id === myMaklerUuid);
+              return (
+                <div style={{ marginTop: "8px", padding: "12px 14px", background: "#DBEAFE", borderRadius: "10px", border: "1px solid #60A5FA" }}>
+                  <div style={{ fontSize: "12px", fontWeight: "700", color: "#1E40AF", marginBottom: "6px" }}>
+                    ℹ️ Toto je {myHits.length === 1 ? "tvoj existujúci klient" : "tvoj existujúci klient (viac zhôd)"}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#1E40AF", marginBottom: "10px" }}>
+                    Namiesto nového klienta pridaj novú nehnuteľnosť do jeho karty.
+                  </div>
+                  {myHits.map(d => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        window.location.href = `/klienti/${d.id}?tab=nehnutelnosti`;
+                      }}
+                      style={{
+                        display: "block", width: "100%", marginBottom: "6px",
+                        padding: "10px 12px", background: "#fff", border: "1px solid #93C5FD",
+                        borderRadius: "8px", fontSize: "13px", color: "#1E40AF", cursor: "pointer",
+                        textAlign: "left", fontWeight: "500",
+                      }}>
+                      📂 {d.meno} · {d.typ || "—"} · <span style={{ fontSize: "11px" }}>{d.lokalita || "—"}</span>
+                      <span style={{ float: "right", fontSize: "11px", fontWeight: "700" }}>Otvoriť kartu →</span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
             {checked && duplicates.some(d => d.status === "realitna_kancelaria" || d.status === "nechce_rk") && (
               <div style={{ marginTop: "8px", padding: "10px 12px", background: "#FEE2E2", borderRadius: "8px", border: "1px solid #EF4444", display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{ fontSize: "20px" }}>⚠️</span>
