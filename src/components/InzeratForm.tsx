@@ -413,12 +413,12 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
      V oboch: len prázdne inzerátové polia dopĺňame. ── */
   const [naberakFilledFields, setNaberakFilledFields] = useState<string[]>([]);
   const [naberakRaw, setNaberakRaw] = useState<Record<string, unknown> | null>(null);
-  const [maklerList, setMaklerList] = useState<{ id: string; meno: string; email: string }[]>([]);
+  const [maklerList, setMaklerList] = useState<{ id: string; meno: string; email: string; telefon?: string }[]>([]);
 
   /* ── Načítaj zoznam maklérov z DB ── */
   useEffect(() => {
-    supabase.from("makleri").select("id, meno, email").then(({ data }) => {
-      if (data) setMaklerList(data as { id: string; meno: string; email: string }[]);
+    supabase.from("makleri").select("id, meno, email, telefon").then(({ data }) => {
+      if (data) setMaklerList(data as { id: string; meno: string; email: string; telefon?: string }[]);
     });
   }, []);
 
@@ -1162,15 +1162,30 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
       // Lokalita — priorita: ulica > obec > okres
       const lokalitaFull = [f.ulica_verejna, f.obec, f.okres, f.kraj].filter(Boolean).join(", ");
 
-      // Load makler profile z localStorage (per-device)
+      // Maklér v inzeráte = `f.makler` (prevzaté z náberáku), NIE prihlásený user.
+      // Kontakty (telefón, email) načítame z tabuľky `makleri` pomocou fuzzy matchu.
       let maklerMeno = "", maklerTelefon = "", maklerEmail = "", vzorovyInzerat = "";
       try {
-        const mp = getUserItem(uid, "makler_profile");
-        if (mp) {
-          const p = JSON.parse(mp);
-          maklerMeno = p.meno || "";
-          maklerTelefon = p.telefon || "";
-          maklerEmail = p.email || "";
+        const stripTitles = (s: string) => (s || "").toLowerCase().trim()
+          .split(/\s+/).filter(w => !w.endsWith(".") && !["mgr","bc","mba","phd","dr","ing","msc"].includes(w))
+          .slice(-2).join(" ");
+        const target = stripTitles(f.makler);
+        const mDb = maklerList.find(x => x.meno === f.makler)
+          || (target ? maklerList.find(x => stripTitles(x.meno) === target) : null);
+        if (mDb) {
+          maklerMeno = mDb.meno;
+          maklerEmail = mDb.email || "";
+          maklerTelefon = (mDb as unknown as { telefon?: string }).telefon || "";
+        }
+        // Fallback: localStorage profile prihláseného usera (ak maklér nie je v DB)
+        if (!maklerMeno) {
+          const mp = getUserItem(uid, "makler_profile");
+          if (mp) {
+            const p = JSON.parse(mp);
+            maklerMeno = p.meno || "";
+            maklerTelefon = p.telefon || "";
+            maklerEmail = p.email || "";
+          }
         }
       } catch { /* ignore */ }
       // Vzorové inzeráty — primárne z DB (cross-device), fallback localStorage
@@ -1369,7 +1384,15 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
       seo_keywords: f.seo_keywords || null, stat: f.stat, kraj: f.kraj || null,
       okres: f.okres || null, obec: f.obec || null,
       ulica_privatna: f.ulica_privatna || null, makler: f.makler || null,
-      interne_id: f.interne_id || null,
+      // Auto-generate interné ID ak je prázdne — formát VIA-YYYYMMDD-4randomChars
+      interne_id: f.interne_id?.trim() || (() => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+        return `VIA-${y}${m}${dd}-${rand}`;
+      })(),
       provizia_hodnota: f.provizia_hodnota ? Number(f.provizia_hodnota) : null,
       provizia_typ: f.provizia_typ, poznamka_interna: f.poznamka_interna || null,
       orientacia: f.orientacia || null, pripojenie: f.pripojenie,
