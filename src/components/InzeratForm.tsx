@@ -1313,7 +1313,17 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
 
   async function handleSave(publish: boolean) {
     if (!f.cena) { setError("Cena je povinná"); return; }
-    if (photos.some(p => p.uploading)) { setError("Počkaj, fotky sa ešte nahrávajú…"); return; }
+    // Fotka je "ešte nenahraná" iba ak uploading: true A zároveň nemá path (Storage cesta).
+    // Ak path existuje, upload prešiel do Supabase bez ohľadu na zaseknutý flag.
+    const stillUploading = photos.filter(p => p.uploading && !p.path);
+    if (stillUploading.length > 0) {
+      const readyCount = photos.length - stillUploading.length;
+      if (readyCount === 0) {
+        setError("Počkaj, fotky sa ešte nahrávajú…");
+        return;
+      }
+      console.warn(`[inzerat save] ${stillUploading.length} fotiek ešte nahráva, pokračujem s ${readyCount} hotovými`);
+    }
     setSaving(true); setError("");
 
     const uploadedPhotos = photos.filter(p => p.path && p.url && !p.error);
