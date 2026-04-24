@@ -49,18 +49,28 @@ function normLok(s: string): string {
 /**
  * Skontroluje či listing zodpovedá filter lokality.
  *
- * Stratégia: vezmeme NAJŠPECIFICKEJŠÍ komponent lokality (najmä mestskú časť,
- * ak existuje), napr. z "Bratislava - Ružinov" vezmeme "Ružinov". Ak sa nenájde
- * v haystacku, skúsime ešte celý reťazec (napr. "bratislava" pre filtre bez MČ).
+ * Podporuje 2 formáty needle:
+ *   1) Jedna lokalita s hierarchiou cez " - " alebo "/":
+ *      "Bratislava - Ružinov" → match na najšpecifickejšiu časť ("Ružinov")
+ *   2) Viacero lokalít oddelených čiarkou alebo bodkočiarkou (OR):
+ *      "Bernolákovo, Ivanka pri Dunaji, Senec" → match ak ktorákoľvek sedí.
+ *      Užitočné pre dediny kde jediné slovo nepokrýva celú oblasť záujmu.
  */
 function matchesLokalita(needle: string, haystackParts: Array<string | undefined | null>): boolean {
-  const parts = needle.split(/\s*[-,/]\s*/).map((p) => p.trim()).filter(Boolean);
+  // 1) Multi-lokality (OR): ak obsahuje `,` alebo `;` — rozdeľ a match ktorúkoľvek.
+  if (/[,;]/.test(needle)) {
+    const alternativy = needle.split(/\s*[,;]\s*/).map((s) => s.trim()).filter(Boolean);
+    if (alternativy.length > 1) {
+      return alternativy.some((alt) => matchesLokalita(alt, haystackParts));
+    }
+  }
+  // 2) Single lokalita s hierarchiou (Bratislava - Ružinov) — existujúca logika
+  const parts = needle.split(/\s*[-/]\s*/).map((p) => p.trim()).filter(Boolean);
   const specific = parts[parts.length - 1] || needle;
   const specificNorm = normLok(specific);
   if (!specificNorm) return true;
   const haystack = normLok(haystackParts.filter(Boolean).join(" "));
   if (haystack.includes(specificNorm)) return true;
-  // Fallback: ak filter je len jednoslovný (len mesto), skús celý reťazec
   if (parts.length === 1) {
     return haystack.includes(normLok(needle));
   }

@@ -688,8 +688,11 @@ export default function MonitorPage() {
                   <LokalitaInput
                     value={nf.lokalita}
                     onChange={v => setNf({ ...nf, lokalita: v })}
-                    placeholder="Bratislava - Petržalka..."
+                    placeholder="Bratislava - Petržalka (alebo viac, oddel čiarkou)"
                   />
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+                    💡 Pre menšie obce zadaj viacero oddelených čiarkou — napr. <code>Bernolákovo, Ivanka pri Dunaji, Senec</code>
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: "12px" }}>
                   <div style={{ flex: 1 }}>
