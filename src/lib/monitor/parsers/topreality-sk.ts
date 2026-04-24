@@ -47,8 +47,10 @@ export const toprealitySkParser: PortalParser = {
     const areaRegex = /(\d[\d,.]*)\s*m[²2]/;
     const roomRegex = /(\d+)[- ]izb/;
 
-    // topreality.sk — hľadáme detaily inzerátov
-    const detailRegex = /<a[^>]*href="([^"]*\/(\d{5,})[^"]*)"/g;
+    // topreality.sk — reálne URL majú tvar /title-slug-r<NNNN>.html
+    // Predošlý regex `\/(\d{5,})` hľadal "/1234..." (digits priamo za /), čo
+    // nikdy nesedelo so skutočným formátom, preto nič nenachádzal.
+    const detailRegex = /<a[^>]*href="((?:https?:\/\/[^"]*topreality\.sk)?\/[a-z0-9-]+-r(\d+)\.html)"/gi;
 
     let match;
     while ((match = detailRegex.exec(html)) !== null) {

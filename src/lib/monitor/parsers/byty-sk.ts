@@ -101,54 +101,67 @@ export const bytySkParser: PortalParser = {
       } catch { /* ignore, fallback to HTML parsing */ }
     }
 
-    // Strategy 2: Regex-based HTML parsing (pre ne-Next.js verzie alebo HTML output)
-    // Hľadáme bloky s class obsahujúcou listing/property/advertisement
-    const blockRegex = /<(?:div|article|li)[^>]*class="[^"]*(?:result|listing|property|advertisement|byt-card)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|article|li)>/gi;
-
+    // Strategy 2: reálne URL na byty.sk sú na mobilnej subdoméne:
+    // https://m.byty.sk/<id>/<slug>/detail  (alebo /kontakt, /foto…)
+    // Extrahujeme všetky unikátne id, okolie (~1500 znakov pred/800 po) použijeme
+    // na cenu, title, fotku, plochu, izby.
+    const urlRegex = /https?:\/\/m\.byty\.sk\/(\d{5,})\/([a-z0-9-]+)\/[a-z]+/gi;
     let match;
-    while ((match = blockRegex.exec(html)) !== null) {
-      const block = match[1];
-
-      // URL + ID
-      const urlMatch = block.match(/href="(\/(?:byt|dom|pozemok)\/[^"]*(\d{4,})[^"]*)"/);
-      if (!urlMatch) continue;
-      const relUrl = urlMatch[1];
-      const externalId = urlMatch[2];
+    while ((match = urlRegex.exec(html)) !== null) {
+      const externalId = match[1];
+      const slug = match[2];
       if (seenIds.has(externalId)) continue;
       seenIds.add(externalId);
 
-      const titleMatch = block.match(/<(?:h2|h3|a)[^>]*>([^<]+)</);
-      const nazov = titleMatch?.[1]?.trim() || "";
+      const pos = match.index;
+      const context = html.substring(
+        Math.max(0, pos - 1500),
+        Math.min(html.length, pos + 800)
+      );
 
-      const priceMatch = block.match(/([\d\s][\d\s,.]*)\s*€/);
-      const cena = priceMatch ? parseFloat(priceMatch[1].replace(/\s/g, "").replace(",", ".")) : undefined;
+      // Title — buď text hneď za linkom, alebo derived zo slugu
+      let nazov = "";
+      const titleRe = new RegExp(
+        `href="https?://m\\.byty\\.sk/${externalId}/[^"]+"[^>]*>\\s*([^<]{5,200})`,
+        "i"
+      );
+      const titleMatch = context.match(titleRe);
+      nazov = titleMatch?.[1]?.replace(/\s+/g, " ").trim() || "";
+      if (!nazov || nazov.length < 5) {
+        nazov = slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      }
 
-      const areaMatch = block.match(/(\d+(?:[,.]\d+)?)\s*m[²2]/);
+      // Cena — prvá hodnota s €, pravdepodobne s thousand separators
+      const priceMatch = context.match(/([\d]{2,3}(?:[\s\u00A0,.][\d]{3})+|\d{4,})\s*€/);
+      const cena = priceMatch ? parseFloat(priceMatch[1].replace(/[\s\u00A0,.]/g, "")) : undefined;
+
+      const areaMatch = context.match(/(\d+(?:[,.]\d+)?)\s*m[²2]/);
       const plocha = areaMatch ? parseFloat(areaMatch[1].replace(",", ".")) : undefined;
 
-      const roomMatch = block.match(/(\d+)\s*[-]?\s*izb/i);
+      const roomMatch = context.match(/(\d+)\s*[-]?\s*izb/i);
       const izby = roomMatch ? parseInt(roomMatch[1]) : undefined;
 
-      const imgMatch = block.match(/<img[^>]+src="(https?:\/\/[^"]+)"/);
+      const imgMatch = context.match(/<img[^>]+src="(https?:\/\/[^"]+\.(?:jpg|jpeg|png|webp))"/i);
       const foto_url = imgMatch?.[1];
 
+      // Typ + lokalita zo slugu
+      const slugLower = slug.toLowerCase();
       let typ = "byt";
-      if (relUrl.startsWith("/dom")) typ = "dom";
-      else if (relUrl.startsWith("/pozemok")) typ = "pozemok";
+      if (slugLower.includes("dom") || slugLower.includes("rodin")) typ = "dom";
+      else if (slugLower.includes("pozem") || slugLower.includes("parcel")) typ = "pozemok";
 
-      const sellerMatch = block.match(
-        /class="[^"]*(?:advertiser|seller|agent|agency|broker|company|realitka|inzerent)[^"]*"[^>]*>\s*(?:<[^>]*>\s*)*([^<]{2,100})/i
-      );
-      const predajca_meno = sellerMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
-      const isFirma = detectFirma(nazov, predajca_meno);
+      const lokMatch = slugLower.match(/(bratislava|kosice|nitra|zilina|trnava|presov|banska-bystrica|trencin|martin|poprad|malacky|pezinok|senec|ruzinov|petrzalka|dubravka|stare-mesto|karlova-ves|nove-mesto|vajnory|devin|lamac|raca|vrakuna)/);
+      const lokalita = lokMatch?.[1]?.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+      const isFirma = detectFirma(nazov, slug);
 
       listings.push({
         portal: PORTAL,
         external_id: externalId,
-        url: `${BASE_URL}${relUrl}`,
+        url: `https://m.byty.sk/${externalId}/${slug}/`,
         nazov, typ,
+        lokalita,
         cena, plocha, izby, foto_url,
-        predajca_meno,
         predajca_typ: isFirma ? "firma" : undefined,
         raw_data: {},
       });
