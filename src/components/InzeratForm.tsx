@@ -1312,6 +1312,8 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   }
 
   async function handleSave(publish: boolean) {
+    console.log("[inzerat save] entered, publish=", publish, "photos=", photos.length, "cena=", f.cena);
+    try {
     if (!f.cena) { setError("Cena je povinná"); return; }
     // Fotka je "ešte nenahraná" iba ak uploading: true A zároveň nemá path (Storage cesta).
     // Ak path existuje, upload prešiel do Supabase bez ohľadu na zaseknutý flag.
@@ -1375,27 +1377,36 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       status: publish ? "aktivny" : "koncept",
     };
 
+    console.log("[inzerat save] payload keys:", Object.keys(payload).join(","), "editId=", editId);
     let err;
     if (editId) {
-      // Edit mode — update existing record
       ({ error: err } = await supabase.from("nehnutelnosti").update(payload).eq("id", editId));
     } else {
-      // New listing — insert
       ({ error: err } = await supabase.from("nehnutelnosti").insert(payload));
     }
+    console.log("[inzerat save] result:", err ? "ERROR" : "OK", err);
 
     setSaving(false);
     if (err) {
       console.error("[inzerat save] failed:", err);
-      setError(err.message || "Uloženie zlyhalo. Skontroluj konzolu.");
+      const msg = err.message || JSON.stringify(err).slice(0, 200) || "Uloženie zlyhalo. Skontroluj konzolu.";
+      setError(msg);
+      if (typeof window !== "undefined") window.alert("⚠️ Uloženie zlyhalo: " + msg);
       return;
     }
-    // Úspešný save — zahoď rozpracovaný draft.
     if (draftKey && typeof window !== "undefined") {
       try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
     }
     setSaved(true); setTimeout(() => setSaved(false), 3000);
+    if (typeof window !== "undefined") window.alert("✓ Inzerát uložený do portfólia");
     if (publish) { setF(defaultForm); onSaved?.(); }
+    } catch (e) {
+      console.error("[inzerat save] uncaught exception:", e);
+      setSaving(false);
+      const msg = (e as Error)?.message || String(e).slice(0, 200);
+      setError("Chyba: " + msg);
+      if (typeof window !== "undefined") window.alert("⚠️ Chyba pri ukladaní: " + msg);
+    }
   }
 
   const hasContent = photos.length > 0 || f.lv_text || docs.length > 0;
