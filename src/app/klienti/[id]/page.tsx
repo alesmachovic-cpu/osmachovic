@@ -1848,6 +1848,20 @@ export default function KlientDetailPage() {
           {/* Ostatné dokumenty — fotky idú do vlastnej kategórie (Supabase Storage), nie sem */}
           {(() => {
             const dokumentyBezFotiek = klientDokumenty.filter(d => d.type !== "Foto");
+            // Zgrupuj dokumenty do priečinkov:
+            //   - jedna zložka per nehnuteľnosť (podľa nehnutelnost_id)
+            //   - zvyšok v zložke "Všeobecné (klient)"
+            type Folder = { key: string; label: string; icon: string; docs: typeof dokumentyBezFotiek };
+            const folders: Folder[] = [];
+            for (const card of propertyCards) {
+              const inzId = card.inzerat?.id as string | undefined;
+              if (!inzId) continue;
+              const docs = dokumentyBezFotiek.filter(d => (d as unknown as { nehnutelnost_id?: string }).nehnutelnost_id === inzId);
+              folders.push({ key: `inz-${inzId}`, label: card.titulok, icon: "🏠", docs });
+            }
+            const generalDocs = dokumentyBezFotiek.filter(d => !(d as unknown as { nehnutelnost_id?: string }).nehnutelnost_id);
+            folders.push({ key: "general", label: "Všeobecné (klient)", icon: "📂", docs: generalDocs });
+
             return (
           <div style={cardSt}>
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
@@ -1858,43 +1872,61 @@ export default function KlientDetailPage() {
                 Žiadne dokumenty. Nahrané v náberáku, inzeráte alebo rezervácii sa zobrazia tu.
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {dokumentyBezFotiek.map(d => (
-                  <div key={d.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px" }}>
-                    <span style={{ fontSize: "18px" }}>📄</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</div>
-                      <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                        {d.type || "Dokument"} · {((d.size || 0) / 1024).toFixed(0)} KB · {d.source || "—"} · {d.created_at ? new Date(d.created_at).toLocaleDateString("sk-SK") : ""}
-                      </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                {folders.filter(f => f.docs.length > 0).map(folder => (
+                  <div key={folder.key} style={{ border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
+                    <div style={{
+                      padding: "10px 14px", background: "var(--bg-elevated)",
+                      borderBottom: "1px solid var(--border)",
+                      display: "flex", alignItems: "center", gap: "8px",
+                      fontSize: "13px", fontWeight: "700", color: "var(--text-primary)",
+                    }}>
+                      <span>{folder.icon}</span>
+                      <span style={{ flex: 1 }}>{folder.label}</span>
+                      <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
+                        {folder.docs.length} {folder.docs.length === 1 ? "súbor" : folder.docs.length < 5 ? "súbory" : "súborov"}
+                      </span>
                     </div>
-                    {d.data_base64 && (
-                      <>
-                        <button
-                          onClick={() => {
-                            try {
-                              const bin = atob(d.data_base64 as string);
-                              const bytes = new Uint8Array(bin.length);
-                              for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                              const blob = new Blob([bytes], { type: d.mime || "application/pdf" });
-                              const url = URL.createObjectURL(blob);
-                              window.open(url, "_blank");
-                              setTimeout(() => URL.revokeObjectURL(url), 60000);
-                            } catch (e) { console.error(e); }
-                          }}
-                          style={{ fontSize: "12px", color: "var(--accent, #3B82F6)", background: "none", padding: "4px 10px", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer" }}>
-                          👁 Zobraziť
-                        </button>
-                        <a href={`data:${d.mime || "application/octet-stream"};base64,${d.data_base64}`} download={d.name}
-                           style={{ fontSize: "12px", color: "var(--text-secondary)", textDecoration: "none", padding: "4px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}>
-                          ⬇ Stiahnuť
-                        </a>
-                      </>
-                    )}
-                    {isAdmin && (
-                      <button onClick={async () => { if (d.id && confirm("Vymazať dokument?")) { await deleteKlientDokument(d.id); setKlientDokumenty(prev => prev.filter(x => x.id !== d.id)); } }}
-                              style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px" }}>×</button>
-                    )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "10px" }}>
+                      {folder.docs.map(d => (
+                        <div key={d.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px" }}>
+                          <span style={{ fontSize: "16px" }}>📄</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</div>
+                            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                              {d.type || "Dokument"} · {((d.size || 0) / 1024).toFixed(0)} KB · {d.source || "—"} · {d.created_at ? new Date(d.created_at).toLocaleDateString("sk-SK") : ""}
+                            </div>
+                          </div>
+                          {d.data_base64 && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  try {
+                                    const bin = atob(d.data_base64 as string);
+                                    const bytes = new Uint8Array(bin.length);
+                                    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                                    const blob = new Blob([bytes], { type: d.mime || "application/pdf" });
+                                    const url = URL.createObjectURL(blob);
+                                    window.open(url, "_blank");
+                                    setTimeout(() => URL.revokeObjectURL(url), 60000);
+                                  } catch (e) { console.error(e); }
+                                }}
+                                style={{ fontSize: "11px", color: "var(--accent, #3B82F6)", background: "none", padding: "4px 8px", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer" }}>
+                                👁
+                              </button>
+                              <a href={`data:${d.mime || "application/octet-stream"};base64,${d.data_base64}`} download={d.name}
+                                 style={{ fontSize: "11px", color: "var(--text-secondary)", textDecoration: "none", padding: "4px 8px", border: "1px solid var(--border)", borderRadius: "6px" }}>
+                                ⬇
+                              </a>
+                            </>
+                          )}
+                          {isAdmin && (
+                            <button onClick={async () => { if (d.id && confirm("Vymazať dokument?")) { await deleteKlientDokument(d.id); setKlientDokumenty(prev => prev.filter(x => x.id !== d.id)); } }}
+                                    style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px" }}>×</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
