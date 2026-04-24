@@ -238,7 +238,19 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
       poschodie: String(params.poschodie || defaultForm.poschodie),
       poschodia_vyssie: String(params.z_kolko || defaultForm.poschodia_vyssie),
       vlastnictvo: String(params.vlastnictvo || vyb.vlastnictvo || defaultForm.vlastnictvo),
-      typ_budovy: String(params.typ_domu || defaultForm.typ_budovy),
+      typ_budovy: (() => {
+        const raw = String(params.typ_domu || "").toLowerCase().trim();
+        // Náberák používa "tehlovy", "panelovy" atď., select vyžaduje "tehlova", "panelova"
+        const map: Record<string, string> = {
+          tehlovy: "tehlova", tehlova: "tehlova",
+          panelovy: "panelova", panelova: "panelova",
+          zmiesany: "zmiešaná", "zmiešaný": "zmiešaná", zmiesana: "zmiešaná", "zmiešaná": "zmiešaná",
+          montovany: "montovana", montovana: "montovana",
+          dreveny: "drevena", drevena: "drevena",
+          ine: "ina", iny: "ina", ina: "ina",
+        };
+        return map[raw] || defaultForm.typ_budovy;
+      })(),
       rok_vystavby: String(params.rok_vystavby || defaultForm.rok_vystavby),
       mesacne_naklady: String(params.mesacne_poplatky || defaultForm.mesacne_naklady),
       provizia_hodnota: (() => {
@@ -539,7 +551,19 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
         fillEmpty("poschodia_vyssie", params.z_kolko);
         fillEmpty("vlastnictvo", params.vlastnictvo);
         fillEmpty("mesacne_naklady", params.mesacne_poplatky);
-        fillEmpty("typ_budovy", params.typ_domu);
+        // Normalize náberák "tehlovy" → select option "tehlova"
+        fillEmpty("typ_budovy", (() => {
+          const raw = String(params.typ_domu || "").toLowerCase().trim();
+          const map: Record<string, string> = {
+            tehlovy: "tehlova", tehlova: "tehlova",
+            panelovy: "panelova", panelova: "panelova",
+            zmiesany: "zmiešaná", zmiesana: "zmiešaná", "zmiešaná": "zmiešaná",
+            montovany: "montovana", montovana: "montovana",
+            dreveny: "drevena", drevena: "drevena",
+            iny: "ina", ina: "ina",
+          };
+          return map[raw] || "";
+        })());
         fillEmpty("rok_vystavby", params.rok_vystavby);
         fillEmpty("rok_rekonstrukcie", stavBytu.rok_rekonstrukcie);
         fillEmpty("pravne_vady", params.tarcha_text);
@@ -551,7 +575,14 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
         fillEmpty("garaz", vyb.garaz || vyb["Garáž"]);
         fillEmpty("pivnica", vyb.pivnica || vyb["Pivnica"]);
         fillEmpty("vytah", vyb.vytah || vyb["Výťah"]);
-        fillEmpty("typ_vybavy", vyb.zariadeny);
+        // Normalize náberák zariadený "ano"/"ciastocne"/"nie" → select option
+        fillEmpty("typ_vybavy", (() => {
+          const z = String(vyb.zariadeny || "").toLowerCase().trim();
+          if (z === "ano") return "uplne-zariadeny";
+          if (z === "ciastocne") return "ciastocne-zariadeny";
+          if (z === "nie") return "nezariadeny";
+          return "";
+        })());
         // Pripojenie z vybavenia
         if ((vyb.internet || vyb["Internet"]) && !prev.pripojenie?.internet) {
           next.pripojenie = { ...prev.pripojenie, internet: true };
@@ -2176,7 +2207,15 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
           }} disabled={saving} style={{ padding: "9px 18px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)", cursor: "pointer" }}>📋 Duplikovať</button>
         )}
         <button onClick={() => handleSave(false)} disabled={saving} style={{ padding: "9px 22px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>{editId ? "Uložiť" : "Uložiť koncept"}</button>
-        <button onClick={() => handleSave(true)} disabled={saving} style={{ padding: "9px 24px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>{saving ? "..." : (editId ? "Uložiť a späť" : "Pridať do portfólia")}</button>
+        <button onClick={() => handleSave(true)} disabled={saving} style={{ padding: "9px 24px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>
+          {saving ? "..." : (() => {
+            // Nový inzerát ALEBO edit rozpracovaného konceptu → "Pridať do portfólia" (publikuje).
+            // Edit už publikovaného (aktívneho) inzerátu → "Uložiť a späť".
+            const curStatus = (prefilledData?.status as string) || "";
+            if (!editId || curStatus === "koncept") return "Pridať do portfólia";
+            return "Uložiť a späť";
+          })()}
+        </button>
       </div>
     </div>
   );
