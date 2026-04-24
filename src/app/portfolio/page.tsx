@@ -87,7 +87,7 @@ export default function Portfolio() {
   const [view, setView] = useState<ViewMode>("cards");
   const [search, setSearch] = useState("");
   const [filterTyp, setFilterTyp] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filterStatus, setFilterStatus] = useState("aktivny");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<Record<string, { stav: string; eurM2: number; benchmark: number; odchylka: number; komentar: string }>>({});
   const [deepDive, setDeepDive] = useState<DBNehnutelnost | null>(null);
