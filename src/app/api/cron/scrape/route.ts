@@ -264,6 +264,17 @@ async function processFilter(
       allListings.push(...listings);
     }
 
+    // 2a. Lokalita injection: portály ktoré URL-filtrujú lokalitou (bazos cez
+    //     ?hlokalita=, byty.sk cez URL slug) garantujú že všetky výsledky sú
+    //     v danej lokalite. Parser ale nemusí listing.lokalita extrahovať z
+    //     karty → matchesLokalita by zlyhalo. Ak filter má lokalitu, propagujú
+    //     ju do všetkých listingu bez vlastnej lokality.
+    if (filter.lokalita) {
+      for (const l of allListings) {
+        if (!l.lokalita) l.lokalita = filter.lokalita;
+      }
+    }
+
     // 2b. Enrichment: pre nehnutelnosti.sk listings stiahni detail stránku
     //     a z JSONu v HTML extrahuj skutočného predajcu (advertiser.name +
     //     agencyName). Aplikuje sa len na listingy ktoré ešte NIE SÚ v DB,
