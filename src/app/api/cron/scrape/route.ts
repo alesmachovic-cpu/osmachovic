@@ -410,6 +410,22 @@ async function processFilter(
       }
     }
 
+    // DEBUG: diagnostic info — ktoré portály koľko parsnuli, koľko prešlo filtrom
+    const debugInfo = {
+      portals_raw: portalResults.map((p) => ({ p: p.portalName, n: p.listings.length })),
+      before_filter: allListings.length,
+      after_firma_filter: allListings.filter((l) => l.predajca_typ !== "firma").length,
+      after_match_filter: totalFound,
+      filter_lokalita: filter.lokalita,
+      filter_typ: filter.typ,
+      sample_listing: allListings[0] ? {
+        portal: allListings[0].portal,
+        nazov: allListings[0].nazov?.slice(0, 40),
+        lokalita: allListings[0].lokalita,
+        typ: allListings[0].typ,
+        predajca_typ: allListings[0].predajca_typ,
+      } : null,
+    };
     return {
       portal: filter.portal,
       status: "success",
@@ -418,7 +434,8 @@ async function processFilter(
       updated_count: updatedCount,
       duration_ms: Date.now() - filterStart,
       newItems,
-    };
+      debug: debugInfo,
+    } as ScrapeResult & { newItems?: ScrapedInzerat[]; debug?: unknown };
   } catch (e) {
     console.error(`[scrape] error for filter ${filter.nazov}:`, e);
     return {
