@@ -286,13 +286,20 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
       vytah: hasAmenity("Výťah"),
       verejne_parkovanie: hasAmenity("Parking"),
       spajza: hasAmenity("Špajza") || hasAmenity("Komora"),
-      // Kategória / typ ponuky z náberu
+      // Kategória / typ ponuky — priorita: klient.typ_transakcie → náberák heuristics
       kategoria: (() => {
+        const klientTyp = String((d._klient_typ_transakcie as string) || "").toLowerCase();
         const ozn = String(d.oznacenie || "").toLowerCase();
         const typZmluvy = String(d.typ_zmluvy || "").toLowerCase();
-        // Ak je výhradná zmluva alebo exkluzívna → IBA U NÁS
+        // 1. Ak má klient nastavený typ transakcie, preber ho
+        if (klientTyp === "na-predaj" || klientTyp === "na-prenajom") {
+          if (typZmluvy.includes("exkluz") || ozn === "vyhradne" || ozn === "exkluzivne") {
+            return klientTyp === "na-predaj" ? "iba-u-nas-predaj" : "iba-u-nas-najom";
+          }
+          return klientTyp === "na-prenajom" ? "na-najom" : "na-predaj";
+        }
+        // 2. Fallback heuristics z náberáku
         if (typZmluvy.includes("exkluz") || ozn === "vyhradne" || ozn === "exkluzivne") return "iba-u-nas-predaj";
-        // Ak máme predajnú cenu, je to predaj
         if (d.predajna_cena) return "na-predaj";
         return defaultForm.kategoria;
       })(),
