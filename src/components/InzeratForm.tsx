@@ -144,7 +144,37 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
     // EDIT MODE — prefilledData je inzerát z tabuľky nehnutelnosti. Polia sa volajú
     // rovnako ako form fields, takže stačí ich skopírovať cez spread.
     if (isEditMode && prefilledData) {
-      return { ...defaultForm, ...(prefilledData as Partial<typeof defaultForm>) };
+      const merged = { ...defaultForm, ...(prefilledData as Partial<typeof defaultForm>) };
+      // Normalize select-bound polia ktoré môžu mať legacy text hodnoty:
+      // orientacia ("Na rakusko-JZ" → "JZ")
+      const orRaw = String(merged.orientacia || "").toUpperCase();
+      if (orRaw && !["S","J","V","Z","SV","SZ","JV","JZ"].includes(orRaw)) {
+        const m = orRaw.match(/\b(SV|SZ|JV|JZ|S|J|V|Z)\b/);
+        merged.orientacia = m?.[1] || "";
+      }
+      // typ_budovy ("tehlovy" legacy → "tehlova")
+      const tbMap: Record<string, string> = {
+        tehlovy: "tehlova", panelovy: "panelova", zmiesany: "zmiešaná",
+        zmiesana: "zmiešaná", montovany: "montovana", dreveny: "drevena", iny: "ina",
+      };
+      const tbRaw = String(merged.typ_budovy || "").toLowerCase().trim();
+      if (tbRaw && tbMap[tbRaw]) merged.typ_budovy = tbMap[tbRaw];
+      // typ_vybavy legacy ("ano"/"ciastocne"/"nie" → select option)
+      const tvRaw = String(merged.typ_vybavy || "").toLowerCase().trim();
+      if (tvRaw === "ano") merged.typ_vybavy = "uplne-zariadeny";
+      else if (tvRaw === "ciastocne") merged.typ_vybavy = "ciastocne-zariadeny";
+      else if (tvRaw === "nie") merged.typ_vybavy = "nezariadeny";
+      // Pozícia bytu — auto-odvoď z poschodia ak chýba
+      if (!merged.pozicia && merged.poschodie) {
+        const p = parseInt(String(merged.poschodie), 10);
+        if (!isNaN(p)) {
+          if (p <= 0) merged.pozicia = "prizemia";
+          else if (p <= 2) merged.pozicia = "nizsie-poschodie";
+          else if (p <= 5) merged.pozicia = "stredne-poschodie";
+          else merged.pozicia = "vyssie-poschodie";
+        }
+      }
+      return merged;
     }
     // Ak existuje uložený draft (napr. po idle-logout), uprednostni ho pred prefillom.
     if (draftKey && typeof window !== "undefined") {
