@@ -135,7 +135,20 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
   // Edit mode: id + klient linkage
   const editId = (prefilledData?.id as string | undefined) || undefined;
   const klientId = (prefilledData?.klient_id as string | undefined) || undefined;
+  // Autosave draft kľúč (iba pre nové inzeráty — nie edit mód).
+  // Keyed per klient, aby sa draft pre jedného klienta nemiešal s iným.
+  const draftKey = editId ? null : `inzerat_draft_${klientId || "new"}`;
   const [f, setF] = useState(() => {
+    // Ak existuje uložený draft (napr. po idle-logout), uprednostni ho pred prefillom.
+    if (draftKey && typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(draftKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?._v === 1 && parsed.data) return { ...defaultForm, ...parsed.data };
+        }
+      } catch { /* ignore */ }
+    }
     if (!prefilledData) return defaultForm;
     // Prefill z náberu — mapuj VŠETKY dostupné polia
     const d = prefilledData;
@@ -386,6 +399,17 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       if (data) setMaklerList(data as { id: string; meno: string; email: string }[]);
     });
   }, []);
+
+  /* ── Autosave draft do localStorage (debounced ~800 ms) ── */
+  useEffect(() => {
+    if (!draftKey || typeof window === "undefined") return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({ _v: 1, data: f, savedAt: Date.now() }));
+      } catch { /* quota / private mode — ignoruj */ }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [f, draftKey]);
   useEffect(() => {
     // Scenario A: prefilledData vyzerá ako náberák (má .parametre alebo .typ_nehnutelnosti)
     const prefillIsNaberak =
@@ -1352,6 +1376,10 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
 
     setSaving(false);
     if (err) { setError(err.message); return; }
+    // Úspešný save — zahoď rozpracovaný draft.
+    if (draftKey && typeof window !== "undefined") {
+      try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+    }
     setSaved(true); setTimeout(() => setSaved(false), 3000);
     if (publish) { setF(defaultForm); onSaved?.(); }
   }
@@ -1946,7 +1974,13 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
 
       {/* Bottom bar */}
       <div style={{ position: "sticky", bottom: 0, background: "var(--bg-surface)", borderTop: "1px solid var(--border)", padding: "14px 0", marginTop: "20px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-        <button onClick={() => { setF(defaultForm); onCancel?.(); }} style={{ padding: "9px 18px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>Zahodiť</button>
+        <button onClick={() => {
+          if (draftKey && typeof window !== "undefined") {
+            try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+          }
+          setF(defaultForm);
+          onCancel?.();
+        }} style={{ padding: "9px 18px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>Zahodiť</button>
         <button onClick={() => handleSave(false)} disabled={saving} style={{ padding: "9px 22px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>{editId ? "Uložiť zmeny" : "Uložiť koncept"}</button>
         <button onClick={() => handleSave(true)} disabled={saving} style={{ padding: "9px 24px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>{saving ? "..." : "Pridať do portfólia"}</button>
       </div>

@@ -103,34 +103,47 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }, []);
 
   // Auto-logout po 30 min nečinnosti (mouse/key/touch/scroll).
-  // Timestamp posledných aktivít je v localStorage, aby to prežilo reload.
-  // Kontrola každých 60s — ak od poslednej aktivity > 30 min, logout.
+  // 1 min pred vypršaním zobrazíme warning modal s tlačidlom "Zostať prihlásený".
+  const [idleLogoutAt, setIdleLogoutAt] = useState<number | null>(null);
   useEffect(() => {
     if (!user) return;
     const IDLE_LIMIT_MS = 30 * 60 * 1000;
+    const WARNING_BEFORE_MS = 60 * 1000;
     const KEY = "crm_last_activity";
     const bump = () => localStorage.setItem(KEY, String(Date.now()));
-    bump(); // inicializácia pri prihlásení/refreshi
+    bump();
 
     const events: Array<keyof WindowEventMap> = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"];
     events.forEach((e) => window.addEventListener(e, bump, { passive: true }));
 
     const interval = setInterval(() => {
       const last = Number(localStorage.getItem(KEY) || "0");
-      if (last && Date.now() - last > IDLE_LIMIT_MS) {
+      if (!last) return;
+      const elapsed = Date.now() - last;
+      if (elapsed > IDLE_LIMIT_MS) {
         localStorage.removeItem(KEY);
         localStorage.removeItem("crm_user");
+        setIdleLogoutAt(null);
         setUser(null);
         supabase.auth.signOut().catch(() => {});
         if (typeof window !== "undefined") window.location.href = "/?logout=idle";
+      } else if (elapsed > IDLE_LIMIT_MS - WARNING_BEFORE_MS) {
+        setIdleLogoutAt(last + IDLE_LIMIT_MS);
+      } else {
+        setIdleLogoutAt(null);
       }
-    }, 60_000);
+    }, 5_000);
 
     return () => {
       events.forEach((e) => window.removeEventListener(e, bump));
       clearInterval(interval);
     };
   }, [user]);
+
+  function stayLoggedIn() {
+    localStorage.setItem("crm_last_activity", String(Date.now()));
+    setIdleLogoutAt(null);
+  }
 
   async function refreshAccounts() {
     const accs = await loadAccounts();
@@ -267,7 +280,47 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   return (
     <AuthContext.Provider value={{ user, accounts, login, loginWithGoogle, linkGoogleToCurrent, logout, updateAccount, addAccount, deleteAccount, refreshAccounts }}>
       {children}
+      {idleLogoutAt !== null && <IdleWarningModal logoutAt={idleLogoutAt} onStay={stayLoggedIn} />}
     </AuthContext.Provider>
+  );
+}
+
+function IdleWarningModal({ logoutAt, onStay }: { logoutAt: number; onStay: () => void }) {
+  const [remaining, setRemaining] = useState(60);
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setRemaining(Math.max(0, Math.ceil((logoutAt - Date.now()) / 1000)));
+    }, 500);
+    return () => clearInterval(tick);
+  }, [logoutAt]);
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: "20px",
+    }}>
+      <div style={{
+        background: "var(--bg-surface, #fff)", borderRadius: "20px", padding: "28px",
+        maxWidth: "400px", width: "100%", textAlign: "center",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+        border: "1px solid var(--border, #E5E7EB)",
+      }}>
+        <div style={{ fontSize: "36px", marginBottom: "10px" }}>⏰</div>
+        <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary, #111)", margin: "0 0 6px" }}>
+          Ešte tam si?
+        </h2>
+        <p style={{ fontSize: "13px", color: "var(--text-muted, #6B7280)", margin: "0 0 18px", lineHeight: 1.5 }}>
+          Z bezpečnostných dôvodov ťa o <strong style={{ color: "var(--text-primary, #111)" }}>{remaining}s</strong> automaticky odhlásime.
+          Klikni aby si ostal prihlásený.
+        </p>
+        <button onClick={onStay} style={{
+          width: "100%", padding: "12px", background: "#374151", color: "#fff",
+          border: "none", borderRadius: "12px", fontSize: "14px", fontWeight: "600",
+          cursor: "pointer",
+        }}>Zostať prihlásený</button>
+      </div>
+    </div>
   );
 }
 
