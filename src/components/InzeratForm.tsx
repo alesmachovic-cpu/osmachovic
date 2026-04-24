@@ -1374,9 +1374,12 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       ...(() => {
         const m = maklerList.find(x => x.meno === f.makler);
         if (m) return { makler_id: m.id, makler_email: m.email || null };
-        // Fallback: ak makler nie je v tabuľke, skús prihláseného usera
+        // Fallback: makler cez email prihláseného usera. `makler_id` musí byť
+        // UUID z tabuľky makleri — ak nenájdeme, nechaj null (nie user.id reťazec,
+        // ktorý by zhodil insert kvôli UUID type constraint).
+        const byEmail = maklerList.find(x => x.email === authUser?.email)?.id || null;
         return {
-          makler_id: (uid ? maklerList.find(x => x.email === authUser?.email)?.id : null) || uid || null,
+          makler_id: byEmail,
           makler_email: authUser?.email || null,
         };
       })(),
