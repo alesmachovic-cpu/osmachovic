@@ -8,7 +8,7 @@ import type { Klient } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
-import { listKlientDokumenty, deleteKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
+import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation }: {
@@ -851,11 +851,38 @@ export default function KlientDetailPage() {
                 ✉️ {klient.email}
               </a>
             )}
-            {klient.lokalita && (
-              <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                📍 {klient.lokalita}
-              </span>
-            )}
+            {(() => {
+              // Adresy z nehnuteľností klienta (ulica + číslo + obec). Ak nie sú,
+              // padneme na klient.lokalita. Ak má klient viac nehnuteľností na
+              // rôznych adresách, ukážeme všetky oddelené pomlčkami.
+              const adresyZnehn: string[] = [];
+              for (const inz of inzeraty) {
+                const rec = inz as Record<string, unknown>;
+                const ulica = String(rec.ulica_privatna || rec.ulica || "").trim();
+                const obec = String(rec.obec || rec.lokalita || "").trim();
+                if (ulica) adresyZnehn.push(obec ? `${ulica} · ${obec}` : ulica);
+              }
+              for (const nab of nabery) {
+                const rec = nab as Record<string, unknown>;
+                const ulica = String(rec.ulica || "").trim();
+                const cislo = String(rec.cislo_orientacne || "").trim();
+                const obec = String(rec.obec || "").trim();
+                if (ulica) {
+                  const full = [`${ulica}${cislo ? ` ${cislo}` : ""}`, obec].filter(Boolean).join(" · ");
+                  if (!adresyZnehn.some(a => a.toLowerCase().includes(ulica.toLowerCase()))) {
+                    adresyZnehn.push(full);
+                  }
+                }
+              }
+              const unique = Array.from(new Set(adresyZnehn));
+              const toShow = unique.length > 0 ? unique : (klient.lokalita ? [klient.lokalita] : []);
+              if (toShow.length === 0) return null;
+              return toShow.map((a, i) => (
+                <span key={i} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                  📍 {a}
+                </span>
+              ));
+            })()}
           </div>
           {(() => {
             const odkazMatch = klient.poznamka?.match(/Odkaz:\s*(https?:\/\/\S+)/);
@@ -1845,13 +1872,8 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
               📁 Dokumenty ({dokumentyBezFotiek.length})
             </div>
-            {dokumentyBezFotiek.length === 0 ? (
-              <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
-                Žiadne dokumenty. Nahrané v náberáku, inzeráte alebo rezervácii sa zobrazia tu.
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                {folders.filter(f => f.docs.length > 0).map(folder => (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                {folders.map(folder => (
                   <div key={folder.key} style={{ border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
                     <div style={{
                       padding: "10px 14px", background: "var(--bg-elevated)",
@@ -1864,6 +1886,42 @@ export default function KlientDetailPage() {
                       <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
                         {folder.docs.length} {folder.docs.length === 1 ? "súbor" : folder.docs.length < 5 ? "súbory" : "súborov"}
                       </span>
+                      <label style={{
+                        padding: "4px 10px", background: "#374151", color: "#fff",
+                        border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: "600",
+                        cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px",
+                      }}>
+                        + Pridať
+                        <input type="file" multiple accept=".pdf,image/*,.doc,.docx"
+                          style={{ display: "none" }}
+                          onChange={async (e) => {
+                            const files = Array.from(e.target.files || []);
+                            e.currentTarget.value = "";
+                            for (const f of files) {
+                              const reader = new FileReader();
+                              const base64: string = await new Promise((res, rej) => {
+                                reader.onload = () => res((reader.result as string).split(",")[1] || "");
+                                reader.onerror = rej;
+                                reader.readAsDataURL(f);
+                              });
+                              const nehnId = folder.key.startsWith("inz-") ? folder.key.slice(4) : null;
+                              await saveKlientDokument({
+                                klient_id: klient.id,
+                                nehnutelnost_id: nehnId,
+                                name: f.name,
+                                type: f.type.startsWith("image/") ? "Fotka" : "Dokument",
+                                size: f.size,
+                                source: "upload",
+                                mime: f.type || "application/octet-stream",
+                                data_base64: base64,
+                              });
+                            }
+                            // Refresh
+                            const refreshed = await listKlientDokumenty(klient.id);
+                            setKlientDokumenty(refreshed);
+                          }}
+                        />
+                      </label>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "10px" }}>
                       {folder.docs.map(d => (
@@ -1908,7 +1966,6 @@ export default function KlientDetailPage() {
                   </div>
                 ))}
               </div>
-            )}
           </div>
             );
           })()}

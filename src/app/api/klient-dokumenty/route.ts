@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
   // Encrypt dáta
   const payload: Record<string, unknown> = {
     klient_id,
+    nehnutelnost_id: body.nehnutelnost_id || null,
     name: body.name,
     type: body.type,
     size: body.size,
@@ -105,6 +106,23 @@ export async function POST(req: NextRequest) {
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ id: data?.id });
+}
+
+/**
+ * PATCH /api/klient-dokumenty
+ * Body: { id, nehnutelnost_id? } — presun dokumentu do inej zložky (alebo null=Všeobecné)
+ */
+export async function PATCH(req: NextRequest) {
+  let body: Record<string, unknown>;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
+  const id = body.id as string;
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  const sb = getSupabaseAdmin();
+  const patch: Record<string, unknown> = {};
+  if ("nehnutelnost_id" in body) patch.nehnutelnost_id = body.nehnutelnost_id || null;
+  const { error } = await sb.from("klient_dokumenty").update(patch).eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
 }
 
 /**

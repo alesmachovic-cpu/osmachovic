@@ -10,10 +10,11 @@
 export type KlientDokument = {
   id?: string;
   klient_id: string;
+  nehnutelnost_id?: string | null;
   name: string;
   type?: string;
   size?: number;
-  source?: "naber" | "inzerat" | "rezervacia";
+  source?: "naber" | "inzerat" | "rezervacia" | "upload";
   mime?: string;
   text_content?: string;
   data_base64?: string;
