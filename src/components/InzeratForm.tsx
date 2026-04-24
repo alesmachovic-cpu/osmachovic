@@ -1372,16 +1372,23 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       // listu), NIE prihlásený user. Toto rozhoduje pre portfolio filter.
       // Lookup UUID + email cez maklerList (z `makleri` tabuľky).
       ...(() => {
-        const m = maklerList.find(x => x.meno === f.makler);
+        // Match makler z náberáku (f.makler = "Nina Žigová") s tabulkou makleri
+        // (m.meno = "Ing. Nina Žigová"). Odstrániť tituly — slová končiace
+        // bodkou alebo v zozname titulov — a porovnať posledné 2 slová.
+        const stripTitles = (s: string) => (s || "").toLowerCase().trim()
+          .split(/\s+/).filter(w => !w.endsWith(".") && !["mgr","bc","mba","phd","dr","ing","msc"].includes(w))
+          .slice(-2).join(" ");
+        const target = stripTitles(f.makler);
+        let m = maklerList.find(x => x.meno === f.makler);
+        if (!m && target) {
+          m = maklerList.find(x => stripTitles(x.meno) === target);
+        }
         if (m) return { makler_id: m.id, makler_email: m.email || null };
-        // Fallback: makler cez email prihláseného usera. `makler_id` musí byť
-        // UUID z tabuľky makleri — ak nenájdeme, nechaj null (nie user.id reťazec,
-        // ktorý by zhodil insert kvôli UUID type constraint).
-        const byEmail = maklerList.find(x => x.email === authUser?.email)?.id || null;
-        return {
-          makler_id: byEmail,
-          makler_email: authUser?.email || null,
-        };
+        // Fallback: prihlásený user ak je v tabuľke makleri
+        const byEmail = maklerList.find(x => x.email === authUser?.email);
+        if (byEmail) return { makler_id: byEmail.id, makler_email: byEmail.email };
+        // Posledná možnosť — nechaj null (nie user.id reťazec, padlo by na UUID typ)
+        return { makler_id: null, makler_email: authUser?.email || null };
       })(),
       status: publish ? "aktivny" : "koncept",
     };
