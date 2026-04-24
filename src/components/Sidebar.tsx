@@ -28,7 +28,8 @@ const mainNavBase = [
 
 const toolsNav = [
   { label: "Náberový list",   href: "/naber",      icon: "📝" },
-  { label: "Inzerát",         href: "/inzerat",    icon: "📰" },
+  // "Inzerát" zo sidebaru odstránený — inzerát sa tvorí iba z karty klienta
+  // (Pipeline → Vytvoriť inzerát, až po podpísaní náberáka).
   { label: "Monitor",         href: "/monitor",    icon: "📡" },
   { label: "Analýza trhu",    href: "/analyzy",    icon: "📈" },
   { label: "Kalkulátor",      href: "/kalkulator", icon: "🧮" },

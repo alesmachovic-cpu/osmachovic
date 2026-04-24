@@ -1417,11 +1417,12 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {/* Rýchle akcie */}
+      {/* Rýchle akcie — Inzerát/Vyplniť náberák odstránené, pracujú sa cez Pipeline predávajúceho */}
       <div style={{
-        display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px",
+        display: "grid", gridTemplateColumns: klient.typ === "kupujuci" ? "repeat(3, 1fr)" : "repeat(2, 1fr)",
+        gap: "10px", marginBottom: "20px",
       }} className="cards-grid">
-        {klient.typ === "kupujuci" ? (
+        {klient.typ === "kupujuci" && (
           <button onClick={() => router.push(`/kupujuci?klient_id=${klient.id}`)} style={{
             padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
             borderRadius: "12px", cursor: "pointer", textAlign: "center",
@@ -1433,19 +1434,7 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📋</div>
             <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Objednávka</div>
           </button>
-        ) : isAdmin ? (
-          <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
-            padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-            borderRadius: "12px", cursor: "pointer", textAlign: "center",
-            transition: "border-color 0.15s",
-          }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
-          >
-            <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📰</div>
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Inzerát</div>
-          </button>
-        ) : null}
+        )}
         <button onClick={() => { if (klient.telefon) window.open(`tel:${klient.telefon}`); }} style={{
           padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
           borderRadius: "12px", cursor: "pointer", textAlign: "center",
@@ -1470,17 +1459,6 @@ export default function KlientDetailPage() {
         >
           <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📅</div>
           <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Kalendár</div>
-        </button>
-        <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
-          padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-          borderRadius: "12px", cursor: "pointer", textAlign: "center",
-          transition: "border-color 0.15s",
-        }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
-          onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
-        >
-          <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📝</div>
-          <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Vyplniť náberový list</div>
         </button>
       </div>
 
