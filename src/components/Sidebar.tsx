@@ -115,8 +115,10 @@ export default function Sidebar() {
       try {
         const [pf, kl, kp] = await Promise.all([
           supabase.from("nehnutelnosti").select("id", { count: "exact", head: true }),
-          supabase.from("klienti").select("id", { count: "exact", head: true }).eq("typ", "predavajuci"),
-          supabase.from("klienti").select("id", { count: "exact", head: true }).eq("typ", "kupujuci"),
+          // Klienti badge = predávajúci + oboje + prenajímateľ (všetci okrem "kupujuci")
+          supabase.from("klienti").select("id", { count: "exact", head: true }).in("typ", ["predavajuci", "oboje", "prenajimatel"]),
+          // Kupujúci badge = kupujuci + oboje (oboje sa zobrazujú na /kupujuci stránke)
+          supabase.from("klienti").select("id", { count: "exact", head: true }).in("typ", ["kupujuci", "oboje"]),
         ]);
         setCounts({
           portfolio: pf.count ?? 0,
