@@ -132,8 +132,14 @@ const defaultForm = {
 export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSaved?: () => void; onCancel?: () => void; prefilledData?: Record<string, unknown> | null } = {}) {
   const { user: authUser } = useAuth();
   const uid = authUser?.id || "";
-  // Edit mode: id + klient linkage
-  const editId = (prefilledData?.id as string | undefined) || undefined;
+  // Rozlíš: prefilledData môže byť (a) existujúci inzerát z `nehnutelnosti` (edit mode),
+  // alebo (b) náberový list z `naberove_listy` (prefill nového inzerátu).
+  // Náberák má typ_nehnutelnosti/parametre — inzerát má typ/kategoria/status.
+  const prefilledIsNaberak = !!prefilledData && (
+    prefilledData.parametre !== undefined ||
+    prefilledData.typ_nehnutelnosti !== undefined
+  );
+  const editId = prefilledIsNaberak ? undefined : ((prefilledData?.id as string | undefined) || undefined);
   const klientId = (prefilledData?.klient_id as string | undefined) || undefined;
   // Autosave draft kľúč (iba pre nové inzeráty — nie edit mód).
   // Keyed per klient, aby sa draft pre jedného klienta nemiešal s iným.
