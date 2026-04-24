@@ -407,14 +407,22 @@ export default function Portfolio() {
                     </button>
                   )}
 
-                  {/* Footer */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "12px", borderTop: "1px solid var(--border)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontWeight: "700", color: "#fff" }}>AM</div>
-                      <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Aleš Machovič</span>
-                    </div>
-                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{new Date(n.created_at).toLocaleDateString("sk")}</span>
-                  </div>
+                  {/* Footer — maklér inzerátu (z n.makler / makler_id lookup) */}
+                  {(() => {
+                    const nFoo = n as unknown as { makler?: string };
+                    const fromList = n.makler_id ? makleriList.find(m => m.id === n.makler_id) : null;
+                    const maklerMeno = fromList?.meno || nFoo.makler || "—";
+                    const maklerInit = maklerMeno.split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase() || "—";
+                    return (
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "12px", borderTop: "1px solid var(--border)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontWeight: "700", color: "#fff" }}>{maklerInit}</div>
+                          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{maklerMeno}</span>
+                        </div>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{new Date(n.created_at).toLocaleDateString("sk")}</span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );
