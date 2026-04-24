@@ -94,6 +94,8 @@ export default function Portfolio() {
   const [deepResult, setDeepResult] = useState<Record<string, unknown> | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
   const [singleAnalyzing, setSingleAnalyzing] = useState<Record<string, boolean>>({});
+  const [statusMenuFor, setStatusMenuFor] = useState<string | null>(null);
+  const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (user?.id) getMaklerUuid(user.id).then(uuid => setMyMaklerUuid(uuid ?? null));
@@ -154,6 +156,37 @@ export default function Portfolio() {
     } catch { /* silent */ }
     setSingleAnalyzing(prev => ({ ...prev, [item.id]: false }));
   }
+
+  async function changeStatus(itemId: string, newStatus: "aktivny" | "koncept" | "predany" | "archivovany") {
+    setStatusUpdating(prev => ({ ...prev, [itemId]: true }));
+    setStatusMenuFor(null);
+    try {
+      const res = await fetch("/api/inzerat/save", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ editId: itemId, payload: { status: newStatus } }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert("⚠️ Zmena statusu zlyhala: " + (out.error || `HTTP ${res.status}`));
+        return;
+      }
+      // Update locally without full reload
+      setItems(prev => prev.map(it => it.id === itemId ? { ...it, status: newStatus } : it));
+    } catch (e) {
+      alert("⚠️ Chyba: " + (e as Error).message);
+    } finally {
+      setStatusUpdating(prev => ({ ...prev, [itemId]: false }));
+    }
+  }
+
+  // Štatistiky pre stav-boxy
+  const stats = {
+    aktivne: items.filter(x => (x.status || "aktivny") === "aktivny").length,
+    koncepty: items.filter(x => x.status === "koncept").length,
+    predane: items.filter(x => x.status === "predany").length,
+    archiv: items.filter(x => x.status === "archivovany").length,
+    celkovo: items.length,
+  };
 
   async function runDeepDive(item: DBNehnutelnost) {
     setDeepDive(item);
@@ -226,6 +259,30 @@ export default function Portfolio() {
             {filtered.length} {filtered.length === 1 ? "nehnuteľnosť" : filtered.length < 5 ? "nehnuteľnosti" : "nehnuteľností"} v ponuke
           </p>
         </div>
+      </div>
+
+      {/* Stats boxy — klik = filter */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px", marginBottom: "20px" }} className="cards-grid">
+        {([
+          { key: "", label: "Celkovo", value: stats.celkovo, color: "#374151" },
+          { key: "aktivny", label: "Aktívne", value: stats.aktivne, color: "#16A34A" },
+          { key: "koncept", label: "Koncepty", value: stats.koncepty, color: "#D97706" },
+          { key: "predany", label: "Predané", value: stats.predane, color: "#6B7280" },
+          { key: "archivovany", label: "Archív", value: stats.archiv, color: "#9CA3AF" },
+        ] as const).map(s => {
+          const active = filterStatus === s.key;
+          return (
+            <button key={s.label} onClick={() => setFilterStatus(s.key)} style={{
+              padding: "16px 18px", borderRadius: "14px",
+              background: "var(--bg-surface)",
+              border: active ? `2px solid ${s.color}` : "1px solid var(--border)",
+              textAlign: "left", cursor: "pointer", transition: "all 0.15s",
+            }}>
+              <div style={{ fontSize: "26px", fontWeight: "700", color: s.color, lineHeight: 1 }}>{s.value}</div>
+              <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", marginTop: "6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</div>
+            </button>
+          );
+        })}
       </div>
 
       {/* Toolbar */}
@@ -334,10 +391,45 @@ export default function Portfolio() {
                       {isPredaj ? "NA PREDAJ" : "PRENÁJOM"}
                     </span>
                   )}
-                  {/* Stav badge */}
-                  <span style={{ position: "absolute", top: "10px", right: "10px", padding: "4px 10px", borderRadius: "6px", fontSize: "10px", fontWeight: "600", background: stavInfo.bg, color: stavInfo.text }}>
-                    {stavInfo.label}
-                  </span>
+                  {/* Stav badge — klik otvorí menu na zmenu statusu */}
+                  <div style={{ position: "absolute", top: "10px", right: "10px" }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setStatusMenuFor(statusMenuFor === n.id ? null : n.id)} style={{
+                      padding: "4px 10px", borderRadius: "6px", fontSize: "10px", fontWeight: "600",
+                      background: stavInfo.bg, color: stavInfo.text, border: "none", cursor: "pointer",
+                      display: "flex", alignItems: "center", gap: "4px",
+                      opacity: statusUpdating[n.id] ? 0.5 : 1,
+                    }}>
+                      {statusUpdating[n.id] ? "⏳" : stavInfo.label}
+                      <span style={{ fontSize: "8px", opacity: 0.6 }}>▾</span>
+                    </button>
+                    {statusMenuFor === n.id && (
+                      <div style={{
+                        position: "absolute", top: "28px", right: 0, zIndex: 100,
+                        background: "var(--bg-surface)", border: "1px solid var(--border)",
+                        borderRadius: "10px", minWidth: "150px",
+                        boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+                        overflow: "hidden",
+                      }}>
+                        {([
+                          ["aktivny", "✓ Aktívny", "#16A34A"],
+                          ["koncept", "📝 Koncept", "#D97706"],
+                          ["predany", "🏁 Predaný", "#6B7280"],
+                          ["archivovany", "📦 Archív", "#9CA3AF"],
+                        ] as const).map(([key, label, color]) => (
+                          <button key={key} onClick={() => changeStatus(n.id, key)} style={{
+                            display: "block", width: "100%", padding: "9px 14px", textAlign: "left",
+                            fontSize: "12px", fontWeight: "500", color: n.status === key ? color : "var(--text-primary)",
+                            background: n.status === key ? "rgba(0,0,0,0.04)" : "transparent",
+                            border: "none", cursor: "pointer",
+                          }}
+                            onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                            onMouseLeave={e => (e.currentTarget.style.background = n.status === key ? "rgba(0,0,0,0.04)" : "transparent")}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Content */}
