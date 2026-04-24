@@ -1348,6 +1348,61 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
     setGenerating(false);
   }
 
+  function buildPayload(publish: boolean): Record<string, unknown> {
+    const uploadedPhotos = photos.filter(p => p.path && p.url && !p.error);
+    return {
+      fotky_urls: uploadedPhotos.map(p => p.url),
+      fotky_thumbs: uploadedPhotos.map(p => p.thumb || p.url),
+      videa_urls: videos,
+      nazov: f.nazov.trim(), typ: f.typ,
+      lokalita: [f.obec, f.okres, f.kraj].filter(Boolean).join(", ") || f.lokalita,
+      cena: Number(f.cena), plocha: f.plocha ? Number(f.plocha) : null,
+      izby: f.izby ? Number(f.izby) : null, poschodie: f.poschodie ? Number(f.poschodie) : null,
+      stav: (f.stav || null) as StavNehnutelnosti | null,
+      url_inzercia: f.url_inzercia || null,
+      intro: f.intro || null, text_popis: f.text_popis || null,
+      zobrazovat_cenu: f.zobrazovat_cenu, zobrazovat_mapu: f.zobrazovat_mapu,
+      zobrazovat_hypoteku: f.zobrazovat_hypoteku, so_zmluvou: f.so_zmluvou,
+      projekt: f.projekt, specialne_oznacenie: f.specialne_oznacenie || null,
+      seo_keywords: f.seo_keywords || null, stat: f.stat, kraj: f.kraj || null,
+      okres: f.okres || null, obec: f.obec || null,
+      ulica_privatna: f.ulica_privatna || null, makler: f.makler || null,
+      interne_id: f.interne_id?.trim() || (() => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const dd = String(d.getDate()).padStart(2, "0");
+        const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+        return `VIA-${y}${m}${dd}-${rand}`;
+      })(),
+      provizia_hodnota: f.provizia_hodnota ? Number(f.provizia_hodnota) : null,
+      provizia_typ: f.provizia_typ, poznamka_interna: f.poznamka_interna || null,
+      orientacia: f.orientacia || null, pripojenie: f.pripojenie,
+      typ_ceny: f.typ_ceny || null, tagy: f.tagy || null,
+      vlastnictvo: f.vlastnictvo || null, text_k_cene: f.text_k_cene || null,
+      cena_za_energie: f.cena_za_energie || null, exkluzivne: f.exkluzivne,
+      url_virtualka: f.url_virtualka || null, vhodne_pre_studentov: f.vhodne_pre_studentov,
+      video_url: f.video_url || null, kategoria: f.kategoria || null,
+      export_portaly: {},
+      klient_id: klientId || null,
+      ...(() => {
+        const stripTitles = (s: string) => (s || "").toLowerCase().trim()
+          .split(/\s+/).filter(w => !w.endsWith(".") && !["mgr","bc","mba","phd","dr","ing","msc"].includes(w))
+          .slice(-2).join(" ");
+        const target = stripTitles(f.makler);
+        let m = maklerList.find(x => x.meno === f.makler);
+        if (!m && target) m = maklerList.find(x => stripTitles(x.meno) === target);
+        if (m) return { makler_id: m.id, makler_email: m.email || null };
+        const byEmail = maklerList.find(x => x.email === authUser?.email);
+        if (byEmail) return { makler_id: byEmail.id, makler_email: byEmail.email };
+        return { makler_id: null, makler_email: authUser?.email || null };
+      })(),
+      status: publish
+        ? "aktivny"
+        : (isEditMode ? ((prefilledData?.status as string) || "koncept") : "koncept"),
+    };
+  }
+
   async function handleSave(publish: boolean) {
     console.log("[inzerat save] entered, publish=", publish, "photos=", photos.length, "cena=", f.cena);
     try {
@@ -1405,7 +1460,8 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
       // Keď budeme mať integráciu (Nehnutelnosti.sk, TopReality atď.),
       // separátne tlačidlo spustí export.
       export_portaly: {},
-      // Linking + status
+      // Linking + status — v edit móde zachovaj existujúci status pri "Uložiť"
+      // (publish=false), pri "Uložiť a späť" (publish=true) ho publikuje.
       klient_id: klientId || null,
       // Makler inzerátu = ten kto je v f.makler (preberá sa z náberového
       // listu), NIE prihlásený user. Toto rozhoduje pre portfolio filter.
@@ -1429,7 +1485,9 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
         // Posledná možnosť — nechaj null (nie user.id reťazec, padlo by na UUID typ)
         return { makler_id: null, makler_email: authUser?.email || null };
       })(),
-      status: publish ? "aktivny" : "koncept",
+      status: publish
+        ? "aktivny"
+        : (isEditMode ? ((prefilledData?.status as string) || "koncept") : "koncept"),
     };
 
     console.log("[inzerat save] payload keys:", Object.keys(payload).join(","), "editId=", editId);
@@ -2046,6 +2104,20 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
         </div>
       </div>
 
+      {/* Prominent AI loader — fixed top center keď generating */}
+      {generating && (
+        <div style={{
+          position: "fixed", top: "20px", left: "50%", transform: "translateX(-50%)", zIndex: 9998,
+          padding: "14px 24px", background: "linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)",
+          color: "#fff", borderRadius: "14px", fontSize: "14px", fontWeight: "600",
+          boxShadow: "0 10px 30px rgba(59,130,246,0.4)",
+          display: "flex", alignItems: "center", gap: "10px",
+        }}>
+          <span style={{ width: "10px", height: "10px", borderRadius: "5px", background: "#fff", animation: "pulse 1s ease-in-out infinite" }} />
+          <span>🤖 AI {f.text_popis ? "upravuje" : "generuje"} text inzerátu — {FUNNY_MSGS[refineMsgIdx]}</span>
+        </div>
+      )}
+
       {/* Notifications — fixed toast v rohu aby bol vždy vidieť */}
       {error && (
         <div style={{
@@ -2080,8 +2152,31 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
           setF(defaultForm);
           onCancel?.();
         }} style={{ padding: "9px 18px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>Zrušiť</button>
-        <button onClick={() => handleSave(false)} disabled={saving} style={{ padding: "9px 22px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>{editId ? "Uložiť zmeny" : "Uložiť koncept"}</button>
-        <button onClick={() => handleSave(true)} disabled={saving} style={{ padding: "9px 24px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>{saving ? "..." : "Pridať do portfólia"}</button>
+        {isEditMode && (
+          <button onClick={async () => {
+            if (!window.confirm("Vytvoriť kópiu tohto inzerátu ako nový koncept?")) return;
+            setSaving(true);
+            try {
+              const dupPayload = { ...buildPayload(false), status: "koncept" };
+              const res = await globalThis.fetch("/api/inzerat/save", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ payload: dupPayload }),
+              });
+              const out = await res.json().catch(() => ({}));
+              setSaving(false);
+              if (!res.ok || !out.id) {
+                window.alert("⚠️ Duplikácia zlyhala: " + (out.error || `HTTP ${res.status}`));
+                return;
+              }
+              window.location.href = `/inzerat?id=${out.id}`;
+            } catch (e) {
+              setSaving(false);
+              window.alert("⚠️ Chyba: " + (e as Error).message);
+            }
+          }} disabled={saving} style={{ padding: "9px 18px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)", cursor: "pointer" }}>📋 Duplikovať</button>
+        )}
+        <button onClick={() => handleSave(false)} disabled={saving} style={{ padding: "9px 22px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>{editId ? "Uložiť" : "Uložiť koncept"}</button>
+        <button onClick={() => handleSave(true)} disabled={saving} style={{ padding: "9px 24px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>{saving ? "..." : (editId ? "Uložiť a späť" : "Pridať do portfólia")}</button>
       </div>
     </div>
   );
