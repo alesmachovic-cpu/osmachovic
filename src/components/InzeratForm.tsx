@@ -129,22 +129,23 @@ const defaultForm = {
   export_portaly: { nehnutelnosti_sk: false, topreality: false, bazos: false, reality_sk: false, realsoft: false, facebook: false } as Record<string, boolean>,
 };
 
-export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSaved?: () => void; onCancel?: () => void; prefilledData?: Record<string, unknown> | null } = {}) {
+export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: propEditId }: { onSaved?: () => void; onCancel?: () => void; prefilledData?: Record<string, unknown> | null; editId?: string } = {}) {
   const { user: authUser } = useAuth();
   const uid = authUser?.id || "";
-  // Rozlíš: prefilledData môže byť (a) existujúci inzerát z `nehnutelnosti` (edit mode),
-  // alebo (b) náberový list z `naberove_listy` (prefill nového inzerátu).
-  // Náberák má typ_nehnutelnosti/parametre — inzerát má typ/kategoria/status.
-  const prefilledIsNaberak = !!prefilledData && (
-    prefilledData.parametre !== undefined ||
-    prefilledData.typ_nehnutelnosti !== undefined
-  );
-  const editId = prefilledIsNaberak ? undefined : ((prefilledData?.id as string | undefined) || undefined);
+  // Edit mode je explicitne riadený `editId` propom (/inzerat?id=X načíta inzerát z DB).
+  // Bez editId + prefilledData = nový inzerát z náberáka (/inzerat?klient_id=X).
+  const editId = propEditId;
+  const isEditMode = !!editId;
   const klientId = (prefilledData?.klient_id as string | undefined) || undefined;
   // Autosave draft kľúč (iba pre nové inzeráty — nie edit mód).
   // Keyed per klient, aby sa draft pre jedného klienta nemiešal s iným.
-  const draftKey = editId ? null : `inzerat_draft_${klientId || "new"}`;
+  const draftKey = isEditMode ? null : `inzerat_draft_${klientId || "new"}`;
   const [f, setF] = useState(() => {
+    // EDIT MODE — prefilledData je inzerát z tabuľky nehnutelnosti. Polia sa volajú
+    // rovnako ako form fields, takže stačí ich skopírovať cez spread.
+    if (isEditMode && prefilledData) {
+      return { ...defaultForm, ...(prefilledData as Partial<typeof defaultForm>) };
+    }
     // Ak existuje uložený draft (napr. po idle-logout), uprednostni ho pred prefillom.
     if (draftKey && typeof window !== "undefined") {
       try {
@@ -260,6 +261,14 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       })(),
       poznamka_interna: String(d.popis || defaultForm.poznamka_interna),
       makler: String(d.makler || defaultForm.makler),
+      // Podpísaná zmluva v náberáku → toggle "So zmluvou" v inzeráte
+      so_zmluvou: typeof d.zmluva === "boolean" ? (d.zmluva as boolean) : defaultForm.so_zmluvou,
+      // Exkluzívna zmluva z náberu
+      exkluzivne: (() => {
+        const t = String(d.typ_zmluvy || "").toLowerCase();
+        const ozn = String(d.oznacenie || "").toLowerCase();
+        return t.includes("exkluz") || ozn.includes("exkluz") || ozn === "vyhradne";
+      })(),
       // Typ výbavy z náberu (zariadený)
       typ_vybavy: (() => {
         const z = String((d.vybavenie as Record<string, unknown>)?.zariadeny || "").toLowerCase();
@@ -2034,12 +2043,13 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       {/* Bottom bar */}
       <div style={{ position: "sticky", bottom: 0, background: "var(--bg-surface)", borderTop: "1px solid var(--border)", padding: "14px 0", marginTop: "20px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
         <button onClick={() => {
+          if (!window.confirm("Naozaj chceš zahodiť zmeny a vrátiť sa späť? Neuložené zmeny sa stratia.")) return;
           if (draftKey && typeof window !== "undefined") {
             try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
           }
           setF(defaultForm);
           onCancel?.();
-        }} style={{ padding: "9px 18px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>Zahodiť</button>
+        }} style={{ padding: "9px 18px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>Zrušiť</button>
         <button onClick={() => handleSave(false)} disabled={saving} style={{ padding: "9px 22px", background: "var(--bg-surface)", border: "1.5px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>{editId ? "Uložiť zmeny" : "Uložiť koncept"}</button>
         <button onClick={() => handleSave(true)} disabled={saving} style={{ padding: "9px 24px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>{saving ? "..." : "Pridať do portfólia"}</button>
       </div>

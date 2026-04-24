@@ -111,5 +111,5 @@ function InzeratPageContent() {
   }
 
   // Ak má náber alebo nie je klient — zobraz formulár
-  return <InzeratForm prefilledData={naberData} onSaved={() => router.push("/portfolio")} />;
+  return <InzeratForm prefilledData={naberData} editId={editId || undefined} onSaved={() => router.push("/portfolio")} onCancel={() => router.push("/portfolio")} />;
 }
