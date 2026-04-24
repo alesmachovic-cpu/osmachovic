@@ -17,6 +17,7 @@ function InzeratPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const klientId = searchParams.get("klient_id");
+  const editId = searchParams.get("id");
 
   const [checking, setChecking] = useState(true);
   const [hasNaber, setHasNaber] = useState(false);
@@ -28,6 +29,15 @@ function InzeratPageContent() {
   }, []);
 
   async function checkPipeline() {
+    // Edit mode — načítaj existujúci inzerát z nehnutelnosti
+    if (editId) {
+      const r = await supabase.from("nehnutelnosti").select("*").eq("id", editId).single();
+      if (r.data) setNaberData(r.data);
+      setHasNaber(true);
+      setChecking(false);
+      return;
+    }
+
     // Ak nemá klient_id, zobraz formulár priamo (backward compatible)
     if (!klientId) {
       setChecking(false);

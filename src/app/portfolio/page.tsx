@@ -27,6 +27,8 @@ interface DBNehnutelnost {
   kategoria: string | null;
   text_popis: string | null;
   updated_at: string;
+  fotky_urls: string[] | null;
+  fotky_thumbs: string[] | null;
   // Spoločné
   cena: number | null;
   plocha: number | null;
@@ -313,15 +315,20 @@ export default function Portfolio() {
           {filtered.map(n => {
             const statusNew = n.status === "koncept" ? { bg: "#FEF3C7", text: "#D97706", label: "Koncept" } : n.status === "predany" ? { bg: "#F0FDF4", text: "#16A34A", label: "Predaný" } : n.status === "archivovany" ? { bg: "#F9FAFB", text: "#9CA3AF", label: "Archív" } : null;
             const stavInfo = statusNew || STAV_COLORS[n.stav_inzeratu] || STAV_COLORS[n.status_kolizie || ""] || { bg: "#E5E7EB", text: "#374151", label: "Aktívny" };
+            const thumbUrl = n.fotky_thumbs?.[0] || n.fotky_urls?.[0] || null;
+            const kategoria = n.kategoria || n.typ_transakcie;
             return (
-              <div key={n.id} style={{ background: "var(--bg-surface)", borderRadius: "14px", border: "1px solid var(--border)", overflow: "hidden" }}>
-                {/* Photo placeholder */}
-                <div style={{ height: "180px", background: "linear-gradient(135deg, #F3F4F6, #E5E7EB)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                  <span style={{ fontSize: "40px", opacity: 0.3 }}>🏠</span>
+              <div key={n.id} onClick={() => router.push(`/inzerat?id=${n.id}`)}
+                style={{ background: "var(--bg-surface)", borderRadius: "14px", border: "1px solid var(--border)", overflow: "hidden", cursor: "pointer", transition: "transform 0.15s, box-shadow 0.15s" }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.08)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }}>
+                {/* Photo */}
+                <div style={{ height: "180px", background: thumbUrl ? `url(${thumbUrl}) center/cover no-repeat` : "linear-gradient(135deg, #F3F4F6, #E5E7EB)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                  {!thumbUrl && <span style={{ fontSize: "40px", opacity: 0.3 }}>🏠</span>}
                   {/* Typ transakcie badge */}
-                  {n.typ_transakcie && (
+                  {kategoria && (
                     <span style={{ position: "absolute", top: "10px", left: "10px", padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", background: "#374151", color: "#fff" }}>
-                      {n.typ_transakcie === "predaj" ? "NA PREDAJ" : "PRENÁJOM"}
+                      {kategoria === "predaj" ? "NA PREDAJ" : "PRENÁJOM"}
                     </span>
                   )}
                   {/* Stav badge */}
