@@ -236,6 +236,14 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
         return defaultForm.izby;
       })(),
       poschodie: String(params.poschodie || defaultForm.poschodie),
+      pozicia: (() => {
+        const p = parseInt(String(params.poschodie || "0"), 10);
+        if (isNaN(p)) return defaultForm.pozicia;
+        if (p <= 0) return "prizemia";
+        if (p <= 2) return "nizsie-poschodie";
+        if (p <= 5) return "stredne-poschodie";
+        return "vyssie-poschodie";
+      })(),
       poschodia_vyssie: String(params.z_kolko || defaultForm.poschodia_vyssie),
       vlastnictvo: String(params.vlastnictvo || vyb.vlastnictvo || defaultForm.vlastnictvo),
       typ_budovy: (() => {
@@ -319,7 +327,14 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
       vykurovanie,
       pripojenie,
       // Výhľad
-      orientacia: String(params.vyhlad || defaultForm.orientacia),
+      orientacia: (() => {
+        // Náberák ukladá vyhlad ako voľný text (napr. "Na rakusko-JZ"). Select akceptuje
+        // iba kódy S/J/V/Z/SV/SZ/JV/JZ — extrahujeme posledný kompas-kód z textu.
+        const raw = String(params.vyhlad || "").toUpperCase();
+        if (!raw) return defaultForm.orientacia;
+        const m = raw.match(/\b(SV|SZ|JV|JZ|S|J|V|Z)\b/);
+        return m?.[1] || defaultForm.orientacia;
+      })(),
       // SEO — auto-fill
       specialne_oznacenie: (() => {
         const ozn = String(d.oznacenie || "").toLowerCase();
@@ -582,6 +597,22 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
           if (z === "ciastocne") return "ciastocne-zariadeny";
           if (z === "nie") return "nezariadeny";
           return "";
+        })());
+        // Orientácia: extrahuj kompas-kód z textu (napr. "Na rakusko-JZ" → "JZ")
+        fillEmpty("orientacia", (() => {
+          const raw = String(params.vyhlad || "").toUpperCase();
+          if (!raw) return "";
+          const m = raw.match(/\b(SV|SZ|JV|JZ|S|J|V|Z)\b/);
+          return m?.[1] || "";
+        })());
+        // Pozícia bytu: auto-odvodené z poschodia
+        fillEmpty("pozicia", (() => {
+          const p = parseInt(String(params.poschodie || "0"), 10);
+          if (isNaN(p)) return "";
+          if (p <= 0) return "prizemia";
+          if (p <= 2) return "nizsie-poschodie";
+          if (p <= 5) return "stredne-poschodie";
+          return "vyssie-poschodie";
         })());
         // Pripojenie z vybavenia
         if ((vyb.internet || vyb["Internet"]) && !prev.pripojenie?.internet) {
