@@ -144,7 +144,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData }: { onSa
       try {
         const saved = localStorage.getItem(draftKey);
         if (saved) {
-          const parsed = JSON.parse(saved);
+          const parsed = JSON.parse(saved) as { _v?: number; data?: Partial<typeof defaultForm> };
           if (parsed?._v === 1 && parsed.data) return { ...defaultForm, ...parsed.data };
         }
       } catch { /* ignore */ }
