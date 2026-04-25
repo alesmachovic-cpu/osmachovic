@@ -277,6 +277,10 @@ export default function KlientDetailPage() {
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
   const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "dokumenty">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
+  // Dokumenty UI state — accordion zbaľovanie, filter typu, otvorený "Presunúť" menu
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [docTypeFilter, setDocTypeFilter] = useState<string>("");
+  const [moveMenuFor, setMoveMenuFor] = useState<string | null>(null);
   useEffect(() => {
     if (!id) return;
     listKlientDokumenty(id).then(setKlientDokumenty);
@@ -1852,7 +1856,11 @@ export default function KlientDetailPage() {
           }} />
           {/* Ostatné dokumenty — fotky idú do vlastnej kategórie (Supabase Storage), nie sem */}
           {(() => {
-            const dokumentyBezFotiek = klientDokumenty.filter(d => d.type !== "Foto");
+            const dokumentyBezFotiekVsetky = klientDokumenty.filter(d => d.type !== "Foto");
+            const dokumentyBezFotiek = docTypeFilter
+              ? dokumentyBezFotiekVsetky.filter(d => (d.type || "Dokument") === docTypeFilter)
+              : dokumentyBezFotiekVsetky;
+            const allTypes = Array.from(new Set(dokumentyBezFotiekVsetky.map(d => d.type || "Dokument"))).sort();
             // Zgrupuj dokumenty do priečinkov:
             //   - jedna zložka per nehnuteľnosť (podľa nehnutelnost_id)
             //   - zvyšok v zložke "Všeobecné (klient)"
@@ -1869,24 +1877,64 @@ export default function KlientDetailPage() {
 
             return (
           <div style={cardSt}>
-            <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
-              📁 Dokumenty ({dokumentyBezFotiek.length})
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", marginBottom: "16px" }}>
+              <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
+                📁 Dokumenty ({dokumentyBezFotiek.length}{docTypeFilter ? ` z ${dokumentyBezFotiekVsetky.length}` : ""})
+              </div>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                {allTypes.length > 1 && (
+                  <select value={docTypeFilter} onChange={e => setDocTypeFilter(e.target.value)} style={{
+                    padding: "6px 10px", fontSize: "12px", borderRadius: "6px",
+                    background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                    color: "var(--text-primary)", cursor: "pointer",
+                  }}>
+                    <option value="">Všetky typy</option>
+                    {allTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                )}
+                <button onClick={() => {
+                  if (collapsedFolders.size === 0) {
+                    setCollapsedFolders(new Set(folders.map(f => f.key)));
+                  } else {
+                    setCollapsedFolders(new Set());
+                  }
+                }} style={{
+                  padding: "6px 10px", fontSize: "12px", background: "var(--bg-elevated)",
+                  border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text-secondary)",
+                  cursor: "pointer",
+                }}>
+                  {collapsedFolders.size === 0 ? "− Zbaliť všetko" : "+ Rozbaliť všetko"}
+                </button>
+              </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                {folders.map(folder => (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {folders.map(folder => {
+                  const isCollapsed = collapsedFolders.has(folder.key);
+                  return (
                   <div key={folder.key} style={{ border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
-                    <div style={{
-                      padding: "10px 14px", background: "var(--bg-elevated)",
-                      borderBottom: "1px solid var(--border)",
-                      display: "flex", alignItems: "center", gap: "8px",
-                      fontSize: "13px", fontWeight: "700", color: "var(--text-primary)",
-                    }}>
+                    <div
+                      onClick={() => {
+                        setCollapsedFolders(prev => {
+                          const next = new Set(prev);
+                          if (next.has(folder.key)) next.delete(folder.key);
+                          else next.add(folder.key);
+                          return next;
+                        });
+                      }}
+                      style={{
+                        padding: "10px 14px", background: "var(--bg-elevated)",
+                        borderBottom: isCollapsed ? "none" : "1px solid var(--border)",
+                        display: "flex", alignItems: "center", gap: "8px",
+                        fontSize: "13px", fontWeight: "700", color: "var(--text-primary)",
+                        cursor: "pointer", userSelect: "none",
+                      }}>
+                      <span style={{ fontSize: "10px", color: "var(--text-muted)", transition: "transform 0.15s", transform: isCollapsed ? "rotate(-90deg)" : "none" }}>▼</span>
                       <span>{folder.icon}</span>
                       <span style={{ flex: 1 }}>{folder.label}</span>
                       <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
                         {folder.docs.length} {folder.docs.length === 1 ? "súbor" : folder.docs.length < 5 ? "súbory" : "súborov"}
                       </span>
-                      <label style={{
+                      <label onClick={e => e.stopPropagation()} style={{
                         padding: "4px 10px", background: "#374151", color: "#fff",
                         border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: "600",
                         cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px",
@@ -1916,13 +1964,13 @@ export default function KlientDetailPage() {
                                 data_base64: base64,
                               });
                             }
-                            // Refresh
                             const refreshed = await listKlientDokumenty(klient.id);
                             setKlientDokumenty(refreshed);
                           }}
                         />
                       </label>
                     </div>
+                    {!isCollapsed && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "10px" }}>
                       {folder.docs.map(d => (
                         <div key={d.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px" }}>
@@ -1956,15 +2004,64 @@ export default function KlientDetailPage() {
                               </a>
                             </>
                           )}
+                          {/* "..." menu — presunúť do iného priečinka */}
+                          <div style={{ position: "relative" }}>
+                            <button onClick={() => setMoveMenuFor(moveMenuFor === d.id ? null : (d.id || null))}
+                              style={{ fontSize: "12px", color: "var(--text-secondary)", background: "none", padding: "4px 6px", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", fontWeight: "700" }}>
+                              ⋯
+                            </button>
+                            {moveMenuFor === d.id && (
+                              <div style={{
+                                position: "absolute", top: "30px", right: 0, zIndex: 50,
+                                background: "var(--bg-surface)", border: "1px solid var(--border)",
+                                borderRadius: "10px", boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                                minWidth: "220px", overflow: "hidden",
+                              }}>
+                                <div style={{ padding: "8px 12px", fontSize: "10px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", borderBottom: "1px solid var(--border)" }}>
+                                  Presunúť do…
+                                </div>
+                                {folders.filter(f => f.key !== folder.key).map(target => (
+                                  <button key={target.key}
+                                    onClick={async () => {
+                                      const newId = target.key.startsWith("inz-") ? target.key.slice(4) : null;
+                                      await fetch("/api/klient-dokumenty", {
+                                        method: "PATCH",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ id: d.id, nehnutelnost_id: newId }),
+                                      });
+                                      setMoveMenuFor(null);
+                                      const refreshed = await listKlientDokumenty(klient.id);
+                                      setKlientDokumenty(refreshed);
+                                    }}
+                                    style={{
+                                      display: "block", width: "100%", padding: "8px 12px", textAlign: "left",
+                                      background: "transparent", border: "none", cursor: "pointer",
+                                      fontSize: "12px", color: "var(--text-primary)",
+                                    }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                                    {target.icon} {target.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           {isAdmin && (
                             <button onClick={async () => { if (d.id && confirm("Vymazať dokument?")) { await deleteKlientDokument(d.id); setKlientDokumenty(prev => prev.filter(x => x.id !== d.id)); } }}
                                     style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px" }}>×</button>
                           )}
                         </div>
                       ))}
+                      {folder.docs.length === 0 && (
+                        <div style={{ padding: "16px", textAlign: "center", fontSize: "12px", color: "var(--text-muted)" }}>
+                          Prázdny priečinok — pridaj dokument tlačidlom &quot;+ Pridať&quot; vyššie.
+                        </div>
+                      )}
                     </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
           </div>
             );
