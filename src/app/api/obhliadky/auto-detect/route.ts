@@ -56,17 +56,36 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Filter — heuristika
+  // Filter — striktnejšia heuristika:
+  //  1) Iba BUDÚCE eventy (start > teraz). Minulé sa ignorujú.
+  //  2) Skip CRM-generované (Náber, Zavolať, Obhliadka...).
+  //  3) Akceptuj iba ak má v texte slovo "obhliadk" ALEBO obsahuje
+  //     telefónne číslo + adresu (location field). Bez týchto dvoch ak nie
+  //     je v texte "obhliadk" → nie je obhliadka (Futbal, Účty atď. sa skryjú).
   const SKIP_PREFIX = ["Náber", "Naber", "Zavolať", "Zavolat", "Obhliadka — ", "Obhliadka -"];
+  const phoneRe = /(\+\s?\d{3}[\s.-]?\d{3}[\s.-]?\d{3}[\s.-]?\d{3})|(\b0\s?9\d{2}[\s.-]?\d{3}[\s.-]?\d{3}\b)/;
+  const nowMs = Date.now();
   const candidates = allEvents
     .filter(e => {
       if (usedIds.has(String(e.id))) return false;
       const summary = String(e.summary || "");
-      // Skip CRM-generated events (po prefix)
       if (SKIP_PREFIX.some(p => summary.startsWith(p))) return false;
-      // Heuristika "potenciálna obhliadka": kľúčové slová alebo voľný event
-      // (filter mierne — necháme aj generic eventy)
-      return true;
+
+      // 1) Iba budúce
+      const startStr = (e.start as Record<string, string> | undefined)?.dateTime
+        || (e.start as Record<string, string> | undefined)?.date || "";
+      if (startStr && new Date(startStr).getTime() < nowMs) return false;
+
+      // 2) Heuristika "obhliadka"
+      const desc = String(e.description || "");
+      const loc = String(e.location || "");
+      const allText = `${summary}\n${desc}\n${loc}`.toLowerCase();
+      const hasObhliadkaWord = /obhliadk/.test(allText);
+      if (hasObhliadkaWord) return true;
+      // Telefón + adresa
+      const hasPhone = phoneRe.test(allText);
+      const hasAddress = loc.trim().length > 5;
+      return hasPhone && hasAddress;
     })
     .map(e => ({
       id: e.id,

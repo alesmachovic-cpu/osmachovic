@@ -279,6 +279,7 @@ export default function KlientDetailPage() {
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
+  const [obhliadkaPrefill, setObhliadkaPrefill] = useState<{ datum: string; miesto: string } | null>(null);
   // Dokumenty UI state — accordion zbaľovanie, filter typu, otvorený "Presunúť" menu
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [docTypeFilter, setDocTypeFilter] = useState<string>("");
@@ -582,6 +583,14 @@ export default function KlientDetailPage() {
 
     setCalendarSyncing(false);
     setShowDatePicker(false);
+
+    // Ak typ udalosti = obhliadka → otvor obhliadkový modal s prefill datum/miesto.
+    // Maklér ešte doplní meno + telefón kupujúceho a uložia sa údaje do tabuľky obhliadky.
+    if (!pendingStatus && eventType === "obhliadka" && naberDatum) {
+      setObhliadkaPrefill({ datum: naberDatum, miesto: naberMiesto });
+      setShowObhliadkaModal(true);
+    }
+
     // Po dohodnutom nábere: ak klient nemá LV, ukáž prompt
     if (isNaber && !klient.lv_data) {
       setShowLVPrompt(true);
@@ -1497,29 +1506,40 @@ export default function KlientDetailPage() {
         </button>
       </div>
 
-      {/* Štatistiky klienta */}
+      {/* Štatistiky klienta — kliknuteľné, presmerujú na príslušný tab */}
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px",
       }} className="cards-grid">
-        {[
-          { label: "Nábery", value: nabery.length },
-          { label: "Objednávky", value: objednavky.length },
-          { label: "Inzeráty", value: inzeraty.length },
-          { label: "Obhliadky", value: obhliadky.length },
-        ].map(s => (
-          <div key={s.label} style={{
+        {([
+          { label: "Nábery", value: nabery.length, tab: "nehnutelnosti" as const },
+          { label: "Objednávky", value: objednavky.length, tab: "objednavky" as const },
+          { label: "Inzeráty", value: inzeraty.length, tab: "nehnutelnosti" as const },
+          { label: "Obhliadky", value: obhliadky.length, tab: "obhliadky" as const },
+        ]).map(s => (
+          <button key={s.label} onClick={() => {
+            setActiveTab(s.tab);
+            // Scroll k tabom
+            setTimeout(() => {
+              const el = document.querySelector('[data-tabs-anchor]');
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }, 50);
+          }} style={{
             padding: "18px 16px", borderRadius: "12px",
-            background: "var(--bg-surface)", border: "1px solid var(--border)",
-            textAlign: "center",
-          }}>
+            background: activeTab === s.tab ? "var(--bg-elevated)" : "var(--bg-surface)",
+            border: activeTab === s.tab ? "1px solid #374151" : "1px solid var(--border)",
+            textAlign: "center", cursor: "pointer", transition: "all 0.15s",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#374151"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = activeTab === s.tab ? "#374151" : "var(--border)"; }}
+          >
             <div style={{ fontSize: "24px", fontWeight: "700", color: "var(--text-primary)", letterSpacing: "-0.02em" }}>{s.value}</div>
             <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", marginTop: "4px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</div>
-          </div>
+          </button>
         ))}
       </div>
 
       {/* Taby */}
-      <div style={{
+      <div data-tabs-anchor style={{
         display: "flex", gap: "4px", marginBottom: "20px", padding: "4px",
         background: "var(--bg-elevated)", borderRadius: "12px",
         border: "1px solid var(--border)",
@@ -2167,9 +2187,11 @@ export default function KlientDetailPage() {
           klient={klient}
           inzeraty={inzeraty}
           myMaklerUuid={myMaklerUuid}
-          onClose={() => setShowObhliadkaModal(false)}
+          prefill={obhliadkaPrefill}
+          onClose={() => { setShowObhliadkaModal(false); setObhliadkaPrefill(null); }}
           onCreated={async () => {
             setShowObhliadkaModal(false);
+            setObhliadkaPrefill(null);
             const r = await fetch(`/api/obhliadky?klient_id=${id}`);
             const d = await r.json();
             setObhliadky(d.obhliadky || []);
@@ -2416,23 +2438,34 @@ export default function KlientDetailPage() {
 
 /* ── Modal: Nová obhliadka ─────────────────────────────────────────── */
 function ObhliadkaModal({
-  klient, inzeraty, myMaklerUuid, onClose, onCreated,
+  klient, inzeraty, myMaklerUuid, prefill, onClose, onCreated,
 }: {
   klient: { id: string; meno: string; typ?: string };
   inzeraty: Record<string, unknown>[];
   myMaklerUuid: string | null;
+  prefill?: { datum: string; miesto: string } | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
   const { user: authUser } = useAuth();
   const isCurrentBuyer = klient.typ === "kupujuci";
-  const [createCalendar, setCreateCalendar] = useState(true);
+  const [createCalendar, setCreateCalendar] = useState(!prefill); // Ak prefill (z datetime picker), kalendár už existuje
   const [nehnId, setNehnId] = useState<string>(() => String((inzeraty[0] as Record<string, unknown> | undefined)?.id || ""));
   const [datum, setDatum] = useState<string>(() => {
+    if (prefill?.datum) return prefill.datum;
     const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0);
     return d.toISOString().slice(0, 16);
   });
-  const [miesto, setMiesto] = useState("");
+  // Adresa: predvyplnené z prefill, alebo z aktuálnej nehnuteľnosti, alebo prázdne (manual)
+  const adresyZNehnutelnosti = inzeraty.map(i => {
+    const r = i as Record<string, unknown>;
+    return {
+      id: String(r.id),
+      adresa: [r.ulica_privatna, r.lokalita].filter(Boolean).join(", ") || String(r.nazov || ""),
+    };
+  });
+  const [miestoMode, setMiestoMode] = useState<"adresa" | "manual">(prefill?.miesto ? "manual" : "adresa");
+  const [miesto, setMiesto] = useState(prefill?.miesto || "");
   const [kupMeno, setKupMeno] = useState("");
   const [kupTel, setKupTel] = useState("");
   const [kupEmail, setKupEmail] = useState("");
@@ -2548,8 +2581,35 @@ function ObhliadkaModal({
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>Miesto stretnutia</label>
-            <input value={miesto} onChange={e => setMiesto(e.target.value)} placeholder="napr. pred bytom, MHD..."
-              style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px" }} />
+            <div style={{ display: "flex", gap: "4px", marginBottom: "6px" }}>
+              <button type="button" onClick={() => setMiestoMode("adresa")} style={{
+                flex: 1, padding: "6px 8px", fontSize: "11px", fontWeight: "600",
+                background: miestoMode === "adresa" ? "#374151" : "var(--bg-elevated)",
+                color: miestoMode === "adresa" ? "#fff" : "var(--text-secondary)",
+                border: "1px solid " + (miestoMode === "adresa" ? "#374151" : "var(--border)"),
+                borderRadius: "6px", cursor: "pointer",
+              }}>📍 Z nehnuteľnosti</button>
+              <button type="button" onClick={() => setMiestoMode("manual")} style={{
+                flex: 1, padding: "6px 8px", fontSize: "11px", fontWeight: "600",
+                background: miestoMode === "manual" ? "#374151" : "var(--bg-elevated)",
+                color: miestoMode === "manual" ? "#fff" : "var(--text-secondary)",
+                border: "1px solid " + (miestoMode === "manual" ? "#374151" : "var(--border)"),
+                borderRadius: "6px", cursor: "pointer",
+              }}>✏️ Ručne</button>
+            </div>
+            {miestoMode === "adresa" && adresyZNehnutelnosti.length > 0 ? (
+              <select value={miesto} onChange={e => setMiesto(e.target.value)} style={{
+                width: "100%", padding: "10px 12px", borderRadius: "8px",
+                background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                color: "var(--text-primary)", fontSize: "14px",
+              }}>
+                <option value="">— vyber adresu —</option>
+                {adresyZNehnutelnosti.map(a => <option key={a.id} value={a.adresa}>{a.adresa}</option>)}
+              </select>
+            ) : (
+              <input value={miesto} onChange={e => setMiesto(e.target.value)} placeholder="napr. pred bytom, MHD..."
+                style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px" }} />
+            )}
           </div>
         </div>
 
