@@ -2424,7 +2424,9 @@ function ObhliadkaModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const { user: authUser } = useAuth();
   const isCurrentBuyer = klient.typ === "kupujuci";
+  const [createCalendar, setCreateCalendar] = useState(true);
   const [nehnId, setNehnId] = useState<string>(() => String((inzeraty[0] as Record<string, unknown> | undefined)?.id || ""));
   const [datum, setDatum] = useState<string>(() => {
     const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0);
@@ -2459,6 +2461,48 @@ function ObhliadkaModal({
       const r = await fetch("/api/obhliadky", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok) { setError(d.error || "Save zlyhal"); setSaving(false); return; }
+      const novaObhliadka = d.obhliadka as Record<string, unknown> | null;
+
+      // Voliteľne — vytvor Google Calendar event a prepoj cez calendar_event_id
+      if (createCalendar && authUser?.id && novaObhliadka?.id) {
+        try {
+          const linkedNehn = inzeraty.find(i => (i as Record<string, unknown>).id === nehnId) as Record<string, unknown> | undefined;
+          const summary = isCurrentBuyer
+            ? `Obhliadka — ${klient.meno}`
+            : `Obhliadka — ${kupMeno || "kupujúci"}${linkedNehn ? ` · ${String(linkedNehn.nazov || "").slice(0, 40)}` : ""}`;
+          const popisLines: string[] = [];
+          popisLines.push(`Obhliadka klienta: ${klient.meno}`);
+          if (!isCurrentBuyer) popisLines.push(`Kupujúci: ${kupMeno}${kupTel ? ` · tel ${kupTel}` : ""}${kupEmail ? ` · ${kupEmail}` : ""}`);
+          if (linkedNehn) popisLines.push(`Nehnuteľnosť: ${String(linkedNehn.nazov || "")}`);
+          if (poznamka) popisLines.push(`Poznámka: ${poznamka}`);
+          const startISO = new Date(datum).toISOString();
+          const endISO = new Date(new Date(datum).getTime() + 60 * 60 * 1000).toISOString();
+          const calRes = await fetch("/api/google/calendar", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: authUser.id,
+              summary,
+              start: startISO,
+              end: endISO,
+              location: miesto || (linkedNehn ? String(linkedNehn.lokalita || "") : ""),
+              description: popisLines.join("\n"),
+            }),
+          });
+          if (calRes.ok) {
+            const calData = await calRes.json();
+            const eventId = calData?.event?.id;
+            if (eventId) {
+              await fetch("/api/obhliadky", {
+                method: "PATCH", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: novaObhliadka.id, calendar_event_id: eventId }),
+              });
+            }
+          }
+        } catch (calErr) {
+          console.warn("[obhliadka calendar] failed:", calErr);
+        }
+      }
+
       onCreated();
     } catch (e) {
       setError(String(e).slice(0, 200));
@@ -2529,6 +2573,11 @@ function ObhliadkaModal({
           <textarea value={poznamka} onChange={e => setPoznamka(e.target.value)} placeholder="Poznámka (voliteľné)"
             rows={2} style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "13px", resize: "vertical" }} />
         </div>
+
+        <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px", padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: "8px", cursor: "pointer", fontSize: "13px", color: "var(--text-secondary)" }}>
+          <input type="checkbox" checked={createCalendar} onChange={e => setCreateCalendar(e.target.checked)} style={{ cursor: "pointer" }} />
+          📅 Vytvoriť aj udalosť v mojom Google Kalendári (so 30-min upozornením)
+        </label>
 
         {error && (
           <div style={{ marginBottom: "12px", padding: "10px 12px", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "13px", color: "#B91C1C" }}>
