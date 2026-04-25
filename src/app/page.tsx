@@ -327,6 +327,72 @@ function loadTiles(userId?: string): TileKey[] {
   return DEFAULT_TILES;
 }
 
+/* ── Banner: kandidáti obhliadok z Google kalendára ───────────────── */
+function ObhliadkyKandidatiBanner() {
+  const { user } = useAuth();
+  const [candidates, setCandidates] = useState<Array<{ id: string; summary: string; start: string; location: string; description?: string }>>([]);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(`/api/obhliadky/auto-detect?userId=${user.id}`)
+      .then(r => r.ok ? r.json() : { candidates: [] })
+      .then(d => setCandidates((d.candidates || []).slice(0, 5)))
+      .catch(() => {});
+  }, [user?.id]);
+
+  const visible = candidates.filter(c => !dismissed.has(c.id));
+  if (hidden || visible.length === 0) return null;
+
+  return (
+    <div style={{
+      padding: "16px 20px", background: "linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)",
+      border: "1px solid #F59E0B", borderRadius: "14px",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "10px" }}>
+        <div>
+          <div style={{ fontSize: "14px", fontWeight: "700", color: "#92400E", marginBottom: "4px" }}>
+            🔍 Možné obhliadky vo tvojom kalendári ({visible.length})
+          </div>
+          <div style={{ fontSize: "12px", color: "#A16207" }}>
+            Tieto eventy v Google kalendári ešte nemajú vyznačenú obhliadku v CRM. Klikni na „Pridať" ak je to obhliadka — automaticky pripoji k pricializu klienta.
+          </div>
+        </div>
+        <button onClick={() => setHidden(true)} style={{
+          padding: "4px 10px", background: "transparent", border: "1px solid #D97706",
+          borderRadius: "6px", fontSize: "11px", fontWeight: "600", color: "#92400E", cursor: "pointer", whiteSpace: "nowrap",
+        }}>Skryť</button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {visible.map(c => (
+          <div key={c.id} style={{
+            display: "flex", alignItems: "center", gap: "12px",
+            padding: "10px 12px", background: "rgba(255,255,255,0.6)",
+            border: "1px solid #FCD34D", borderRadius: "10px",
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "13px", fontWeight: "600", color: "#92400E" }}>{c.summary}</div>
+              <div style={{ fontSize: "11px", color: "#A16207", marginTop: "2px" }}>
+                📅 {new Date(c.start).toLocaleString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
+                {c.location ? <> · 📍 {c.location}</> : null}
+              </div>
+            </div>
+            <button onClick={() => setDismissed(prev => new Set(prev).add(c.id))}
+              style={{ padding: "5px 10px", background: "transparent", border: "1px solid #D97706", borderRadius: "6px", fontSize: "11px", fontWeight: "600", color: "#92400E", cursor: "pointer" }}>
+              Nie je obhliadka
+            </button>
+            <a href={`/klienti?addObhliadka=${encodeURIComponent(c.id)}&summary=${encodeURIComponent(c.summary)}&start=${encodeURIComponent(c.start)}&location=${encodeURIComponent(c.location || "")}`}
+              style={{ padding: "6px 12px", background: "#92400E", color: "#fff", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: "700", cursor: "pointer", textDecoration: "none" }}>
+              + Zaradiť ako obhliadku
+            </a>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const { user } = useAuth();
@@ -579,6 +645,9 @@ export default function Dashboard() {
 
       {/* Google link banner — zobrazuje sa len ak user nemá login_email */}
       <LinkGoogleBanner />
+
+      {/* Auto-detect kandidátov obhliadok z Google kalendára */}
+      <ObhliadkyKandidatiBanner />
 
       {/* Customize button */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
