@@ -275,8 +275,10 @@ export default function KlientDetailPage() {
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
-  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "dokumenty">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
+  const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
+  const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
   // Dokumenty UI state — accordion zbaľovanie, filter typu, otvorený "Presunúť" menu
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [docTypeFilter, setDocTypeFilter] = useState<string>("");
@@ -284,6 +286,7 @@ export default function KlientDetailPage() {
   useEffect(() => {
     if (!id) return;
     listKlientDokumenty(id).then(setKlientDokumenty);
+    fetch(`/api/obhliadky?klient_id=${id}`).then(r => r.json()).then(d => setObhliadky(d.obhliadky || [])).catch(() => {});
   }, [id, activeTab]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
@@ -718,6 +721,7 @@ export default function KlientDetailPage() {
   const tabs = [
     { key: "timeline", label: "Aktivita", count: timeline.length },
     { key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length },
+    { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
     { key: "objednavky", label: "Objednávky", count: objednavky.length },
     { key: "dokumenty", label: "Dokumenty", count: 0 },
   ];
@@ -1501,7 +1505,7 @@ export default function KlientDetailPage() {
           { label: "Nábery", value: nabery.length },
           { label: "Objednávky", value: objednavky.length },
           { label: "Inzeráty", value: inzeraty.length },
-          { label: "Obhliadky", value: 0 },
+          { label: "Obhliadky", value: obhliadky.length },
         ].map(s => (
           <div key={s.label} style={{
             padding: "18px 16px", borderRadius: "12px",
@@ -1692,6 +1696,82 @@ export default function KlientDetailPage() {
                           📰 Vytvoriť inzerát
                         </button>
                       )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "obhliadky" && (
+        <div style={cardSt}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>👁 Obhliadky</div>
+            <button onClick={() => setShowObhliadkaModal(true)} style={{
+              padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
+              borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
+            }}>+ Nová obhliadka</button>
+          </div>
+          {obhliadky.length === 0 ? (
+            <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
+              Žiadne obhliadky. Po naplánovaní sa tu zobrazí zoznam.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {obhliadky.map(o => {
+                const status = String(o.status || "planovana");
+                const statusCfg: Record<string, { bg: string; text: string; label: string }> = {
+                  planovana: { bg: "#FEF3C7", text: "#92400E", label: "Plánovaná" },
+                  prebehla: { bg: "#DBEAFE", text: "#1E40AF", label: "Prebehla" },
+                  obhliadka_zaujem: { bg: "#DCFCE7", text: "#16A34A", label: "Záujem" },
+                  obhliadka_bez_zaujmu: { bg: "#F3F4F6", text: "#6B7280", label: "Bez záujmu" },
+                  zrusena: { bg: "#FEE2E2", text: "#991B1B", label: "Zrušená" },
+                };
+                const sc = statusCfg[status] || statusCfg.planovana;
+                const dt = new Date(String(o.datum));
+                const linkedNehn = inzeraty.find(i => (i as Record<string, unknown>).id === o.nehnutelnost_id) as Record<string, unknown> | undefined;
+                const isPodpisana = !!o.podpis_data;
+                return (
+                  <div key={String(o.id)} style={{
+                    padding: "14px 16px", borderRadius: "10px", background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "8px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
+                          {dt.toLocaleString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                          🏠 {linkedNehn ? String(linkedNehn.nazov || "Nehnuteľnosť") : "—"}
+                        </div>
+                        <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                          👤 Kupujúci: <strong>{String(o.kupujuci_meno || "—")}</strong>
+                          {o.kupujuci_telefon ? <> · 📱 {String(o.kupujuci_telefon)}</> : null}
+                          {o.kupujuci_email ? <> · ✉️ {String(o.kupujuci_email)}</> : null}
+                        </div>
+                        {!!o.miesto && <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>📍 {String(o.miesto)}</div>}
+                      </div>
+                      <span style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", background: sc.bg, color: sc.text }}>
+                        {isPodpisana ? "✓ " : ""}{sc.label}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "8px" }}>
+                      {!isPodpisana && (
+                        <button onClick={() => router.push(`/obhliadky/${o.id}`)}
+                          style={{ padding: "5px 10px", background: "#374151", color: "#fff", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: "600", cursor: "pointer" }}>
+                          ✍️ Podpísať
+                        </button>
+                      )}
+                      {(["planovana","prebehla","obhliadka_zaujem","obhliadka_bez_zaujmu","zrusena"] as const).filter(s => s !== status).map(s => (
+                        <button key={s} onClick={async () => {
+                          await fetch("/api/obhliadky", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: o.id, status: s }) });
+                          const r = await fetch(`/api/obhliadky?klient_id=${id}`); const d = await r.json(); setObhliadky(d.obhliadky || []);
+                        }}
+                          style={{ padding: "5px 10px", background: "var(--bg-surface)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", fontWeight: "500", cursor: "pointer" }}>
+                          → {statusCfg[s]?.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 );
@@ -2081,6 +2161,22 @@ export default function KlientDetailPage() {
         </div>
       )}
 
+      {/* Modal: Nová obhliadka */}
+      {showObhliadkaModal && (
+        <ObhliadkaModal
+          klient={klient}
+          inzeraty={inzeraty}
+          myMaklerUuid={myMaklerUuid}
+          onClose={() => setShowObhliadkaModal(false)}
+          onCreated={async () => {
+            setShowObhliadkaModal(false);
+            const r = await fetch(`/api/obhliadky?klient_id=${id}`);
+            const d = await r.json();
+            setObhliadky(d.obhliadky || []);
+          }}
+        />
+      )}
+
       {/* Datetime picker modal */}
       {showDatePicker && (
         <div style={{
@@ -2314,6 +2410,139 @@ export default function KlientDetailPage() {
         />
       )}
 
+    </div>
+  );
+}
+
+/* ── Modal: Nová obhliadka ─────────────────────────────────────────── */
+function ObhliadkaModal({
+  klient, inzeraty, myMaklerUuid, onClose, onCreated,
+}: {
+  klient: { id: string; meno: string; typ?: string };
+  inzeraty: Record<string, unknown>[];
+  myMaklerUuid: string | null;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const isCurrentBuyer = klient.typ === "kupujuci";
+  const [nehnId, setNehnId] = useState<string>(() => String((inzeraty[0] as Record<string, unknown> | undefined)?.id || ""));
+  const [datum, setDatum] = useState<string>(() => {
+    const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0);
+    return d.toISOString().slice(0, 16);
+  });
+  const [miesto, setMiesto] = useState("");
+  const [kupMeno, setKupMeno] = useState("");
+  const [kupTel, setKupTel] = useState("");
+  const [kupEmail, setKupEmail] = useState("");
+  const [poznamka, setPoznamka] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    if (!datum) { setError("Dátum je povinný"); return; }
+    if (!isCurrentBuyer && !kupMeno.trim()) { setError("Meno kupujúceho je povinné"); return; }
+    setSaving(true); setError("");
+    try {
+      const body: Record<string, unknown> = {
+        predavajuci_klient_id: isCurrentBuyer ? null : klient.id,
+        kupujuci_klient_id: isCurrentBuyer ? klient.id : null,
+        nehnutelnost_id: nehnId || null,
+        kupujuci_meno: isCurrentBuyer ? klient.meno : kupMeno.trim() || null,
+        kupujuci_telefon: kupTel.trim() || null,
+        kupujuci_email: kupEmail.trim() || null,
+        makler_id: myMaklerUuid,
+        datum: new Date(datum).toISOString(),
+        miesto: miesto || null,
+        poznamka: poznamka || null,
+        status: "planovana",
+      };
+      const r = await fetch("/api/obhliadky", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (!r.ok) { setError(d.error || "Save zlyhal"); setSaving(false); return; }
+      onCreated();
+    } catch (e) {
+      setError(String(e).slice(0, 200));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "var(--bg-surface)", borderRadius: "20px", padding: "28px",
+        maxWidth: "520px", width: "100%", maxHeight: "90vh", overflowY: "auto",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+      }}>
+        <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 6px" }}>👁 Nová obhliadka</h2>
+        <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px" }}>
+          {isCurrentBuyer
+            ? <>Obhliadka pre <strong>{klient.meno}</strong> (kupujúci)</>
+            : <>Klient <strong>{klient.meno}</strong> (predávajúci) · vyber nehnuteľnosť a údaje kupujúceho</>
+          }
+        </p>
+
+        {!isCurrentBuyer && inzeraty.length > 0 && (
+          <div style={{ marginBottom: "14px" }}>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>Nehnuteľnosť</label>
+            <select value={nehnId} onChange={e => setNehnId(e.target.value)} style={{
+              width: "100%", padding: "10px 12px", borderRadius: "8px",
+              background: "var(--bg-elevated)", border: "1px solid var(--border)",
+              color: "var(--text-primary)", fontSize: "14px",
+            }}>
+              {inzeraty.map(i => (
+                <option key={String(i.id)} value={String(i.id)}>{String(i.nazov || i.id)}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>Dátum a čas *</label>
+            <input type="datetime-local" value={datum} onChange={e => setDatum(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>Miesto stretnutia</label>
+            <input value={miesto} onChange={e => setMiesto(e.target.value)} placeholder="napr. pred bytom, MHD..."
+              style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px" }} />
+          </div>
+        </div>
+
+        {!isCurrentBuyer && (
+          <>
+            <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: "14px 0 10px" }}>Kupujúci</div>
+            <div style={{ marginBottom: "10px" }}>
+              <input value={kupMeno} onChange={e => setKupMeno(e.target.value)} placeholder="Meno a priezvisko *"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px" }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+              <input value={kupTel} onChange={e => setKupTel(e.target.value)} placeholder="Telefón"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px" }} />
+              <input value={kupEmail} onChange={e => setKupEmail(e.target.value)} placeholder="Email"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px" }} />
+            </div>
+          </>
+        )}
+
+        <div style={{ marginBottom: "14px" }}>
+          <textarea value={poznamka} onChange={e => setPoznamka(e.target.value)} placeholder="Poznámka (voliteľné)"
+            rows={2} style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "13px", resize: "vertical" }} />
+        </div>
+
+        {error && (
+          <div style={{ marginBottom: "12px", padding: "10px 12px", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "13px", color: "#B91C1C" }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button onClick={onClose} disabled={saving} style={{ padding: "10px 18px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)", cursor: "pointer" }}>Zrušiť</button>
+          <button onClick={save} disabled={saving} style={{ padding: "10px 22px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>
+            {saving ? "Ukladám..." : "Vytvoriť obhliadku"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
