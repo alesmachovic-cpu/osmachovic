@@ -18,7 +18,7 @@
     },
     {
       "path": "/api/cron/volni-klienti",
-      "schedule": "0 * * * *"
+      "schedule": "0 5 * * *"
     },
     {
       "path": "/api/cron/foto-rotation",
