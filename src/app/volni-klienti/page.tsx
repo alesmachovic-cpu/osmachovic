@@ -112,17 +112,28 @@ export default function VolniKlientiPage() {
     else showToast(d.error || "Chyba", "error");
   };
 
-  const prebrat = async (klient_id: string, meno: string) => {
-    if (!myMaklerUuid) { showToast("Nie si zaregistrovaný ako maklér", "error"); return; }
-    if (!confirm(`Prebrať klienta ${meno}? Stane sa tvojím a začne plynúť 24h SLA.`)) return;
+  const prebrat = async (klient_id: string, meno: string, targetMaklerId?: string) => {
+    const maklerId = targetMaklerId || myMaklerUuid;
+    if (!maklerId) { showToast("Nie je vybraný maklér", "error"); return; }
+    const targetMakler = makleri.find(m => m.id === maklerId);
+    const isMine = maklerId === myMaklerUuid;
+    const promptMsg = isMine
+      ? `Prebrať klienta ${meno}? Stane sa tvojím a začne plynúť 24h SLA.`
+      : `Prideliť klienta ${meno} maklerovi ${targetMakler?.meno || "?"}?`;
+    if (!confirm(promptMsg)) return;
     const res = await fetch("/api/volni-klienti", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "prebrat", klient_id, makler_id: myMaklerUuid, by_user_id: user?.id }),
+      body: JSON.stringify({ action: "prebrat", klient_id, makler_id: maklerId, by_user_id: user?.id }),
     });
     const d = await res.json();
-    if (res.ok) { showToast(`Klient ${meno} je teraz tvoj`); await load(); }
-    else showToast(d.error || "Chyba", "error");
+    if (res.ok) {
+      showToast(isMine ? `Klient ${meno} je teraz tvoj` : `Klient ${meno} pridelený ${targetMakler?.meno}`);
+      await load();
+    } else showToast(d.error || "Chyba", "error");
   };
+
+  // Manažér / admin môže prideliť klienta hocikomu
+  const isManager = user?.role === "manager" || user?.role === "admin";
 
   // Unique lokality — pre filter dropdown
   const uniqueLokality = useMemo(() => {
@@ -189,7 +200,7 @@ export default function VolniKlientiPage() {
           disabled={running}
           style={{
             height: "38px", padding: "0 18px",
-            background: running ? "var(--text-muted)" : "var(--text-primary)",
+            background: running ? "#9CA3AF" : "#374151",
             color: "#fff", border: "none", borderRadius: "var(--radius-sm)",
             fontSize: "14px", fontWeight: 600, cursor: running ? "not-allowed" : "pointer",
             display: "flex", alignItems: "center", gap: "8px",
@@ -217,9 +228,9 @@ export default function VolniKlientiPage() {
             style={{
               height: "38px", padding: "0 16px", borderRadius: "var(--radius-sm)",
               fontSize: "13px", fontWeight: 600, cursor: "pointer",
-              background: filter === f.value ? "var(--text-primary)" : "var(--bg-base)",
+              background: filter === f.value ? "#374151" : "var(--bg-elevated)",
               color: filter === f.value ? "#fff" : "var(--text-secondary)",
-              border: "1px solid " + (filter === f.value ? "var(--text-primary)" : "var(--border-subtle)"),
+              border: "1px solid " + (filter === f.value ? "#374151" : "var(--border)"),
             }}
           >
             {f.label}
@@ -319,12 +330,43 @@ export default function VolniKlientiPage() {
                     )}
                   </div>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                    {!isMine && (
+                    {/* Manažér / admin: dropdown s výberom makléra + Prideliť */}
+                    {isManager && (
+                      <>
+                        <select id={`assign-makler-${k.id}`} style={{
+                          height: "34px", padding: "0 10px", borderRadius: "var(--radius-sm)",
+                          background: "var(--bg-base)", border: "1px solid var(--border-subtle)",
+                          fontSize: "12px", color: "var(--text-primary)",
+                        }}>
+                          <option value="">Prideliť makléron…</option>
+                          {makleri.map(m => (
+                            <option key={m.id} value={m.id}>{m.meno}{m.id === myMaklerUuid ? " (mne)" : ""}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => {
+                            const sel = (document.getElementById(`assign-makler-${k.id}`) as HTMLSelectElement)?.value;
+                            if (!sel) { showToast("Najprv vyber makléra", "error"); return; }
+                            prebrat(k.id, k.meno, sel);
+                          }}
+                          style={{
+                            height: "34px", padding: "0 14px",
+                            background: "#374151", color: "#fff",
+                            border: "none", borderRadius: "var(--radius-sm)",
+                            fontSize: "13px", fontWeight: 600, cursor: "pointer",
+                          }}
+                        >
+                          Prideliť
+                        </button>
+                      </>
+                    )}
+                    {/* Bežný maklér: Prebrať tlačidlo (priradí sebe) */}
+                    {!isManager && !isMine && (
                       <button
                         onClick={() => prebrat(k.id, k.meno)}
                         style={{
                           height: "34px", padding: "0 14px",
-                          background: "var(--text-primary)", color: "#fff",
+                          background: "#374151", color: "#fff",
                           border: "none", borderRadius: "var(--radius-sm)",
                           fontSize: "13px", fontWeight: 600, cursor: "pointer",
                         }}
@@ -337,7 +379,7 @@ export default function VolniKlientiPage() {
                       style={{
                         height: "34px", padding: "0 14px",
                         background: "var(--success-light)", color: "var(--success)",
-                        border: "none", borderRadius: "var(--radius-sm)",
+                        border: "1px solid #A7F3D0", borderRadius: "var(--radius-sm)",
                         fontSize: "13px", fontWeight: 600, cursor: "pointer",
                       }}
                     >
@@ -347,8 +389,8 @@ export default function VolniKlientiPage() {
                       onClick={() => router.push(`/klienti/${k.id}`)}
                       style={{
                         height: "34px", padding: "0 14px",
-                        background: "var(--bg-base)", color: "var(--text-secondary)",
-                        border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)",
+                        background: "var(--bg-elevated)", color: "var(--text-primary)",
+                        border: "1px solid var(--border)", borderRadius: "var(--radius-sm)",
                         fontSize: "13px", fontWeight: 500, cursor: "pointer",
                       }}
                     >
