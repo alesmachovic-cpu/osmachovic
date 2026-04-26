@@ -145,23 +145,30 @@ export default function NotificationBell() {
 
   return (
     <div ref={dropdownRef} style={{ position: "relative" }}>
-      <button onClick={toggleOpen} style={{
-        position: "relative", width: "36px", height: "36px", borderRadius: "50%",
-        background: "var(--bg-elevated)", border: "1px solid var(--border)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        cursor: "pointer", flexShrink: 0,
-      }} aria-label="Notifikácie">
-        <span style={{ fontSize: "16px", color: "var(--text-secondary)" }}>🔔</span>
-        {unreadCount > 0 && (
-          <span style={{
-            position: "absolute", top: "-4px", right: "-4px",
-            minWidth: "18px", height: "18px", padding: "0 4px",
-            background: "#DC2626", color: "#fff",
-            borderRadius: "9px", fontSize: "10px", fontWeight: 700,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            border: "2px solid var(--bg-base)",
-          }}>{unreadCount > 99 ? "99+" : unreadCount}</span>
-        )}
+      <button
+        onClick={toggleOpen}
+        title={unreadCount > 0 ? `${unreadCount} neprečítaných notifikácií` : "Notifikácie"}
+        style={{
+          width: "36px", height: "36px", borderRadius: "9px",
+          background: "var(--bg-elevated)", border: "1px solid var(--border)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", color: "var(--text-secondary)", position: "relative",
+          flexShrink: 0,
+        }}
+        aria-label="Notifikácie"
+      >
+        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        {/* Status tečka v rohu — sivá ak 0 unread, červená ak >0 */}
+        <span style={{
+          position: "absolute", top: "7px", right: "7px",
+          width: "7px", height: "7px",
+          background: unreadCount > 0 ? "#DC2626" : "#34C759",
+          borderRadius: "50%", border: "1.5px solid var(--bg-surface)",
+          transition: "background 0.3s ease",
+        }} />
       </button>
 
       {open && (
