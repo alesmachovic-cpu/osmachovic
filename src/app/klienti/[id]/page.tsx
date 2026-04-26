@@ -8,6 +8,7 @@ import type { Klient } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import SlaTimer from "@/components/SlaTimer";
 import KlientHistoryTab from "@/components/KlientHistoryTab";
+import KlientMatchingTab from "@/components/KlientMatchingTab";
 import NovaNehnutelnostModal from "@/components/NovaNehnutelnostModal";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
@@ -278,7 +279,7 @@ export default function KlientDetailPage() {
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
-  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia" | "zhody">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
@@ -733,11 +734,13 @@ export default function KlientDetailPage() {
     return cards;
   })();
 
+  const isKlientBuyer = klient.typ === "kupujuci" || klient.typ === "oboje";
   const tabs = [
     { key: "timeline", label: "Aktivita", count: timeline.length },
     { key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length },
     { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
     { key: "objednavky", label: "Objednávky", count: objednavky.length },
+    ...(isKlientBuyer ? [{ key: "zhody", label: "Zhody", count: 0 }] : []),
     { key: "dokumenty", label: "Dokumenty", count: 0 },
     { key: "historia", label: "História", count: 0 },
   ];
@@ -2272,6 +2275,16 @@ export default function KlientDetailPage() {
           </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* Zhody — matching nehnuteľností pre kupujúceho */}
+      {activeTab === "zhody" && (
+        <div style={cardSt}>
+          <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
+            🔗 Vyhovujúce nehnuteľnosti
+          </div>
+          <KlientMatchingTab klient={klient} />
         </div>
       )}
 

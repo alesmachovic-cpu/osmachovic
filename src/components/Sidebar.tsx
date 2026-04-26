@@ -34,7 +34,6 @@ const toolsNav = [
   { label: "Monitor",         href: "/monitor",    icon: "📡" },
   { label: "Analýza trhu",    href: "/analyzy",    icon: "📈" },
   { label: "Kalkulátor",      href: "/kalkulator", icon: "🧮" },
-  { label: "Matching",        href: "/matching",   icon: "🔗" },
   { label: "Štatistiky",      href: "/statistiky", icon: "📉" },
 ];
 
