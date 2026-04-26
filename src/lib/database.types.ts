@@ -77,6 +77,7 @@ export interface Klient {
   spolupracujuci_makler_id: string | null;
   spolupracujuci_provizia_pct: number | null;
   lv_data: Record<string, unknown> | null;
+  anonymized_at: string | null;
   created_at: string;
 }
 

@@ -171,7 +171,8 @@ export async function POST(req: NextRequest) {
 /**
  * PATCH /api/obhliadky
  * Body: { id, ...fields }
- *   – update pre status, podpis, email, poznámka
+ *   – update pre status, podpis, email, poznámka, GDPR audit
+ *   – pri zápise podpis_data sa server-side dopĺňa IP do podpis_meta.ip
  */
 export async function PATCH(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -186,9 +187,22 @@ export async function PATCH(req: NextRequest) {
     "podpis_data","podpis_datum",
     "list_pdf_base64","email_sent_at","email_sent_to",
     "calendar_event_id","makler_id","nehnutelnost_id",
+    "gdpr_consent","gdpr_consent_at","podpis_meta",
   ];
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const k of allowed) if (k in body) patch[k] = body[k];
+
+  // Audit trail: ak sa ukladá podpis, doplň IP a server-side timestamp do podpis_meta
+  if (body.podpis_data && typeof body.podpis_meta === "object" && body.podpis_meta !== null) {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      || req.headers.get("x-real-ip")
+      || "unknown";
+    patch.podpis_meta = {
+      ...(body.podpis_meta as Record<string, unknown>),
+      ip,
+      server_timestamp: new Date().toISOString(),
+    };
+  }
 
   const { data, error } = await sb.from("obhliadky").update(patch).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

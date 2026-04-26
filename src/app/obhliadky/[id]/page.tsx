@@ -21,6 +21,9 @@ type Obhliadka = {
   podpis_datum?: string | null;
   email_sent_at?: string | null;
   email_sent_to?: string | null;
+  gdpr_consent?: boolean | null;
+  gdpr_consent_at?: string | null;
+  podpis_meta?: Record<string, unknown> | null;
 };
 
 export default function ObhliadkaDetailPage() {
@@ -33,6 +36,7 @@ export default function ObhliadkaDetailPage() {
   const [nehnutelnost, setNehnutelnost] = useState<Record<string, unknown> | null>(null);
   const [predKlient, setPredKlient] = useState<Record<string, unknown> | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
+  const [gdprConsent, setGdprConsent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [sentMsg, setSentMsg] = useState("");
@@ -68,8 +72,17 @@ export default function ObhliadkaDetailPage() {
 
   async function ulozPodpis() {
     if (!signature) { setError("Najprv podpíš v poli"); return; }
+    if (!gdprConsent) { setError("Súhlas so spracovaním osobných údajov je povinný"); return; }
     if (!obhliadka) return;
     setSaving(true); setError("");
+    // Audit metadata — IP zaznamená server (req headers), tu zachytíme klientske údaje
+    const podpis_meta = {
+      gdpr_version: "v1.0",
+      consent_evidence: true,
+      user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      screen: typeof window !== "undefined" ? `${window.screen.width}x${window.screen.height}` : null,
+    };
     try {
       const r = await fetch("/api/obhliadky", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -78,6 +91,9 @@ export default function ObhliadkaDetailPage() {
           podpis_data: signature,
           podpis_datum: new Date().toISOString(),
           status: "prebehla",
+          gdpr_consent: true,
+          gdpr_consent_at: new Date().toISOString(),
+          podpis_meta,
         }),
       });
       const d = await r.json();
@@ -179,11 +195,48 @@ export default function ObhliadkaDetailPage() {
           </div>
         )}
 
-        <div style={{ padding: "14px 16px", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: "10px", marginBottom: "20px", fontSize: "12px", color: "#92400E", lineHeight: 1.5 }}>
+        <div style={{ padding: "14px 16px", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: "10px", marginBottom: "16px", fontSize: "12px", color: "#92400E", lineHeight: 1.5 }}>
           <strong>Vyhlásenie kupujúceho:</strong> Týmto potvrdzujem, že nehnuteľnosť som obhliadol/a v sprievode realitného makléra
           spoločnosti VIANEMA. Beriem na vedomie, že akékoľvek ďalšie rokovanie ohľadom predaja tejto nehnuteľnosti budem viesť výhradne
-          prostredníctvom tejto realitnej kancelárie. Súhlasím so spracovaním osobných údajov v zmysle GDPR pre účely evidencie obhliadok.
+          prostredníctvom tejto realitnej kancelárie.
         </div>
+
+        {/* GDPR — explicitný súhlas pred podpisom */}
+        {!isPodpisana && (
+          <label style={{
+            display: "flex", alignItems: "flex-start", gap: "10px",
+            padding: "12px 14px", background: "var(--bg-elevated)",
+            border: gdprConsent ? "1px solid #10B981" : "1px solid var(--border)",
+            borderRadius: "10px", marginBottom: "16px", cursor: "pointer",
+            fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
+          }}>
+            <input
+              type="checkbox"
+              checked={gdprConsent}
+              onChange={e => setGdprConsent(e.target.checked)}
+              style={{ marginTop: "2px", cursor: "pointer", flexShrink: 0 }}
+            />
+            <span>
+              Súhlasím so spracovaním mojich osobných údajov spoločnosťou Vianema s. r. o.
+              v zmysle GDPR pre účely evidencie obhliadok. Plné znenie zásad spracovania
+              nájdete v dokumente{" "}
+              <a href="/gdpr" target="_blank" rel="noopener noreferrer"
+                style={{ color: "var(--accent, #3B82F6)", textDecoration: "underline" }}>
+                Zásady spracovania osobných údajov →
+              </a>
+            </span>
+          </label>
+        )}
+        {isPodpisana && obhliadka.gdpr_consent && (
+          <div style={{
+            padding: "10px 14px", background: "#ECFDF5", border: "1px solid #A7F3D0",
+            borderRadius: "10px", marginBottom: "16px", fontSize: "11px", color: "#065F46",
+          }}>
+            ✓ GDPR súhlas udelený {obhliadka.gdpr_consent_at ? new Date(obhliadka.gdpr_consent_at).toLocaleString("sk") : ""} ·
+            {" "}<a href="/gdpr" target="_blank" rel="noopener noreferrer"
+              style={{ color: "#065F46", textDecoration: "underline" }}>Zásady spracovania</a>
+          </div>
+        )}
 
         {isPodpisana ? (
           <div>
@@ -204,8 +257,16 @@ export default function ObhliadkaDetailPage() {
               Podpis kupujúceho
             </div>
             <SignatureCanvas onSignatureChange={setSignature} />
-            <button onClick={ulozPodpis} disabled={saving || !signature}
-              style={{ marginTop: "10px", padding: "10px 18px", background: signature ? "#374151" : "#E5E7EB", color: signature ? "#fff" : "#9CA3AF", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: signature && !saving ? "pointer" : "default" }}>
+            <button onClick={ulozPodpis} disabled={saving || !signature || !gdprConsent}
+              style={{
+                marginTop: "10px", padding: "10px 18px",
+                background: (signature && gdprConsent) ? "#374151" : "#E5E7EB",
+                color: (signature && gdprConsent) ? "#fff" : "#9CA3AF",
+                border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600",
+                cursor: (signature && gdprConsent && !saving) ? "pointer" : "not-allowed",
+              }}
+              title={!gdprConsent ? "Najprv označ súhlas s GDPR" : !signature ? "Najprv podpíš v poli" : ""}
+            >
               {saving ? "Ukladám..." : "✓ Uložiť podpis"}
             </button>
           </div>

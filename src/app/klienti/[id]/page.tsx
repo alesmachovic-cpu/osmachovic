@@ -768,13 +768,45 @@ export default function KlientDetailPage() {
           </p>
         </div>
         {isOwner ? (
-          <button onClick={() => setEditModal(true)} style={{
-            padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
-            border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
-            fontWeight: "600", cursor: "pointer",
-          }}>
-            ✏️ Upraviť
-          </button>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button onClick={() => setEditModal(true)} style={{
+              padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
+              border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
+              fontWeight: "600", cursor: "pointer",
+            }}>
+              ✏️ Upraviť
+            </button>
+            {!(klient as { anonymized_at?: string | null }).anonymized_at && (
+              <button onClick={async () => {
+                const ok = window.confirm(
+                  "Naozaj anonymizovať tohto klienta?\n\n" +
+                  "Meno, telefón, email a poznámky budú nenávratne zmazané (právo " +
+                  "na zabudnutie podľa GDPR čl. 17). Náberáky a obhliadky zostanú " +
+                  "evidované, ale bez identifikovateľných údajov.\n\nOperácia je nevratná."
+                );
+                if (!ok) return;
+                const r = await fetch("/api/klienti/anonymize", {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id: klient.id }),
+                });
+                if (!r.ok) { alert("Chyba pri anonymizácii"); return; }
+                window.location.reload();
+              }} style={{
+                padding: "9px 14px", background: "var(--bg-surface)", color: "#B91C1C",
+                border: "1px solid #FECACA", borderRadius: "10px", fontSize: "12px",
+                fontWeight: "600", cursor: "pointer",
+              }} title="Právo na zabudnutie podľa GDPR čl. 17">
+                Anonymizovať (GDPR)
+              </button>
+            )}
+            {(klient as { anonymized_at?: string | null }).anonymized_at && (
+              <span style={{
+                padding: "9px 14px", background: "#F3F4F6", color: "#6B7280",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "12px",
+                fontWeight: "600",
+              }}>Anonymizovaný {new Date((klient as { anonymized_at: string }).anonymized_at).toLocaleDateString("sk")}</span>
+            )}
+          </div>
         ) : (
           <div style={{
             padding: "9px 14px", background: "#FEF3C7", color: "#92400E",
