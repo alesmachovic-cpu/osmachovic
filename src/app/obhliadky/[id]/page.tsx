@@ -134,7 +134,7 @@ export default function ObhliadkaDetailPage() {
 
       <div style={{ background: "var(--bg-surface)", borderRadius: "16px", border: "1px solid var(--border)", padding: "28px", marginBottom: "20px" }}>
         <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 6px" }}>
-          👁 Obhliadkový list
+          Obhliadkový list
         </h1>
         <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px" }}>
           {dt.toLocaleString("sk", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}

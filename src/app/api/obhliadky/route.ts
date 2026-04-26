@@ -25,6 +25,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ obhliadky: data || [] });
 }
 
+/** Normalizuje SK telefón na kanonický tvar (digits-only, "0…" → "+421…"). */
+function normalizePhone(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let s = String(raw).replace(/[\s().\-]/g, "");
+  if (s.startsWith("00")) s = "+" + s.slice(2);
+  if (s.startsWith("0")) s = "+421" + s.slice(1);
+  return s;
+}
+
 /**
  * POST /api/obhliadky
  * Body:
@@ -33,6 +42,15 @@ export async function GET(req: NextRequest) {
  *    kupujuci_klient_id?, kupujuci_meno?, kupujuci_telefon?, kupujuci_email?,
  *    makler_id?, datum, miesto?, poznamka?, calendar_event_id?
  *  }
+ *
+ * Po vytvorení obhliadky: ak je vyplnený kupujúci (meno + telefón) a nie je
+ * priradený žiadny kupujuci_klient_id, pokus sa nájsť alebo vytvoriť kupujúceho
+ * v tabuľke `klienti`:
+ *   - match podľa normalizovaného telefónu
+ *   - ak nájdený a nehnuteľnosť je iná ako jeho doterajší záujem → poznámka
+ *     "má záujem aj o {adresa}" + doplň chýbajúce polia (email)
+ *   - ak nenájdený → vytvor nového klienta typ=kupujuci so zdrojom obhliadky
+ *   - vždy zapíš zdrojového makléra do poznámky
  */
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -41,6 +59,8 @@ export async function POST(req: NextRequest) {
   if (!body.datum) return NextResponse.json({ error: "datum required" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
+
+  // 1) Vlož obhliadku
   const payload: Record<string, unknown> = {
     predavajuci_klient_id: body.predavajuci_klient_id || null,
     nehnutelnost_id: body.nehnutelnost_id || null,
@@ -57,7 +77,95 @@ export async function POST(req: NextRequest) {
   };
   const { data, error } = await sb.from("obhliadky").insert(payload).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ obhliadka: data });
+
+  // 2) Auto-upsert kupujúci klient (best-effort, nezhasne obhliadku ak zlyhá)
+  let kupujuciInfo: { klient_id: string; created: boolean; updated: boolean } | null = null;
+  try {
+    const kupTel = String(body.kupujuci_telefon || "").trim();
+    const kupMeno = String(body.kupujuci_meno || "").trim();
+    const alreadyLinked = !!body.kupujuci_klient_id;
+    if (!alreadyLinked && kupTel && kupMeno) {
+      const normNew = normalizePhone(kupTel);
+
+      // Načítaj všetkých klientov s telefónom a porovnaj normalizované hodnoty
+      const { data: existingList } = await sb
+        .from("klienti")
+        .select("id, meno, telefon, email, typ, poznamka, lokalita, makler_id")
+        .not("telefon", "is", null);
+      const matched = (existingList || []).find(k =>
+        normalizePhone(String((k as { telefon: string }).telefon)) === normNew
+      ) as Record<string, unknown> | undefined;
+
+      // Načítaj meno makléra (zdroj informácie) a názov nehnuteľnosti pre poznámku
+      const maklerId = body.makler_id as string | null;
+      let maklerMeno = "neznámy maklér";
+      if (maklerId) {
+        const { data: m } = await sb.from("makleri").select("meno").eq("id", maklerId).single();
+        if (m?.meno) maklerMeno = String(m.meno);
+      }
+      const nehnId = body.nehnutelnost_id as string | null;
+      let nehnLabel = "";
+      if (nehnId) {
+        const { data: n } = await sb.from("nehnutelnosti")
+          .select("nazov, lokalita, ulica_privatna").eq("id", nehnId).single();
+        if (n) {
+          const adresa = [n.ulica_privatna, n.lokalita].filter(Boolean).join(", ");
+          nehnLabel = adresa || String(n.nazov || "");
+        }
+      }
+      const datumStr = new Date(String(body.datum)).toLocaleDateString("sk", { day: "numeric", month: "numeric", year: "numeric" });
+      const noteLine = `Obhliadka ${datumStr}: ${nehnLabel || "nehnuteľnosť"} (od makléra ${maklerMeno})`;
+
+      if (!matched) {
+        // 2a) Vytvor nového klienta typu kupujúci
+        const newKlient = {
+          meno: kupMeno,
+          telefon: kupTel,
+          email: String(body.kupujuci_email || "") || null,
+          typ: "kupujuci" as const,
+          status: "novy_kontakt" as const,
+          makler_id: maklerId,
+          zdroj: "obhliadka",
+          lokalita: nehnLabel || null,
+          poznamka: noteLine,
+        };
+        const { data: created, error: cErr } = await sb.from("klienti").insert(newKlient).select("id").single();
+        if (!cErr && created) {
+          kupujuciInfo = { klient_id: String(created.id), created: true, updated: false };
+          // Prepoj obhliadku
+          await sb.from("obhliadky").update({ kupujuci_klient_id: created.id }).eq("id", (data as { id: string }).id);
+        }
+      } else {
+        // 2b) Klient už existuje — doplň chýbajúce údaje + poznámka
+        const patch: Record<string, unknown> = {};
+        if (!matched.email && body.kupujuci_email) patch.email = body.kupujuci_email;
+        // Ak meno v DB je krátke alebo "neznámy", aktualizuj
+        if (!matched.meno || String(matched.meno).length < 3) patch.meno = kupMeno;
+
+        // Append poznámku — ak iná nehnuteľnosť, dopíš "má záujem aj o ..."
+        const existingNote = String(matched.poznamka || "").trim();
+        const existingLokalita = String(matched.lokalita || "").trim();
+        let extra = noteLine;
+        if (existingLokalita && nehnLabel && !existingLokalita.toLowerCase().includes(nehnLabel.toLowerCase())) {
+          extra = `${noteLine} — má záujem aj o ${nehnLabel}`;
+        }
+        // Idempotencia: ak rovnaký riadok už existuje v poznámke, nepridávaj
+        if (!existingNote.includes(noteLine)) {
+          patch.poznamka = existingNote ? `${existingNote}\n${extra}` : extra;
+        }
+        if (Object.keys(patch).length > 0) {
+          await sb.from("klienti").update(patch).eq("id", matched.id);
+        }
+        // Prepoj obhliadku na existujúceho klienta
+        await sb.from("obhliadky").update({ kupujuci_klient_id: matched.id }).eq("id", (data as { id: string }).id);
+        kupujuciInfo = { klient_id: String(matched.id), created: false, updated: Object.keys(patch).length > 0 };
+      }
+    }
+  } catch (upsertErr) {
+    console.warn("[obhliadky POST] kupujúci upsert failed:", upsertErr);
+  }
+
+  return NextResponse.json({ obhliadka: data, kupujuci: kupujuciInfo });
 }
 
 /**

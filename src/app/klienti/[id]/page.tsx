@@ -2520,6 +2520,13 @@ function ObhliadkaModal({
       const d = await r.json();
       if (!r.ok) { setError(d.error || "Save zlyhal"); setSaving(false); return; }
       const novaObhliadka = d.obhliadka as Record<string, unknown> | null;
+      const kupujuciInfo = d.kupujuci as { klient_id: string; created: boolean; updated: boolean } | null;
+      // Krátka spätná väzba — ak bol kupujúci založený alebo aktualizovaný
+      if (kupujuciInfo?.created) {
+        try { console.info(`[obhliadka] vytvorený nový klient kupujúci ${kupujuciInfo.klient_id}`); } catch {}
+      } else if (kupujuciInfo?.updated) {
+        try { console.info(`[obhliadka] doplnená karta existujúceho kupujúceho ${kupujuciInfo.klient_id}`); } catch {}
+      }
 
       // Voliteľne — vytvor Google Calendar event a prepoj cez calendar_event_id
       let calendarOk: boolean | null = null; // null = nezvolené, true = OK, false = zlyhalo

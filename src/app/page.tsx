@@ -170,7 +170,11 @@ function CalendarWidget({ userId }: { userId?: string }) {
   // Generate 7 days (current week Mon-Sun)
   const days: Date[] = [];
   const startOfWeek = new Date(today);
-  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay() + 1); // Monday
+  // Bug fix: ak je dnes nedeľa (getDay=0), pôvodný vzorec posunul na +1 deň → ďalší týždeň.
+  // Správne: nedeľa → -6 dní; iné dni → 1 - dow (napr. utorok dow=2 → -1 deň).
+  const dow = startOfWeek.getDay(); // 0=Ne, 1=Po, ..., 6=So
+  const offsetToMonday = dow === 0 ? -6 : 1 - dow;
+  startOfWeek.setDate(startOfWeek.getDate() + offsetToMonday);
   for (let i = 0; i < 7; i++) {
     const d = new Date(startOfWeek);
     d.setDate(d.getDate() + i);
