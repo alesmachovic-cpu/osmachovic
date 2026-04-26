@@ -280,6 +280,8 @@ export default function KlientDetailPage() {
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
   const [obhliadkaPrefill, setObhliadkaPrefill] = useState<{ datum: string; miesto: string } | null>(null);
+  // Pamätáme si, či sa Obhliadka modal otvoril z datetime pickeru (tlačidlo "Späť")
+  const [obhliadkaCameFromPicker, setObhliadkaCameFromPicker] = useState(false);
   // Dokumenty UI state — accordion zbaľovanie, filter typu, otvorený "Presunúť" menu
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [docTypeFilter, setDocTypeFilter] = useState<string>("");
@@ -1728,7 +1730,7 @@ export default function KlientDetailPage() {
       {activeTab === "obhliadky" && (
         <div style={cardSt}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-            <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>👁 Obhliadky</div>
+            <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>Obhliadky</div>
             <button onClick={() => setShowObhliadkaModal(true)} style={{
               padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
@@ -2096,7 +2098,7 @@ export default function KlientDetailPage() {
                                   } catch (e) { console.error(e); }
                                 }}
                                 style={{ fontSize: "11px", color: "var(--accent, #3B82F6)", background: "none", padding: "4px 8px", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer" }}>
-                                👁
+                                Otvoriť
                               </button>
                               <a href={`data:${d.mime || "application/octet-stream"};base64,${d.data_base64}`} download={d.name}
                                  style={{ fontSize: "11px", color: "var(--text-secondary)", textDecoration: "none", padding: "4px 8px", border: "1px solid var(--border)", borderRadius: "6px" }}>
@@ -2188,10 +2190,22 @@ export default function KlientDetailPage() {
           inzeraty={inzeraty}
           myMaklerUuid={myMaklerUuid}
           prefill={obhliadkaPrefill}
-          onClose={() => { setShowObhliadkaModal(false); setObhliadkaPrefill(null); }}
+          onBack={obhliadkaCameFromPicker ? () => {
+            // Späť do datetime pickeru "Nová udalosť"
+            setShowObhliadkaModal(false);
+            setObhliadkaPrefill(null);
+            setObhliadkaCameFromPicker(false);
+            setShowDatePicker(true);
+          } : undefined}
+          onClose={() => {
+            setShowObhliadkaModal(false);
+            setObhliadkaPrefill(null);
+            setObhliadkaCameFromPicker(false);
+          }}
           onCreated={async () => {
             setShowObhliadkaModal(false);
             setObhliadkaPrefill(null);
+            setObhliadkaCameFromPicker(false);
             const r = await fetch(`/api/obhliadky?klient_id=${id}`);
             const d = await r.json();
             setObhliadky(d.obhliadky || []);
@@ -2237,10 +2251,8 @@ export default function KlientDetailPage() {
                     // Špeciál: pri "Obhliadka" rovno otvor plný formulár obhliadky
                     if (o.v === "obhliadka") {
                       setShowDatePicker(false);
-                      setPendingStatus(null);
-                      setNaberDatum("");
-                      setNaberMiesto("");
                       setObhliadkaPrefill(null); // Bez prefill — používateľ vyplní v plnom modaly
+                      setObhliadkaCameFromPicker(true); // Pre "Späť" tlačidlo
                       setShowObhliadkaModal(true);
                       return;
                     }
@@ -2450,7 +2462,7 @@ export default function KlientDetailPage() {
 
 /* ── Modal: Nová obhliadka ─────────────────────────────────────────── */
 function ObhliadkaModal({
-  klient, inzeraty, myMaklerUuid, prefill, onClose, onCreated,
+  klient, inzeraty, myMaklerUuid, prefill, onClose, onCreated, onBack,
 }: {
   klient: { id: string; meno: string; typ?: string };
   inzeraty: Record<string, unknown>[];
@@ -2458,6 +2470,7 @@ function ObhliadkaModal({
   prefill?: { datum: string; miesto: string } | null;
   onClose: () => void;
   onCreated: () => void;
+  onBack?: () => void;
 }) {
   const { user: authUser } = useAuth();
   const isCurrentBuyer = klient.typ === "kupujuci";
@@ -2562,7 +2575,7 @@ function ObhliadkaModal({
         maxWidth: "520px", width: "100%", maxHeight: "90vh", overflowY: "auto",
         boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
       }}>
-        <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 6px" }}>👁 Nová obhliadka</h2>
+        <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 6px" }}>Nová obhliadka</h2>
         <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px" }}>
           {isCurrentBuyer
             ? <>Obhliadka pre <strong>{klient.meno}</strong> (kupujúci)</>
@@ -2600,14 +2613,14 @@ function ObhliadkaModal({
                 color: miestoMode === "adresa" ? "#fff" : "var(--text-secondary)",
                 border: "1px solid " + (miestoMode === "adresa" ? "#374151" : "var(--border)"),
                 borderRadius: "6px", cursor: "pointer",
-              }}>📍 Z nehnuteľnosti</button>
+              }}>Z nehnuteľnosti</button>
               <button type="button" onClick={() => setMiestoMode("manual")} style={{
                 flex: 1, padding: "6px 8px", fontSize: "11px", fontWeight: "600",
                 background: miestoMode === "manual" ? "#374151" : "var(--bg-elevated)",
                 color: miestoMode === "manual" ? "#fff" : "var(--text-secondary)",
                 border: "1px solid " + (miestoMode === "manual" ? "#374151" : "var(--border)"),
                 borderRadius: "6px", cursor: "pointer",
-              }}>✏️ Ručne</button>
+              }}>Ručne</button>
             </div>
             {miestoMode === "adresa" && adresyZNehnutelnosti.length > 0 ? (
               <select value={miesto} onChange={e => setMiesto(e.target.value)} style={{
@@ -2648,7 +2661,7 @@ function ObhliadkaModal({
 
         <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px", padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: "8px", cursor: "pointer", fontSize: "13px", color: "var(--text-secondary)" }}>
           <input type="checkbox" checked={createCalendar} onChange={e => setCreateCalendar(e.target.checked)} style={{ cursor: "pointer" }} />
-          📅 Vytvoriť aj udalosť v mojom Google Kalendári (so 30-min upozornením)
+          Vytvoriť aj udalosť v mojom Google Kalendári (so 30-min upozornením)
         </label>
 
         {error && (
@@ -2657,11 +2670,22 @@ function ObhliadkaModal({
           </div>
         )}
 
-        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-          <button onClick={onClose} disabled={saving} style={{ padding: "10px 18px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)", cursor: "pointer" }}>Zrušiť</button>
-          <button onClick={save} disabled={saving} style={{ padding: "10px 22px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>
-            {saving ? "Ukladám..." : "Vytvoriť obhliadku"}
-          </button>
+        <div style={{ display: "flex", gap: "10px", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            {onBack && (
+              <button onClick={onBack} disabled={saving} style={{
+                padding: "10px 16px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+                borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)",
+                cursor: "pointer",
+              }}>← Späť</button>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button onClick={onClose} disabled={saving} style={{ padding: "10px 18px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)", cursor: "pointer" }}>Zrušiť</button>
+            <button onClick={save} disabled={saving} style={{ padding: "10px 22px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: saving ? "wait" : "pointer" }}>
+              {saving ? "Ukladám..." : "Vytvoriť obhliadku"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
