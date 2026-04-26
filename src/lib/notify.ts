@@ -107,15 +107,47 @@ async function emailToUser(userId: string, payload: NotifyPayload): Promise<bool
   }
 }
 
+/** Mapuje NotifType (push) na in_app_notifications.type CHECK constraint hodnoty */
+function mapToInAppType(t: NotifType): string {
+  switch (t) {
+    case "monitor": return "match";
+    case "odklik": return "sla";
+    case "lv": return "warning";
+    case "naklady": return "info";
+    default: return "info";
+  }
+}
+
+/** Insert in-app notifikácie pre user-a (Bell ikona ich uvidí). */
+async function inAppNotify(userId: string, payload: NotifyPayload): Promise<void> {
+  try {
+    const sb = getSupabaseAdmin();
+    await sb.from("in_app_notifications").insert({
+      recipient_user_id: userId,
+      type: mapToInAppType(payload.type),
+      title: payload.title,
+      body: payload.body || null,
+      url: payload.url || null,
+      meta: { source: payload.type },
+    });
+  } catch (e) {
+    console.warn("[notify in-app] failed:", e);
+  }
+}
+
 /**
- * Hlavná funkcia — pošle push + email konkrétnemu user-ovi.
- * Obidve sú best-effort, neblokujú sa navzájom.
+ * Hlavná funkcia — pošle 3 kanály konkrétnemu user-ovi:
+ *   1) Web push (browser notification)
+ *   2) Email (cez Resend, ak je payload.emailHtml)
+ *   3) In-app notifikácia (vidí v Bell + /notifikacie)
+ * Všetky sú best-effort, neblokujú sa navzájom.
  */
 export async function notifyUser(userId: string | null, payload: NotifyPayload): Promise<void> {
   if (!userId) return;
   await Promise.allSettled([
     pushToUser(userId, payload),
     emailToUser(userId, payload),
+    inAppNotify(userId, payload),
   ]);
 }
 

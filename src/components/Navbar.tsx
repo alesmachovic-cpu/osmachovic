@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import SystemSearch from "@/components/SystemSearch";
 import { useAuth } from "@/components/AuthProvider";
 import { PoweredByAMGD } from "@/components/brand";
+import NotificationBell from "@/components/NotificationBell";
 
 type ApiStatus = "ok" | "credit_low" | "error" | "no_key";
 type ApiStatuses = { anthropic: ApiStatus; gemini: ApiStatus; openai: ApiStatus };
@@ -279,6 +280,9 @@ export default function Navbar() {
         </div>
 
         <ApiBell />
+
+        {/* In-app notifikácie — bell s badge unread */}
+        <NotificationBell />
 
         {/* Tier 1 — AMGD whisper pred avatarom (interný maklér view) */}
         <div className="navbar-amgd-whisper" style={{ color: "var(--text-muted)" }}>
