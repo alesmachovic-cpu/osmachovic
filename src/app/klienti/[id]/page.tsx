@@ -834,6 +834,33 @@ export default function KlientDetailPage() {
                 fontWeight: "600",
               }}>Anonymizovaný {new Date((klient as { anonymized_at: string }).anonymized_at).toLocaleDateString("sk")}</span>
             )}
+            {/* Admin-only: Trvalé zmazanie klienta */}
+            {(user?.role === "admin" || user?.role === "manager") && (
+              <button onClick={async () => {
+                const c1 = window.confirm(
+                  `Trvalo zmazať klienta "${klient.meno}"?\n\n` +
+                  "• Karta klienta sa zmaže nenávratne\n" +
+                  "• Náberáky a obhliadky zostanú v evidencii bez identifikácie\n" +
+                  "• História klienta sa zmaže\n\n" +
+                  "Operácia je NEVRATNÁ. Pre len skrytie použi 'Anonymizovať (GDPR)'."
+                );
+                if (!c1) return;
+                const c2 = window.prompt(`Pre potvrdenie napíš meno klienta presne: "${klient.meno}"`);
+                if (c2?.trim() !== klient.meno.trim()) { alert("Mená sa nezhodujú, mazanie zrušené"); return; }
+                const r = await fetch("/api/volni-klienti", {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "zmazat", klient_id: klient.id, by_user_id: user?.id }),
+                });
+                if (!r.ok) { const e = await r.json(); alert(e.error || "Chyba"); return; }
+                router.push("/klienti");
+              }} style={{
+                padding: "9px 14px", background: "transparent", color: "#DC2626",
+                border: "1px solid #FECACA", borderRadius: "10px", fontSize: "12px",
+                fontWeight: "600", cursor: "pointer",
+              }} title="Trvalé zmazanie (len admin/manager)">
+                🗑 Zmazať
+              </button>
+            )}
           </div>
         ) : (
           <div style={{

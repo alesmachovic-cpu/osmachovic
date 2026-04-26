@@ -97,6 +97,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: "Klient vrátený ako Nový" });
     }
 
+    if (action === "zmazat") {
+      // Trvalé zmazanie — len admin/manager. ON DELETE CASCADE v migrácii 026
+      // automaticky zmaže súvisiace klienti_history záznamy.
+      // Náberáky a obhliadky majú ON DELETE SET NULL → zostávajú v evidencii
+      // (právny záujem RK + zákon o účtovníctve), ale stratia identifikáciu.
+      // Auth: vyžadujeme by_user_id + check že má rolu admin/manager.
+      const byUser = body.by_user_id as string | undefined;
+      if (!byUser) return NextResponse.json({ error: "by_user_id required" }, { status: 401 });
+      const { data: u } = await sb.from("users").select("role").eq("id", byUser).single();
+      if (!u || (u.role !== "admin" && u.role !== "manager")) {
+        return NextResponse.json({ error: "Forbidden — len admin/manager" }, { status: 403 });
+      }
+      const { data: prevKlient } = await sb.from("klienti").select("makler_id, meno").eq("id", klient_id).single();
+      // Audit log PRED mazaním (lebo CASCADE zmaže history záznamy)
+      await sb.from("klienti_history").insert({
+        klient_id,
+        action: "uvolneny",      // používame existujúci enum hodnoty; meta upresní že to bolo zmazanie
+        from_makler_id: prevKlient?.makler_id || null,
+        by_user_id: byUser,
+        dovod: `Trvalé zmazanie klienta ${prevKlient?.meno || ""} adminom`,
+        meta: { hard_delete: true, klient_meno: prevKlient?.meno },
+      });
+      const { error } = await sb.from("klienti").delete().eq("id", klient_id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ success: true, message: "Klient zmazaný" });
+    }
+
     if (action === "prebrat") {
       const newMaklerId = body.makler_id as string | null;
       if (!newMaklerId) return NextResponse.json({ error: "Missing makler_id" }, { status: 400 });

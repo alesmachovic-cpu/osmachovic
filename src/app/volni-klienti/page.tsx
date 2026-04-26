@@ -112,6 +112,23 @@ export default function VolniKlientiPage() {
     else showToast(d.error || "Chyba", "error");
   };
 
+  const zmazat = async (klient_id: string, meno: string) => {
+    const c1 = confirm(`Trvalo zmazať klienta "${meno}"?\n\n• Karta klienta sa zmaže\n• Náberáky a obhliadky zostanú evidované, ale bez identifikácie\n• História klienta sa zmaže\n\nOperácia je NEVRATNÁ.`);
+    if (!c1) return;
+    const c2 = prompt(`Pre potvrdenie napíš meno klienta presne tak ako je: "${meno}"`);
+    if (c2?.trim() !== meno.trim()) {
+      showToast("Mená sa nezhodujú, mazanie zrušené", "error");
+      return;
+    }
+    const res = await fetch("/api/volni-klienti", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "zmazat", klient_id, by_user_id: user?.id }),
+    });
+    const d = await res.json();
+    if (res.ok) { showToast(`Klient ${meno} zmazaný`); await load(); }
+    else showToast(d.error || "Chyba", "error");
+  };
+
   const prebrat = async (klient_id: string, meno: string, targetMaklerId?: string) => {
     const maklerId = targetMaklerId || myMaklerUuid;
     if (!maklerId) { showToast("Nie je vybraný maklér", "error"); return; }
@@ -396,6 +413,21 @@ export default function VolniKlientiPage() {
                     >
                       Otvoriť
                     </button>
+                    {/* Admin-only Zmazať */}
+                    {isManager && (
+                      <button
+                        onClick={() => zmazat(k.id, k.meno)}
+                        title="Trvalo zmazať klienta (len admin/manager)"
+                        style={{
+                          height: "34px", padding: "0 12px",
+                          background: "transparent", color: "#DC2626",
+                          border: "1px solid #FECACA", borderRadius: "var(--radius-sm)",
+                          fontSize: "13px", fontWeight: 600, cursor: "pointer",
+                        }}
+                      >
+                        🗑 Zmazať
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
