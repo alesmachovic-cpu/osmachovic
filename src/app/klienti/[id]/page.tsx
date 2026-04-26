@@ -8,6 +8,7 @@ import type { Klient } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import SlaTimer from "@/components/SlaTimer";
 import KlientHistoryTab from "@/components/KlientHistoryTab";
+import NovaNehnutelnostModal from "@/components/NovaNehnutelnostModal";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
@@ -281,6 +282,7 @@ export default function KlientDetailPage() {
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
+  const [showNovaNehnModal, setShowNovaNehnModal] = useState(false);
   const [obhliadkaPrefill, setObhliadkaPrefill] = useState<{ datum: string; miesto: string } | null>(null);
   // Pamätáme si, či sa Obhliadka modal otvoril z datetime pickeru (tlačidlo "Späť")
   const [obhliadkaCameFromPicker, setObhliadkaCameFromPicker] = useState(false);
@@ -1736,7 +1738,7 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
               🏠 Nehnuteľnosti klienta
             </div>
-            <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
+            <button onClick={() => setShowNovaNehnModal(true)} style={{
               padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
             }}>+ Pridať nehnuteľnosť</button>
@@ -2293,6 +2295,15 @@ export default function KlientDetailPage() {
             {klient.poznamka}
           </div>
         </div>
+      )}
+
+      {/* Modal: Pre-check pri pridávaní novej nehnuteľnosti */}
+      {showNovaNehnModal && (
+        <NovaNehnutelnostModal
+          klientId={klient.id}
+          klientMeno={klient.meno || ""}
+          onClose={() => setShowNovaNehnModal(false)}
+        />
       )}
 
       {/* Modal: Nová obhliadka */}

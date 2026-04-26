@@ -62,7 +62,8 @@ const systemNav = [
   { label: "Klientská zóna",  href: "/klientska-zona", icon: "🌐" },
   { label: "Plán systému",    href: "/plan",       icon: "🗺️" },
   { label: "Nastavenia",      href: "/nastavenia", icon: "⚙️" },
-  { label: "Notifikácie",     href: "/notifikacie", icon: "🔕", badge: 2 },
+  { label: "Notifikácie",     href: "/notifikacie", icon: "🔕" },
+  { label: "Stav API",        href: "/stav-api",   icon: "🟢", adminOnly: true },
   { label: "System Log",      href: "/log",        icon: "📋" },
 ];
 

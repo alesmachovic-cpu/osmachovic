@@ -153,9 +153,16 @@ interface Props {
   /** Ak nastavený, nový záznam sa uloží ako DODATOK k existujúcemu náberáku.
    *  Originál zostáva nedotknutý — tak vyžaduje model (audit / legalita). */
   parentNaberakId?: string | null;
+  /** Prefill polí z pre-check modalu (NovaNehnutelnostModal) — adresa už bola overená */
+  prefillObec?: string;
+  prefillUlica?: string;
+  prefillSupisneCislo?: string;
+  prefillTyp?: string;
+  prefillLink?: string;
 }
 
-export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNaberakId }: Props) {
+export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNaberakId,
+  prefillObec, prefillUlica, prefillSupisneCislo, prefillLink }: Props) {
   const { user: authUser } = useAuth();
   const uid = authUser?.id || "";
   const [saving, setSaving] = useState(false);
@@ -188,11 +195,11 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
     all.sort((a, b) => b.length - a.length);
     return all.find(x => lok === x.toLowerCase()) || all.find(x => lok.includes(x.toLowerCase())) || "";
   });
-  const [obec, setObec] = useState(() => parseNote([/Obec:\s*(.+)/i, /Mesto:\s*(.+)/i]) || klient.lokalita || "");
+  const [obec, setObec] = useState(() => prefillObec || parseNote([/Obec:\s*(.+)/i, /Mesto:\s*(.+)/i]) || klient.lokalita || "");
   const [castObce, setCastObce] = useState(() => parseNote([/Časť obce:\s*(.+)/i, /Mestská časť:\s*(.+)/i, /MČ:\s*(.+)/i]));
   const [katUzemie, setKatUzemie] = useState(() => parseNote([/Kat(?:astrálne)?\s*územie:\s*(.+)/i, /KÚ:\s*(.+)/i]));
-  const [ulica, setUlica] = useState(() => parseNote([/Ulica:\s*(.+)/i, /Adresa:\s*(.+)/i]));
-  const [supisneCislo, setSupisneCislo] = useState(() => parseNote([/Súpisné\s*č(?:íslo)?\.?:\s*(.+)/i]));
+  const [ulica, setUlica] = useState(() => prefillUlica || parseNote([/Ulica:\s*(.+)/i, /Adresa:\s*(.+)/i]));
+  const [supisneCislo, setSupisneCislo] = useState(() => prefillSupisneCislo || parseNote([/Súpisné\s*č(?:íslo)?\.?:\s*(.+)/i]));
   const [cisloOrientacne, setCisloOrientacne] = useState(() => parseNote([/Orientačné\s*č(?:íslo)?\.?:\s*(.+)/i]));
 
   const [plocha, setPlocha] = useState(() => parseNote([/Plocha:\s*(\d+[\.,]?\d*)/i, /(\d+)\s*m[²2]/i]));

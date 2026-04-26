@@ -656,6 +656,11 @@ function NaberPageContent() {
           onBack={() => setStep("typ")}
           onSubmit={handleNaberSubmit}
           parentNaberakId={parentNaberakId}
+          prefillObec={searchParams.get("obec") || undefined}
+          prefillUlica={searchParams.get("ulica") || undefined}
+          prefillSupisneCislo={searchParams.get("supisne_cislo") || undefined}
+          prefillTyp={searchParams.get("typ") || undefined}
+          prefillLink={searchParams.get("link") || undefined}
         />
       </div>
     );
