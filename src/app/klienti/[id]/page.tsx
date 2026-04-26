@@ -7,6 +7,7 @@ import { STATUS_LABELS } from "@/lib/database.types";
 import type { Klient } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import SlaTimer from "@/components/SlaTimer";
+import KlientHistoryTab from "@/components/KlientHistoryTab";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
@@ -276,7 +277,7 @@ export default function KlientDetailPage() {
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
-  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
@@ -736,6 +737,7 @@ export default function KlientDetailPage() {
     { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
     { key: "objednavky", label: "Objednávky", count: objednavky.length },
     { key: "dokumenty", label: "Dokumenty", count: 0 },
+    { key: "historia", label: "História", count: 0 },
   ];
 
   return (
@@ -2229,6 +2231,16 @@ export default function KlientDetailPage() {
           </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* História — audit log z klienti_history */}
+      {activeTab === "historia" && (
+        <div style={cardSt}>
+          <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
+            História klienta
+          </div>
+          <KlientHistoryTab klientId={klient.id} />
         </div>
       )}
 

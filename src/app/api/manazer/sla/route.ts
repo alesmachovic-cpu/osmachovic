@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { sendPushToAll } from "@/lib/monitor";
+import { notifyUser, userIdFromMaklerId, brandedEmailHtml } from "@/lib/notify";
 
 export const runtime = "nodejs";
 
@@ -109,15 +109,23 @@ export async function POST(request: Request) {
         dovod: dovod || `Napomenutý za nedodržanie SLA u klienta ${klient.meno}`,
         meta: { napomenutia_total: newCount },
       });
-      // Push notifikácia maklerovi (cez sendPushToAll typu "odklik" — neskôr možno per-user)
-      try {
-        await sendPushToAll({
+      // Per-maklér push + email (cieliene iba na napomenutého)
+      const maklerUserId = await userIdFromMaklerId(klient.makler_id || null);
+      if (maklerUserId) {
+        await notifyUser(maklerUserId, {
           type: "odklik",
           title: "Manažér ťa napomenul",
-          body: `Nedodržal/a si SLA u klienta ${klient.meno}. ${dovod ? `Dôvod: ${dovod}` : ""}`,
-          url: "/notifikacie",
+          body: `Klient ${klient.meno} — ${dovod || "Nedodržanie SLA"}`,
+          url: `/klienti/${klient_id}`,
+          emailSubject: `Vianema CRM — napomenutie (klient ${klient.meno})`,
+          emailHtml: brandedEmailHtml({
+            title: "Manažér ti udelil napomenutie",
+            body: `<p>Manažér ťa napomenul za nedodržanie SLA u klienta <strong>${klient.meno}</strong>.</p><p style="margin-top:12px;"><strong>Dôvod:</strong> ${dovod || "Nedodržanie SLA"}</p><p style="margin-top:12px;">Toto je <strong>${newCount}.</strong> napomenutie za posledných 90 dní.</p>`,
+            ctaUrl: `/klienti/${klient_id}`,
+            ctaLabel: "Otvoriť kartu klienta",
+          }),
         });
-      } catch (e) { console.warn("[manazer/sla] push failed:", e); }
+      }
       return NextResponse.json({ success: true, napomenutia_count: newCount });
     }
 

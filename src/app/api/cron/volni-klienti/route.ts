@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { sendPushToAll } from "@/lib/monitor";
+import { notifyUser, notifyManagers, userIdFromMaklerId, brandedEmailHtml } from "@/lib/notify";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -198,9 +199,10 @@ export async function GET(request: Request) {
       }
     }
 
-    // SLA warning markers + audit
+    // === SLA WARNING (48h) markers + per-maklér notifikácie ===
     let slaWarningCount = 0;
     for (const w of slaWarningIds) {
+      const { data: kl } = await sb.from("klienti").select("meno, telefon").eq("id", w.id).single();
       await sb.from("klienti").update({ sla_warning_at: now.toISOString() }).eq("id", w.id);
       await sb.from("klienti_history").insert({
         klient_id: w.id,
@@ -209,10 +211,30 @@ export async function GET(request: Request) {
         dovod: "48h od dohodnutého náberu bez vytvoreného inzerátu",
         meta: { auto: true, hours: 48 },
       });
+      // Per-maklér push + email
+      const userId = await userIdFromMaklerId(w.makler_id);
+      if (userId) {
+        await notifyUser(userId, {
+          type: "odklik",
+          title: "SLA Warning: chýba inzerát",
+          body: `${kl?.meno || "Klient"} čaká už 48h na vytvorenie inzerátu. Po 72h rozhodne manažér.`,
+          url: `/klienti/${w.id}`,
+          emailSubject: `Vianema CRM — SLA warning: ${kl?.meno || "klient"}`,
+          emailHtml: brandedEmailHtml({
+            title: "Pozor: SLA prekročená 48 hodín",
+            body: `Klient <strong>${kl?.meno || "—"}</strong>${kl?.telefon ? ` (${kl.telefon})` : ""} má dohodnutý náber, ale ešte si nevytvoril inzerát. Máš ďalších <strong>24 hodín</strong>, inak rozhodne manažér (môže ťa napomenúť alebo presunúť klienta).`,
+            ctaUrl: `/klienti/${w.id}`,
+            ctaLabel: "Otvoriť kartu klienta",
+          }),
+        });
+      }
       slaWarningCount++;
     }
+
+    // === SLA CRITICAL (72h) markers + notifikácie maklerovi + manažérom ===
     let slaCriticalCount = 0;
     for (const c of slaCriticalIds) {
+      const { data: kl } = await sb.from("klienti").select("meno, telefon").eq("id", c.id).single();
       await sb.from("klienti").update({ sla_critical_at: now.toISOString() }).eq("id", c.id);
       await sb.from("klienti_history").insert({
         klient_id: c.id,
@@ -221,11 +243,42 @@ export async function GET(request: Request) {
         dovod: "72h od dohodnutého náberu bez vytvoreného inzerátu",
         meta: { auto: true, hours: 72 },
       });
+      // Notify makléra (vie že je v critical) + všetkých manažérov (oni rozhodujú)
+      const maklerUserId = await userIdFromMaklerId(c.makler_id);
+      if (maklerUserId) {
+        await notifyUser(maklerUserId, {
+          type: "odklik",
+          title: "SLA Critical: 72h bez inzerátu",
+          body: `${kl?.meno || "Klient"} — manažér teraz rozhoduje (presunutie/napomenutie).`,
+          url: `/klienti/${c.id}`,
+          emailHtml: brandedEmailHtml({
+            title: "SLA prekročená 72 hodín — manažér rozhoduje",
+            body: `Klient <strong>${kl?.meno || "—"}</strong> čaká už 72 hodín na vytvorenie inzerátu. Manažér teraz vyhodnotí situáciu a môže ťa napomenúť alebo klienta presunúť na iného maklera.`,
+            ctaUrl: `/klienti/${c.id}`,
+            ctaLabel: "Otvoriť kartu klienta",
+          }),
+        });
+      }
+      await notifyManagers({
+        type: "odklik",
+        title: "SLA porušenie 72h+ — vyžaduje rozhodnutie",
+        body: `${kl?.meno || "Klient"} čaká bez inzerátu. Otvor manažérsky pohľad.`,
+        url: "/manazer#sla-poruseni",
+        emailSubject: "Vianema CRM — porušenie SLA, vyžaduje rozhodnutie",
+        emailHtml: brandedEmailHtml({
+          title: "Porušenie SLA 72h+",
+          body: `Klient <strong>${kl?.meno || "—"}</strong>${kl?.telefon ? ` (${kl.telefon})` : ""} čaká už 72 hodín na vytvorenie inzerátu. Treba rozhodnúť — presunúť na iného makléra alebo napomenúť pôvodného.`,
+          ctaUrl: "/manazer#sla-poruseni",
+          ctaLabel: "Otvoriť manažérsky pohľad",
+        }),
+      });
       slaCriticalCount++;
     }
-    // Posledná šanca markers
+
+    // === LAST CHANCE markers (1h pred vypršaním) + per-maklér push ===
     let lastChanceCount = 0;
     for (const lc of lastChanceToFlag) {
+      const { data: kl } = await sb.from("klienti").select("meno").eq("id", lc.id).single();
       await sb.from("klienti").update({ sla_last_chance_at: now.toISOString() }).eq("id", lc.id);
       await sb.from("klienti_history").insert({
         klient_id: lc.id,
@@ -234,10 +287,20 @@ export async function GET(request: Request) {
         dovod: lc.reason,
         meta: { auto: true },
       });
+      const userId = await userIdFromMaklerId(lc.makler_id);
+      if (userId) {
+        // Last chance — len push (rýchla notifikácia, žiaden email aby sme nespamovali)
+        await notifyUser(userId, {
+          type: "odklik",
+          title: "Posledná šanca — 1h do vypršania SLA",
+          body: `${kl?.meno || "Klient"}: ${lc.reason}`,
+          url: `/klienti/${lc.id}`,
+        });
+      }
       lastChanceCount++;
     }
 
-    // === Notifikácie ===
+    // === UVOLNENIE — broadcast (lebo všetci si môžu prebrať) ===
     if (movedCount > 0) {
       try {
         await sendPushToAll({
@@ -245,36 +308,6 @@ export async function GET(request: Request) {
           title: `${movedCount} ${movedCount === 1 ? "klient sa uvoľnil" : "klientov sa uvoľnilo"}`,
           body: "Po vypršaní SLA. Skontroluj v sekcii Voľní klienti.",
           url: "/volni-klienti",
-        });
-      } catch (e) { console.warn("[volni-klienti] push failed:", e); }
-    }
-    if (slaWarningCount > 0) {
-      try {
-        await sendPushToAll({
-          type: "odklik",
-          title: `Pozor: ${slaWarningCount} ${slaWarningCount === 1 ? "klient prekročil" : "klientov prekročilo"} 48h SLA`,
-          body: "Vytvor inzerát do 24h, inak rozhoduje manažér.",
-          url: "/",
-        });
-      } catch (e) { console.warn("[volni-klienti] push failed:", e); }
-    }
-    if (slaCriticalCount > 0) {
-      try {
-        await sendPushToAll({
-          type: "odklik",
-          title: `Manažér: ${slaCriticalCount} ${slaCriticalCount === 1 ? "klient" : "klientov"} prekročili 72h SLA`,
-          body: "Treba rozhodnúť: presunúť alebo napomenúť maklera.",
-          url: "/manazer",
-        });
-      } catch (e) { console.warn("[volni-klienti] push failed:", e); }
-    }
-    if (lastChanceCount > 0) {
-      try {
-        await sendPushToAll({
-          type: "odklik",
-          title: `Posledná šanca: ${lastChanceCount} ${lastChanceCount === 1 ? "klient" : "klientov"}`,
-          body: "Klient/i sa uvoľnia v nasledujúcej hodine. Konaj teraz.",
-          url: "/",
         });
       } catch (e) { console.warn("[volni-klienti] push failed:", e); }
     }

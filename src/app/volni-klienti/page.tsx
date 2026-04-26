@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { STATUS_LABELS } from "@/lib/database.types";
 import { useAuth } from "@/components/AuthProvider";
+import { supabase } from "@/lib/supabase";
 import { getMaklerUuid } from "@/lib/maklerMap";
 
 interface KlientVolny {
@@ -56,8 +57,11 @@ export default function VolniKlientiPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [maklerFilter, setMaklerFilter] = useState<string>("all");      // pôvodný maklér (makler_id)
+  const [lokalitaFilter, setLokalitaFilter] = useState<string>("all");
   const [running, setRunning] = useState(false);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
+  const [makleri, setMakleri] = useState<Array<{ id: string; meno: string }>>([]);
 
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(null);
@@ -69,6 +73,7 @@ export default function VolniKlientiPage() {
 
   useEffect(() => {
     if (user?.id) getMaklerUuid(user.id).then(setMyMaklerUuid);
+    supabase.from("makleri").select("id, meno").order("meno").then(({ data }) => setMakleri(data || []));
   }, [user?.id]);
 
   const load = useCallback(async () => {
@@ -119,14 +124,29 @@ export default function VolniKlientiPage() {
     else showToast(d.error || "Chyba", "error");
   };
 
+  // Unique lokality — pre filter dropdown
+  const uniqueLokality = useMemo(() => {
+    const set = new Set<string>();
+    for (const k of klienti) {
+      if (k.lokalita) set.add(k.lokalita);
+    }
+    return Array.from(set).sort();
+  }, [klienti]);
+
   const filtered = klienti.filter((k) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      (k.meno || "").toLowerCase().includes(q) ||
-      (k.telefon || "").toLowerCase().includes(q) ||
-      (k.lokalita || "").toLowerCase().includes(q)
-    );
+    if (search) {
+      const q = search.toLowerCase();
+      const match = (k.meno || "").toLowerCase().includes(q)
+        || (k.telefon || "").toLowerCase().includes(q)
+        || (k.lokalita || "").toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    if (maklerFilter !== "all") {
+      if (maklerFilter === "none" && k.makler_id) return false;
+      if (maklerFilter !== "none" && k.makler_id !== maklerFilter) return false;
+    }
+    if (lokalitaFilter !== "all" && k.lokalita !== lokalitaFilter) return false;
+    return true;
   });
 
   if (loading) {
@@ -179,7 +199,7 @@ export default function VolniKlientiPage() {
         </button>
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "16px" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "12px" }}>
         <div style={{ position: "relative", flex: "1 1 240px", maxWidth: "320px" }}>
           <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", fontSize: "14px" }}>🔍</span>
           <input
@@ -205,6 +225,41 @@ export default function VolniKlientiPage() {
             {f.label}
           </button>
         ))}
+      </div>
+
+      {/* Detailné filtre — pôvodný maklér + lokalita */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "16px" }}>
+        <select value={maklerFilter} onChange={e => setMaklerFilter(e.target.value)} style={{
+          height: "34px", padding: "0 12px", borderRadius: "var(--radius-sm)",
+          background: "var(--bg-base)", border: "1px solid var(--border-subtle)",
+          fontSize: "13px", color: "var(--text-secondary)",
+        }}>
+          <option value="all">Pôvodný maklér: Všetci</option>
+          <option value="none">Bez prideleného makléra</option>
+          {makleri.map(m => (
+            <option key={m.id} value={m.id}>{m.meno}</option>
+          ))}
+        </select>
+        <select value={lokalitaFilter} onChange={e => setLokalitaFilter(e.target.value)} style={{
+          height: "34px", padding: "0 12px", borderRadius: "var(--radius-sm)",
+          background: "var(--bg-base)", border: "1px solid var(--border-subtle)",
+          fontSize: "13px", color: "var(--text-secondary)",
+        }}>
+          <option value="all">Lokalita: Všetky</option>
+          {uniqueLokality.map(l => (
+            <option key={l} value={l}>{l}</option>
+          ))}
+        </select>
+        {(maklerFilter !== "all" || lokalitaFilter !== "all" || search) && (
+          <button
+            onClick={() => { setMaklerFilter("all"); setLokalitaFilter("all"); setSearch(""); }}
+            style={{
+              height: "34px", padding: "0 12px", borderRadius: "var(--radius-sm)",
+              background: "transparent", border: "1px solid var(--border-subtle)",
+              fontSize: "12px", color: "var(--text-muted)", cursor: "pointer",
+            }}
+          >Zrušiť filtre</button>
+        )}
       </div>
 
       <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "12px" }}>
