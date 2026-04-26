@@ -109,8 +109,17 @@ async function fetchEvents(userId?: string): Promise<CalEvent[]> {
 }
 
 /* ─── Event Detail Modal ─── */
-function EventDetailModal({ event, onClose, onDelete }: { event: CalEvent; onClose: () => void; onDelete: (id: string) => void }) {
+function EventDetailModal({ event, onClose, onDelete, obhliadkaIdByEvent }: {
+  event: CalEvent;
+  onClose: () => void;
+  onDelete: (id: string) => void;
+  obhliadkaIdByEvent: Record<string, string>;
+}) {
   const color = event.color || hashColor(event.id);
+  // 1) Skús nájsť odkaz na obhliadkový list priamo v popise (nový formát)
+  const obhliadkaMatch = (event.description || "").match(/\/obhliadky\/([0-9a-f-]{36})/i);
+  // 2) Fallback — staré obhliadky bez URL v popise: lookup podľa calendar_event_id
+  const obhliadkaId = obhliadkaMatch?.[1] || obhliadkaIdByEvent[event.id] || null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}
       onClick={onClose}>
@@ -198,6 +207,21 @@ function EventDetailModal({ event, onClose, onDelete }: { event: CalEvent; onClo
                 Synchronizované z Google Calendar
               </span>
             </div>
+          )}
+
+          {/* Quick link na obhliadkový list — ak event je obhliadka */}
+          {obhliadkaId && (
+            <a
+              href={`/obhliadky/${obhliadkaId}`}
+              style={{
+                display: "block", padding: "12px 16px", background: "#EFF6FF",
+                border: "1px solid #BFDBFE", borderRadius: "10px", marginBottom: "12px",
+                fontSize: "13px", fontWeight: "600", color: "#1D4ED8",
+                textAlign: "center", textDecoration: "none",
+              }}
+            >
+              Otvoriť obhliadkový list →
+            </a>
           )}
 
           {/* Actions */}
@@ -427,6 +451,8 @@ export default function KalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [newEventDate, setNewEventDate] = useState<string | null>(null);
   const [newEventHour, setNewEventHour] = useState(9);
+  // Mapa: calendar_event_id → obhliadka.id (pre rýchle prepojenie z eventu na obhliadkový list)
+  const [obhliadkaIdByEvent, setObhliadkaIdByEvent] = useState<Record<string, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const todayStr = toDateStr(new Date());
@@ -437,6 +463,18 @@ export default function KalendarPage() {
       setLoading(false);
     });
   }, [user?.id]);
+
+  // Načítaj všetky obhliadky a postav mapu calendar_event_id → obhliadka.id
+  useEffect(() => {
+    fetch("/api/obhliadky").then(r => r.json()).then(d => {
+      const map: Record<string, string> = {};
+      for (const o of (d.obhliadky || []) as Array<Record<string, unknown>>) {
+        const ceid = o.calendar_event_id;
+        if (ceid && typeof ceid === "string" && o.id) map[ceid] = String(o.id);
+      }
+      setObhliadkaIdByEvent(map);
+    }).catch(() => {});
+  }, []);
 
   // Scroll to 7am on mount
   useEffect(() => {
@@ -683,6 +721,7 @@ export default function KalendarPage() {
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
           onDelete={handleDeleteEvent}
+          obhliadkaIdByEvent={obhliadkaIdByEvent}
         />
       )}
       {newEventDate && (

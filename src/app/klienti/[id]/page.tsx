@@ -2522,13 +2522,18 @@ function ObhliadkaModal({
       const novaObhliadka = d.obhliadka as Record<string, unknown> | null;
 
       // Voliteľne — vytvor Google Calendar event a prepoj cez calendar_event_id
+      let calendarOk: boolean | null = null; // null = nezvolené, true = OK, false = zlyhalo
       if (createCalendar && authUser?.id && novaObhliadka?.id) {
         try {
           const linkedNehn = inzeraty.find(i => (i as Record<string, unknown>).id === nehnId) as Record<string, unknown> | undefined;
           const summary = isCurrentBuyer
             ? `Obhliadka — ${klient.meno}`
             : `Obhliadka — ${kupMeno || "kupujúci"}${linkedNehn ? ` · ${String(linkedNehn.nazov || "").slice(0, 40)}` : ""}`;
+          // Odkaz späť do CRM (obhliadkový list) — kalendár ho zobrazí ako klikateľný link
+          const obhliadkaUrl = `${window.location.origin}/obhliadky/${novaObhliadka.id}`;
           const popisLines: string[] = [];
+          popisLines.push(`Obhliadkový list: ${obhliadkaUrl}`);
+          popisLines.push("");
           popisLines.push(`Obhliadka klienta: ${klient.meno}`);
           if (!isCurrentBuyer) popisLines.push(`Kupujúci: ${kupMeno}${kupTel ? ` · tel ${kupTel}` : ""}${kupEmail ? ` · ${kupEmail}` : ""}`);
           if (linkedNehn) popisLines.push(`Nehnuteľnosť: ${String(linkedNehn.nazov || "")}`);
@@ -2554,13 +2559,27 @@ function ObhliadkaModal({
                 method: "PATCH", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id: novaObhliadka.id, calendar_event_id: eventId }),
               });
+              calendarOk = true;
+            } else {
+              calendarOk = false;
             }
+          } else {
+            calendarOk = false;
+            const errBody = await calRes.text().catch(() => "");
+            console.warn("[obhliadka calendar] create failed:", calRes.status, errBody);
           }
         } catch (calErr) {
+          calendarOk = false;
           console.warn("[obhliadka calendar] failed:", calErr);
         }
       }
 
+      // Ak používateľ chcel kalendár ale zlyhal → upozorni (obhliadka už uložená)
+      if (calendarOk === false) {
+        setError("Obhliadka uložená, ale Google Kalendár zlyhal. Skontroluj, či je Google Calendar prepojený v Nastaveniach.");
+        setSaving(false);
+        return;
+      }
       onCreated();
     } catch (e) {
       setError(String(e).slice(0, 200));
