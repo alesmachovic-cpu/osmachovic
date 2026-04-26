@@ -2233,7 +2233,19 @@ export default function KlientDetailPage() {
                   { v: "odovzdanie", l: "Odovzdanie kľúčov" },
                   { v: "ine", l: "Iné" },
                 ].map(o => (
-                  <button key={o.v} onClick={() => setEventType(o.v as typeof eventType)} style={{
+                  <button key={o.v} onClick={() => {
+                    // Špeciál: pri "Obhliadka" rovno otvor plný formulár obhliadky
+                    if (o.v === "obhliadka") {
+                      setShowDatePicker(false);
+                      setPendingStatus(null);
+                      setNaberDatum("");
+                      setNaberMiesto("");
+                      setObhliadkaPrefill(null); // Bez prefill — používateľ vyplní v plnom modaly
+                      setShowObhliadkaModal(true);
+                      return;
+                    }
+                    setEventType(o.v as typeof eventType);
+                  }} style={{
                     padding: "10px 12px", borderRadius: "10px", fontSize: "12px", fontWeight: "600",
                     cursor: "pointer", textAlign: "center",
                     background: eventType === o.v ? "#374151" : "var(--bg-elevated)",
