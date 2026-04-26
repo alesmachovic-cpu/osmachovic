@@ -2,14 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
+import SlaPoruseni from "@/components/SlaPoruseni";
 
 interface TeamStat {
+  id: string;
   name: string;
   role: string;
   klienti: number;
   nabery: number;
   nehnutelnosti: number;
   konverzia: string;
+  napomenutia: number; // za posledných 90 dní
+  sla_critical: number; // koľkokrát sa dostal do critical
 }
 
 interface MonthlyData {
@@ -20,10 +25,12 @@ interface MonthlyData {
 }
 
 export default function ManazerPage() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [totals, setTotals] = useState({ klienti: 0, nehnutelnosti: 0, nabery: 0, objednavky: 0 });
   const [team, setTeam] = useState<TeamStat[]>([]);
   const [monthly, setMonthly] = useState<MonthlyData[]>([]);
+  const [criticalCount, setCriticalCount] = useState(0);
 
   useEffect(() => {
     fetchData();
@@ -32,20 +39,32 @@ export default function ManazerPage() {
   async function fetchData() {
     setLoading(true);
 
-    const [{ data: klienti }, { data: nehnutelnosti }, { data: nabery }, { data: objednavky }, { data: users }] =
-      await Promise.all([
-        supabase.from("klienti").select("id, makler_id, created_at, status, proviziaeur"),
-        supabase.from("nehnutelnosti").select("id, makler, created_at, cena"),
-        supabase.from("naberove_listy").select("id, makler_id, created_at"),
-        supabase.from("objednavky").select("id, created_at"),
-        supabase.from("users").select("id, name, role"),
-      ]);
+    // 90-dňové okno pre SLA stat
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      { data: klienti }, { data: nehnutelnosti }, { data: nabery },
+      { data: objednavky }, { data: users }, { data: makleri },
+      { data: history }, slaRes,
+    ] = await Promise.all([
+      supabase.from("klienti").select("id, makler_id, created_at, status, proviziaeur"),
+      supabase.from("nehnutelnosti").select("id, makler, created_at, cena"),
+      supabase.from("naberove_listy").select("id, makler_id, created_at"),
+      supabase.from("objednavky").select("id, created_at"),
+      supabase.from("users").select("id, name, role, email"),
+      supabase.from("makleri").select("id, email, meno"),
+      supabase.from("klienti_history").select("from_makler_id, action, created_at").gte("created_at", ninetyDaysAgo),
+      fetch("/api/manazer/sla").then(r => r.json()).catch(() => ({ critical: [] })),
+    ]);
 
     const kl = klienti ?? [];
     const nh = nehnutelnosti ?? [];
     const nb = nabery ?? [];
     const ob = objednavky ?? [];
     const us = users ?? [];
+    const ms = makleri ?? [];
+    const hs = (history ?? []) as Array<{ from_makler_id: string | null; action: string }>;
+    setCriticalCount((slaRes.critical || []).length);
 
     setTotals({
       klienti: kl.length,
@@ -54,18 +73,33 @@ export default function ManazerPage() {
       objednavky: ob.length,
     });
 
-    // Team stats
+    // Mapovanie users.id → makleri.id (cez email match — rovnako ako v maklerMap)
+    const userToMaklerId: Record<string, string | null> = {};
+    for (const u of us) {
+      const m = ms.find(x => x.email === (u as { email: string }).email);
+      userToMaklerId[u.id] = m?.id || null;
+    }
+
+    // Team stats — vrátane SLA štatistík
     const teamStats: TeamStat[] = us.map((u) => {
-      const uk = kl.filter((k) => k.makler_id === u.id).length;
-      const un = nb.filter((n) => n.makler_id === u.id).length;
-      const unh = nh.filter((n) => n.makler === u.id).length;
+      const maklerUuid = userToMaklerId[u.id];
+      const uk = maklerUuid ? kl.filter((k) => k.makler_id === maklerUuid).length : 0;
+      const un = maklerUuid ? nb.filter((n) => n.makler_id === maklerUuid).length : 0;
+      const unh = maklerUuid ? nh.filter((n) => n.makler === maklerUuid).length : 0;
+      const napomenutia = maklerUuid
+        ? hs.filter((h) => h.from_makler_id === maklerUuid && h.action === "napomenuty").length : 0;
+      const slaCritical = maklerUuid
+        ? hs.filter((h) => h.from_makler_id === maklerUuid && h.action === "sla_critical").length : 0;
       return {
+        id: u.id,
         name: u.name,
         role: u.role || "makler",
         klienti: uk,
         nabery: un,
         nehnutelnosti: unh,
         konverzia: uk > 0 ? `${Math.round((un / uk) * 100)}%` : "0%",
+        napomenutia,
+        sla_critical: slaCritical,
       };
     });
     teamStats.sort((a, b) => b.klienti - a.klienti);
@@ -117,6 +151,27 @@ export default function ManazerPage() {
           Štatistiky a výkonnosť tímu
         </p>
       </div>
+
+      {/* Banner: aktívne SLA porušenia 72h+ */}
+      {criticalCount > 0 && (
+        <div style={{
+          marginBottom: "20px", padding: "14px 16px",
+          background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "10px",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+        }}>
+          <div style={{ fontSize: "13px", color: "#991B1B" }}>
+            <strong>{criticalCount}</strong> {criticalCount === 1 ? "klient prekročil" : "klientov prekročilo"} 72h SLA bez vytvoreného inzerátu — treba rozhodnúť.
+          </div>
+          <a href="#sla-poruseni" style={{
+            padding: "6px 14px", background: "#991B1B", color: "#fff",
+            borderRadius: "8px", fontSize: "12px", fontWeight: 600, textDecoration: "none",
+          }}>Otvoriť zoznam ↓</a>
+        </div>
+      )}
+
+      {/* SLA porušenia — interaktívna sekcia */}
+      <SlaPoruseni byUserId={user?.id || null} onUpdated={fetchData} />
+
 
       {/* KPI cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
@@ -291,7 +346,7 @@ export default function ManazerPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
+              gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr",
               padding: "12px 20px",
               fontSize: "11px",
               fontWeight: "600",
@@ -305,14 +360,16 @@ export default function ManazerPage() {
             <span style={{ textAlign: "center" }}>Klienti</span>
             <span style={{ textAlign: "center" }}>Nábery</span>
             <span style={{ textAlign: "center" }}>Nehnuteľnosti</span>
-            <span style={{ textAlign: "right" }}>Konverzia</span>
+            <span style={{ textAlign: "center" }}>Konverzia</span>
+            <span style={{ textAlign: "center" }} title="SLA porušenia za 90 dní">SLA 72h+</span>
+            <span style={{ textAlign: "right" }} title="Napomenutia za 90 dní">Napomenutí</span>
           </div>
           {team.map((m, i) => (
             <div
-              key={m.name}
+              key={m.id}
               style={{
                 display: "grid",
-                gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
+                gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr",
                 padding: "14px 20px",
                 alignItems: "center",
                 borderBottom: i < team.length - 1 ? "1px solid var(--border)" : "none",
@@ -322,22 +379,26 @@ export default function ManazerPage() {
               <div>
                 <div style={{ fontWeight: "600", color: "var(--text-primary)" }}>{m.name}</div>
                 <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                  {m.role === "admin" ? "Administrátor" : "Maklér"}
+                  {m.role === "admin" ? "Administrátor" : m.role === "manager" ? "Manažér" : "Maklér"}
                 </div>
               </div>
               <div style={{ textAlign: "center", fontWeight: "600", color: "var(--text-primary)" }}>{m.klienti}</div>
               <div style={{ textAlign: "center", fontWeight: "600", color: "var(--text-primary)" }}>{m.nabery}</div>
               <div style={{ textAlign: "center", fontWeight: "600", color: "var(--text-primary)" }}>{m.nehnutelnosti}</div>
+              <div style={{ textAlign: "center" }}>
+                <span style={{
+                  fontSize: "12px", fontWeight: "700",
+                  color: parseInt(m.konverzia) >= 50 ? "#059669" : parseInt(m.konverzia) >= 25 ? "#D97706" : "#374151",
+                }}>{m.konverzia}</span>
+              </div>
+              <div style={{ textAlign: "center", fontWeight: "600", color: m.sla_critical > 0 ? "#DC2626" : "var(--text-muted)" }}>
+                {m.sla_critical}
+              </div>
               <div style={{ textAlign: "right" }}>
-                <span
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: "700",
-                    color: parseInt(m.konverzia) >= 50 ? "#059669" : parseInt(m.konverzia) >= 25 ? "#D97706" : "#374151",
-                  }}
-                >
-                  {m.konverzia}
-                </span>
+                <span style={{
+                  fontSize: "12px", fontWeight: "700",
+                  color: m.napomenutia > 0 ? "#DC2626" : "var(--text-muted)",
+                }}>{m.napomenutia}{m.napomenutia > 0 ? "×" : ""}</span>
               </div>
             </div>
           ))}

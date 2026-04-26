@@ -26,6 +26,12 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      // Premenovanie: /odklik → /volni-klienti (zachová staré bookmarks)
+      { source: "/odklik", destination: "/volni-klienti", permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;

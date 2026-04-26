@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { STATUS_LABELS } from "@/lib/database.types";
 import type { Klient } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
+import SlaTimer from "@/components/SlaTimer";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
@@ -768,7 +769,7 @@ export default function KlientDetailPage() {
           </p>
         </div>
         {isOwner ? (
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             <button onClick={() => setEditModal(true)} style={{
               padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
               border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
@@ -776,6 +777,31 @@ export default function KlientDetailPage() {
             }}>
               ✏️ Upraviť
             </button>
+            {/* Manuálne uvoľnenie klienta (vrátenie do voľného poolu) */}
+            {!klient.je_volny && (klient as { anonymized_at?: string | null }).anonymized_at == null && (
+              <button onClick={async () => {
+                if (!confirm(`Uvoľniť klienta ${klient.meno}? Stane sa voľným pre celú kanceláriu.`)) return;
+                await supabase.from("klienti").update({
+                  je_volny: true,
+                  volny_dovod: klient.status,
+                  volny_at: new Date().toISOString(),
+                }).eq("id", klient.id);
+                await supabase.from("klienti_history").insert({
+                  klient_id: klient.id,
+                  action: "uvolneny",
+                  from_makler_id: klient.makler_id,
+                  by_user_id: user?.id,
+                  dovod: "Manuálne uvoľnenie maklerom",
+                });
+                window.location.reload();
+              }} style={{
+                padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-secondary)",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "12px",
+                fontWeight: "600", cursor: "pointer",
+              }} title="Vráti klienta do voľného poolu (môže si ho prebrať iný maklér)">
+                Uvoľniť klienta
+              </button>
+            )}
             {!(klient as { anonymized_at?: string | null }).anonymized_at && (
               <button onClick={async () => {
                 const ok = window.confirm(
@@ -817,6 +843,9 @@ export default function KlientDetailPage() {
           </div>
         )}
       </div>
+
+      {/* SLA Timer banner — odpočítava do uvolnenia / SLA warningu */}
+      <SlaTimer klient={klient} hasInzerat={inzeraty.length > 0} />
 
       {/* Klient karta — hlavné info */}
       {/* ═══ LV mismatch banner — VŽDY VIDITEĽNÝ keď LV existuje a údaje klienta sa nezhodujú ═══ */}

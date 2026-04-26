@@ -78,6 +78,19 @@ export interface Klient {
   spolupracujuci_provizia_pct: number | null;
   lv_data: Record<string, unknown> | null;
   anonymized_at: string | null;
+  // Voľní klienti / SLA — viď migrácia 026_volni_klienti.sql
+  je_volny?: boolean | null;
+  volny_at?: string | null;
+  volny_dovod?: string | null;
+  sla_warning_at?: string | null;
+  sla_critical_at?: string | null;
+  sla_last_chance_at?: string | null;
+  napomenutia_count?: number | null;
+  posledne_napomenutie_at?: string | null;
+  posledne_napomenutie_dovod?: string | null;
+  manager_action_at?: string | null;
+  manager_action_type?: string | null;
+  updated_at?: string | null;
   created_at: string;
 }
 
