@@ -76,15 +76,20 @@ export async function POST(request: Request) {
           method: "POST",
           headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            from: "Machovič CRM <onboarding@resend.dev>",  // TODO: zmeň na noreply@vianema.sk keď overíš doménu v Resend
+            // Tier 1 — klient-facing FROM. Vianema dominantná, AMGD whisper v patičke.
+            from: process.env.RESEND_FROM || "VIANEMA Real <onboarding@resend.dev>",
             to: toEmail,
-            subject: "Obnovenie hesla — Machovič CRM",
+            subject: "Obnovenie hesla — VIANEMA Real",
             html: `
               <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                  <div style="font-size: 22px; font-weight: 500; letter-spacing: -0.03em; color: #0A0A0A;">VIANEMA</div>
+                  <div style="font-size: 9px; letter-spacing: 0.4em; color: #86868B; margin-top: 2px;">REAL</div>
+                </div>
                 <h2 style="color: #1f2937; margin: 0 0 12px;">Obnovenie hesla</h2>
                 <p style="color: #4b5563; line-height: 1.6;">
                   Ahoj ${user.name || user.id},<br/><br/>
-                  Niekto požiadal o obnovenie hesla pre tvoj účet v Machovič CRM.
+                  Niekto požiadal o obnovenie hesla pre tvoj účet v systéme VIANEMA Real.
                   Ak si to nebol ty, tento email ignoruj.
                 </p>
                 <p style="margin: 24px 0;">
@@ -99,6 +104,10 @@ export async function POST(request: Request) {
                   Ak tlačidlo nefunguje, skopíruj tento odkaz:<br/>
                   <code style="word-break: break-all;">${resetUrl}</code>
                 </p>
+                <div style="text-align: center; margin-top: 28px; padding-top: 16px; border-top: 1px solid #E8E8ED; opacity: 0.6;">
+                  <span style="font-size: 9px; letter-spacing: 0.12em; color: #6b7280;">POWERED BY</span>
+                  <span style="font-size: 11px; font-weight: 500; letter-spacing: -0.02em; color: #1f2937; margin-left: 8px;">AMGD</span>
+                </div>
               </div>
             `,
           }),

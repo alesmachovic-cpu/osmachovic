@@ -3,6 +3,7 @@
 import { useState, useEffect, createContext, useContext } from "react";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { VianemaBranded, PoweredByAMGD } from "@/components/brand";
 
 interface User {
   id: string;
@@ -418,18 +419,10 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
         padding: "36px 32px",
         boxShadow: "0 32px 64px rgba(0,0,0,0.3)",
       }}>
-        {/* Logo */}
-        <div style={{ textAlign: "center", marginBottom: "28px" }}>
-          <div style={{
-            width: "56px", height: "56px", borderRadius: "14px",
-            background: "rgba(255,255,255,0.15)", backdropFilter: "blur(20px)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "24px", fontWeight: 700, color: "#fff", margin: "0 auto 14px",
-          }}>V</div>
-          <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#fff", margin: "0 0 4px", letterSpacing: "-0.02em" }}>
-            Machovič CRM
-          </h1>
-          <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", margin: 0 }}>
+        {/* Logo — Tier 1: Vianema dominates, AMGD whispers underneath */}
+        <div style={{ textAlign: "center", marginBottom: "28px", color: "#fff" }}>
+          <VianemaBranded />
+          <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", margin: "16px 0 0" }}>
             Prihláste sa do systému
           </p>
         </div>
@@ -580,14 +573,19 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
           )}
         </button>
 
-        {/* Footer */}
-        <p style={{
-          fontSize: "11px", color: "rgba(255,255,255,0.3)",
-          textAlign: "center", marginTop: "24px", margin: "24px 0 0",
-          letterSpacing: "0.02em",
+        {/* Footer — Tier 1: AMGD attribution under Vianema-branded screen */}
+        <div style={{
+          textAlign: "center", marginTop: "24px",
+          color: "rgba(255,255,255,0.5)",
         }}>
-          VIANEMA Reality · Machovič CRM v10.0
-        </p>
+          <PoweredByAMGD size="sm" />
+          <div style={{
+            fontSize: "10px", color: "rgba(255,255,255,0.25)", marginTop: "6px",
+            letterSpacing: "0.02em",
+          }}>
+            v10.0
+          </div>
+        </div>
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

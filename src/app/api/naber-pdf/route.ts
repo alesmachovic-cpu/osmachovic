@@ -508,14 +508,15 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "VIANEMA <noreply@vianema.sk>",
+        // Tier 1 — Vianema klient-facing
+        from: process.env.RESEND_FROM || "VIANEMA Real <onboarding@resend.dev>",
         to,
         subject: `Naberovy list — ${esc(lokalita)}`,
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: #374151; color: white; padding: 24px 32px; border-radius: 12px 12px 0 0;">
-              <h1 style="margin: 0; font-size: 20px; font-weight: 700;">VIANEMA</h1>
-              <p style="margin: 4px 0 0; font-size: 13px; opacity: 0.8;">Realitna kancelaria</p>
+            <div style="background: #0A0A0A; color: white; padding: 24px 32px; border-radius: 12px 12px 0 0; text-align:center;">
+              <div style="font-size:24px; font-weight:500; letter-spacing:-0.03em; line-height:1;">VIANEMA</div>
+              <div style="font-size:9px; letter-spacing:0.4em; opacity:0.55; margin-top:4px;">REAL</div>
             </div>
             <div style="background: #f9fafb; padding: 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
               <p style="margin: 0 0 16px; font-size: 15px; color: #374151;">
@@ -529,8 +530,13 @@ export async function POST(req: NextRequest) {
               </p>
               <p style="margin: 24px 0 0; font-size: 14px; color: #374151;">
                 S pozdravom,<br/>
-                <strong>${esc(maklerMeno || "VIANEMA")}</strong>
+                <strong>${esc(maklerMeno || "VIANEMA Real")}</strong>
               </p>
+              <!-- Tier 1 patička: AMGD whisper -->
+              <div style="text-align:center; margin-top:28px; padding-top:16px; border-top:1px solid #e5e7eb; opacity:0.55;">
+                <span style="font-size:9px; letter-spacing:0.12em; color:#6b7280;">POWERED BY</span>
+                <span style="font-size:11px; font-weight:500; letter-spacing:-0.02em; color:#374151; margin-left:8px;">AMGD</span>
+              </div>
             </div>
           </div>
         `,

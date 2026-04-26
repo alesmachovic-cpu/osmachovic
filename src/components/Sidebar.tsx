@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { PoweredByAMGD } from "@/components/brand";
 import { isFeatureEnabled } from "@/lib/featureToggles";
 import { supabase } from "@/lib/supabase";
 
@@ -152,20 +153,22 @@ export default function Sidebar() {
       background: "var(--sidebar-bg)", borderRight: "1px solid var(--border)",
       display: "flex", flexDirection: "column", position: "sticky", top: 0,
     }}>
-      {/* Logo */}
+      {/* Brand — Tier 1: VIANEMA dominant, AMGD whisper */}
       <div style={{ padding: "20px 16px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{
-            width: "34px", height: "34px",
-            background: "#374151",
-            borderRadius: "10px", display: "flex", alignItems: "center",
-            justifyContent: "center", fontSize: "16px", flexShrink: 0,
-          }}>
-            🏢
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px", color: "var(--text-primary)" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <span style={{
+              fontSize: "20px", fontWeight: 500, letterSpacing: "-0.03em",
+              lineHeight: 1, color: "var(--text-primary)",
+              fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+            }}>VIANEMA</span>
+            <span style={{
+              fontSize: "8px", letterSpacing: "0.4em", color: "var(--text-muted)",
+              marginTop: "2px",
+            }}>REAL</span>
           </div>
-          <div>
-            <div style={{ fontWeight: "700", fontSize: "14px", color: "var(--text-primary)", lineHeight: 1.2 }}>Machovič CRM</div>
-            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>v10.0 · Realitný systém</div>
+          <div style={{ marginTop: "6px", color: "var(--text-muted)" }}>
+            <PoweredByAMGD size="sm" />
           </div>
         </div>
       </div>

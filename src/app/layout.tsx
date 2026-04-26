@@ -18,12 +18,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Machovič CRM — Realitný Systém",
-  description: "Inteligentný systém pre správu klientov a nehnuteľností",
+  // Tier 1 — klient-facing browser tab. Vianema first, AMGD as system whisper.
+  title: "VIANEMA Real — Realitný Systém",
+  description: "Inteligentný realitný CRM pre Vianema Real · Powered by AMGD",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "Machovič",
+    title: "VIANEMA",
     statusBarStyle: "default",
   },
   icons: {
