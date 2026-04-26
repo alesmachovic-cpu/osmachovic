@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Klient } from "@/lib/database.types";
+import type { Klient, Nehnutelnost } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
 import ObjednavkaForm from "@/components/ObjednavkaForm";
 import NewKlientModal from "@/components/NewKlientModal";
 import Stepper from "@/components/Stepper";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
+import { calcMatch, type MatchObjednavka } from "@/lib/matching";
 
 type Step = "zoznam" | "klient" | "formular" | "hotovo";
 
@@ -31,6 +32,8 @@ export default function KupujuciPage() {
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
+  // Matching counts per klient_id — pre mini badge v zozname
+  const [matchCounts, setMatchCounts] = useState<Record<string, { count: number; top: number }>>({});
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"objednavky" | "klienti" | "nova">("objednavky");
   const [filterMakler, setFilterMakler] = useState<string>("mine");
@@ -41,6 +44,33 @@ export default function KupujuciPage() {
     loadData();
     supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
   }, []);
+
+  // Vypočítaj matching counts pre všetkých kupujúcich (raz po loadData)
+  useEffect(() => {
+    if (klienti.length === 0) return;
+    let stopped = false;
+    (async () => {
+      const { data: ns } = await supabase.from("nehnutelnosti").select("*").neq("stav", "predane");
+      if (stopped) return;
+      const nehn = (ns ?? []) as Nehnutelnost[];
+      const counts: Record<string, { count: number; top: number }> = {};
+      const buyers = klienti.filter(k => k.typ === "kupujuci" || k.typ === "oboje");
+      for (const k of buyers) {
+        const myObjs = (objednavky.filter(o => o.klient_id === k.id) as unknown) as MatchObjednavka[];
+        let count = 0, top = 0;
+        for (const n of nehn) {
+          const r = calcMatch(k, n, myObjs);
+          if (r.score >= 30) {
+            count++;
+            if (r.score > top) top = r.score;
+          }
+        }
+        if (count > 0) counts[k.id] = { count, top };
+      }
+      setMatchCounts(counts);
+    })();
+    return () => { stopped = true; };
+  }, [klienti, objednavky]);
 
   async function loadData() {
     setLoading(true);
@@ -177,6 +207,18 @@ export default function KupujuciPage() {
                         }}>
                           {druhLabel}
                         </span>
+                        {/* Matching badge — koľko nehnuteľností sa zhoduje */}
+                        {klient && matchCounts[klient.id] && (
+                          <span style={{
+                            fontSize: "10px", fontWeight: "700", padding: "4px 10px", borderRadius: "10px",
+                            background: matchCounts[klient.id].top >= 70 ? "#ECFDF5"
+                              : matchCounts[klient.id].top >= 50 ? "#FEF3C7" : "#F3F4F6",
+                            color: matchCounts[klient.id].top >= 70 ? "#10B981"
+                              : matchCounts[klient.id].top >= 50 ? "#F59E0B" : "#6B7280",
+                          }} title={`${matchCounts[klient.id].count} zhôd, top skóre ${matchCounts[klient.id].top}`}>
+                            🔗 {matchCounts[klient.id].count} · {matchCounts[klient.id].top}
+                          </span>
+                        )}
                       </div>
 
                       <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px" }}>
@@ -220,12 +262,14 @@ export default function KupujuciPage() {
                               Karta klienta
                             </button>
                           )}
-                          <button onClick={() => window.location.href = "/matching"} style={{
-                            padding: "5px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
-                            background: "#F3F4F6", color: "#374151", border: "none", cursor: "pointer",
-                          }}>
-                            Hľadať zhody →
-                          </button>
+                          {klient && (
+                            <button onClick={() => window.location.href = `/klienti/${klient.id}#zhody`} style={{
+                              padding: "5px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                              background: "#F3F4F6", color: "#374151", border: "none", cursor: "pointer",
+                            }}>
+                              Zobraziť zhody →
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -386,6 +430,18 @@ export default function KupujuciPage() {
                     {[k.telefon, k.lokalita].filter(Boolean).join(" · ") || "—"}
                   </div>
                 </div>
+                {/* Mini matching badge */}
+                {matchCounts[k.id] && (
+                  <span style={{
+                    fontSize: "10px", fontWeight: "700", padding: "3px 8px", borderRadius: "8px",
+                    background: matchCounts[k.id].top >= 70 ? "#ECFDF5"
+                      : matchCounts[k.id].top >= 50 ? "#FEF3C7" : "#F3F4F6",
+                    color: matchCounts[k.id].top >= 70 ? "#10B981"
+                      : matchCounts[k.id].top >= 50 ? "#F59E0B" : "#6B7280",
+                  }} title={`${matchCounts[k.id].count} zhôd, top skóre ${matchCounts[k.id].top}`}>
+                    🔗 {matchCounts[k.id].count}
+                  </span>
+                )}
                 <span style={{
                   fontSize: "10px", fontWeight: "600", color: "var(--text-muted)", background: "#F3F4F6",
                   padding: "3px 8px", borderRadius: "8px",

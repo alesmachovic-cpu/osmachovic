@@ -10,6 +10,8 @@ import SlaTimer from "@/components/SlaTimer";
 import KlientHistoryTab from "@/components/KlientHistoryTab";
 import KlientMatchingTab from "@/components/KlientMatchingTab";
 import NovaNehnutelnostModal from "@/components/NovaNehnutelnostModal";
+import { calcMatch, type MatchObjednavka } from "@/lib/matching";
+import type { Nehnutelnost } from "@/lib/database.types";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
@@ -284,6 +286,8 @@ export default function KlientDetailPage() {
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
   const [showNovaNehnModal, setShowNovaNehnModal] = useState(false);
+  // Matching stats — počet zhôd + top skóre pre stat tile v karte klienta
+  const [matchingStats, setMatchingStats] = useState<{ count: number; topScore: number }>({ count: 0, topScore: 0 });
   const [obhliadkaPrefill, setObhliadkaPrefill] = useState<{ datum: string; miesto: string } | null>(null);
   // Pamätáme si, či sa Obhliadka modal otvoril z datetime pickeru (tlačidlo "Späť")
   const [obhliadkaCameFromPicker, setObhliadkaCameFromPicker] = useState(false);
@@ -371,6 +375,32 @@ export default function KlientDetailPage() {
     if (isAdmin) supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
     if (user?.id) getMaklerUuid(user.id).then(setMyMaklerUuid);
   }, [id]);
+
+  // Matching stats — pre kupujúcich vypočítaj počet zhôd s nehnuteľnosťami
+  // (skóre ≥ 30) + top skóre. Načítava nehnuteľnosti + objednavky tohto klienta.
+  useEffect(() => {
+    if (!klient || (klient.typ !== "kupujuci" && klient.typ !== "oboje")) return;
+    let stopped = false;
+    (async () => {
+      const [{ data: ns }, { data: os }] = await Promise.all([
+        supabase.from("nehnutelnosti").select("*").neq("stav", "predane"),
+        supabase.from("objednavky").select("id, klient_id, druh, poziadavky, lokalita, cena_do").eq("klient_id", klient.id),
+      ]);
+      if (stopped) return;
+      const nehn = (ns ?? []) as Nehnutelnost[];
+      const obj = (os ?? []) as MatchObjednavka[];
+      let count = 0, topScore = 0;
+      for (const n of nehn) {
+        const r = calcMatch(klient, n, obj);
+        if (r.score >= 30) {
+          count++;
+          if (r.score > topScore) topScore = r.score;
+        }
+      }
+      setMatchingStats({ count, topScore });
+    })();
+    return () => { stopped = true; };
+  }, [klient?.id, klient?.typ]);
 
   // 15-minútová pripomienka na LV ak chýba
   useEffect(() => {
@@ -1560,7 +1590,7 @@ export default function KlientDetailPage() {
 
       {/* Rýchle akcie + Štatistiky — jeden zjednotený grid s rovnakou tile veľkosťou.
           Filter podľa typu klienta:
-          - kupujúci: Objednávka, Zavolať, Kalendár | Objednávky, Obhliadky
+          - kupujúci: Objednávka, Zavolať, Kalendár | Objednávky, Zhody, Obhliadky
           - predávajúci/oboje: Zavolať, Kalendár | Nábery, Inzeráty, Obhliadky
           Všetky tile rovnaký padding/výška → vizuálne konzistentné. */}
       {(() => {
@@ -1568,7 +1598,7 @@ export default function KlientDetailPage() {
         const isBoth = klient.typ === "oboje";
         type Tile =
           | { kind: "action"; key: string; icon: string; label: string; onClick: () => void }
-          | { kind: "stat"; key: string; label: string; value: number; tab: "nehnutelnosti" | "objednavky" | "obhliadky" };
+          | { kind: "stat"; key: string; label: string; value: number; tab: "nehnutelnosti" | "objednavky" | "obhliadky" | "zhody"; topScore?: number };
 
         const actions: Tile[] = [];
         if (isBuyer || isBoth) {
@@ -1587,6 +1617,7 @@ export default function KlientDetailPage() {
         }
         if (isBuyer || isBoth) {
           stats.push({ kind: "stat", key: "objednavky", label: "Objednávky", value: objednavky.length, tab: "objednavky" });
+          stats.push({ kind: "stat", key: "zhody", label: "Zhody", value: matchingStats.count, tab: "zhody", topScore: matchingStats.topScore });
         }
         stats.push({ kind: "stat", key: "obhliadky", label: "Obhliadky", value: obhliadky.length, tab: "obhliadky" });
 
@@ -1621,6 +1652,15 @@ export default function KlientDetailPage() {
                 <>
                   <div style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", letterSpacing: "-0.02em", lineHeight: 1 }}>{t.value}</div>
                   <div style={{ fontSize: "10px", fontWeight: "600", color: "var(--text-muted)", marginTop: "6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{t.label}</div>
+                  {/* Pre Zhody tile: ukáž top skóre ako malý chip */}
+                  {t.key === "zhody" && t.topScore && t.topScore > 0 && (
+                    <div style={{
+                      marginTop: "4px", padding: "2px 8px", borderRadius: "10px",
+                      fontSize: "9px", fontWeight: 700,
+                      background: t.topScore >= 70 ? "#ECFDF5" : t.topScore >= 50 ? "#FEF3C7" : "#F3F4F6",
+                      color: t.topScore >= 70 ? "#10B981" : t.topScore >= 50 ? "#F59E0B" : "#6B7280",
+                    }}>top {t.topScore}</div>
+                  )}
                 </>
               )}
             </button>
