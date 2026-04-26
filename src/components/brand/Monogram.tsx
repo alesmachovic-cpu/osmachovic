@@ -1,42 +1,65 @@
 interface MonogramProps {
-  className?: string;
-  /** Pixel size of the square. Default: 32 */
+  /** Pixel size of the square (width = height). Default: 40 */
   size?: number;
+  /** Inverted — biele pozadie + čierny text. Default: false (čierne pozadie + biely text) */
+  inverted?: boolean;
+  className?: string;
 }
 
 /**
- * AMGD monogram — single-letter mark for compact contexts (favicon-sized,
- * sidebar collapsed state, mobile nav).
+ * AMGD monogram — AM/GD štvorec.
  *
- * Tier 3. Filled square with the letter A. Color inherits currentColor.
+ * Použitie: app icon, avatar, watermark. Nezvolený tier — funguje samostatne
+ * (na klient-facing aj AMGD plochách). Self-contained: NEpoužíva currentColor,
+ * vždy renderuje vlastný farebný blok.
  */
-export function Monogram({ className = "", size = 32 }: MonogramProps) {
+export function Monogram({ size = 40, inverted = false, className = "" }: MonogramProps) {
+  const bg = inverted ? "#FFFFFF" : "#000000";
+  const fg = inverted ? "#000000" : "#FFFFFF";
   return (
-    <div
-      className={`inline-flex items-center justify-center ${className}`}
-      style={{
-        width: `${size}px`,
-        height: `${size}px`,
-        borderRadius: `${Math.round(size * 0.22)}px`,
-        background: "currentColor",
-        color: "transparent",
-      }}
+    <svg
+      role="img"
       aria-label="AMGD"
+      width={size}
+      height={size}
+      viewBox="0 0 120 120"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
     >
-      <span
-        style={{
-          fontSize: `${Math.round(size * 0.55)}px`,
-          fontWeight: 600,
-          letterSpacing: "-0.04em",
-          lineHeight: 1,
-          fontFamily: "Inter, system-ui, -apple-system, sans-serif",
-          // Inversion trick: letter "transparently" cuts through the filled square
-          mixBlendMode: "difference",
-          color: "#fff",
-        }}
+      <rect width="120" height="120" rx="22" fill={bg} />
+      <text
+        x="60"
+        y="56"
+        textAnchor="middle"
+        fontFamily="Inter, system-ui, -apple-system, sans-serif"
+        fontSize="28"
+        fontWeight="500"
+        letterSpacing="-0.5"
+        fill={fg}
       >
-        A
-      </span>
-    </div>
+        AM
+      </text>
+      <line
+        x1="36"
+        y1="64"
+        x2="84"
+        y2="64"
+        stroke={fg}
+        strokeWidth="0.8"
+        opacity="0.4"
+      />
+      <text
+        x="60"
+        y="92"
+        textAnchor="middle"
+        fontFamily="Inter, system-ui, -apple-system, sans-serif"
+        fontSize="28"
+        fontWeight="500"
+        letterSpacing="-0.5"
+        fill={fg}
+      >
+        GD
+      </text>
+    </svg>
   );
 }

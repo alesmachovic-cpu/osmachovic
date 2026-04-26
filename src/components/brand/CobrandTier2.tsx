@@ -1,34 +1,26 @@
 interface PartnershipLockupProps {
-  /** Override default size scale. Default: "md" */
+  /** Veľkostná škála. Default: "md" */
   size?: "sm" | "md" | "lg";
   className?: string;
 }
 
 /**
- * Tier 2 lockup — Vianema and AMGD as equals, separated by vertical rule.
+ * Tier 2 lockup — VIANEMA | AMGD ako rovnocenné, oddelené tenkým vertikálnym
+ * separátorom.
  *
- * Visual: VIANEMA  |  AMGD
+ * Použitie (B2B): pitch decky pre iné realitky (title slide), case studies,
+ * blog posts o systéme, joint webináre, partnership stránky, press materiály.
  *
- * Use in B2B / partnership contexts:
- * - Pitch decks for other realitky (title slide)
- * - Case studies, blog posts about the system
- * - Joint webinars, partnership pages
- * - Press materials
+ * NIKDY v klient-facing kontextoch (Tier 1) — implikuje to, že Vianema a AMGD
+ * sú zameniteľné z pohľadu kupujúceho/predávajúceho, čo mätie vzťah.
  *
- * NEVER use this in klient-facing contexts (Tier 1) — it implies
- * Vianema and AMGD are interchangeable to the buyer/seller, which
- * confuses the relationship.
- *
- * Color: inherits currentColor — set with text-white / text-black.
+ * Farba: dedí cez currentColor.
  */
-export function PartnershipLockup({
-  size = "md",
-  className = "",
-}: PartnershipLockupProps) {
+export function PartnershipLockup({ size = "md", className = "" }: PartnershipLockupProps) {
   const config = {
-    sm: { vianemaSize: 14, amgdSize: 14, realSize: 7, dividerHeight: 14, gap: "gap-3.5" },
-    md: { vianemaSize: 22, amgdSize: 22, realSize: 6, dividerHeight: 36, gap: "gap-6" },
-    lg: { vianemaSize: 32, amgdSize: 32, realSize: 9, dividerHeight: 50, gap: "gap-8" },
+    sm: { vianemaSize: 14, amgdSize: 14, realSize: 7,  dividerHeight: 14, gap: "gap-3.5" },
+    md: { vianemaSize: 22, amgdSize: 22, realSize: 6,  dividerHeight: 36, gap: "gap-6" },
+    lg: { vianemaSize: 32, amgdSize: 32, realSize: 9,  dividerHeight: 50, gap: "gap-8" },
   }[size];
 
   return (

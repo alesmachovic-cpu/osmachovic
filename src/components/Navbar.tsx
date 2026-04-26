@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import SystemSearch from "@/components/SystemSearch";
 import { useAuth } from "@/components/AuthProvider";
+import { PoweredByAMGD } from "@/components/brand";
 
 type ApiStatus = "ok" | "credit_low" | "error" | "no_key";
 type ApiStatuses = { anthropic: ApiStatus; gemini: ApiStatus; openai: ApiStatus };
@@ -278,6 +279,11 @@ export default function Navbar() {
         </div>
 
         <ApiBell />
+
+        {/* Tier 1 — AMGD whisper pred avatarom (interný maklér view) */}
+        <div className="navbar-amgd-whisper" style={{ color: "var(--text-muted)" }}>
+          <PoweredByAMGD size="sm" />
+        </div>
 
         <div className="navbar-avatar" style={{
           width: "36px", height: "36px", borderRadius: "50%",

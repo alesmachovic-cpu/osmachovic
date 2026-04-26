@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
@@ -7,9 +7,13 @@ import BottomTabs from "@/components/BottomTabs";
 import SidebarOverlay from "@/components/SidebarOverlay";
 import AuthProvider from "@/components/AuthProvider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+// Inter ako primárny font — latin-ext potrebný pre slovenské diakritiky
+// (č, š, ž, ľ, ť, á, í, é). Brand komponenty (Logo, Wordmark, Monogram,
+// VianemaBranded, ...) hardcodujú "Inter, system-ui, ..." v štýle.
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin", "latin-ext"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -67,7 +71,7 @@ export default function RootLayout({
           })();
         `}} />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${inter.variable} ${geistMono.variable} antialiased`}>
         <AuthProvider>
           <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
             {/* Desktop sidebar */}

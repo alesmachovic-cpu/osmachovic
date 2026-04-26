@@ -1,24 +1,25 @@
+import type { ReactNode } from "react";
+
 interface PoweredByAMGDProps {
-  /** Color theme — auto adapts; pass to override */
-  className?: string;
-  /** Visual scale: "sm" for vizitka/email footers, "md" for login screens */
+  /** Visual scale: "sm" pre vizitky/email patičky, "md" pre login screen */
   size?: "sm" | "md";
+  className?: string;
 }
 
 /**
- * AMGD signature for use under Vianema branding (Tier 1 — klient-facing).
+ * Tichá AMGD signatúra "POWERED BY  AMGD" pre Tier 1 (klient-facing).
  *
- * Visual: "POWERED BY  AMGD" in muted small caps, ~55% opacity.
+ * Použitie pod Vianema brandingom v:
+ *   - Login footer
+ *   - Email signatúrach
+ *   - PDF dokumentoch
+ *   - Vizitkách
  *
- * Use under Vianema logo on:
- * - Login screen footer
- * - Email signatures
- * - Contracts / PDF documents
- * - Business cards
+ * NIKDY samostatne bez Vianema brandingu prítomného v rovnakej ploche.
  *
- * NEVER use without Vianema branding present in the same view.
+ * Farba: dedí cez currentColor.
  */
-export function PoweredByAMGD({ className = "", size = "md" }: PoweredByAMGDProps) {
+export function PoweredByAMGD({ size = "md", className = "" }: PoweredByAMGDProps) {
   const isSmall = size === "sm";
   const labelSize = isSmall ? "text-[7px]" : "text-[9px]";
   const markSize = isSmall ? "text-[9px]" : "text-[11px]";
@@ -50,21 +51,26 @@ export function PoweredByAMGD({ className = "", size = "md" }: PoweredByAMGDProp
 }
 
 interface VianemaBrandedProps {
-  children?: React.ReactNode;
-  /** Show Powered by AMGD line below. Default: true */
+  children?: ReactNode;
+  /** Či sa pod Vianemou má zobraziť POWERED BY AMGD whisper. Default: true */
   showPoweredBy?: boolean;
-  /** Vertical layout (login, vizitka) vs horizontal (header). Default: vertical */
+  /** Vertical (login, vizitka) vs horizontal (header). Default: vertical */
   orientation?: "vertical" | "horizontal";
   className?: string;
 }
 
 /**
- * Tier 1 lockup — Vianema dominates, AMGD whispers.
+ * Tier 1 lockup — Vianema dominuje, AMGD šepká.
  *
- * Use as the brand block in klient-facing contexts. Composes Vianema
- * wordmark with optional Powered by AMGD signature.
+ * Použitie: login screen, klient-facing dokumenty, kontrakty footer,
+ * email signatúry, vizitky.
  *
- * Color: inherits currentColor — set with text-white / text-black.
+ * Skladá Vianema wordmark s voliteľnou POWERED BY AMGD signatúrou pod ním.
+ *
+ * Vianema wordmark je momentálne typografický placeholder (Inter font).
+ * Pred produkciou nahradiť oficiálnym SVG z vianemareal.eu — viď BRAND.md.
+ *
+ * Farba: dedí cez currentColor.
  */
 export function VianemaBranded({
   children,
@@ -73,7 +79,6 @@ export function VianemaBranded({
   className = "",
 }: VianemaBrandedProps) {
   const isVertical = orientation === "vertical";
-
   return (
     <div
       className={`flex ${
