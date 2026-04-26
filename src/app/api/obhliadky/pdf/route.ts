@@ -185,7 +185,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { obhliadkaId?: string; to?: string; maklerMeno?: string };
+  let body: { obhliadkaId?: string; to?: string; maklerMeno?: string; maklerEmail?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
   if (!body.obhliadkaId || !body.to) return NextResponse.json({ error: "obhliadkaId and to required" }, { status: 400 });
 
@@ -201,11 +201,19 @@ export async function POST(req: NextRequest) {
   const lokalita = String(ctx.nehn?.lokalita || ctx.nehn?.nazov || "nehnutelnost");
   const kupMeno = String(ctx.ob.kupujuci_meno || "klient");
 
+  // FROM adresa: ak je v env nastavený verifikovaný RESEND_FROM (napr.
+  // "VIANEMA <noreply@vianema.sk>" po overení domény), použi ho. Inak fallback
+  // na Resend default (vždy doručiteľný). replyTo nasmerujeme na makléra,
+  // takže odpovede idú jemu.
+  const fromAddr = process.env.RESEND_FROM || "VIANEMA <onboarding@resend.dev>";
+  const replyTo = body.maklerEmail || undefined;
+
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: "VIANEMA <noreply@vianema.sk>",
+      from: fromAddr,
+      ...(replyTo ? { reply_to: replyTo } : {}),
       to: body.to,
       subject: `Obhliadkovy list — ${esc(lokalita)}`,
       html: `

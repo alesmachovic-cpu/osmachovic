@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import SignatureCanvas from "@/components/SignatureCanvas";
+import { useAuth } from "@/components/AuthProvider";
 
 type Obhliadka = {
   id: string;
@@ -25,6 +26,7 @@ type Obhliadka = {
 export default function ObhliadkaDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
   const id = params.id;
 
   const [obhliadka, setObhliadka] = useState<Obhliadka | null>(null);
@@ -97,7 +99,12 @@ export default function ObhliadkaDetailPage() {
     try {
       const r = await fetch("/api/obhliadky/pdf", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ obhliadkaId: obhliadka.id, to }),
+        body: JSON.stringify({
+          obhliadkaId: obhliadka.id,
+          to,
+          maklerEmail: user?.email || undefined,
+          maklerMeno: user?.name || undefined,
+        }),
       });
       const d = await r.json();
       if (!r.ok) { setError(d.error || "Email zlyhal"); setSaving(false); return; }

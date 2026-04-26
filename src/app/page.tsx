@@ -167,21 +167,17 @@ function CalendarWidget({ userId }: { userId?: string }) {
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
 
-  // Generate 7 days (current week Mon-Sun)
+  // Rolling 7-day window: dnes + nasledujúcich 6 dní.
+  // Garantuje, že aktuálny deň je vždy viditeľný (najprv vľavo). Predtým sa
+  // používala striktná Po-Ne týždeň, ktorá v nedeľu zobrazovala minulý/budúci
+  // týždeň podľa hraničnej logiky a maklér nevidel dnešné udalosti.
   const days: Date[] = [];
-  const startOfWeek = new Date(today);
-  // Bug fix: ak je dnes nedeľa (getDay=0), pôvodný vzorec posunul na +1 deň → ďalší týždeň.
-  // Správne: nedeľa → -6 dní; iné dni → 1 - dow (napr. utorok dow=2 → -1 deň).
-  const dow = startOfWeek.getDay(); // 0=Ne, 1=Po, ..., 6=So
-  const offsetToMonday = dow === 0 ? -6 : 1 - dow;
-  startOfWeek.setDate(startOfWeek.getDate() + offsetToMonday);
   for (let i = 0; i < 7; i++) {
-    const d = new Date(startOfWeek);
+    const d = new Date(today);
     d.setDate(d.getDate() + i);
     days.push(d);
   }
-
-  const dayNames = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
+  const dayNamesByDow = ["Ne", "Po", "Ut", "St", "Št", "Pi", "So"]; // 0=Ne ... 6=So
 
   function fmtTime(iso: string) {
     const d = new Date(iso);
@@ -247,7 +243,7 @@ function CalendarWidget({ userId }: { userId?: string }) {
             <DroppableDay key={i} dateStr={ds}>
               <div onClick={() => setSelectedDate(ds)} style={{ cursor: "pointer" }}>
                 <div style={{ fontSize: "10px", color: "var(--text-muted)", fontWeight: "600", marginBottom: "4px" }}>
-                  {dayNames[i]}
+                  {dayNamesByDow[d.getDay()]}
                 </div>
                 <div style={{
                   width: "32px", height: "32px", borderRadius: "50%", margin: "0 auto",
