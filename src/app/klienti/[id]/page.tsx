@@ -1553,82 +1553,94 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {/* Rýchle akcie — Inzerát/Vyplniť náberák odstránené, pracujú sa cez Pipeline predávajúceho */}
-      <div style={{
-        display: "grid", gridTemplateColumns: klient.typ === "kupujuci" ? "repeat(3, 1fr)" : "repeat(2, 1fr)",
-        gap: "10px", marginBottom: "20px",
-      }} className="cards-grid">
-        {klient.typ === "kupujuci" && (
-          <button onClick={() => router.push(`/kupujuci?klient_id=${klient.id}`)} style={{
-            padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-            borderRadius: "12px", cursor: "pointer", textAlign: "center",
-            transition: "border-color 0.15s",
-          }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
-          >
-            <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📋</div>
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Objednávka</div>
-          </button>
-        )}
-        <button onClick={() => { if (klient.telefon) window.open(`tel:${klient.telefon}`); }} style={{
-          padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-          borderRadius: "12px", cursor: "pointer", textAlign: "center",
-          transition: "border-color 0.15s",
-        }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
-          onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
-        >
-          <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📞</div>
-          <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Zavolať</div>
-        </button>
-        <button onClick={() => {
-          setPendingStatus(null);
-          setShowDatePicker(true);
-        }} style={{
-          padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-          borderRadius: "12px", cursor: "pointer", textAlign: "center",
-          transition: "border-color 0.15s",
-        }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
-          onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
-        >
-          <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📅</div>
-          <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Kalendár</div>
-        </button>
-      </div>
+      {/* Rýchle akcie + Štatistiky — jeden zjednotený grid s rovnakou tile veľkosťou.
+          Filter podľa typu klienta:
+          - kupujúci: Objednávka, Zavolať, Kalendár | Objednávky, Obhliadky
+          - predávajúci/oboje: Zavolať, Kalendár | Nábery, Inzeráty, Obhliadky
+          Všetky tile rovnaký padding/výška → vizuálne konzistentné. */}
+      {(() => {
+        const isBuyer = klient.typ === "kupujuci";
+        const isBoth = klient.typ === "oboje";
+        type Tile =
+          | { kind: "action"; key: string; icon: string; label: string; onClick: () => void }
+          | { kind: "stat"; key: string; label: string; value: number; tab: "nehnutelnosti" | "objednavky" | "obhliadky" };
 
-      {/* Štatistiky klienta — kliknuteľné, presmerujú na príslušný tab */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px",
-      }} className="cards-grid">
-        {([
-          { label: "Nábery", value: nabery.length, tab: "nehnutelnosti" as const },
-          { label: "Objednávky", value: objednavky.length, tab: "objednavky" as const },
-          { label: "Inzeráty", value: inzeraty.length, tab: "nehnutelnosti" as const },
-          { label: "Obhliadky", value: obhliadky.length, tab: "obhliadky" as const },
-        ]).map(s => (
-          <button key={s.label} onClick={() => {
-            setActiveTab(s.tab);
-            // Scroll k tabom
+        const actions: Tile[] = [];
+        if (isBuyer || isBoth) {
+          actions.push({ kind: "action", key: "objednavka", icon: "📋", label: "Objednávka",
+            onClick: () => router.push(`/kupujuci?klient_id=${klient.id}`) });
+        }
+        actions.push({ kind: "action", key: "zavolat", icon: "📞", label: "Zavolať",
+          onClick: () => { if (klient.telefon) window.open(`tel:${klient.telefon}`); } });
+        actions.push({ kind: "action", key: "kalendar", icon: "📅", label: "Kalendár",
+          onClick: () => { setPendingStatus(null); setShowDatePicker(true); } });
+
+        const stats: Tile[] = [];
+        if (!isBuyer || isBoth) {
+          stats.push({ kind: "stat", key: "nabery",   label: "Nábery",    value: nabery.length,    tab: "nehnutelnosti" });
+          stats.push({ kind: "stat", key: "inzeraty", label: "Inzeráty",  value: inzeraty.length,  tab: "nehnutelnosti" });
+        }
+        if (isBuyer || isBoth) {
+          stats.push({ kind: "stat", key: "objednavky", label: "Objednávky", value: objednavky.length, tab: "objednavky" });
+        }
+        stats.push({ kind: "stat", key: "obhliadky", label: "Obhliadky", value: obhliadky.length, tab: "obhliadky" });
+
+        const renderTile = (t: Tile) => {
+          const isActive = t.kind === "stat" && activeTab === t.tab;
+          const tileSt: React.CSSProperties = {
+            padding: "16px 14px", borderRadius: "12px", textAlign: "center",
+            background: isActive ? "var(--bg-elevated)" : "var(--bg-surface)",
+            border: isActive ? "1px solid #374151" : "1px solid var(--border)",
+            cursor: "pointer", transition: "all 0.15s",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            minHeight: "84px",
+          };
+          const onClick = t.kind === "action" ? t.onClick : () => {
+            setActiveTab(t.tab);
             setTimeout(() => {
               const el = document.querySelector('[data-tabs-anchor]');
               if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
             }, 50);
-          }} style={{
-            padding: "18px 16px", borderRadius: "12px",
-            background: activeTab === s.tab ? "var(--bg-elevated)" : "var(--bg-surface)",
-            border: activeTab === s.tab ? "1px solid #374151" : "1px solid var(--border)",
-            textAlign: "center", cursor: "pointer", transition: "all 0.15s",
-          }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "#374151"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = activeTab === s.tab ? "#374151" : "var(--border)"; }}
-          >
-            <div style={{ fontSize: "24px", fontWeight: "700", color: "var(--text-primary)", letterSpacing: "-0.02em" }}>{s.value}</div>
-            <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", marginTop: "4px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</div>
-          </button>
-        ))}
-      </div>
+          };
+          return (
+            <button key={t.key} onClick={onClick} style={tileSt}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "#374151"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = isActive ? "#374151" : "var(--border)"; }}
+            >
+              {t.kind === "action" ? (
+                <>
+                  <div style={{ fontSize: "20px", marginBottom: "6px", opacity: 0.85 }}>{t.icon}</div>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>{t.label}</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", letterSpacing: "-0.02em", lineHeight: 1 }}>{t.value}</div>
+                  <div style={{ fontSize: "10px", fontWeight: "600", color: "var(--text-muted)", marginTop: "6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{t.label}</div>
+                </>
+              )}
+            </button>
+          );
+        };
+
+        return (
+          <>
+            {/* Akcie */}
+            <div style={{
+              display: "grid", gridTemplateColumns: `repeat(${actions.length}, 1fr)`,
+              gap: "10px", marginBottom: "10px",
+            }} className="cards-grid">
+              {actions.map(renderTile)}
+            </div>
+            {/* Štatistiky — rovnaký počet stĺpcov ako akcie pre vizuálnu konzistenciu */}
+            <div style={{
+              display: "grid", gridTemplateColumns: `repeat(${Math.max(stats.length, actions.length)}, 1fr)`,
+              gap: "10px", marginBottom: "20px",
+            }} className="cards-grid">
+              {stats.map(renderTile)}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Taby */}
       <div data-tabs-anchor style={{

@@ -476,18 +476,43 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
         izby: izbyNum || null,
         makler_email: authUser?.email || null,
         makler_meno: makler || null,
+        // Presná adresa — pre silnejšiu kontrolu duplicít na rovnakej ulici/čísle
+        ulica_privatna: ulica || null,
+        supisne_cislo: supisneCislo || null,
       };
-      if (collisionBody.lokalita && izbyNum) {
+      if ((collisionBody.lokalita && izbyNum) || (collisionBody.ulica_privatna && collisionBody.supisne_cislo)) {
         const res = await fetch("/api/kolize/nehnutelnosti", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify(collisionBody),
         });
         const out = await res.json().catch(() => ({}));
-        const high = (out.kolize || []).filter((k: { zavaznost?: string }) => k.zavaznost === "high");
-        if (high.length > 0) {
-          const names = high.map((k: { data?: { makler_a_meno?: string } }) => k.data?.makler_a_meno || "iný maklér").join(", ");
+        const all = (out.kolize || []) as Array<{ typ?: string; zavaznost?: string; data?: Record<string, unknown> }>;
+
+        // 1) Presná adresa — najsilnejšia, ponúka prejsť na existujúci náberák
+        const exact = all.filter(k => k.typ === "PRESNA_ADRESA");
+        if (exact.length > 0) {
+          const e = exact[0];
+          const existId = e.data?.existujuca_nehnutelnost_id as string | undefined;
+          const exMakler = (e.data?.makler_a_meno as string) || "iný maklér";
+          const exNazov = (e.data?.nazov as string) || "—";
           const ok = window.confirm(
-            `⚠️ KOLÍZIA\n\nRovnakú nehnuteľnosť (${obec}, ${typ}, ${izbyNum}-izb) už eviduje: ${names}.\n\nNapriek tomu pokračovať v nábere?`
+            `⚠️ DUPLICITNÁ ADRESA\n\nNa adrese ${ulica} ${supisneCislo}, ${obec} už evidujeme nehnuteľnosť:\n` +
+            `• ${exNazov}\n• Maklér: ${exMakler}\n\n` +
+            `Stlač OK pre POKRAČOVAŤ v zakladaní novej (asi je to chyba), alebo ZRUŠIŤ — odporúčame namiesto duplikovania ` +
+            `otvoriť existujúcu nehnuteľnosť cez Portfólio.`
+          );
+          if (!ok) {
+            if (existId) console.info("[duplicate] existujuca nehnutelnost ID:", existId);
+            return;
+          }
+        }
+
+        // 2) Soft kolízia (lokalita+typ+izby)
+        const high = all.filter(k => k.typ !== "PRESNA_ADRESA" && k.zavaznost === "high");
+        if (high.length > 0) {
+          const names = high.map(k => (k.data?.makler_a_meno as string) || "iný maklér").join(", ");
+          const ok = window.confirm(
+            `⚠️ KOLÍZIA\n\nPodobnú nehnuteľnosť (${obec}, ${typ}, ${izbyNum}-izb) už eviduje: ${names}.\n\nNapriek tomu pokračovať v nábere?`
           );
           if (!ok) return;
         }
