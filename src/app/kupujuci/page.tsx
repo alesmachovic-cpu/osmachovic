@@ -34,6 +34,8 @@ export default function KupujuciPage() {
   const [loading, setLoading] = useState(true);
   // Matching counts per klient_id — pre mini badge v zozname
   const [matchCounts, setMatchCounts] = useState<Record<string, { count: number; top: number }>>({});
+  // Filter status — rovnaký pattern ako Klienti page
+  const [filterStatus, setFilterStatus] = useState<string>("");
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"objednavky" | "klienti" | "nova">("objednavky");
   const [filterMakler, setFilterMakler] = useState<string>("mine");
@@ -92,6 +94,8 @@ export default function KupujuciPage() {
     // Makler filter
     if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
     if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
+    // Status filter
+    if (filterStatus && k.status !== filterStatus) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -101,6 +105,16 @@ export default function KupujuciPage() {
       k.lokalita?.toLowerCase().includes(q)
     );
   });
+
+  // Stats pre prehľad cards (počítame z kupujuciKlienti, nie z filtered)
+  const objKlientIdsAll = new Set(objednavky.map(o => o.klient_id as string));
+  const stats = {
+    total: kupujuciKlienti.length,
+    novy: kupujuciKlienti.filter(k => k.status === "novy" || k.status === "novy_kontakt").length,
+    volat: kupujuciKlienti.filter(k => k.status === "volat_neskor").length,
+    aktivny: kupujuciKlienti.filter(k => k.status === "aktivny").length,
+    bezObj: kupujuciKlienti.filter(k => !objKlientIdsAll.has(k.id)).length,
+  };
 
   const cardSt: React.CSSProperties = {
     background: "var(--bg-surface)", border: "1px solid var(--border)",
@@ -132,6 +146,72 @@ export default function KupujuciPage() {
               + Objednávka
             </button>
           </div>
+        </div>
+
+        {/* Prehľad — stat cards (klikateľné = nastavia status filter) */}
+        <div className="cards-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px", marginBottom: "16px" }}>
+          {[
+            { label: "Celkom", value: stats.total, filter: "" },
+            { label: "Nový", value: stats.novy, filter: "novy" },
+            { label: "Volať neskôr", value: stats.volat, filter: "volat_neskor" },
+            { label: "Aktívny", value: stats.aktivny, filter: "aktivny" },
+            { label: "Bez objednávky", value: stats.bezObj, filter: "" },
+          ].map(s => (
+            <div key={s.label} onClick={() => {
+              if (s.label === "Bez objednávky") { setTab("klienti"); setFilterStatus(""); }
+              else setFilterStatus(s.filter);
+            }} style={{
+              padding: "16px", background: "var(--bg-surface)", borderRadius: "12px",
+              border: filterStatus === s.filter && s.label !== "Bez objednávky" && s.label !== "Celkom"
+                ? "2px solid #374151" : "1px solid var(--border)",
+              cursor: "pointer", transition: "border 0.15s",
+            }}>
+              <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", fontWeight: "500" }}>{s.label}</div>
+              <div style={{ fontSize: "24px", fontWeight: "700", color: "#374151" }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Toolbar — search + status + makler filter */}
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "16px", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: "200px", maxWidth: "360px" }}>
+            <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px", color: "var(--text-muted)", pointerEvents: "none" }}>🔍</span>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Hľadať meno, email, telefón..."
+              style={{ width: "100%", padding: "9px 14px 9px 36px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", outline: "none" }} />
+          </div>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{
+            padding: "9px 14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+            borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", outline: "none", cursor: "pointer",
+          }}>
+            <option value="">Všetky statusy</option>
+            <option value="novy">Nový</option>
+            <option value="novy_kontakt">Nový kontakt</option>
+            <option value="aktivny">Aktívny</option>
+            <option value="volat_neskor">Volať neskôr</option>
+            <option value="nedovolal">Nedovolal</option>
+            <option value="pasivny">Pasívny</option>
+            <option value="uzavrety">Uzavretý</option>
+            <option value="uz_predal">Už predal</option>
+          </select>
+          {makleri.length > 0 && (
+            <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={{
+              padding: "9px 14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+              borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", outline: "none", cursor: "pointer",
+            }}>
+              <option value="mine">Moji kupujúci</option>
+              <option value="all">Všetci</option>
+              {makleri.map(m => (
+                <option key={m.id} value={m.id}>{m.meno}</option>
+              ))}
+            </select>
+          )}
+          {(filterStatus || search) && (
+            <button onClick={() => { setFilterStatus(""); setSearch(""); }} style={{
+              padding: "9px 14px", background: "transparent", border: "1px solid var(--border)",
+              borderRadius: "8px", fontSize: "12px", color: "var(--text-muted)", cursor: "pointer",
+            }}>Zrušiť filter</button>
+          )}
         </div>
 
         {/* Taby */}
