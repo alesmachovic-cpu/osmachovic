@@ -90,6 +90,8 @@ export default function Portfolio() {
   const [filterStatus, setFilterStatus] = useState("aktivny");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<Record<string, { stav: string; eurM2: number; benchmark: number; odchylka: number; komentar: string }>>({});
+  // AI analýzy z /api/analyzy (najnovšia quick per nehnutelnost) — prepojenie s /analyzy page
+  const [aiAnalyzy, setAiAnalyzy] = useState<Record<string, { id: string; odhadovana_cena_eur: number | null; odporucany_cas_topovania_dni: number | null; analyza_text: string | null; created_at: string }>>({});
   const [deepDive, setDeepDive] = useState<DBNehnutelnost | null>(null);
   const [deepResult, setDeepResult] = useState<Record<string, unknown> | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
@@ -114,6 +116,31 @@ export default function Portfolio() {
     const { data } = await supabase.from("nehnutelnosti").select("*").order(sort, { ascending: sortDir === "asc" });
     setItems((data as DBNehnutelnost[]) ?? []);
     setLoading(false);
+    loadAiAnalyzy(); // background fetch — neblokuje render
+  }
+
+  // Load najnovšie quick AI analýzy (z /api/analyzy weekly cron) per nehnutelnost
+  async function loadAiAnalyzy() {
+    const { data } = await supabase
+      .from("analyzy_nehnutelnosti")
+      .select("id, nehnutelnost_id, typ, odhadovana_cena_eur, odporucany_cas_topovania_dni, analyza_text, created_at")
+      .eq("typ", "quick_weekly")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    const map: typeof aiAnalyzy = {};
+    for (const a of (data || []) as Array<{ id: string; nehnutelnost_id: string; odhadovana_cena_eur: number | null; odporucany_cas_topovania_dni: number | null; analyza_text: string | null; created_at: string }>) {
+      const nid = a.nehnutelnost_id;
+      if (nid && !map[nid]) {
+        map[nid] = {
+          id: a.id,
+          odhadovana_cena_eur: a.odhadovana_cena_eur,
+          odporucany_cas_topovania_dni: a.odporucany_cas_topovania_dni,
+          analyza_text: a.analyza_text,
+          created_at: a.created_at,
+        };
+      }
+    }
+    setAiAnalyzy(map);
   }
 
   function toggleSort(key: SortKey) {
@@ -144,14 +171,16 @@ export default function Portfolio() {
   async function runSingleAnalysis(item: DBNehnutelnost) {
     setSingleAnalyzing(prev => ({ ...prev, [item.id]: true }));
     try {
-      const res = await fetch("/api/analyze", {
+      // Použijeme nový /api/analyzy endpoint (mode=quick) — uloží sa aj do DB
+      // a Analýza trhu page zobrazí ten istý výsledok.
+      const res = await fetch("/api/analyzy", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "batch", items: [item] }),
+        body: JSON.stringify({ mode: "quick", nehnutelnost_id: item.id }),
       });
       const data = await res.json();
-      if (data.results?.[0]) {
-        const r = data.results[0];
-        setAnalysis(prev => ({ ...prev, [item.id]: r }));
+      if (res.ok && data.result) {
+        // Refresh AI analyzy state
+        await loadAiAnalyzy();
       }
     } catch { /* silent */ }
     setSingleAnalyzing(prev => ({ ...prev, [item.id]: false }));
@@ -193,13 +222,19 @@ export default function Portfolio() {
     setDeepLoading(true);
     setDeepResult(null);
     try {
-      const res = await fetch("/api/analyze", {
+      // Detailná AI analýza cez nový endpoint — výsledok sa zachová aj v
+      // analyzy_nehnutelnosti tabuľke (zobrazí sa aj v /analyzy detail tabe)
+      const res = await fetch("/api/analyzy", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "deep", item }),
+        body: JSON.stringify({ mode: "detailed", nehnutelnost_id: item.id }),
       });
       const data = await res.json();
-      setDeepResult(data);
-    } catch { /* silent */ }
+      if (res.ok && data.result) {
+        setDeepResult(data.result);
+      } else {
+        setDeepResult({ error: data.error || "Chyba pri analýze" });
+      }
+    } catch (e) { setDeepResult({ error: String(e).slice(0, 200) }); }
     setDeepLoading(false);
   }
 
@@ -464,23 +499,30 @@ export default function Portfolio() {
                     {n.stav && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#F3F4F6", color: "#374151", borderRadius: "4px" }}>{n.stav}</span>}
                   </div>
 
-                  {/* Analysis section */}
-                  {analysis[n.id] ? (() => {
-                    const a = analysis[n.id];
-                    const cfg = a.stav === "podhodnotene" ? { icon: "✅", bg: "#F3F4F6", text: "#374151", label: "Podhodnotené" }
-                      : a.stav === "nadhodnotene" ? { icon: "⚠️", bg: "#F3F4F6", text: "#374151", label: "Nadhodnotené" }
-                      : { icon: "📊", bg: "#F3F4F6", text: "#374151", label: "Trhová cena" };
+                  {/* AI Analýza section — používa /api/analyzy + tabuľku analyzy_nehnutelnosti
+                      (rovnaký dataset ako /analyzy page → konzistentné dáta naprieč CRM) */}
+                  {aiAnalyzy[n.id] ? (() => {
+                    const a = aiAnalyzy[n.id];
+                    const aktualnaCena = Number(n.cena || 0);
+                    const odhad = a.odhadovana_cena_eur || 0;
+                    const odchylka = aktualnaCena > 0 && odhad > 0 ? Math.round(((aktualnaCena - odhad) / odhad) * 100) : 0;
+                    const stav = odchylka > 5 ? "nadhodnotene" : odchylka < -5 ? "podhodnotene" : "trhova";
+                    const cfg = stav === "podhodnotene" ? { icon: "✅", bg: "#ECFDF5", text: "#059669", label: "Podhodnotené" }
+                      : stav === "nadhodnotene" ? { icon: "⚠️", bg: "#FEF3C7", text: "#92400E", label: "Nadhodnotené" }
+                      : { icon: "📊", bg: "#EFF6FF", text: "#1D4ED8", label: "Trhová cena" };
                     return (
                       <div style={{ padding: "10px 12px", background: cfg.bg, borderRadius: "10px", marginBottom: "12px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
                           <span style={{ fontSize: "12px", fontWeight: "600", color: cfg.text }}>{cfg.icon} {cfg.label}</span>
-                          <span style={{ fontSize: "11px", color: cfg.text, fontWeight: "500" }}>{a.odchylka > 0 ? "+" : ""}{a.odchylka}%</span>
+                          {odchylka !== 0 && (
+                            <span style={{ fontSize: "11px", color: cfg.text, fontWeight: "500" }}>{odchylka > 0 ? "+" : ""}{odchylka}%</span>
+                          )}
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: cfg.text, opacity: 0.8 }}>
-                          <span>{a.eurM2} €/m²</span>
-                          <span>benchmark {a.benchmark} €/m²</span>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: cfg.text, opacity: 0.85 }}>
+                          <span>AI odhad: {formatCena(odhad)}</span>
+                          {a.odporucany_cas_topovania_dni && <span>Topovať za {a.odporucany_cas_topovania_dni} dní</span>}
                         </div>
-                        {a.komentar && <div style={{ fontSize: "11px", color: cfg.text, marginTop: "4px", opacity: 0.7 }}>{a.komentar}</div>}
+                        {a.analyza_text && <div style={{ fontSize: "11px", color: cfg.text, marginTop: "4px", opacity: 0.75, lineHeight: 1.4 }}>💡 {a.analyza_text}</div>}
                         <button onClick={(e) => { e.stopPropagation(); runDeepDive(n); }} style={{
                           marginTop: "8px", width: "100%", padding: "6px", fontSize: "11px", fontWeight: "600",
                           background: "rgba(255,255,255,0.6)", border: "none", borderRadius: "6px", cursor: "pointer", color: cfg.text,
@@ -490,7 +532,7 @@ export default function Portfolio() {
                   })() : (
                     <button onClick={(e) => { e.stopPropagation(); runSingleAnalysis(n); }} disabled={singleAnalyzing[n.id]} style={{
                       width: "100%", padding: "8px", fontSize: "12px", fontWeight: "600", marginBottom: "12px",
-                      background: singleAnalyzing[n.id] ? "var(--bg-elevated)" : "var(--bg-elevated)",
+                      background: "var(--bg-elevated)",
                       border: "1px solid var(--border)", borderRadius: "8px", cursor: singleAnalyzing[n.id] ? "wait" : "pointer",
                       color: singleAnalyzing[n.id] ? "var(--text-muted)" : "var(--text-primary)",
                       display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
@@ -612,94 +654,76 @@ export default function Portfolio() {
             )}
 
             {deepResult && (() => {
-              const z = (deepResult as { zaklad?: { cena?: number; plocha?: number; eurM2?: number; benchmark?: number; odchylka?: number; stav?: string } }).zaklad;
-              const h = (deepResult as { hypoteka?: { istina?: number; mesacnaSplatka?: number; celkovaNakup?: number; hotovost?: number; potrebnyPrijem?: number; ltv?: string; urok?: string; roky?: number } }).hypoteka;
-              const ai = (deepResult as { ai?: { verdikt?: string; silne_stranky?: string[]; slabe_stranky?: string[]; odporucanie?: string; cielova_skupina?: string; cas_predaja?: string } }).ai;
-
-              const verdiktCfg = z?.stav === "podhodnotene" ? { icon: "✅", bg: "#F3F4F6", text: "#374151", label: "Podhodnotené" }
-                : z?.stav === "nadhodnotene" ? { icon: "⚠️", bg: "#F3F4F6", text: "#374151", label: "Nadhodnotené" }
-                : { icon: "📊", bg: "#F3F4F6", text: "#374151", label: "Trhová cena" };
-
+              type DeepFmt = {
+                error?: string;
+                odhadovana_cena_eur?: number;
+                cena_min?: number;
+                cena_max?: number;
+                analyza_text?: string;
+                zdovodnenie?: string;
+                postup?: string[];
+                konkurencia?: Array<{ popis?: string; cena_eur?: number; lokalita?: string; plocha_m2?: number }>;
+              };
+              const d = deepResult as DeepFmt;
+              if (d.error) {
+                return <div style={{ padding: "20px", textAlign: "center", color: "#DC2626" }}>⚠️ {d.error}</div>;
+              }
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                  {/* Verdikt */}
-                  <div style={{ padding: "16px", background: verdiktCfg.bg, borderRadius: "14px", textAlign: "center" }}>
-                    <div style={{ fontSize: "28px", marginBottom: "4px" }}>{verdiktCfg.icon}</div>
-                    <div style={{ fontSize: "16px", fontWeight: "700", color: verdiktCfg.text }}>{verdiktCfg.label}</div>
-                    <div style={{ fontSize: "13px", color: verdiktCfg.text, marginTop: "4px" }}>
-                      {z?.eurM2?.toLocaleString("sk")} €/m² vs benchmark {z?.benchmark?.toLocaleString("sk")} €/m² ({z?.odchylka != null && z.odchylka > 0 ? "+" : ""}{z?.odchylka}%)
+                  {/* Odhadovaná cena — hero */}
+                  <div style={{ padding: "20px", background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: "14px", textAlign: "center" }}>
+                    <div style={{ fontSize: "11px", color: "#065F46", textTransform: "uppercase", fontWeight: 600, letterSpacing: "0.04em" }}>Odhadovaná trhová cena</div>
+                    <div style={{ fontSize: "32px", fontWeight: 700, color: "#10B981", marginTop: "4px", lineHeight: 1 }}>
+                      {d.odhadovana_cena_eur ? formatCena(d.odhadovana_cena_eur) : "—"}
                     </div>
-                  </div>
-
-                  {/* Základné čísla */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
-                    {[
-                      { label: "Cena", value: z?.cena ? z.cena.toLocaleString("sk") + " €" : "—" },
-                      { label: "Plocha", value: z?.plocha ? z.plocha + " m²" : "—" },
-                      { label: "€/m²", value: z?.eurM2 ? z.eurM2.toLocaleString("sk") + " €" : "—" },
-                    ].map(item => (
-                      <div key={item.label} style={{ padding: "12px", background: "var(--bg-elevated)", borderRadius: "10px", textAlign: "center" }}>
-                        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>{item.label}</div>
-                        <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>{item.value}</div>
+                    {(d.cena_min || d.cena_max) && (
+                      <div style={{ fontSize: "12px", color: "#065F46", marginTop: "6px" }}>
+                        Rozsah: {formatCena(d.cena_min || 0)} – {formatCena(d.cena_max || 0)}
                       </div>
-                    ))}
+                    )}
                   </div>
 
-                  {/* Hypotéka */}
-                  {h && (
+                  {/* Analýza trhu */}
+                  {d.analyza_text && (
                     <div style={{ padding: "16px", background: "var(--bg-elevated)", borderRadius: "14px" }}>
-                      <div style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "12px" }}>🏦 Hypotekárny model</div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "13px" }}>
-                        <div>
-                          <span style={{ color: "var(--text-muted)" }}>Mesačná splátka</span>
-                          <div style={{ fontWeight: "700", fontSize: "18px", color: "var(--text-primary)", marginTop: "2px" }}>{h.mesacnaSplatka?.toLocaleString("sk")} €</div>
-                        </div>
-                        <div>
-                          <span style={{ color: "var(--text-muted)" }}>Potrebný príjem</span>
-                          <div style={{ fontWeight: "700", fontSize: "18px", color: "var(--text-primary)", marginTop: "2px" }}>{h.potrebnyPrijem?.toLocaleString("sk")} €</div>
-                        </div>
-                        <div style={{ color: "var(--text-secondary)" }}>
-                          <span style={{ color: "var(--text-muted)" }}>Úver (istina)</span>
-                          <div style={{ fontWeight: "600", marginTop: "2px" }}>{h.istina?.toLocaleString("sk")} €</div>
-                        </div>
-                        <div style={{ color: "var(--text-secondary)" }}>
-                          <span style={{ color: "var(--text-muted)" }}>Hotovosť potrebná</span>
-                          <div style={{ fontWeight: "600", marginTop: "2px" }}>{h.hotovost?.toLocaleString("sk")} €</div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: "12px", marginTop: "12px", fontSize: "11px", color: "var(--text-muted)" }}>
-                        <span>LTV: {h.ltv}</span>
-                        <span>Úrok: {h.urok}</span>
-                        <span>{h.roky} rokov</span>
-                        <span>Celkom: {h.celkovaNakup?.toLocaleString("sk")} €</span>
-                      </div>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>Analýza trhu</div>
+                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{d.analyza_text}</div>
                     </div>
                   )}
 
-                  {/* AI Komentár */}
-                  {ai && (
+                  {/* Zdôvodnenie ceny */}
+                  {d.zdovodnenie && (
                     <div style={{ padding: "16px", background: "var(--bg-elevated)", borderRadius: "14px" }}>
-                      <div style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "12px" }}>🤖 AI Hodnotenie</div>
-                      {ai.silne_stranky && ai.silne_stranky.length > 0 && (
-                        <div style={{ marginBottom: "10px" }}>
-                          <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>Silné stránky</div>
-                          {ai.silne_stranky.map((s, i) => <div key={i} style={{ fontSize: "12px", color: "var(--text-secondary)", paddingLeft: "12px" }}>+ {s}</div>)}
-                        </div>
-                      )}
-                      {ai.slabe_stranky && ai.slabe_stranky.length > 0 && (
-                        <div style={{ marginBottom: "10px" }}>
-                          <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>Slabé stránky</div>
-                          {ai.slabe_stranky.map((s, i) => <div key={i} style={{ fontSize: "12px", color: "var(--text-secondary)", paddingLeft: "12px" }}>− {s}</div>)}
-                        </div>
-                      )}
-                      {ai.odporucanie && (
-                        <div style={{ fontSize: "12px", color: "var(--text-primary)", padding: "10px", background: "var(--bg-surface)", borderRadius: "8px", marginBottom: "8px" }}>
-                          <strong>Odporúčanie:</strong> {ai.odporucanie}
-                        </div>
-                      )}
-                      <div style={{ display: "flex", gap: "16px", fontSize: "11px", color: "var(--text-muted)", marginTop: "8px" }}>
-                        {ai.cielova_skupina && <span>👤 {ai.cielova_skupina}</span>}
-                        {ai.cas_predaja && <span>⏱ Predaj: {ai.cas_predaja}</span>}
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>Prečo táto cena</div>
+                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{d.zdovodnenie}</div>
+                    </div>
+                  )}
+
+                  {/* Postup predaja */}
+                  {d.postup && d.postup.length > 0 && (
+                    <div style={{ padding: "16px", background: "var(--bg-elevated)", borderRadius: "14px" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>Odporučený postup predaja</div>
+                      <ol style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.7, paddingLeft: "20px", margin: 0 }}>
+                        {d.postup.map((s, i) => <li key={i}>{s}</li>)}
+                      </ol>
+                    </div>
+                  )}
+
+                  {/* Konkurencia */}
+                  {d.konkurencia && d.konkurencia.length > 0 && (
+                    <div style={{ padding: "16px", background: "var(--bg-elevated)", borderRadius: "14px" }}>
+                      <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>Konkurencia na trhu</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        {d.konkurencia.map((k, i) => (
+                          <div key={i} style={{ padding: "10px 12px", background: "var(--bg-surface)", borderRadius: "8px", fontSize: "12px" }}>
+                            <div style={{ color: "var(--text-primary)", fontWeight: 600 }}>{k.popis}</div>
+                            <div style={{ color: "var(--text-muted)", marginTop: "2px" }}>
+                              {k.lokalita && <>📍 {k.lokalita}</>}
+                              {k.plocha_m2 && <> · {k.plocha_m2} m²</>}
+                              {k.cena_eur && <> · 💰 {formatCena(k.cena_eur)}</>}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
