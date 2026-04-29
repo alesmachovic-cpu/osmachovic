@@ -72,7 +72,7 @@ function buildPdf(ops: PdfOp[], pageW = 595, pageH = 842): Buffer {
       const [r, g, b] = op.fill;
       stream += `${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg\n${op.x} ${op.y} ${op.w} ${op.h} re\nf\n`;
     } else if (op.kind === "line") {
-      stream += `${op.gray.toFixed(3)} G\n${op.x} ${op.y1} m\n${op.x2} ${op.y2} l\nS\n`;
+      stream += `${op.gray.toFixed(3)} G\n${op.x1} ${op.y1} m\n${op.x2} ${op.y2} l\nS\n`;
     }
   }
 
