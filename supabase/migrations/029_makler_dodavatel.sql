@@ -10,8 +10,9 @@
 --   Presúvame to do DB. Jeden riadok na maklera (PK = user_id).
 -- ============================================================
 
+-- POZN.: users.id je TEXT (slug, nie UUID) — preto user_id tu tiež text.
 CREATE TABLE IF NOT EXISTS makler_dodavatel (
-  user_id          uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  user_id          text PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   nazov            text DEFAULT '',
   adresa           text DEFAULT '',
   ico              text DEFAULT '',

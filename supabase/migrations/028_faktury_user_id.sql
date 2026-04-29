@@ -15,13 +15,15 @@
 -- ============================================================
 
 -- 1) Stĺpec + index
-ALTER TABLE faktury ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES users(id);
+-- POZN.: users.id je TEXT (slug typu "mgr-slavomr-kollr"), nie UUID,
+-- preto user_id musí byť tiež text — inak FK fail-uje.
+ALTER TABLE faktury ADD COLUMN IF NOT EXISTS user_id text REFERENCES users(id);
 CREATE INDEX IF NOT EXISTS idx_faktury_user_id ON faktury(user_id);
 
 -- 2) Backfill Slavomír Kollár — FA20260002 → jeho FA20260001
 DO $$
 DECLARE
-  v_slavo uuid;
+  v_slavo text;
   v_faktura_id uuid;
 BEGIN
   SELECT id INTO v_slavo FROM users WHERE lower(email) = 'kollar@vianema.eu' LIMIT 1;
