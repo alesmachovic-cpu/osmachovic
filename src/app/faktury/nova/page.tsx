@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadDodavatel } from "@/app/nastavenia/faktury/page";
+import { fetchDodavatel } from "@/app/nastavenia/faktury/page";
 import { useAuth } from "@/components/AuthProvider";
 
 type Odberatel = {
@@ -70,9 +70,12 @@ export default function NovaFakturaPage() {
       setOdberatelia(Array.isArray(d) ? d : []);
       if (Array.isArray(d) && d.length > 0) setOdberatelId(d[0].id);
     });
-    const dod = loadDodavatel(user?.id);
-    if (dod.splatnost_dni) setDatumSplatnosti(addDays(today, dod.splatnost_dni));
-    if (dod.poznamka_default) setPoznamka(dod.poznamka_default);
+    if (user?.id) {
+      fetchDodavatel(user.id).then((dod) => {
+        if (dod.splatnost_dni) setDatumSplatnosti(addDays(today, dod.splatnost_dni));
+        if (dod.poznamka_default) setPoznamka(dod.poznamka_default);
+      });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
