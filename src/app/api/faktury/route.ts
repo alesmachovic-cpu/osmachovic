@@ -19,9 +19,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ...faktura, polozky: polozky ?? [] });
   }
   const userId = searchParams.get("user_id");
-  let q = supabase.from("faktury").select("*").order("datum_vystavenia", { ascending: false });
-  if (userId) q = q.eq("user_id", userId);
-  const { data, error } = await q;
+  // Bez user_id NIČ nevraciame — faktúry sú per-makler a žiadny zdieľaný pohľad
+  // nie je povolený cez tento endpoint.
+  if (!userId) return NextResponse.json([]);
+  const { data, error } = await supabase
+    .from("faktury")
+    .select("*")
+    .eq("user_id", userId)
+    .order("datum_vystavenia", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 }

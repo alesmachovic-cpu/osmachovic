@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 type Makler = { id: string; meno: string; percento: number };
 type Faktura = {
@@ -24,6 +25,7 @@ const inputSt: React.CSSProperties = {
 };
 
 export default function ProvizieMaklerovPage() {
+  const { user } = useAuth();
   const [maklery, setMaklery] = useState<Makler[]>([]);
   const [faktury, setFaktury] = useState<Faktura[]>([]);
   const [novyMeno, setNovyMeno] = useState("");
@@ -35,11 +37,15 @@ export default function ProvizieMaklerovPage() {
     const r = await fetch("/api/maklerske-provizie");
     setMaklery(await r.json());
   }
-  async function loadFaktury() {
-    const r = await fetch("/api/faktury");
-    setFaktury(await r.json());
+  async function loadFaktury(userId: string) {
+    const r = await fetch(`/api/faktury?user_id=${userId}`);
+    const d = await r.json();
+    setFaktury(Array.isArray(d) ? d : []);
   }
-  useEffect(() => { loadMaklery(); loadFaktury(); }, []);
+  useEffect(() => {
+    loadMaklery();
+    if (user?.id) loadFaktury(user.id);
+  }, [user?.id]);
 
   async function addMakler() {
     if (!novyMeno.trim()) return;
