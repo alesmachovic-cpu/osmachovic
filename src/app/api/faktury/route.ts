@@ -18,10 +18,10 @@ export async function GET(req: NextRequest) {
       .order("poradie", { ascending: true });
     return NextResponse.json({ ...faktura, polozky: polozky ?? [] });
   }
-  const { data, error } = await supabase
-    .from("faktury")
-    .select("*")
-    .order("datum_vystavenia", { ascending: false });
+  const userId = searchParams.get("user_id");
+  let q = supabase.from("faktury").select("*").order("datum_vystavenia", { ascending: false });
+  if (userId) q = q.eq("user_id", userId);
+  const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 }
@@ -44,14 +44,22 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { polozky = [], ...faktura } = body;
 
-  // Auto numbering
-  const { data: all } = await supabase.from("faktury").select("cislo_faktury, variabilny_symbol");
+  if (!faktura.user_id) {
+    return NextResponse.json({ error: "user_id required" }, { status: 400 });
+  }
+
+  // Auto numbering — per-makler nezávislý rad (FA-RRRR-NNNN, VS-RRRR-NNNN)
+  const { data: all } = await supabase
+    .from("faktury")
+    .select("cislo_faktury, variabilny_symbol")
+    .eq("user_id", faktura.user_id);
   const cislo = faktura.cislo_faktury || nextNumber((all ?? []).map((x) => x.cislo_faktury), "FA");
   const vs = faktura.variabilny_symbol || nextNumber((all ?? []).map((x) => x.variabilny_symbol), "VS");
 
   const sumaCelkom = polozky.reduce((s: number, p: { spolu?: number }) => s + (Number(p.spolu) || 0), 0);
 
   const payload = {
+    user_id: faktura.user_id,
     cislo_faktury: cislo,
     variabilny_symbol: vs,
     odberatel_id: faktura.odberatel_id ?? null,

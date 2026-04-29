@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/components/AuthProvider";
 
 type Faktura = {
   id: string;
@@ -15,17 +16,19 @@ type Faktura = {
 };
 
 export default function FakturyPage() {
+  const { user } = useAuth();
   const [list, setList] = useState<Faktura[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
+    if (!user?.id) { setList([]); setLoading(false); return; }
     setLoading(true);
-    const r = await fetch("/api/faktury");
+    const r = await fetch(`/api/faktury?user_id=${user.id}`);
     const d = await r.json();
     setList(Array.isArray(d) ? d : []);
     setLoading(false);
-  }
-  useEffect(() => { load(); }, []);
+  }, [user?.id]);
+  useEffect(() => { load(); }, [load]);
 
   async function togglePaid(f: Faktura) {
     await fetch("/api/faktury", {
