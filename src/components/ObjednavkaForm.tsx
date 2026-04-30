@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Klient } from "@/lib/database.types";
 import SignatureCanvas from "./SignatureCanvas";
@@ -11,6 +11,10 @@ interface Props {
   onSubmit: (data: { id: string }) => void;
   /** Zjednodušený mód — bez podpisu a zálohy */
   simplified?: boolean;
+  /** Ak je nastavené → edit mode (UPDATE namiesto INSERT) */
+  existing?: Record<string, unknown> | null;
+  /** Meno aktuálneho makléra (Aleš / Slavomír / ...) — uloží sa do `objednavky.makler` */
+  maklerMeno?: string;
 }
 
 const DRUHY = [
@@ -74,7 +78,7 @@ function MultiSelect({ options, selected, onChange, label }: {
   );
 }
 
-export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = false }: Props) {
+export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = false, existing = null, maklerMeno = "" }: Props) {
   const [saving, setSaving] = useState(false);
   const [druhy, setDruhy] = useState<string[]>([]);
   const [kraje, setKraje] = useState<string[]>([]);
@@ -93,6 +97,31 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
   const [zaloha, setZaloha] = useState("");
   const [ine, setIne] = useState("");
   const [podpis, setPodpis] = useState("");
+
+  // Načítaj existujúcu objednávku pri edite
+  useEffect(() => {
+    if (!existing) return;
+    const druhRaw = existing.druh as string | string[] | null;
+    setDruhy(Array.isArray(druhRaw) ? druhRaw : (druhRaw ? String(druhRaw).split(/[,/]/).map(s => s.trim()).filter(Boolean) : []));
+    const lok = (existing.lokalita || {}) as { kraje?: string[]; okresy?: string[] };
+    setKraje(lok.kraje ?? []);
+    setOkresy(lok.okresy ?? []);
+    const poz = (existing.poziadavky || {}) as Record<string, unknown>;
+    setIzby(Array.isArray(poz.izby) ? poz.izby as string[] : []);
+    setStavy(Array.isArray(poz.stavy) ? poz.stavy as string[] : []);
+    setKonstrukcie(Array.isArray(poz.konstrukcie) ? poz.konstrukcie as string[] : []);
+    setVykurovanie(Array.isArray(poz.vykurovanie) ? poz.vykurovanie as string[] : []);
+    setPodlazia(String(poz.podlazia ?? ""));
+    setPlochaOd(poz.plocha_od ? String(poz.plocha_od) : "");
+    setPlochaDo(poz.plocha_do ? String(poz.plocha_do) : "");
+    setRokOd(poz.rok_od ? String(poz.rok_od) : "");
+    setCenaOd(existing.cena_od ? String(existing.cena_od) : "");
+    setCenaDo(existing.cena_do ? String(existing.cena_do) : "");
+    setTerminDo((existing.termin_do as string) || "");
+    setZaloha(existing.zaloha ? String(existing.zaloha) : "");
+    setIne((existing.ine as string) || "");
+    setPodpis((existing.podpis as string) || "");
+  }, [existing]);
 
   const availableOkresy = kraje.flatMap(k => OKRESY_MAP[k] || []);
 
@@ -113,7 +142,7 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
   async function handleSubmit() {
     if (druhy.length === 0) { alert("Vyber aspoň jeden druh nehnuteľnosti"); return; }
     setSaving(true);
-    const { data, error } = await supabase.from("objednavky").insert({
+    const payload: Record<string, unknown> = {
       klient_id: klient.id,
       druh: druhy.join(", "),
       poziadavky: {
@@ -123,20 +152,35 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
         rok_od: rokOd ? Number(rokOd) : null,
       },
       lokalita: { kraje, okresy },
+      cena_od: cenaOd ? Number(cenaOd) : null,
       cena_do: cenaDo ? Number(cenaDo) : null,
       termin_do: terminDo || null,
       zaloha: zaloha ? Number(zaloha) : null,
       ine: ine || null,
       podpis: podpis || null,
-      makler: "Aleš Machovič",
-    }).select("id").single();
+      makler: maklerMeno || "—",
+    };
 
-    if (error) { alert("Chyba: " + error.message); setSaving(false); return; }
-    if (klient.typ === "predavajuci") {
-      await supabase.from("klienti").update({ typ: "oboje" }).eq("id", klient.id);
+    let resultId: string | null = null;
+    if (existing?.id) {
+      const r = await fetch("/api/objednavky", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: existing.id, ...payload }),
+      });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); alert("Chyba: " + (e.error || r.statusText)); setSaving(false); return; }
+      const data = await r.json();
+      resultId = data.id;
+    } else {
+      const { data, error } = await supabase.from("objednavky").insert(payload).select("id").single();
+      if (error) { alert("Chyba: " + error.message); setSaving(false); return; }
+      resultId = data.id;
+      if (klient.typ === "predavajuci") {
+        await supabase.from("klienti").update({ typ: "oboje" }).eq("id", klient.id);
+      }
     }
     setSaving(false);
-    onSubmit({ id: data.id });
+    onSubmit({ id: resultId! });
   }
 
   return (

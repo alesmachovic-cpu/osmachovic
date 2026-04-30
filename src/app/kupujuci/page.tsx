@@ -9,6 +9,7 @@ import NewKlientModal from "@/components/NewKlientModal";
 import Stepper from "@/components/Stepper";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
+import { makeInitials } from "@/lib/initials";
 
 type Step = "zoznam" | "klient" | "formular" | "hotovo";
 
@@ -18,11 +19,17 @@ const OBJ_STEPS = [
   { key: "hotovo", label: "Hotovo", num: 3 },
 ];
 
+// Štatusy ktoré majú zmysel pre kupujúceho (filtruje aj zoznam aj výber)
+const KUPUJUCI_STATUSY = new Set([
+  "novy", "novy_kontakt", "aktivny", "volat_neskor", "nedovolal", "nechce_rk", "uzavrety", "caka_na_schvalenie",
+]);
+
 export default function KupujuciPage() {
   const { user } = useAuth();
-  const isAdmin = user?.id === "ales";
+  const isAdmin = user?.role === "super_admin" || user?.id === "ales";
   const [step, setStep] = useState<Step>("zoznam");
   const [selectedKlient, setSelectedKlient] = useState<Klient | null>(null);
+  const [editingObjednavka, setEditingObjednavka] = useState<Record<string, unknown> | null>(null);
   const [submittedAt, setSubmittedAt] = useState("");
   const [modal, setModal] = useState(false);
   const [isSimplified, setIsSimplified] = useState(false);
@@ -32,7 +39,7 @@ export default function KupujuciPage() {
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"objednavky" | "klienti" | "nova">("objednavky");
+  const [tab, setTab] = useState<"objednavky" | "klienti">("objednavky");
   const [filterMakler, setFilterMakler] = useState<string>("mine");
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
@@ -46,7 +53,6 @@ export default function KupujuciPage() {
     setLoading(true);
     const uuid = user?.id ? await getMaklerUuid(user.id) : null;
     setMyMaklerUuid(uuid);
-    // Load all clients — filtering is done at display level
     const klientiRes = await supabase.from("klienti").select("*").order("created_at", { ascending: false });
     setKlienti(klientiRes.data ?? []);
     const objRes = await supabase.from("objednavky").select("*").order("created_at", { ascending: false });
@@ -54,12 +60,10 @@ export default function KupujuciPage() {
     setLoading(false);
   }
 
-  // Filtered
   // Len kupujúci a oboje — nie predávajúci
   const kupujuciKlienti = klienti.filter(k => k.typ === "kupujuci" || k.typ === "oboje");
 
   const filtered = kupujuciKlienti.filter(k => {
-    // Makler filter
     if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
     if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
     if (!search.trim()) return true;
@@ -72,15 +76,36 @@ export default function KupujuciPage() {
     );
   });
 
+  // Klienti ktorí UŽ majú objednávku — pre disabled state v krokovom výbere
+  const objKlientIds = new Set(objednavky.map(o => o.klient_id as string));
+
   const cardSt: React.CSSProperties = {
     background: "var(--bg-surface)", border: "1px solid var(--border)",
     borderRadius: "14px", padding: "20px",
   };
 
+  async function deleteObjednavka(id: string) {
+    if (!confirm("Naozaj zmazať objednávku?")) return;
+    const r = await fetch(`/api/objednavky?id=${id}`, { method: "DELETE" });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      alert("Chyba: " + (e.error || r.statusText));
+      return;
+    }
+    loadData();
+  }
+
+  function startEdit(obj: Record<string, unknown>) {
+    const klient = klienti.find(k => k.id === obj.klient_id);
+    if (!klient) { alert("Klient nenájdený"); return; }
+    setEditingObjednavka(obj);
+    setSelectedKlient(klient);
+    setIsSimplified(false);
+    setStep("formular");
+  }
+
   // ZOZNAM — prehľad objednávok + tlačidlo novej
   if (step === "zoznam") {
-    // Kupujúci klienti BEZ objednávky
-    const objKlientIds = new Set(objednavky.map(o => o.klient_id as string));
     const bezObjednavky = kupujuciKlienti.filter(k => !objKlientIds.has(k.id));
 
     return (
@@ -93,13 +118,15 @@ export default function KupujuciPage() {
             </p>
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={() => { setIsSimplified(true); setTab("nova"); setStep("klient"); }}
-              style={{ padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}>
-              + Nový kupujúci
+            <button onClick={() => { setIsSimplified(false); setEditingObjednavka(null); setSelectedKlient(null); setStep("klient"); }}
+              style={{ padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}
+              title="Vytvor klienta + záväznú objednávku v jednom kroku">
+              + Klient s objednávkou
             </button>
-            <button onClick={() => { setIsSimplified(false); setTab("nova"); setStep("klient"); }}
-              style={{ padding: "9px 18px", background: "#374151", color: "#fff", border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}>
-              + Objednávka
+            <button onClick={() => setModal(true)}
+              style={{ padding: "9px 18px", background: "#374151", color: "#fff", border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}
+              title="Pridaj kupujúceho klienta bez objednávky (objednávku vystavíš neskôr)">
+              + Kupujúci klient
             </button>
           </div>
         </div>
@@ -111,7 +138,7 @@ export default function KupujuciPage() {
         }}>
           {[
             { key: "objednavky", label: `Objednávky (${objednavky.length})` },
-            { key: "klienti", label: `Klienti (${bezObjednavky.length})` },
+            { key: "klienti", label: `Bez objednávky (${bezObjednavky.length})` },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key as typeof tab)} style={{
               flex: 1, padding: "10px 12px", borderRadius: "8px", cursor: "pointer",
@@ -151,7 +178,9 @@ export default function KupujuciPage() {
                   const klient = klienti.find(k => k.id === obj.klient_id);
                   const poziadavky = (obj.poziadavky || {}) as Record<string, unknown>;
                   const lokalita = (obj.lokalita || {}) as Record<string, unknown>;
-                  const druhLabel = DRUHY_NEHNUTELNOSTI_MAP[obj.druh as string] || (obj.druh as string);
+                  const druhRaw = (obj.druh as string | string[] | null) || "";
+                  const druhArr = Array.isArray(druhRaw) ? druhRaw : String(druhRaw).split(/[,/]/).map(s => s.trim()).filter(Boolean);
+                  const druhLabel = druhArr.map(d => DRUHY_NEHNUTELNOSTI_MAP[d] || d).join(", ") || "—";
                   return (
                     <div key={obj.id as string} style={cardSt}>
                       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "14px" }}>
@@ -161,7 +190,7 @@ export default function KupujuciPage() {
                           display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: "14px", fontWeight: "700", flexShrink: 0,
                         }}>
-                          {klient ? klient.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() : "?"}
+                          {makeInitials(klient?.meno)}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)" }}>
@@ -194,11 +223,12 @@ export default function KupujuciPage() {
                             <span style={{ color: "var(--text-primary)", fontWeight: "500" }}>{String(poziadavky.pocet_izieb)}</span>
                           </div>
                         ) : null}
-                        {obj.cena_do ? (
+                        {(obj.cena_od || obj.cena_do) ? (
                           <div style={{ display: "flex", gap: "6px" }}>
-                            <span style={{ color: "var(--text-muted)", minWidth: "80px" }}>💰 Max cena:</span>
+                            <span style={{ color: "var(--text-muted)", minWidth: "80px" }}>💰 Cena:</span>
                             <span style={{ color: "var(--text-primary)", fontWeight: "500" }}>
-                              {Number(obj.cena_do).toLocaleString("sk")} €
+                              {obj.cena_od ? `${Number(obj.cena_od).toLocaleString("sk")} – ` : "do "}
+                              {obj.cena_do ? Number(obj.cena_do).toLocaleString("sk") : "?"} €
                             </span>
                           </div>
                         ) : null}
@@ -207,25 +237,38 @@ export default function KupujuciPage() {
                       <div style={{
                         display: "flex", justifyContent: "space-between", alignItems: "center",
                         marginTop: "14px", paddingTop: "12px", borderTop: "1px solid var(--border)",
+                        gap: "6px",
                       }}>
                         <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                           {new Date(obj.created_at as string).toLocaleDateString("sk")}
                         </span>
-                        <div style={{ display: "flex", gap: "6px" }}>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                          <button onClick={() => startEdit(obj)} style={{
+                            padding: "5px 10px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                            background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)", cursor: "pointer",
+                          }} title="Upraviť objednávku">
+                            ✎
+                          </button>
+                          <button onClick={() => deleteObjednavka(obj.id as string)} style={{
+                            padding: "5px 10px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                            background: "var(--bg-elevated)", color: "var(--danger)", border: "1px solid var(--border)", cursor: "pointer",
+                          }} title="Zmazať objednávku">
+                            🗑
+                          </button>
                           {klient && (
-                            <button onClick={() => window.location.href = `/klienti/${klient.id}`} style={{
-                              padding: "5px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
-                              background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)", cursor: "pointer",
+                            <a href={`/klienti/${klient.id}`} target="_blank" rel="noopener noreferrer" style={{
+                              padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                              background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)", textDecoration: "none",
                             }}>
-                              Karta klienta
-                            </button>
+                              Karta
+                            </a>
                           )}
-                          <button onClick={() => window.location.href = "/matching"} style={{
-                            padding: "5px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
-                            background: "#F3F4F6", color: "#374151", border: "none", cursor: "pointer",
+                          <a href={`/matching?objednavka=${obj.id}`} style={{
+                            padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                            background: "#F3F4F6", color: "#374151", border: "none", textDecoration: "none",
                           }}>
                             Hľadať zhody →
-                          </button>
+                          </a>
                         </div>
                       </div>
                     </div>
@@ -250,50 +293,49 @@ export default function KupujuciPage() {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                {bezObjednavky.map(k => {
-                  const initials = k.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
-                  return (
-                    <div key={k.id} style={{
-                      display: "flex", alignItems: "center", gap: "12px",
-                      padding: "14px 16px", background: "var(--bg-surface)",
-                      border: "1px solid var(--border)", borderRadius: "12px",
-                      cursor: "pointer", transition: "border-color 0.15s",
-                    }}
-                      onClick={() => window.location.href = `/klienti/${k.id}`}
-                      onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
-                    >
-                      <div style={{
-                        width: "40px", height: "40px", borderRadius: "50%",
-                        background: "#E5E7EB", color: "#374151",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "13px", fontWeight: "700", flexShrink: 0,
-                      }}>{initials}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>{k.meno}</div>
-                        <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                          {[k.telefon, k.lokalita].filter(Boolean).join(" · ") || "—"}
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        <span style={{
-                          fontSize: "10px", fontWeight: "600", color: "var(--text-muted)", background: "#F3F4F6",
-                          padding: "3px 8px", borderRadius: "8px",
-                        }}>{STATUS_LABELS[k.status] || k.status}</span>
-                        <button onClick={e => {
-                          e.stopPropagation();
-                          setSelectedKlient(k);
-                          setStep("formular");
-                        }} style={{
-                          padding: "5px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "700",
-                          background: "#374151", color: "#fff", border: "none", cursor: "pointer",
-                        }}>
-                          Objednávka →
-                        </button>
+                {bezObjednavky.map(k => (
+                  <div key={k.id} style={{
+                    display: "flex", alignItems: "center", gap: "12px",
+                    padding: "14px 16px", background: "var(--bg-surface)",
+                    border: "1px solid var(--border)", borderRadius: "12px",
+                    cursor: "pointer", transition: "border-color 0.15s",
+                  }}
+                    onClick={() => window.open(`/klienti/${k.id}`, "_blank")}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
+                  >
+                    <div style={{
+                      width: "40px", height: "40px", borderRadius: "50%",
+                      background: "#E5E7EB", color: "#374151",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "13px", fontWeight: "700", flexShrink: 0,
+                    }}>{makeInitials(k.meno)}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>{k.meno}</div>
+                      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                        {[k.telefon, k.lokalita].filter(Boolean).join(" · ") || "—"}
                       </div>
                     </div>
-                  );
-                })}
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span style={{
+                        fontSize: "10px", fontWeight: "600", color: "var(--text-muted)", background: "#F3F4F6",
+                        padding: "3px 8px", borderRadius: "8px",
+                      }}>{STATUS_LABELS[k.status] || k.status}</span>
+                      <button onClick={e => {
+                        e.stopPropagation();
+                        setEditingObjednavka(null);
+                        setSelectedKlient(k);
+                        setIsSimplified(false);
+                        setStep("formular");
+                      }} style={{
+                        padding: "5px 12px", borderRadius: "8px", fontSize: "11px", fontWeight: "700",
+                        background: "#374151", color: "#fff", border: "none", cursor: "pointer",
+                      }}>
+                        Objednávka →
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </>
@@ -361,15 +403,23 @@ export default function KupujuciPage() {
         {loading && <div style={{ padding: "60px", textAlign: "center", color: "var(--text-muted)" }}>Načítavam...</div>}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          {filtered.slice(0, 25).map(k => {
-            const initials = k.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
+          {filtered.map(k => {
+            const hasOrder = objKlientIds.has(k.id);
             return (
-              <button key={k.id} onClick={() => { setSelectedKlient(k); setStep("formular"); }} style={{
+              <button key={k.id} onClick={() => {
+                if (hasOrder) {
+                  if (!confirm(`${k.meno} už má objednávku. Naozaj chceš vytvoriť ďalšiu?`)) return;
+                }
+                setEditingObjednavka(null);
+                setSelectedKlient(k);
+                setStep("formular");
+              }} style={{
                 display: "flex", alignItems: "center", gap: "12px",
                 padding: "12px 16px", background: "var(--bg-surface)",
                 border: "1px solid var(--border)",
                 borderRadius: "12px", cursor: "pointer", textAlign: "left", width: "100%",
                 transition: "border-color 0.15s, background 0.15s",
+                opacity: hasOrder ? 0.55 : 1,
               }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = "#374151"; e.currentTarget.style.background = "var(--bg-elevated)"; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = "var(--bg-surface)"; }}
@@ -379,17 +429,25 @@ export default function KupujuciPage() {
                   background: "#E5E7EB", color: "#374151",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: "13px", fontWeight: "700", flexShrink: 0,
-                }}>{initials}</div>
+                }}>{makeInitials(k.meno)}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>{k.meno}</div>
                   <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                     {[k.telefon, k.lokalita].filter(Boolean).join(" · ") || "—"}
                   </div>
                 </div>
-                <span style={{
-                  fontSize: "10px", fontWeight: "600", color: "var(--text-muted)", background: "#F3F4F6",
-                  padding: "3px 8px", borderRadius: "8px",
-                }}>{STATUS_LABELS[k.status] || k.status}</span>
+                {hasOrder && (
+                  <span style={{
+                    fontSize: "10px", fontWeight: "700", color: "var(--warning)", background: "var(--warning-light)",
+                    padding: "3px 8px", borderRadius: "8px",
+                  }}>Už má objednávku</span>
+                )}
+                {!KUPUJUCI_STATUSY.has(k.status) && (
+                  <span style={{
+                    fontSize: "10px", fontWeight: "600", color: "var(--text-muted)", background: "#F3F4F6",
+                    padding: "3px 8px", borderRadius: "8px",
+                  }}>{STATUS_LABELS[k.status] || k.status}</span>
+                )}
                 <span style={{ fontSize: "14px", color: "var(--text-muted)" }}>→</span>
               </button>
             );
@@ -411,7 +469,7 @@ export default function KupujuciPage() {
           </div>
         )}
 
-        {modal && <NewKlientModal open onClose={() => setModal(false)} onSaved={() => { loadData(); setModal(false); }} />}
+        {modal && <NewKlientModal open defaultTyp="kupujuci" showTypKlienta onClose={() => setModal(false)} onSaved={() => { loadData(); setModal(false); }} />}
       </div>
     );
   }
@@ -426,8 +484,10 @@ export default function KupujuciPage() {
         <ObjednavkaForm
           klient={selectedKlient}
           simplified={isSimplified}
-          onBack={() => setStep("klient")}
-          onSubmit={(data) => {
+          existing={editingObjednavka}
+          maklerMeno={user?.name || "—"}
+          onBack={() => { setStep(editingObjednavka ? "zoznam" : "klient"); setEditingObjednavka(null); }}
+          onSubmit={() => {
             setSubmittedAt(new Date().toLocaleString("sk", {
               day: "numeric", month: "long", year: "numeric",
               hour: "2-digit", minute: "2-digit",
@@ -453,10 +513,10 @@ export default function KupujuciPage() {
           fontSize: "36px", margin: "0 auto 24px", border: "3px solid #BBF7D0",
         }}>✓</div>
         <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 8px" }}>
-          Objednávka uložená
+          {editingObjednavka ? "Objednávka aktualizovaná" : "Objednávka uložená"}
         </h1>
         <p style={{ fontSize: "14px", color: "var(--text-muted)", margin: "0 0 4px" }}>
-          Záväzná objednávka pre <strong style={{ color: "var(--text-primary)" }}>{selectedKlient?.meno}</strong> bola vytvorená.
+          {editingObjednavka ? "Zmeny pre" : "Záväzná objednávka pre"} <strong style={{ color: "var(--text-primary)" }}>{selectedKlient?.meno}</strong> {editingObjednavka ? "boli uložené" : "bola vytvorená"}.
         </p>
         <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 8px" }}>
           {submittedAt}
@@ -468,6 +528,7 @@ export default function KupujuciPage() {
           <button onClick={() => {
             setStep("zoznam");
             setSelectedKlient(null);
+            setEditingObjednavka(null);
             loadData();
           }} style={{
             padding: "12px 28px", background: "var(--bg-surface)", color: "var(--text-primary)",
@@ -476,16 +537,18 @@ export default function KupujuciPage() {
           }}>
             Prehľad objednávok
           </button>
-          <button onClick={() => {
-            setStep("klient");
-            setSelectedKlient(null);
-            loadData();
-          }} style={{
-            padding: "12px 28px", background: "#374151", color: "#fff", border: "none",
-            borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
-          }}>
-            Nová objednávka →
-          </button>
+          {!editingObjednavka && (
+            <button onClick={() => {
+              setStep("klient");
+              setSelectedKlient(null);
+              loadData();
+            }} style={{
+              padding: "12px 28px", background: "#374151", color: "#fff", border: "none",
+              borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
+            }}>
+              Nová objednávka →
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -496,6 +559,7 @@ const DRUHY_NEHNUTELNOSTI_MAP: Record<string, string> = {
   byt: "Byt",
   rodinny_dom: "Rodinný dom",
   pozemok: "Pozemok",
+  komercny: "Komerčná nehnuteľnosť",
   komercne: "Komerčný",
   ine: "Iné",
 };
