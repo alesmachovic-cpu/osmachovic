@@ -143,6 +143,13 @@ export default function Sidebar() {
       // "Inzerát" v sidebar vidí iba admin (Aleš). Ostatní makléri inzerát
       // nevytvárajú — dostanú ho z Portfolia až keď admin vytvorí.
       if (item.href === "/inzerat" && user.id !== "ales") return false;
+      // "Matching" v menu vidí iba super_admin / majitel / manazer.
+      // Maklér používa matching len kontextovo cez tlačidlo "Hľadať zhody"
+      // z karty objednávky v /kupujuci (?objednavka=ID).
+      if (item.href === "/matching") {
+        const elevated = user.role === "super_admin" || user.role === "majitel" || user.role === "manazer";
+        if (!elevated && user.id !== "ales") return false;
+      }
       const feat = ROUTE_FEATURE_MAP[item.href];
       return !feat || isFeatureEnabled(user.id, feat);
     }) : items;
