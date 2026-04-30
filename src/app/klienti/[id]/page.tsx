@@ -11,6 +11,7 @@ import KlientHistoryTab from "@/components/KlientHistoryTab";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
+import { createCalendarEvent, notifyCalendarFail } from "@/lib/calendar";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation }: {
@@ -554,35 +555,27 @@ export default function KlientDetailPage() {
       await supabase.from("klienti").update({ datum_naberu: new Date(naberDatum).toISOString() }).eq("id", klient.id);
     }
 
-    // 2. Vytvor Google Calendar event
+    // 2. Vytvor Google Calendar event — pri zlyhaní upozorni maklera
     if (naberDatum && user?.id) {
-      try {
-        const startDt = new Date(naberDatum).toISOString();
-        const endDt = new Date(new Date(naberDatum).getTime() + durationMs).toISOString();
-        const summary = `${evCfg.label} — ${klient.meno}`;
-        const res = await fetch("/api/google/calendar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: user.id,
-            summary,
-            start: startDt,
-            end: endDt,
-            description: [
-              !isVolat && naberMiesto && `Adresa: ${naberMiesto}`,
-              klient.telefon && `Tel: ${klient.telefon}`,
-              klient.email && `Email: ${klient.email}`,
-            ].filter(Boolean).join("\n"),
-            location: isVolat ? "" : naberMiesto,
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.event?.id) {
-            await supabase.from("klienti").update({ calendar_event_id: data.event.id }).eq("id", klient.id);
-          }
-        }
-      } catch { /* kalendár zlyhá ticho */ }
+      const startDt = new Date(naberDatum).toISOString();
+      const endDt = new Date(new Date(naberDatum).getTime() + durationMs).toISOString();
+      const result = await createCalendarEvent({
+        userId: user.id,
+        summary: `${evCfg.label} — ${klient.meno}`,
+        start: startDt,
+        end: endDt,
+        description: [
+          !isVolat && naberMiesto && `Adresa: ${naberMiesto}`,
+          klient.telefon && `Tel: ${klient.telefon}`,
+          klient.email && `Email: ${klient.email}`,
+        ].filter(Boolean).join("\n"),
+        location: isVolat ? "" : naberMiesto,
+      });
+      if (result.ok) {
+        await supabase.from("klienti").update({ calendar_event_id: result.eventId }).eq("id", klient.id);
+      } else {
+        notifyCalendarFail(result, klient.meno);
+      }
     }
 
     setCalendarSyncing(false);

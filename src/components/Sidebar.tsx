@@ -7,6 +7,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { PoweredByAMGD } from "@/components/brand";
 import { isFeatureEnabled } from "@/lib/featureToggles";
 import { supabase } from "@/lib/supabase";
+import { useGoogleConnected } from "@/lib/useGoogleConnected";
 
 const ROUTE_FEATURE_MAP: Record<string, string> = {
   "/": "dashboard",
@@ -180,6 +181,8 @@ export default function Sidebar() {
         </div>
       </div>
 
+      <GoogleNotConnectedBanner userId={user?.id} />
+
       {/* Nav */}
       <nav style={{ flex: 1, padding: "0 8px", overflowY: "auto" }}>
         <SectionLabel label="HLAVNÉ" />
@@ -220,5 +223,23 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
+  );
+}
+
+function GoogleNotConnectedBanner({ userId }: { userId?: string | null }) {
+  const connected = useGoogleConnected(userId);
+  if (connected !== false) return null; // loading alebo OK → nezobraz
+  return (
+    <Link href="/nastavenia" style={{
+      display: "block", margin: "0 12px 8px", padding: "10px 12px",
+      borderRadius: "8px", background: "var(--warning-light)",
+      border: "1px solid var(--warning)", color: "var(--warning)",
+      fontSize: "11px", fontWeight: 600, lineHeight: 1.4, textDecoration: "none",
+    }}>
+      ⚠️ Google nepripojený<br />
+      <span style={{ fontWeight: 400, color: "var(--text-secondary)" }}>
+        Pripomienky a obhliadky sa nepridajú do kalendára. Kliknutím prejdi do Nastavení.
+      </span>
+    </Link>
   );
 }
