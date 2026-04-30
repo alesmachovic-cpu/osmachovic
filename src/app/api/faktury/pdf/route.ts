@@ -64,10 +64,13 @@ type PdfOp =
   | { kind: "line"; x1: number; y1: number; x2: number; y2: number; gray: number };
 
 function buildPdf(ops: PdfOp[], pageW = 595, pageH = 842): Buffer {
-  let stream = "";
+  // Default fill = čierna. PDF graphics state pamätá poslednú farbu cez `rg`,
+  // takže po sivom rectangle (header tabuľky) by ostala svetlá pre nasledujúci
+  // text — preto pred KAŽDÝM textom resetneme fill na čiernu.
+  let stream = "0 g\n";
   for (const op of ops) {
     if (op.kind === "text") {
-      stream += `BT\n/F1 ${op.size} Tf\n${op.x} ${op.y} Td\n(${esc(op.text)}) Tj\nET\n`;
+      stream += `0 g\nBT\n/F1 ${op.size} Tf\n${op.x} ${op.y} Td\n(${esc(op.text)}) Tj\nET\n`;
     } else if (op.kind === "rect") {
       const [r, g, b] = op.fill;
       stream += `${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg\n${op.x} ${op.y} ${op.w} ${op.h} re\nf\n`;
