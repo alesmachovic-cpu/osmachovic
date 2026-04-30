@@ -351,10 +351,10 @@ async function processFilter(
     // Post-parse filter — portály v search URL čiastočne rešpektujú filter kritéria
     // (cena/lokalita/typ), ale nie všetky a nie spoľahlivo. Aplikujeme striktný
     // post-filter lokality, typu, ceny, plochy, izieb + vyradíme prenájmy.
-    // DODATOČNE: Monitor slúži VÝLUČNE na súkromnú inzerciu. Firma listings
-    // sa vôbec neukladajú (RK analýza je samostatná feature).
+    // RK (firma) sa odhodí len ak má filter `len_sukromni=true` (default).
+    // Ak je `len_sukromni=false` → ukladáme aj RK pre analýzy cien.
     const filteredListings = allListings
-      .filter((l) => l.predajca_typ !== "firma")
+      .filter((l) => !filter.len_sukromni || l.predajca_typ !== "firma")
       .filter((l) => matchesFilter(l, filter));
     totalFound = filteredListings.length;
 
@@ -401,8 +401,11 @@ async function processFilter(
             new Date(row.first_seen_at).getTime() > Date.now() - 60000;
           if (isNew) {
             newCount++;
-            // Monitor ukladá len súkromné, takže všetky newItems idú do push.
-            newItems.push({ ...listing, db_id: row.id });
+            // Notifikácia (push/email) ide len o súkromných predajcov — RK
+            // sa zbierajú výhradne pre analýzy cien, žiadne notifikácie.
+            if (listing.predajca_typ !== "firma") {
+              newItems.push({ ...listing, db_id: row.id });
+            }
           } else {
             updatedCount++;
           }

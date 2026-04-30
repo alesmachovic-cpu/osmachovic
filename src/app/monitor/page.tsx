@@ -41,6 +41,7 @@ interface Filter {
   notify_email: boolean;
   notify_telegram: boolean;
   is_active: boolean;
+  len_sukromni: boolean;
 }
 
 /* ── Konštanty ── */
@@ -741,7 +742,8 @@ export default function MonitorPage() {
                     <div>
                       👤 Len súkromní predajcovia
                       <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 400, marginTop: "2px" }}>
-                        Odfiltruje realitné kancelárie (odporúčané — súkromní predajcovia sú potenciálne leady)
+                        Zapnuté = potenciálne leady (notifikácie, kupujúci pre teba).<br/>
+                        Vypnuté = uložia sa aj RK inzeráty pre <strong>analýzy cien</strong> (bez notifikácií).
                       </div>
                     </div>
                   </label>
@@ -809,6 +811,11 @@ export default function MonitorPage() {
                       {(f.cena_od || f.cena_do) && (
                         <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                           {f.cena_od ? `${fmt(Number(f.cena_od))} €` : "0 €"} – {f.cena_do ? `${fmt(Number(f.cena_do))} €` : "∞"}
+                        </span>
+                      )}
+                      {f.len_sukromni === false && (
+                        <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--accent-light)", color: "var(--accent)", fontWeight: 600 }}>
+                          📊 Vrátane RK (analýzy cien)
                         </span>
                       )}
                       {f.notify_email && <span style={{ fontSize: "12px", color: "var(--accent)", fontWeight: 500 }}>📧 Email</span>}
