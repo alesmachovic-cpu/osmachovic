@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { getUserScope, canEditRecord } from "@/lib/scope";
 
 export const runtime = "nodejs";
 
@@ -213,6 +214,19 @@ export async function PATCH(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
+
+  // Ownership: ak caller pošle user_id, overíme. Bez user_id povoľujeme
+  // (legacy clients) — UI sa postupne migruje.
+  if (body.user_id) {
+    const scope = await getUserScope(String(body.user_id));
+    if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+    const { data: existing } = await sb.from("obhliadky").select("makler_id").eq("id", id).single();
+    if (!existing) return NextResponse.json({ error: "Obhliadka nenájdená" }, { status: 404 });
+    const ok = await canEditRecord(scope, existing.makler_id);
+    if (!ok) return NextResponse.json({ error: "Nemáš oprávnenie editovať túto obhliadku" }, { status: 403 });
+    if (!scope.isAdmin && body.makler_id) delete body.makler_id; // anti-impersonation
+  }
+
   const allowed = [
     "status","miesto","poznamka","datum",
     "kupujuci_klient_id","kupujuci_meno","kupujuci_telefon","kupujuci_email",
@@ -242,12 +256,23 @@ export async function PATCH(req: NextRequest) {
 }
 
 /**
- * DELETE /api/obhliadky?id=X
+ * DELETE /api/obhliadky?id=X&user_id=Y
  */
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
+  const userId = req.nextUrl.searchParams.get("user_id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const sb = getSupabaseAdmin();
+
+  if (userId) {
+    const scope = await getUserScope(userId);
+    if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+    const { data: existing } = await sb.from("obhliadky").select("makler_id").eq("id", id).single();
+    if (!existing) return NextResponse.json({ error: "Obhliadka nenájdená" }, { status: 404 });
+    const ok = await canEditRecord(scope, existing.makler_id);
+    if (!ok) return NextResponse.json({ error: "Nemáš oprávnenie zmazať túto obhliadku" }, { status: 403 });
+  }
+
   const { error } = await sb.from("obhliadky").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
