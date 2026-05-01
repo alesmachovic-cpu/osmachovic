@@ -10,6 +10,7 @@ import Stepper from "@/components/Stepper";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { getUserItem } from "@/lib/userStorage";
+import { klientUpdate, naberUpdate } from "@/lib/klientApi";
 
 type TypNaber = "byt" | "rodinny_dom" | "pozemok";
 
@@ -142,7 +143,7 @@ function NaberPageContent() {
     }
     setSelectedKlient(k);
     if (k.status !== "dohodnuty_naber" && k.status !== "nabrany") {
-      await supabase.from("klienti").update({ status: "dohodnuty_naber" }).eq("id", k.id);
+      if (user?.id) await klientUpdate(user.id, k.id, { status: "dohodnuty_naber" });
       setKlienti(prev => prev.map(kl => kl.id === k.id ? { ...kl, status: "dohodnuty_naber" as Klient["status"] } : kl));
     }
     // Ak klient už má dátum, použi ho
@@ -156,7 +157,7 @@ function NaberPageContent() {
     // Uloží dátum náberu na klienta + pridá/updatuje do kalendára
     if (selectedKlient && naberDatum) {
       const newDatum = new Date(naberDatum).toISOString();
-      await supabase.from("klienti").update({ datum_naberu: newDatum }).eq("id", selectedKlient.id);
+      if (user?.id) await klientUpdate(user.id, selectedKlient.id, { datum_naberu: newDatum });
       if (user?.id) {
         try {
           // Ak klient má existujúci calendar event, updatuj ho
@@ -195,8 +196,8 @@ function NaberPageContent() {
               });
               if (res.ok) {
                 const data = await res.json();
-                if (data.event?.id) {
-                  await supabase.from("klienti").update({ calendar_event_id: data.event.id }).eq("id", selectedKlient.id);
+                if (data.event?.id && user?.id) {
+                  await klientUpdate(user.id, selectedKlient.id, { calendar_event_id: data.event.id });
                 }
               }
             }
@@ -218,8 +219,8 @@ function NaberPageContent() {
             });
             if (res.ok) {
               const data = await res.json();
-              if (data.event?.id) {
-                await supabase.from("klienti").update({ calendar_event_id: data.event.id }).eq("id", selectedKlient.id);
+              if (data.event?.id && user?.id) {
+                await klientUpdate(user.id, selectedKlient.id, { calendar_event_id: data.event.id });
               }
             }
           }
@@ -258,7 +259,7 @@ function NaberPageContent() {
 
         // Uloží datum_naberu na náberový list
         if (datum) {
-          await supabase.from("naberove_listy").update({ datum_naberu: datum }).eq("id", data.id);
+          if (user?.id) await naberUpdate(user.id, data.id, { datum_naberu: datum });
         }
 
         await fetch("/api/google/calendar", {

@@ -6,6 +6,7 @@ import PhoneInput from "@/components/PhoneInput";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { searchStreets } from "@/lib/streets-db";
+import { klientInsert, klientUpdate } from "@/lib/klientApi";
 
 interface DuplicateHit {
   id: string;
@@ -678,15 +679,22 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     }
     const payload = basePayload;
 
-    // Get makler UUID for this user
-    const maklerUuid = authUser?.id ? await getMaklerUuid(authUser.id) : null;
-    const insertPayload = !isEdit && maklerUuid ? { ...payload, makler_id: maklerUuid } : payload;
-
     console.log("[NewKlientModal] isEdit:", isEdit, "id:", editKlient?.id, "payload:", JSON.stringify(payload));
 
+    if (!authUser?.id) {
+      setSaving(false);
+      setSaveError("Nie si prihlásený — relogni sa.");
+      return;
+    }
+
+    // makler_id sa odvodí z user.id v API endpointe (anti-impersonation),
+    // takže ho z payload odstránime — zabráni nezamýšľaným zmenám vlastníctva.
+    const cleanPayload = { ...payload };
+    delete (cleanPayload as Record<string, unknown>).makler_id;
+
     const result = isEdit
-      ? await supabase.from("klienti").update(payload).eq("id", editKlient!.id).select()
-      : await supabase.from("klienti").insert(insertPayload).select();
+      ? await klientUpdate(authUser.id, editKlient!.id, cleanPayload)
+      : await klientInsert(authUser.id, cleanPayload);
 
     const { error, data: resultData } = result;
     console.log("[NewKlientModal] result:", JSON.stringify({ error, count: resultData?.length, data: resultData?.[0] }));
@@ -757,9 +765,9 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
           });
           const json = await res.json().catch(() => null);
           const newEventId = json?.event?.id;
-          const targetId = isEdit ? editKlient?.id : resultData?.[0]?.id;
-          if (newEventId && targetId) {
-            await supabase.from("klienti").update({ calendar_event_id: newEventId }).eq("id", targetId);
+          const targetId = (isEdit ? editKlient?.id : (resultData?.[0] as { id?: string } | undefined)?.id) as string | undefined;
+          if (newEventId && targetId && authUser?.id) {
+            await klientUpdate(authUser.id, targetId, { calendar_event_id: newEventId });
           }
         }
       } catch { /* silent */ }
@@ -781,7 +789,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     if (status === "dohodnuty_naber") {
       const hasLv = isEdit ? !!(editKlient?.lv_data && Object.keys(editKlient.lv_data).length > 0) : false;
       if (!hasLv) {
-        const klientId = isEdit ? editKlient?.id : resultData?.[0]?.id;
+        const klientId = (isEdit ? editKlient?.id : (resultData?.[0] as { id?: string } | undefined)?.id) as string | undefined;
         const klientMeno = meno.trim();
         if (klientId) onLvPrompt?.({ id: klientId, meno: klientMeno });
       }

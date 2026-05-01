@@ -9,6 +9,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { getUserItem } from "@/lib/userStorage";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { saveKlientDokument } from "@/lib/klientDokumenty";
+import { naberInsert, klientUpdate as klientApiUpdate } from "@/lib/klientApi";
 
 const OKRESY: Record<string, string[]> = {
   "Bratislavský kraj": ["Bratislava I","Bratislava II","Bratislava III","Bratislava IV","Bratislava V","Malacky","Pezinok","Senec"],
@@ -568,11 +569,13 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
         // IP doplní /api/naber-pdf alebo iný server-side proces; tu klient-side
       },
     };
-    const { data, error: dbError } = await supabase.from("naberove_listy").insert(record).select("id").single();
-    if (dbError) { setSaving(false); setError("Chyba pri ukladaní: " + dbError.message); return; }
-    const klientUpdate: Record<string, unknown> = { status: "nabrany" };
-    if (maklerUuid && !klient.makler_id) klientUpdate.makler_id = maklerUuid;
-    await supabase.from("klienti").update(klientUpdate).eq("id", klient.id);
+    if (!authUser?.id) { setSaving(false); setError("Nie si prihlásený"); return; }
+    const insertRes = await naberInsert<{ id: string }>(authUser.id, { ...record, klient_id: klient.id });
+    if (insertRes.error) { setSaving(false); setError("Chyba pri ukladaní: " + insertRes.error.message); return; }
+    const data = (insertRes.data?.[0] as { id: string }) ?? { id: "" };
+    const klientPatch: Record<string, unknown> = { status: "nabrany" };
+    if (maklerUuid && !klient.makler_id) klientPatch.makler_id = maklerUuid;
+    await klientApiUpdate(authUser.id, klient.id, klientPatch);
 
     // Auto-upload Náberového listu ako PDF do Dokumentov klienta
     try {

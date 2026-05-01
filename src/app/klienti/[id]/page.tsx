@@ -12,9 +12,10 @@ import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
 import { createCalendarEvent, notifyCalendarFail } from "@/lib/calendar";
+import { klientUpdate } from "@/lib/klientApi";
 
 // ── LV sekcia s uploadom a parsovaním ──
-function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation }: {
+function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
   klientId: string;
   lvData: Record<string, unknown> | null | undefined;
   onParsed: (data: Record<string, unknown>) => void;
@@ -23,6 +24,7 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
   klientLokalita?: string;
   onFixName?: (newName: string) => Promise<void>;
   onFixLocation?: (newLokalita: string) => Promise<void>;
+  userId: string;
 }) {
   const [parsing, setParsing] = useState(false);
   const [err, setErr] = useState("");
@@ -50,9 +52,8 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
       if (!res.ok) throw new Error(await res.text());
       const parsed = await res.json();
 
-      // Ulož do klienta
-      const { supabase: sb } = await import("@/lib/supabase");
-      await sb.from("klienti").update({ lv_data: parsed }).eq("id", klientId);
+      // Ulož do klienta cez API endpoint (ownership check)
+      await klientUpdate(userId, klientId, { lv_data: parsed });
       console.log("[LVSection] LV uložené do DB, volám onParsed...");
       onParsed(parsed);
       console.log("[LVSection] onParsed hotové, rodičovský modal by mal byť otvorený");
@@ -519,7 +520,7 @@ export default function KlientDetailPage() {
       return;
     }
     // Pre ostatné statusy — len update
-    await supabase.from("klienti").update({ status: newStatus }).eq("id", klient.id);
+    if (user?.id) await klientUpdate(user.id, klient.id, { status: newStatus });
     loadAll();
   }
 
@@ -565,9 +566,9 @@ export default function KlientDetailPage() {
         const cleaned = existingNote.replace(/Adresa:\s*.+/i, "").trim();
         updates.poznamka = cleaned ? `${cleaned}\n${addrLine}` : addrLine;
       }
-      await supabase.from("klienti").update(updates).eq("id", klient.id);
-    } else if (isNaber && naberDatum) {
-      await supabase.from("klienti").update({ datum_naberu: new Date(naberDatum).toISOString() }).eq("id", klient.id);
+      if (user?.id) await klientUpdate(user.id, klient.id, updates);
+    } else if (isNaber && naberDatum && user?.id) {
+      await klientUpdate(user.id, klient.id, { datum_naberu: new Date(naberDatum).toISOString() });
     }
 
     // 2. Vytvor Google Calendar event — pri zlyhaní upozorni maklera
@@ -587,7 +588,7 @@ export default function KlientDetailPage() {
         location: isVolat ? "" : naberMiesto,
       });
       if (result.ok) {
-        await supabase.from("klienti").update({ calendar_event_id: result.eventId }).eq("id", klient.id);
+        if (user?.id) await klientUpdate(user.id, klient.id, { calendar_event_id: result.eventId });
       } else {
         notifyCalendarFail(result, klient.meno);
       }
@@ -650,7 +651,7 @@ export default function KlientDetailPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       const parsed = await res.json();
-      await supabase.from("klienti").update({ lv_data: parsed }).eq("id", klient.id);
+      if (user?.id) await klientUpdate(user.id, klient.id, { lv_data: parsed });
       setKlient(k => k ? { ...k, lv_data: parsed } : k);
       setShowLVPrompt(false);
 
@@ -791,7 +792,7 @@ export default function KlientDetailPage() {
             {klient.typ === "predavajuci" && (
               <button onClick={async () => {
                 if (!confirm(`Doplniť ${klient.meno} aj ako kupujúceho?\n\nObjaví sa aj v sekcii Kupujúci.`)) return;
-                await supabase.from("klienti").update({ typ: "oboje" }).eq("id", klient.id);
+                if (user?.id) await klientUpdate(user.id, klient.id, { typ: "oboje" });
                 loadAll();
               }} style={{
                 padding: "9px 14px", background: "#ECFDF5", color: "#065F46",
@@ -804,7 +805,7 @@ export default function KlientDetailPage() {
             {klient.typ === "kupujuci" && (
               <button onClick={async () => {
                 if (!confirm(`Doplniť ${klient.meno} aj ako predávajúceho?\n\nObjaví sa aj v sekcii Klienti.`)) return;
-                await supabase.from("klienti").update({ typ: "oboje" }).eq("id", klient.id);
+                if (user?.id) await klientUpdate(user.id, klient.id, { typ: "oboje" });
                 loadAll();
               }} style={{
                 padding: "9px 14px", background: "#EFF6FF", color: "#1E40AF",
@@ -818,7 +819,7 @@ export default function KlientDetailPage() {
               <>
                 <button onClick={async () => {
                   if (!confirm(`Nechať ${klient.meno} iba ako kupujúceho?\n\nZmizne zo sekcie Klienti.`)) return;
-                  await supabase.from("klienti").update({ typ: "kupujuci" }).eq("id", klient.id);
+                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "kupujuci" });
                   loadAll();
                 }} style={{
                   padding: "9px 14px", background: "#ECFDF5", color: "#065F46",
@@ -827,7 +828,7 @@ export default function KlientDetailPage() {
                 }}>iba kupujúci</button>
                 <button onClick={async () => {
                   if (!confirm(`Nechať ${klient.meno} iba ako predávajúceho?\n\nZmizne zo sekcie Kupujúci.`)) return;
-                  await supabase.from("klienti").update({ typ: "predavajuci" }).eq("id", klient.id);
+                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "predavajuci" });
                   loadAll();
                 }} style={{
                   padding: "9px 14px", background: "#EFF6FF", color: "#1E40AF",
@@ -847,11 +848,11 @@ export default function KlientDetailPage() {
             {!klient.je_volny && (klient as { anonymized_at?: string | null }).anonymized_at == null && (
               <button onClick={async () => {
                 if (!confirm(`Uvoľniť klienta ${klient.meno}? Stane sa voľným pre celú kanceláriu.`)) return;
-                await supabase.from("klienti").update({
+                if (user?.id) await klientUpdate(user.id, klient.id, {
                   je_volny: true,
                   volny_dovod: klient.status,
                   volny_at: new Date().toISOString(),
-                }).eq("id", klient.id);
+                });
                 await supabase.from("klienti_history").insert({
                   klient_id: klient.id,
                   action: "uvolneny",
@@ -1085,7 +1086,7 @@ export default function KlientDetailPage() {
             <select
               value={klient.makler_id || ""}
               onChange={async (e) => {
-                await supabase.from("klienti").update({ makler_id: e.target.value || null }).eq("id", klient.id);
+                if (user?.id) await klientUpdate(user.id, klient.id, { makler_id: e.target.value || null });
                 loadAll();
               }}
               style={{
@@ -1136,7 +1137,7 @@ export default function KlientDetailPage() {
               </div>
               {isOwner && (
                 <button onClick={async () => {
-                  await supabase.from("klienti").update({ spolupracujuci_makler_id: null, spolupracujuci_provizia_pct: null }).eq("id", klient.id);
+                  if (user?.id) await klientUpdate(user.id, klient.id, { spolupracujuci_makler_id: null, spolupracujuci_provizia_pct: null });
                   loadAll();
                 }} style={{
                   padding: "4px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "700",
@@ -1400,8 +1401,8 @@ export default function KlientDetailPage() {
                     const updates: Record<string, unknown> = {};
                     if (lvEditFixName && lvEditPickedOwner) updates.meno = lvEditPickedOwner;
                     if (lvEditFixLok && lvEditPickedLok) updates.lokalita = lvEditPickedLok;
-                    if (Object.keys(updates).length > 0) {
-                      await supabase.from("klienti").update(updates).eq("id", klient.id);
+                    if (Object.keys(updates).length > 0 && user?.id) {
+                      await klientUpdate(user.id, klient.id, updates);
                       setKlient(k => k ? { ...k, ...updates } as Klient : k);
                     }
                     // Sync kalendár event — VŽDY keď máme calEventId (aj adresa sa updatuje)
@@ -1499,9 +1500,8 @@ export default function KlientDetailPage() {
                     }
                   }
                 }
-                if (Object.keys(updates).length > 0) {
-                  const { supabase: sb } = await import("@/lib/supabase");
-                  await sb.from("klienti").update(updates).eq("id", klient.id);
+                if (Object.keys(updates).length > 0 && user?.id) {
+                  await klientUpdate(user.id, klient.id, updates);
                   setKlient(k => k ? { ...k, ...updates } as typeof k : k);
                 }
                 setShowLVDiff(false);
@@ -1555,9 +1555,8 @@ export default function KlientDetailPage() {
                 border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
               }}>Ponechať &quot;{klient.meno}&quot;</button>
               <button onClick={async () => {
-                if (!selectedLvOwner) return;
-                const { supabase: sb } = await import("@/lib/supabase");
-                await sb.from("klienti").update({ meno: selectedLvOwner }).eq("id", klient.id);
+                if (!selectedLvOwner || !user?.id) return;
+                await klientUpdate(user.id, klient.id, { meno: selectedLvOwner });
                 // Aktualizuj Google Calendar event s novým menom
                 const calEventId = (klient as { calendar_event_id?: string | null }).calendar_event_id;
                 if (calEventId && user?.id) {
@@ -2054,12 +2053,13 @@ export default function KlientDetailPage() {
           {/* LV sekcia */}
           <LVSection
             klientId={klient.id}
+            userId={user?.id || ""}
             lvData={klient.lv_data}
             canEdit={!!isOwner}
             klientMeno={klient.meno || ""}
             klientLokalita={klient.lokalita || ""}
             onFixName={async (newName) => {
-              await supabase.from("klienti").update({ meno: newName }).eq("id", klient.id);
+              if (user?.id) await klientUpdate(user.id, klient.id, { meno: newName });
               setKlient(k => k ? { ...k, meno: newName } : k);
               // Sync kalendár event
               const calEventId = (klient as { calendar_event_id?: string | null }).calendar_event_id;
@@ -2077,7 +2077,7 @@ export default function KlientDetailPage() {
               }
             }}
             onFixLocation={async (newLok) => {
-              await supabase.from("klienti").update({ lokalita: newLok }).eq("id", klient.id);
+              if (user?.id) await klientUpdate(user.id, klient.id, { lokalita: newLok });
               setKlient(k => k ? { ...k, lokalita: newLok } : k);
             }}
             onParsed={(data) => {
@@ -2623,10 +2623,10 @@ export default function KlientDetailPage() {
                 border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
               }}>Zrušiť</button>
               <button disabled={!spolupracaMakler} onClick={async () => {
-                await supabase.from("klienti").update({
+                if (user?.id) await klientUpdate(user.id, klient.id, {
                   spolupracujuci_makler_id: spolupracaMakler,
                   spolupracujuci_provizia_pct: spolupracaPct,
-                }).eq("id", klient.id);
+                });
                 setShowSpolupracaModal(false);
                 setSpolupracaMakler("");
                 setSpolupracaPct(50);

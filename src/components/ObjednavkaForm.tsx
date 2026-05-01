@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Klient } from "@/lib/database.types";
 import SignatureCanvas from "./SignatureCanvas";
+import { useAuth } from "./AuthProvider";
+import { klientUpdate } from "@/lib/klientApi";
 
 interface Props {
   klient: Klient;
@@ -79,6 +81,7 @@ function MultiSelect({ options, selected, onChange, label }: {
 }
 
 export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = false, existing = null, maklerMeno = "" }: Props) {
+  const { user } = useAuth();
   const [saving, setSaving] = useState(false);
   const [druhy, setDruhy] = useState<string[]>([]);
   const [kraje, setKraje] = useState<string[]>([]);
@@ -175,8 +178,8 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
       const { data, error } = await supabase.from("objednavky").insert(payload).select("id").single();
       if (error) { alert("Chyba: " + error.message); setSaving(false); return; }
       resultId = data.id;
-      if (klient.typ === "predavajuci") {
-        await supabase.from("klienti").update({ typ: "oboje" }).eq("id", klient.id);
+      if (klient.typ === "predavajuci" && user?.id) {
+        await klientUpdate(user.id, klient.id, { typ: "oboje" });
       }
     }
     setSaving(false);
