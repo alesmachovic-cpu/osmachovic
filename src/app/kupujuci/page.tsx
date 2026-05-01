@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { Klient } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
@@ -25,6 +26,7 @@ const KUPUJUCI_STATUSY = new Set([
 ]);
 
 export default function KupujuciPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const isAdmin = user?.role === "super_admin" || user?.id === "ales";
   const [step, setStep] = useState<Step>("zoznam");
@@ -300,7 +302,7 @@ export default function KupujuciPage() {
                     border: "1px solid var(--border)", borderRadius: "12px",
                     cursor: "pointer", transition: "border-color 0.15s",
                   }}
-                    onClick={() => window.open(`/klienti/${k.id}`, "_blank")}
+                    onClick={() => router.push(`/klienti/${k.id}?from=kupujuci`)}
                     onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
                     onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
                   >

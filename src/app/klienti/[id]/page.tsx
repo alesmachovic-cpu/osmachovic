@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { STATUS_LABELS } from "@/lib/database.types";
 import type { Klient } from "@/lib/database.types";
@@ -268,8 +268,14 @@ const WORKFLOW_STEPS = [
 export default function KlientDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const id = params.id as string;
+  // Kam sa vrátiť tlačidlom "späť" — rešpektuje odkial používateľ prišiel
+  // (z /kupujuci by sa mal vrátiť do /kupujuci, default je /klienti).
+  const fromParam = searchParams.get("from");
+  const backHref = fromParam === "kupujuci" ? "/kupujuci" : "/klienti";
+  const backLabel = fromParam === "kupujuci" ? "Kupujúci" : "Klienti";
 
   const [klient, setKlient] = useState<Klient | null>(null);
   const [loading, setLoading] = useState(true);
@@ -370,6 +376,15 @@ export default function KlientDetailPage() {
     if (user?.id) getMaklerUuid(user.id).then(setMyMaklerUuid);
   }, [id]);
 
+  // Ak sa typ zmení na "kupujuci" počas zobrazeného tabu "nehnutelnosti"
+  // (alebo sa otvorí kupujúci s tým tabom), tab v karte už neexistuje —
+  // prepni na "objednavky" aby používateľ neostal s prázdnym obsahom.
+  useEffect(() => {
+    if (klient?.typ === "kupujuci" && activeTab === "nehnutelnosti") {
+      setActiveTab("objednavky");
+    }
+  }, [klient?.typ, activeTab]);
+
   // 15-minútová pripomienka na LV ak chýba
   useEffect(() => {
     if (!klient || klient.lv_data || lvReminderShown) return;
@@ -467,11 +482,11 @@ export default function KlientDetailPage() {
         <div style={{ fontSize: "16px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "8px" }}>
           Klient nenájdený
         </div>
-        <button onClick={() => router.push("/klienti")} style={{
+        <button onClick={() => router.push(backHref)} style={{
           padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
           borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
         }}>
-          ← Späť na klientov
+          ← Späť na {backLabel.toLowerCase()}
         </button>
       </div>
     );
@@ -724,9 +739,13 @@ export default function KlientDetailPage() {
     return cards;
   })();
 
+  // Pre čistého kupujúceho (typ="kupujuci") skryjeme tab "Nehnuteľnosti" —
+  // kupujuci predáva nič, iba kupuje. Nábery, LV a vlastné inzeráty sa ho
+  // netýkajú; relevantnejšie tým je sekcia Objednávky (čo hľadá).
+  const isCistyKupujuci = klient.typ === "kupujuci";
   const tabs = [
     { key: "timeline", label: "Aktivita", count: timeline.length },
-    { key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length },
+    ...(isCistyKupujuci ? [] : [{ key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length }]),
     { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
     { key: "objednavky", label: "Objednávky", count: objednavky.length },
     { key: "dokumenty", label: "Dokumenty", count: 0 },
@@ -742,15 +761,15 @@ export default function KlientDetailPage() {
           onMouseEnter={e => e.currentTarget.style.color = "var(--text-primary)"}
           onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>🏠 Prehľad</a>
         <span style={{ color: "var(--text-muted)" }}>›</span>
-        <a href="/klienti" style={{ color: "var(--text-muted)", textDecoration: "none" }}
+        <a href={backHref} style={{ color: "var(--text-muted)", textDecoration: "none" }}
           onMouseEnter={e => e.currentTarget.style.color = "var(--text-primary)"}
-          onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>Klienti</a>
+          onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>{backLabel}</a>
         <span style={{ color: "var(--text-muted)" }}>›</span>
         <span style={{ color: "var(--text-primary)", fontWeight: "600" }}>{klient.meno}</span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
-        <button onClick={() => router.push("/klienti")} style={{
+        <button onClick={() => router.push(backHref)} style={{
           width: "36px", height: "36px", borderRadius: "50%", border: "1px solid var(--border)",
           background: "var(--bg-surface)", cursor: "pointer", fontSize: "16px", color: "var(--text-muted)",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -765,6 +784,58 @@ export default function KlientDetailPage() {
         </div>
         {isOwner ? (
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            {/* Toggle typu klienta — predavajuci/kupujuci/oboje. Maklér môže
+                jednoducho doplniť alebo zúžiť rolu klienta bez nutnosti otvárať
+                úpravu. Tlačidlá sa menia podľa aktuálneho typu (jeden klik =
+                jedna logická akcia). */}
+            {klient.typ === "predavajuci" && (
+              <button onClick={async () => {
+                if (!confirm(`Doplniť ${klient.meno} aj ako kupujúceho?\n\nObjaví sa aj v sekcii Kupujúci.`)) return;
+                await supabase.from("klienti").update({ typ: "oboje" }).eq("id", klient.id);
+                loadAll();
+              }} style={{
+                padding: "9px 14px", background: "#ECFDF5", color: "#065F46",
+                border: "1px solid #A7F3D0", borderRadius: "10px", fontSize: "13px",
+                fontWeight: "600", cursor: "pointer",
+              }} title="Klient sa doplní aj ako kupujúci (zostane aj predávajúcim)">
+                + aj kupujúci
+              </button>
+            )}
+            {klient.typ === "kupujuci" && (
+              <button onClick={async () => {
+                if (!confirm(`Doplniť ${klient.meno} aj ako predávajúceho?\n\nObjaví sa aj v sekcii Klienti.`)) return;
+                await supabase.from("klienti").update({ typ: "oboje" }).eq("id", klient.id);
+                loadAll();
+              }} style={{
+                padding: "9px 14px", background: "#EFF6FF", color: "#1E40AF",
+                border: "1px solid #BFDBFE", borderRadius: "10px", fontSize: "13px",
+                fontWeight: "600", cursor: "pointer",
+              }} title="Klient sa doplní aj ako predávajúci (zostane aj kupujúcim)">
+                + aj predávajúci
+              </button>
+            )}
+            {klient.typ === "oboje" && (
+              <>
+                <button onClick={async () => {
+                  if (!confirm(`Nechať ${klient.meno} iba ako kupujúceho?\n\nZmizne zo sekcie Klienti.`)) return;
+                  await supabase.from("klienti").update({ typ: "kupujuci" }).eq("id", klient.id);
+                  loadAll();
+                }} style={{
+                  padding: "9px 14px", background: "#ECFDF5", color: "#065F46",
+                  border: "1px solid #A7F3D0", borderRadius: "10px", fontSize: "13px",
+                  fontWeight: "600", cursor: "pointer",
+                }}>iba kupujúci</button>
+                <button onClick={async () => {
+                  if (!confirm(`Nechať ${klient.meno} iba ako predávajúceho?\n\nZmizne zo sekcie Kupujúci.`)) return;
+                  await supabase.from("klienti").update({ typ: "predavajuci" }).eq("id", klient.id);
+                  loadAll();
+                }} style={{
+                  padding: "9px 14px", background: "#EFF6FF", color: "#1E40AF",
+                  border: "1px solid #BFDBFE", borderRadius: "10px", fontSize: "13px",
+                  fontWeight: "600", cursor: "pointer",
+                }}>iba predávajúci</button>
+              </>
+            )}
             <button onClick={() => setEditModal(true)} style={{
               padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
               border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
@@ -1595,6 +1666,79 @@ export default function KlientDetailPage() {
           </button>
         ))}
       </div>
+
+      {/* Info-strip pre čistého kupujúceho — zhrnie "čo hľadá" z najnovšej
+          objednávky (lokality, druh, cena_do, izby z poziadavky). Bez kliknutia
+          na tab Objednávky vidí maklér hneď to najpodstatnejšie. */}
+      {isCistyKupujuci && (() => {
+        const last = (objednavky[0] as Record<string, unknown> | undefined) ?? null;
+        if (!last) {
+          return (
+            <div style={{
+              marginBottom: "16px", padding: "16px 18px", borderRadius: "12px",
+              background: "var(--bg-elevated)", border: "1px dashed var(--border)",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+            }}>
+              <div>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>🔎 Čo hľadá</div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                  Klient zatiaľ nemá objednávku — vytvor ju aby si vedel čo presne hľadá.
+                </div>
+              </div>
+              <button onClick={() => router.push(`/kupujuci?klient_id=${klient.id}`)} style={{
+                padding: "8px 16px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>+ Pridať preferencie</button>
+            </div>
+          );
+        }
+        const lokalita = last.lokalita as Record<string, unknown> | string | null | undefined;
+        const lokalitaText = typeof lokalita === "string"
+          ? lokalita
+          : lokalita && typeof lokalita === "object"
+            ? Object.values(lokalita).filter(Boolean).join(", ")
+            : "";
+        const poz = (last.poziadavky as Record<string, unknown> | null | undefined) ?? null;
+        const izby = poz?.izby ?? poz?.pocet_izieb;
+        const druh = last.druh as string | undefined;
+        const cenaDo = last.cena_do as number | undefined;
+        return (
+          <div style={{
+            marginBottom: "16px", padding: "16px 18px", borderRadius: "12px",
+            background: "#EFF6FF", border: "1px solid #BFDBFE",
+          }}>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "#1E3A8A", marginBottom: "10px" }}>
+              🔎 Čo hľadá
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
+              {lokalitaText && (
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Lokalita</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{lokalitaText}</div>
+                </div>
+              )}
+              {druh && (
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Typ</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{druh}</div>
+                </div>
+              )}
+              {cenaDo != null && (
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Cena do</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{Number(cenaDo).toLocaleString("sk")} €</div>
+                </div>
+              )}
+              {izby != null && (
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Izby</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{String(izby)}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Taby */}
       <div data-tabs-anchor style={{
