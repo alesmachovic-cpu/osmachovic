@@ -66,7 +66,8 @@ export default function NovaFakturaPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/odberatelia").then((r) => r.json()).then((d) => {
+    if (!user?.id) return;
+    fetch(`/api/odberatelia?user_id=${user.id}`).then((r) => r.json()).then((d) => {
       setOdberatelia(Array.isArray(d) ? d : []);
       if (Array.isArray(d) && d.length > 0) setOdberatelId(d[0].id);
     });

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 type Odberatel = {
   id: string;
@@ -30,6 +31,7 @@ const labelSt: React.CSSProperties = {
 };
 
 export default function OdberateliaPage() {
+  const { user } = useAuth();
   const [list, setList] = useState<Odberatel[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -46,14 +48,15 @@ export default function OdberateliaPage() {
     telefon: "",
   });
 
-  async function load() {
+  const load = useCallback(async () => {
+    if (!user?.id) { setList([]); setLoading(false); return; }
     setLoading(true);
-    const r = await fetch("/api/odberatelia");
+    const r = await fetch(`/api/odberatelia?user_id=${user.id}`);
     const d = await r.json();
     setList(Array.isArray(d) ? d : []);
     setLoading(false);
-  }
-  useEffect(() => { load(); }, []);
+  }, [user?.id]);
+  useEffect(() => { load(); }, [load]);
 
   function openNew() {
     setEditing(null);
@@ -76,8 +79,9 @@ export default function OdberateliaPage() {
 
   async function save() {
     if (!form.nazov.trim()) return alert("Názov je povinný");
+    if (!user?.id) return alert("Nie si prihlásený");
     const method = editing ? "PATCH" : "POST";
-    const body = editing ? { id: editing.id, ...form } : form;
+    const body = editing ? { id: editing.id, ...form } : { user_id: user.id, ...form };
     const r = await fetch("/api/odberatelia", {
       method,
       headers: { "Content-Type": "application/json" },
