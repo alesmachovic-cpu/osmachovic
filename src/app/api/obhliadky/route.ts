@@ -60,6 +60,35 @@ export async function POST(req: NextRequest) {
 
   const sb = getSupabaseAdmin();
 
+  // 0) Conflict check — ak iný maklér plánuje obhliadku tej istej nehnuteľnosti
+  // v okne ±60 minút, nedovoľ insert pokiaľ klient explicitne neposlal
+  // allow_conflict: true (UI to po varovaní pošle pri "áno, plánuj aj tak").
+  if (body.nehnutelnost_id && !body.allow_conflict) {
+    // DB ukladá obhliadky.datum bez tz konvertuje cez Postgres ako UTC. JS new Date()
+    // bez tz suffixu by interpretoval string ako local — preto pre konzistentnosť
+    // dopĺňame 'Z' aby sme oba parsing aj DB porovnávali v UTC.
+    const datumStr = String(body.datum);
+    const datumIso = /Z|[+-]\d{2}:?\d{2}$/.test(datumStr) ? datumStr : `${datumStr}Z`;
+    const targetMs = new Date(datumIso).getTime();
+    if (!Number.isNaN(targetMs)) {
+      const fromIso = new Date(targetMs - 60 * 60 * 1000).toISOString();
+      const toIso = new Date(targetMs + 60 * 60 * 1000).toISOString();
+      const { data: clash } = await sb
+        .from("obhliadky")
+        .select("id, datum, makler_id, kupujuci_meno, status")
+        .eq("nehnutelnost_id", body.nehnutelnost_id)
+        .gte("datum", fromIso)
+        .lte("datum", toIso)
+        .neq("status", "zrusena");
+      if (clash && clash.length > 0) {
+        return NextResponse.json({
+          error: "Časový konflikt — na tejto nehnuteľnosti je iná obhliadka v okolí ±1h",
+          conflicts: clash,
+        }, { status: 409 });
+      }
+    }
+  }
+
   // 1) Vlož obhliadku
   const payload: Record<string, unknown> = {
     predavajuci_klient_id: body.predavajuci_klient_id || null,
@@ -130,6 +159,9 @@ export async function POST(req: NextRequest) {
           poznamka: noteLine,
         };
         const { data: created, error: cErr } = await sb.from("klienti").insert(newKlient).select("id").single();
+        if (cErr) {
+          console.warn("[obhliadky POST] auto-create kupujúci failed:", cErr.message, cErr.code);
+        }
         if (!cErr && created) {
           kupujuciInfo = { klient_id: String(created.id), created: true, updated: false };
           // Prepoj obhliadku
