@@ -8,6 +8,7 @@ import {
   fetchNehnDetailInfo,
   isBazosListingFirma,
   sendPushForNewListings,
+  recordInAppNotifications,
 } from "@/lib/monitor";
 import type { ScrapedInzerat, MonitorFilter, ScrapeResult } from "@/lib/monitor";
 
@@ -195,6 +196,12 @@ export async function GET(request: Request) {
             await sendPushForNewListings(newItems);
           } catch (e) {
             console.warn("[scrape] push failed:", e);
+          }
+          // In-app notifikácie pre bell ikonu v navbare
+          try {
+            await recordInAppNotifications(newItems);
+          } catch (e) {
+            console.warn("[scrape] in-app notif failed:", e);
           }
         }
       }

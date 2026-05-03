@@ -82,6 +82,59 @@ export async function sendPushToAll(payload: {
  * Jeden inzerát = jedna notifikácia per subscription. Pri batchi (napr.
  * 5 nových), pošleme max 3 notifikácie a ostatné zhrnieme do jednej ("+2 ďalšie").
  */
+/**
+ * Vlož in-app notifikácie do tabuľky `in_app_notifications` aby sa nové
+ * inzeráty z monitora zobrazili v zvončeku v navbare. Pre každého aktívneho
+ * usera (so role makler/manazer/super_admin/majitel) vlož N notifikácií.
+ * Volá sa zo scrape route po každom batche nových inzerátov.
+ */
+export async function recordInAppNotifications(listings: ScrapedInzerat[]): Promise<number> {
+  if (listings.length === 0) return 0;
+  const sb = getSupabaseAdmin();
+
+  const { data: users } = await sb
+    .from("users")
+    .select("id, role")
+    .in("role", ["makler", "manazer", "majitel", "super_admin"]);
+  if (!users || users.length === 0) return 0;
+
+  // Pre každého user × max 3 individualne notif (ostatné v 1 zhrnutí)
+  const individual = listings.slice(0, 3);
+  const extra = listings.length - individual.length;
+
+  const rows: Array<Record<string, unknown>> = [];
+  for (const u of users) {
+    for (const l of individual) {
+      rows.push({
+        user_id: u.id,
+        typ: "monitor_novy_inzerat",
+        titulok: `🏠 Nový súkromný inzerát${l.lokalita ? ` · ${l.lokalita}` : ""}`,
+        sprava: `${l.cena ? `${l.cena.toLocaleString("sk")} €` : "Cena dohodou"}${l.plocha ? ` · ${l.plocha} m²` : ""}${l.izby ? ` · ${l.izby}-izb` : ""}${l.nazov ? `\n${l.nazov}` : ""}`.slice(0, 240),
+        data: { url: l.url, external_id: l.external_id, portal: l.portal },
+        precitane: false,
+      });
+    }
+    if (extra > 0) {
+      rows.push({
+        user_id: u.id,
+        typ: "monitor_summary",
+        titulok: `🏠 +${extra} ďalších nových inzerátov`,
+        sprava: `V monitore čaká ${extra} ďalších nových súkromných inzerátov.`,
+        data: { url: "/monitor", count: extra },
+        precitane: false,
+      });
+    }
+  }
+
+  if (rows.length === 0) return 0;
+  const { error } = await sb.from("in_app_notifications").insert(rows);
+  if (error) {
+    console.warn("[push] in_app_notifications insert failed:", error.message);
+    return 0;
+  }
+  return rows.length;
+}
+
 export async function sendPushForNewListings(listings: ScrapedInzerat[]): Promise<void> {
   if (!ensureVapid() || listings.length === 0) return;
 
