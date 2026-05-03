@@ -23,6 +23,11 @@ interface Inzerat {
   first_seen_at: string;
   last_seen_at: string;
   is_active: boolean;
+  motivation_score?: number;
+  listed_on_n_portals?: number;
+  predajca_typ_confidence?: number;
+  predajca_typ_method?: string;
+  canonical_id?: string | null;
 }
 
 interface Filter {
@@ -185,6 +190,8 @@ export default function MonitorPage() {
   const [sort, setSort] = useState("newest");
   const [lenSukromni, setLenSukromni] = useState(true);  // Default: zobraz len súkromných
   const [onlyToday, setOnlyToday] = useState(false);
+  const [onlyMotivated, setOnlyMotivated] = useState(false);
+  const [hideDuplicates, setHideDuplicates] = useState(true); // Default: skry dupy z viacerých portálov
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { user } = useAuth();
@@ -275,12 +282,15 @@ export default function MonitorPage() {
   const today = new Date().toISOString().split("T")[0];
   const noveDnes = inzeraty.filter(i => i.first_seen_at?.startsWith(today)).length;
   const sukromniCount = inzeraty.filter(i => i.predajca_typ === "sukromny").length;
+  const motivovaniCount = inzeraty.filter(i => (i.motivation_score ?? 0) >= 30).length;
   const aktivneFiltre = filtre.filter(f => f.is_active).length;
 
   const filtered = inzeraty
     .filter(i => {
       if (lenSukromni && i.predajca_typ !== "sukromny") return false;
       if (onlyToday && !(i.first_seen_at || "").startsWith(today)) return false;
+      if (onlyMotivated && (i.motivation_score ?? 0) < 30) return false;
+      if (hideDuplicates && i.canonical_id) return false; // skry duplikáty (canonical_id ≠ null = sekundárny)
       if (search) {
         const q = search.toLowerCase();
         if (!(i.nazov || "").toLowerCase().includes(q) && !(i.lokalita || "").toLowerCase().includes(q)) return false;
@@ -415,22 +425,27 @@ export default function MonitorPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px", marginBottom: "24px" }}>
         {[
           {
             label: "Celkom inzerátov", value: total, color: "var(--text-primary)",
-            onClick: () => { setTab("inzeraty"); setSearch(""); setViewPortal(""); setViewTyp(""); setLenSukromni(false); setOnlyToday(false); },
-            active: tab === "inzeraty" && !lenSukromni && !onlyToday && !search && !viewPortal && !viewTyp,
+            onClick: () => { setTab("inzeraty"); setSearch(""); setViewPortal(""); setViewTyp(""); setLenSukromni(false); setOnlyToday(false); setOnlyMotivated(false); },
+            active: tab === "inzeraty" && !lenSukromni && !onlyToday && !onlyMotivated && !search && !viewPortal && !viewTyp,
           },
           {
             label: "Nové dnes", value: noveDnes, color: noveDnes > 0 ? "var(--accent)" : "var(--text-primary)",
-            onClick: () => { setTab("inzeraty"); setOnlyToday(true); },
+            onClick: () => { setTab("inzeraty"); setOnlyToday(true); setOnlyMotivated(false); },
             active: tab === "inzeraty" && onlyToday,
           },
           {
             label: "Súkromní", value: sukromniCount, color: sukromniCount > 0 ? "var(--warning)" : "var(--text-primary)",
-            onClick: () => { setTab("inzeraty"); setLenSukromni(true); },
-            active: tab === "inzeraty" && lenSukromni,
+            onClick: () => { setTab("inzeraty"); setLenSukromni(true); setOnlyMotivated(false); },
+            active: tab === "inzeraty" && lenSukromni && !onlyMotivated,
+          },
+          {
+            label: "🔥 Motivovaní", value: motivovaniCount, color: motivovaniCount > 0 ? "#dc2626" : "var(--text-primary)",
+            onClick: () => { setTab("inzeraty"); setOnlyMotivated(true); setLenSukromni(false); },
+            active: tab === "inzeraty" && onlyMotivated,
           },
           {
             label: "Aktívne filtre", value: aktivneFiltre, color: aktivneFiltre > 0 ? "var(--success)" : "var(--text-muted)",
@@ -625,11 +640,29 @@ export default function MonitorPage() {
                       {i.izby > 0 && <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>{i.izby}-izb</span>}
                       {i.lokalita && <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>📍 {i.lokalita}</span>}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{timeAgo(i.first_seen_at)}</span>
                       {i.predajca_typ === "sukromny" && (
                         <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--warning)", background: "var(--warning-light)", padding: "2px 8px", borderRadius: "6px" }}>
                           👤 Súkromný
+                        </span>
+                      )}
+                      {(i.motivation_score ?? 0) >= 60 && (
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#fff", background: "#dc2626", padding: "2px 8px", borderRadius: "6px" }}
+                          title="Vysoko motivovaný predajca">
+                          🔥🔥🔥 {i.motivation_score}
+                        </span>
+                      )}
+                      {(i.motivation_score ?? 0) >= 30 && (i.motivation_score ?? 0) < 60 && (
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#fff", background: "#ea580c", padding: "2px 8px", borderRadius: "6px" }}
+                          title="Motivovaný predajca">
+                          🔥 {i.motivation_score}
+                        </span>
+                      )}
+                      {(i.listed_on_n_portals ?? 1) >= 3 && (
+                        <span style={{ fontSize: "11px", fontWeight: 600, color: "#1e40af", background: "#dbeafe", padding: "2px 8px", borderRadius: "6px" }}
+                          title="Inzerát je listovaný na viacerých portáloch">
+                          📡 {i.listed_on_n_portals} portálov
                         </span>
                       )}
                     </div>

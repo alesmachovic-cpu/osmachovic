@@ -242,8 +242,6 @@ export async function GET(request: Request) {
   }
 
   // ── PHASE 3: Market sentiments per segment ───────────────
-  // Pre každý segment (lokalita+typ+izby) s aspoň 3 aktívnymi inzerátmi
-  // vypočítaj denný snímok trhu: median ceny, DOM, demand index.
   let sentiments_updated = 0;
   try {
     sentiments_updated = await updateMarketSentiments(today);
@@ -252,8 +250,35 @@ export async function GET(request: Request) {
     stats.errors++;
   }
 
+  // ── PHASE 4: Multi-portal deduplication (telefón match) ──
+  let dedup_links = 0;
+  try {
+    dedup_links = await dedupPhoneMatch();
+  } catch (e) {
+    console.error("[monitor-daily] dedup phase failed:", e);
+    stats.errors++;
+  }
+
+  // ── PHASE 5: Private/RK classifier (rule-based heuristika) ──
+  let classifier_updated = 0;
+  try {
+    classifier_updated = await classifyPredajcaTyp();
+  } catch (e) {
+    console.error("[monitor-daily] classifier phase failed:", e);
+    stats.errors++;
+  }
+
+  // ── PHASE 6: Motivation signals detection ────────────────
+  let signals_detected = 0;
+  try {
+    signals_detected = await detectMotivationSignals(now);
+  } catch (e) {
+    console.error("[monitor-daily] signals phase failed:", e);
+    stats.errors++;
+  }
+
   const ms = Date.now() - t0;
-  const result = { ...stats, sentiments_updated, took_ms: ms };
+  const result = { ...stats, sentiments_updated, dedup_links, classifier_updated, signals_detected, took_ms: ms };
   console.log("[monitor-daily] completed", result);
   return NextResponse.json({ ok: true, ...result });
 }
@@ -401,4 +426,263 @@ async function updateMarketSentiments(today: string): Promise<number> {
   }
 
   return updated;
+}
+
+/* ── PHASE 4 ─ Multi-portal deduplication (telefón Stage 1) ─────────────
+ * Pre každý telefón ktorý sa objaví na ≥2 rôznych portáloch:
+ *   - Vyber primárny inzerát (najstarší first_seen_at) — canonical
+ *   - Ostatné inzeráty s rovnakým telefónom + podobnou plochou (±5%)
+ *     označ canonical_id = primárny.id
+ *   - Updatni listed_on_n_portals counter na primárnom
+ */
+async function dedupPhoneMatch(): Promise<number> {
+  const sb = getSupabaseAdmin();
+  const { data: rows } = await sb
+    .from("monitor_inzeraty")
+    .select("id, portal, predajca_telefon, plocha, first_seen_at, canonical_id")
+    .eq("is_active", true)
+    .not("predajca_telefon", "is", null);
+
+  if (!rows || rows.length === 0) return 0;
+
+  // Group by phone
+  const byPhone = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const phone = String(r.predajca_telefon).replace(/[\s().-]/g, "");
+    if (phone.length < 7) continue;
+    if (!byPhone.has(phone)) byPhone.set(phone, []);
+    byPhone.get(phone)!.push(r);
+  }
+
+  let links = 0;
+  for (const group of byPhone.values()) {
+    const portals = new Set(group.map(r => r.portal));
+    if (portals.size < 2) continue;  // iba 1 portál → žiadny dedup
+
+    // Sort by first_seen_at — najstarší = canonical
+    group.sort((a, b) => new Date(a.first_seen_at).getTime() - new Date(b.first_seen_at).getTime());
+    const canonical = group[0];
+    const canonicalPlocha = canonical.plocha ? Number(canonical.plocha) : null;
+
+    for (let i = 1; i < group.length; i++) {
+      const dup = group[i];
+      // Filter podobnou plochou ±5% (ak obe majú plochu)
+      if (canonicalPlocha && dup.plocha) {
+        const ratio = Number(dup.plocha) / canonicalPlocha;
+        if (ratio < 0.95 || ratio > 1.05) continue;
+      }
+      // Updatni len ak sa zmenil canonical_id (idempotent)
+      if (dup.canonical_id !== canonical.id) {
+        const { error } = await sb.from("monitor_inzeraty")
+          .update({ canonical_id: canonical.id })
+          .eq("id", dup.id);
+        if (!error) links++;
+      }
+    }
+    // Update counter na canonical
+    await sb.from("monitor_inzeraty")
+      .update({ listed_on_n_portals: portals.size })
+      .eq("id", canonical.id);
+  }
+
+  return links;
+}
+
+/* ── PHASE 5 ─ Private/RK classifier (rule-based) ─────────────────────
+ * Heuristiky z CLAUDE.md vrstva 2:
+ *   - Telefón sa objavuje vo viacerých inzerátoch za 30 dní → RK
+ *     (>=5 inzerátov = RK, 2-4 = unknown, 1 = súkromník)
+ *   - Email domain v RK blacklist → RK
+ *   - Bazos.sk + krátky popis bez RK keywords → súkromník
+ *
+ * Confidence + method sa logujú aby sme vedeli ako sme rozhodli.
+ */
+async function classifyPredajcaTyp(): Promise<number> {
+  const sb = getSupabaseAdmin();
+
+  // Spočítaj koľko inzerátov má každý telefón za posledných 30 dní
+  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: rows } = await sb
+    .from("monitor_inzeraty")
+    .select("id, portal, predajca_telefon, predajca_typ, popis")
+    .eq("is_active", true)
+    .gte("first_seen_at", monthAgo);
+  if (!rows) return 0;
+
+  // Volume map per phone
+  const phoneVolume = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.predajca_telefon) continue;
+    const p = String(r.predajca_telefon).replace(/[\s().-]/g, "");
+    phoneVolume.set(p, (phoneVolume.get(p) || 0) + 1);
+  }
+
+  // RK keywords
+  const rkKeywords = ["realitn", "kancelária", "exkluzívne", "provízia", "naša RK", "RK ", "MMr eality", "century 21", "remax"];
+  const sukromKeywords = ["predávam", "ponúkam na predaj", "z osobných dôvodov", "súrne", "vlastník"];
+
+  let updated = 0;
+  for (const r of rows) {
+    let typ: "sukromny" | "firma" | null = null;
+    let confidence = 0;
+    let method = "rule_default";
+
+    // 1) Phone volume
+    if (r.predajca_telefon) {
+      const p = String(r.predajca_telefon).replace(/[\s().-]/g, "");
+      const vol = phoneVolume.get(p) || 0;
+      if (vol >= 5) { typ = "firma"; confidence = 0.85; method = "rule_phone_volume"; }
+      else if (vol === 1) { typ = "sukromny"; confidence = 0.65; method = "rule_phone_volume"; }
+    }
+
+    // 2) Bazos baseline (vyšší prior pre súkromník)
+    if (typ === null && r.portal === "bazos") {
+      typ = "sukromny";
+      confidence = 0.55;
+      method = "rule_portal_baseline";
+    }
+
+    // 3) Keywords v popise (override ak match)
+    const popis = (r.popis || "").toLowerCase();
+    const rkHits = rkKeywords.filter(k => popis.includes(k.toLowerCase())).length;
+    const sukHits = sukromKeywords.filter(k => popis.includes(k.toLowerCase())).length;
+    if (rkHits >= 2) { typ = "firma"; confidence = Math.max(confidence, 0.80); method = "rule_keywords"; }
+    else if (sukHits >= 1 && rkHits === 0) { typ = "sukromny"; confidence = Math.max(confidence, 0.70); method = "rule_keywords"; }
+
+    if (typ === null) continue;
+
+    // Update iba ak sa rozhodnutie zmení
+    if (r.predajca_typ !== typ) {
+      await sb.from("monitor_inzeraty")
+        .update({
+          predajca_typ: typ,
+          predajca_typ_confidence: confidence,
+          predajca_typ_method: method,
+        })
+        .eq("id", r.id);
+      updated++;
+    }
+  }
+
+  return updated;
+}
+
+/* ── PHASE 6 ─ Motivation signals (9 typov z CLAUDE.md) ───────────────
+ *   PRICE_DROP_SMALL/MEDIUM/LARGE — pokles ceny od first_known_cena
+ *   MULTIPLE_DROPS — ≥2 zníženia v snapshots za 90 dní
+ *   LONG_ON_MARKET — ≥120 dní aktívna
+ *   VERY_LONG_ON_MARKET — ≥240 dní aktívna
+ *   RELISTED — bola disappeared a vrátila sa s nižšou cenou (po 14+ dňoch)
+ *   MULTI_PORTAL_BURST — >=5 portálov v <=2 dňoch (z listed_on_n_portals)
+ *
+ * Plus motivation_score (0-100) na monitor_inzeraty (suma váh aktívnych signálov).
+ */
+async function detectMotivationSignals(now: Date): Promise<number> {
+  const sb = getSupabaseAdmin();
+  const { data: active } = await sb
+    .from("monitor_inzeraty")
+    .select("id, cena, first_known_cena, first_seen_at, last_seen_at, listed_on_n_portals")
+    .eq("is_active", true)
+    .not("cena", "is", null);
+  if (!active) return 0;
+
+  const SIGNAL_WEIGHTS: Record<string, number> = {
+    PRICE_DROP_LARGE: 30, PRICE_DROP_MEDIUM: 15, PRICE_DROP_SMALL: 5,
+    MULTIPLE_DROPS: 25,
+    LONG_ON_MARKET: 10, VERY_LONG_ON_MARKET: 25,
+    RELISTED: 30,
+    MULTI_PORTAL_BURST: 15,
+  };
+
+  let detected = 0;
+  for (const r of active) {
+    const signals: Array<{ type: string; severity: "LOW" | "MEDIUM" | "HIGH"; evidence: Record<string, unknown> }> = [];
+
+    const cena = Number(r.cena);
+    const firstCena = r.first_known_cena ? Number(r.first_known_cena) : cena;
+    const dom = Math.floor((now.getTime() - new Date(r.first_seen_at).getTime()) / (24 * 60 * 60 * 1000));
+
+    // Price drops
+    if (firstCena > cena) {
+      const dropPct = ((firstCena - cena) / firstCena) * 100;
+      if (dropPct >= 10) signals.push({ type: "PRICE_DROP_LARGE", severity: "HIGH", evidence: { from: firstCena, to: cena, pct: Math.round(dropPct * 10) / 10 } });
+      else if (dropPct >= 5) signals.push({ type: "PRICE_DROP_MEDIUM", severity: "MEDIUM", evidence: { from: firstCena, to: cena, pct: Math.round(dropPct * 10) / 10 } });
+      else if (dropPct >= 1) signals.push({ type: "PRICE_DROP_SMALL", severity: "LOW", evidence: { from: firstCena, to: cena, pct: Math.round(dropPct * 10) / 10 } });
+    }
+
+    // Multiple drops — count distinct cena hodnôt v snapshots za 90 dní
+    const ninetyAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const { data: snaps } = await sb
+      .from("monitor_inzeraty_snapshots")
+      .select("cena, snapshot_date")
+      .eq("inzerat_id", r.id)
+      .gte("snapshot_date", ninetyAgo)
+      .order("snapshot_date", { ascending: true });
+    if (snaps && snaps.length >= 3) {
+      let drops = 0;
+      let prev = Number(snaps[0].cena);
+      for (let i = 1; i < snaps.length; i++) {
+        const curr = Number(snaps[i].cena);
+        if (curr < prev * 0.99) { drops++; prev = curr; }
+      }
+      if (drops >= 2) {
+        signals.push({ type: "MULTIPLE_DROPS", severity: "HIGH", evidence: { drops_count: drops, period_days: 90 } });
+      }
+    }
+
+    // Long on market
+    if (dom >= 240) signals.push({ type: "VERY_LONG_ON_MARKET", severity: "HIGH", evidence: { days: dom } });
+    else if (dom >= 120) signals.push({ type: "LONG_ON_MARKET", severity: "MEDIUM", evidence: { days: dom } });
+
+    // Multi-portal burst
+    const portals = Number(r.listed_on_n_portals) || 1;
+    if (portals >= 5) {
+      signals.push({ type: "MULTI_PORTAL_BURST", severity: "MEDIUM", evidence: { portals } });
+    }
+
+    // RELISTED — ak existuje záznam v disappearances pre tento inzerát
+    // ale teraz je opäť aktívny + cena nižšia ako pred zmiznutím
+    const { data: disap } = await sb
+      .from("monitor_inzeraty_disappearances")
+      .select("last_known_cena, disappeared_on")
+      .eq("inzerat_id", r.id)
+      .maybeSingle();
+    if (disap && disap.last_known_cena && cena < Number(disap.last_known_cena)) {
+      const daysAway = Math.floor((now.getTime() - new Date(disap.disappeared_on).getTime()) / (24 * 60 * 60 * 1000));
+      if (daysAway >= 14) {
+        signals.push({ type: "RELISTED", severity: "HIGH", evidence: { days_away: daysAway, prev_cena: Number(disap.last_known_cena), new_cena: cena } });
+        // Zmaž disappearance záznam (inzerát sa vrátil)
+        await sb.from("monitor_inzeraty_disappearances").delete().eq("inzerat_id", r.id);
+      }
+    }
+
+    // UPSERT signály — pre každý typ buď pridáme alebo aktualizujeme evidence
+    for (const s of signals) {
+      const { error } = await sb.from("motivation_signals").upsert({
+        inzerat_id: r.id,
+        signal_type: s.type,
+        severity: s.severity,
+        evidence: s.evidence,
+        is_active: true,
+      }, { onConflict: "inzerat_id,signal_type", ignoreDuplicates: false });
+      if (!error) detected++;
+    }
+
+    // Deactivate signals ktoré už nesúhlasia (napr. cena vyrástla → PRICE_DROP zruš)
+    const activeTypes = new Set(signals.map(s => s.type));
+    await sb.from("motivation_signals")
+      .update({ is_active: false })
+      .eq("inzerat_id", r.id)
+      .eq("is_active", true)
+      .not("signal_type", "in", `(${Array.from(activeTypes).map(t => `"${t}"`).join(",") || `""`})`);
+
+    // Compute motivation score
+    const score = signals.reduce((s, sig) => s + (SIGNAL_WEIGHTS[sig.type] || 0), 0);
+    const cappedScore = Math.min(100, score);
+    await sb.from("monitor_inzeraty")
+      .update({ motivation_score: cappedScore })
+      .eq("id", r.id);
+  }
+
+  return detected;
 }
