@@ -241,7 +241,164 @@ export async function GET(request: Request) {
     stats.errors++;
   }
 
+  // ── PHASE 3: Market sentiments per segment ───────────────
+  // Pre každý segment (lokalita+typ+izby) s aspoň 3 aktívnymi inzerátmi
+  // vypočítaj denný snímok trhu: median ceny, DOM, demand index.
+  let sentiments_updated = 0;
+  try {
+    sentiments_updated = await updateMarketSentiments(today);
+  } catch (e) {
+    console.error("[monitor-daily] sentiments phase failed:", e);
+    stats.errors++;
+  }
+
   const ms = Date.now() - t0;
-  console.log("[monitor-daily] completed", { ...stats, ms });
-  return NextResponse.json({ ok: true, ...stats, took_ms: ms });
+  const result = { ...stats, sentiments_updated, took_ms: ms };
+  console.log("[monitor-daily] completed", result);
+  return NextResponse.json({ ok: true, ...result });
+}
+
+/**
+ * PHASE 3 — agreguj market sentiments per (lokalita, typ, izby).
+ * UPSERT na (sentiment_date, lokalita, typ, izby) takže opätovné spustenie
+ * v ten istý deň jednoducho prepíše.
+ */
+async function updateMarketSentiments(today: string): Promise<number> {
+  const sb = getSupabaseAdmin();
+
+  // Načítaj všetky aktívne inzeráty s validnými dátami
+  const { data: active } = await sb
+    .from("monitor_inzeraty")
+    .select("id, lokalita, typ, izby, cena, plocha, first_seen_at")
+    .eq("is_active", true)
+    .not("cena", "is", null)
+    .not("lokalita", "is", null)
+    .not("typ", "is", null);
+
+  if (!active || active.length === 0) return 0;
+
+  // Today's new + disappeared count za jeden query (pre rýchlosť)
+  const { data: todayNew } = await sb
+    .from("monitor_inzeraty")
+    .select("id, lokalita, typ, izby")
+    .gte("first_seen_at", today)
+    .not("lokalita", "is", null);
+  const { data: todayDisap } = await sb
+    .from("monitor_inzeraty_disappearances")
+    .select("inzerat_id, monitor_inzeraty!inner(lokalita, typ, izby)")
+    .eq("disappeared_on", today);
+
+  // Group active inzeráty do segmentov
+  type Segment = { lokalita: string; typ: string; izby: number | null; rows: typeof active };
+  const segments = new Map<string, Segment>();
+  for (const r of active) {
+    const lok = String(r.lokalita).trim();
+    if (!lok) continue;
+    const typ = String(r.typ).trim();
+    const izby = r.izby != null ? Number(r.izby) : null;
+    const key = `${lok}|${typ}|${izby ?? ""}`;
+    if (!segments.has(key)) segments.set(key, { lokalita: lok, typ, izby, rows: [] });
+    segments.get(key)!.rows.push(r);
+  }
+
+  const today_d = new Date(today);
+  let updated = 0;
+
+  for (const seg of segments.values()) {
+    if (seg.rows.length < 3) continue;  // málo dát pre validnú štatistiku
+
+    // Pricing aggregates
+    const prices = seg.rows.map(r => Number(r.cena)).filter(v => v > 0).sort((a, b) => a - b);
+    const eurPerM2 = seg.rows
+      .map(r => r.plocha && r.cena ? Number(r.cena) / Number(r.plocha) : 0)
+      .filter(v => Number.isFinite(v) && v > 100 && v < 30000)
+      .sort((a, b) => a - b);
+    const doms = seg.rows
+      .map(r => Math.floor((today_d.getTime() - new Date(r.first_seen_at).getTime()) / (24 * 60 * 60 * 1000)))
+      .filter(v => v >= 0)
+      .sort((a, b) => a - b);
+
+    const med = (a: number[]) => {
+      if (a.length === 0) return null;
+      const m = Math.floor(a.length / 2);
+      return a.length % 2 === 0 ? (a[m - 1] + a[m]) / 2 : a[m];
+    };
+    const median_cena = med(prices);
+    const median_eur_per_m2 = med(eurPerM2);
+    const median_dom = med(doms);
+    const avg_dom = doms.length ? doms.reduce((s, x) => s + x, 0) / doms.length : null;
+
+    // Counts
+    const newCount = (todayNew || []).filter(n =>
+      n.lokalita === seg.lokalita && n.typ === seg.typ && (n.izby ?? null) === seg.izby
+    ).length;
+    const disapCount = (todayDisap || []).filter(d => {
+      const m = (d as { monitor_inzeraty?: { lokalita?: string; typ?: string; izby?: number | null } }).monitor_inzeraty;
+      return m?.lokalita === seg.lokalita && m?.typ === seg.typ && (m?.izby ?? null) === seg.izby;
+    }).length;
+
+    // Trend vs sentiment z pred 30 dní
+    const monthAgo = new Date(today_d.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const { data: past } = await sb
+      .from("market_sentiments")
+      .select("median_eur_per_m2, active_count")
+      .eq("sentiment_date", monthAgo)
+      .eq("lokalita", seg.lokalita)
+      .eq("typ", seg.typ)
+      .is("izby", seg.izby)
+      .maybeSingle();
+
+    let priceChange30d: number | null = null;
+    let supplyChange30d: number | null = null;
+    if (past?.median_eur_per_m2 && median_eur_per_m2) {
+      priceChange30d = Math.round(((median_eur_per_m2 - Number(past.median_eur_per_m2)) / Number(past.median_eur_per_m2)) * 100 * 10) / 10;
+    }
+    if (past?.active_count) {
+      supplyChange30d = Math.round(((seg.rows.length - past.active_count) / Math.max(1, past.active_count)) * 100 * 10) / 10;
+    }
+
+    // Demand index 0-10 — ako horúci je tento segment
+    let demand = 5;
+    if (avg_dom != null) {
+      if (avg_dom < 30) demand += 2;
+      else if (avg_dom < 60) demand += 1;
+      else if (avg_dom < 90) demand += 0;
+      else if (avg_dom < 180) demand -= 1;
+      else demand -= 2;
+    }
+    const ratio = newCount > 0 ? disapCount / newCount : (disapCount > 0 ? 2 : 0);
+    if (ratio > 1.5) demand += 1.5;
+    else if (ratio > 1.0) demand += 0.5;
+    else if (ratio < 0.5 && newCount > 0) demand -= 1;
+    if (priceChange30d != null) {
+      if (priceChange30d > 3) demand += 1;
+      else if (priceChange30d > 1) demand += 0.5;
+      else if (priceChange30d < -2) demand -= 1;
+    }
+    demand = Math.max(0, Math.min(10, Math.round(demand * 10) / 10));
+
+    const { error } = await sb.from("market_sentiments").upsert({
+      sentiment_date: today,
+      lokalita: seg.lokalita,
+      typ: seg.typ,
+      izby: seg.izby,
+      active_count: seg.rows.length,
+      new_count: newCount,
+      disappeared_count: disapCount,
+      median_cena,
+      median_eur_per_m2: median_eur_per_m2 ? Math.round(median_eur_per_m2) : null,
+      min_cena: prices[0] || null,
+      max_cena: prices[prices.length - 1] || null,
+      median_dom: median_dom != null ? Math.round(median_dom) : null,
+      avg_dom: avg_dom != null ? Math.round(avg_dom * 10) / 10 : null,
+      price_change_30d_pct: priceChange30d,
+      supply_change_30d_pct: supplyChange30d,
+      demand_index: demand,
+    }, { onConflict: "sentiment_date,lokalita,typ,izby", ignoreDuplicates: false });
+
+    if (!error) updated++;
+    else console.warn("[monitor-daily] sentiment upsert failed:", error.message);
+  }
+
+  return updated;
 }

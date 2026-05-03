@@ -5,23 +5,66 @@ import type { Klient, Nehnutelnost } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
 import UrlAnalyzeModal from "@/components/UrlAnalyzeModal";
 
+interface MarketSentiment {
+  lokalita: string;
+  typ: string;
+  izby: number | null;
+  active_count: number;
+  median_eur_per_m2: number | null;
+  median_dom: number | null;
+  demand_index: number;
+  price_change_30d_pct: number | null;
+}
+
+interface DisapRow {
+  id: string;
+  disappeared_on: string;
+  estimated_sale_price: number | null;
+  total_days_on_market: number;
+  estimated_discount_pct: number | null;
+  monitor_inzeraty: { lokalita: string | null; typ: string | null; izby: number | null; nazov: string | null } | null;
+}
+
 export default function AnalyzyPage() {
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [nehnutelnosti, setNehnutelnosti] = useState<Nehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
   const [urlInput, setUrlInput] = useState("");
   const [urlModal, setUrlModal] = useState(false);
+  const [sentiments, setSentiments] = useState<MarketSentiment[]>([]);
+  const [disappearances, setDisappearances] = useState<DisapRow[]>([]);
 
   useEffect(() => {
     Promise.all([
       supabase.from("klienti").select("*").order("created_at", { ascending: false }),
       supabase.from("nehnutelnosti").select("*").order("created_at", { ascending: false }),
-    ]).then(([{ data: k }, { data: n }]) => {
+      // Najnovšie sentiments — vyber najnovší dátum, posledných 50 segmentov
+      supabase.from("market_sentiments")
+        .select("lokalita, typ, izby, active_count, median_eur_per_m2, median_dom, demand_index, price_change_30d_pct, sentiment_date")
+        .order("sentiment_date", { ascending: false })
+        .order("demand_index", { ascending: false })
+        .limit(50),
+      // Posledných 20 detegovaných predajov
+      supabase.from("monitor_inzeraty_disappearances")
+        .select("id, disappeared_on, estimated_sale_price, total_days_on_market, estimated_discount_pct, monitor_inzeraty(lokalita, typ, izby, nazov)")
+        .eq("classification", "likely_sold")
+        .gte("confidence_score", 0.6)
+        .order("disappeared_on", { ascending: false })
+        .limit(20),
+    ]).then(([{ data: k }, { data: n }, { data: s }, { data: d }]) => {
       setKlienti(k ?? []);
       setNehnutelnosti(n ?? []);
+      // Filter na najnovší dátum
+      const all = (s ?? []) as Array<MarketSentiment & { sentiment_date: string }>;
+      const latestDate = all[0]?.sentiment_date;
+      setSentiments(latestDate ? all.filter(x => x.sentiment_date === latestDate) : []);
+      setDisappearances((d ?? []) as unknown as DisapRow[]);
       setLoading(false);
     });
   }, []);
+
+  const hotSegments = [...sentiments].sort((a, b) => b.demand_index - a.demand_index).slice(0, 5);
+  const coldSegments = [...sentiments].sort((a, b) => a.demand_index - b.demand_index).slice(0, 5);
 
   // Stats
   const totalPotencialnaProviziaMin = nehnutelnosti.reduce((s, n) => s + (n.cena ?? 0) * 0.02, 0);
@@ -156,6 +199,116 @@ export default function AnalyzyPage() {
               </div>
             </div>
           </div>
+
+          {/* Market intelligence — hot/cold segments + recent sales (Etapa C) */}
+          {(hotSegments.length > 0 || disappearances.length > 0) && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+              {hotSegments.length > 0 && (
+                <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", borderLeft: "4px solid #dc2626" }}>
+                  <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)", marginBottom: "12px" }}>
+                    🔥 Najhorúcejšie segmenty
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {hotSegments.map((s, i) => (
+                      <div key={i} style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "10px 12px", borderRadius: "8px",
+                        background: "var(--bg-elevated)",
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                            {s.lokalita}
+                          </div>
+                          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
+                            {s.typ}{s.izby != null ? ` · ${s.izby} izb.` : ""} · {s.active_count} ponúk
+                            {s.median_eur_per_m2 ? ` · ${Math.round(s.median_eur_per_m2).toLocaleString("sk")} €/m²` : ""}
+                          </div>
+                        </div>
+                        <div style={{
+                          padding: "6px 12px", borderRadius: "8px",
+                          background: "#fee2e2", color: "#991b1b",
+                          fontSize: "13px", fontWeight: 800,
+                        }}>{s.demand_index}/10</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {coldSegments.length > 0 && (
+                <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", borderLeft: "4px solid #3b82f6" }}>
+                  <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)", marginBottom: "12px" }}>
+                    ❄️ Pomalé segmenty
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {coldSegments.map((s, i) => (
+                      <div key={i} style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "10px 12px", borderRadius: "8px",
+                        background: "var(--bg-elevated)",
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                            {s.lokalita}
+                          </div>
+                          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
+                            {s.typ}{s.izby != null ? ` · ${s.izby} izb.` : ""} · {s.active_count} ponúk
+                            {s.median_dom != null ? ` · ${s.median_dom} dní na trhu` : ""}
+                          </div>
+                        </div>
+                        <div style={{
+                          padding: "6px 12px", borderRadius: "8px",
+                          background: "#dbeafe", color: "#1e40af",
+                          fontSize: "13px", fontWeight: 800,
+                        }}>{s.demand_index}/10</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Recently detected sales — implicitne predané inzeráty z monitoringu */}
+          {disappearances.length > 0 && (
+            <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", borderLeft: "4px solid #16a34a" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)" }}>
+                  ✅ Detegované predaje (z monitoringu)
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                  Posledných {disappearances.length} · odhad realizačnej ceny
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {disappearances.slice(0, 8).map((d) => (
+                  <div key={d.id} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "8px 12px", borderRadius: "8px", background: "var(--bg-elevated)",
+                    fontSize: "12px",
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0, marginRight: "10px" }}>
+                      <div style={{ color: "var(--text-primary)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {d.monitor_inzeraty?.lokalita || "—"} · {d.monitor_inzeraty?.typ || "—"}
+                        {d.monitor_inzeraty?.izby != null ? ` · ${d.monitor_inzeraty.izby} izb.` : ""}
+                      </div>
+                      <div style={{ color: "var(--text-muted)", fontSize: "11px", marginTop: "1px" }}>
+                        {new Date(d.disappeared_on).toLocaleDateString("sk")} · {d.total_days_on_market} dní na trhu
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ color: "#15803d", fontWeight: 700 }}>
+                        {d.estimated_sale_price != null ? `${Math.round(d.estimated_sale_price).toLocaleString("sk")} €` : "—"}
+                      </div>
+                      <div style={{ color: "var(--text-muted)", fontSize: "10px" }}>
+                        {d.estimated_discount_pct != null ? `−${d.estimated_discount_pct}% od pôvodnej` : ""}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
             {/* Klienti by status */}
