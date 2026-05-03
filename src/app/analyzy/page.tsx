@@ -3,11 +3,14 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Klient, Nehnutelnost } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
+import UrlAnalyzeModal from "@/components/UrlAnalyzeModal";
 
 export default function AnalyzyPage() {
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [nehnutelnosti, setNehnutelnosti] = useState<Nehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [urlInput, setUrlInput] = useState("");
+  const [urlModal, setUrlModal] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -66,6 +69,52 @@ export default function AnalyzyPage() {
 
       {loading ? <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Načítavam...</div> : (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+          {/* URL Analýza — vlož link z portálu, AI vytiahne dáta + spraví analýzu */}
+          <div style={{
+            background: "linear-gradient(135deg, #1e3a8a 0%, #312e81 100%)",
+            borderRadius: "16px", padding: "20px 24px", color: "#fff",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+              <span style={{ fontSize: "22px" }}>🔍</span>
+              <div>
+                <div style={{ fontSize: "15px", fontWeight: 700 }}>Analýza nehnuteľnosti z URL</div>
+                <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "2px" }}>
+                  Vlož link z nehnutelnosti.sk, reality.sk, bazos.sk, topreality.sk alebo z akéhokoľvek inzerátu
+                </div>
+              </div>
+            </div>
+            <form
+              onSubmit={(e) => { e.preventDefault(); if (urlInput.trim()) setUrlModal(true); }}
+              style={{ display: "flex", gap: "8px", marginTop: "12px" }}
+            >
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="https://www.nehnutelnosti.sk/..."
+                style={{
+                  flex: 1, padding: "11px 14px", borderRadius: "10px",
+                  background: "rgba(255,255,255,0.12)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  color: "#fff", fontSize: "13px", outline: "none",
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!urlInput.trim() || !/^https?:\/\//i.test(urlInput.trim())}
+                style={{
+                  padding: "11px 22px", borderRadius: "10px",
+                  background: "#fff", color: "#1e3a8a",
+                  border: "none", fontSize: "13px", fontWeight: 700,
+                  cursor: urlInput.trim() && /^https?:\/\//i.test(urlInput.trim()) ? "pointer" : "default",
+                  opacity: urlInput.trim() && /^https?:\/\//i.test(urlInput.trim()) ? 1 : 0.5,
+                }}
+              >
+                Analyzovať
+              </button>
+            </form>
+          </div>
 
           {/* Top stats */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px" }}>
@@ -166,6 +215,13 @@ export default function AnalyzyPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {urlModal && (
+        <UrlAnalyzeModal
+          url={urlInput.trim()}
+          onClose={() => setUrlModal(false)}
+        />
       )}
     </div>
   );
