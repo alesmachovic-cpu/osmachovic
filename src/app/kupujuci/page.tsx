@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { Klient } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
@@ -26,7 +26,16 @@ const KUPUJUCI_STATUSY = new Set([
 ]);
 
 export default function KupujuciPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "40px" }}>Načítavam…</div>}>
+      <KupujuciInner />
+    </Suspense>
+  );
+}
+
+function KupujuciInner() {
   const router = useRouter();
+  const search_params = useSearchParams();
   const { user } = useAuth();
   const isAdmin = user?.role === "super_admin" || user?.id === "ales";
   const [step, setStep] = useState<Step>("zoznam");
@@ -50,6 +59,24 @@ export default function KupujuciPage() {
     loadData();
     supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
   }, []);
+
+  // Ak prišiel cez ?klient_id=X (z karty klienta — "+ Pridať preferencie"),
+  // hneď otvor formulár objednávky pre tohto konkrétneho klienta — nech
+  // Aleš nemusí klikať cez "objednávka / bez objednávky" menu.
+  useEffect(() => {
+    const kid = search_params?.get("klient_id");
+    if (!kid || klienti.length === 0 || step !== "zoznam") return;
+    const k = klienti.find(x => x.id === kid);
+    if (!k) return;
+    setEditingObjednavka(null);
+    setSelectedKlient(k);
+    setIsSimplified(false);
+    setStep("formular");
+    // Vyčisti URL aby refresh / back tlačidlo nezopakoval
+    if (typeof window !== "undefined") {
+      window.history.replaceState({}, "", "/kupujuci");
+    }
+  }, [search_params, klienti, step]);
 
   async function loadData() {
     setLoading(true);
