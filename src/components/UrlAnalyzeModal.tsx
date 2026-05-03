@@ -18,6 +18,15 @@ interface Extracted {
 interface Analysis {
   zaklad?: { cena?: number; plocha?: number; eurM2?: number; benchmark?: number; odchylka?: number; stav?: string };
   benchmark_zdroj?: string;
+  trh?: {
+    zdroj?: "realized" | "asking" | "static";
+    asking_median?: number | null;
+    asking_count?: number;
+    realized_median?: number | null;
+    realized_count?: number;
+    avg_discount_pct?: number | null;
+    median_dom?: number | null;
+  };
   hypoteka?: {
     istina?: number; mesacna_splatka?: number; celkova_nakup?: number;
     hotovost_potrebna?: number; potrebny_prijem?: number;
@@ -209,6 +218,60 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
                   </div>
                 )}
               </div>
+
+              {/* Trh v segmente — koľko ľudia zľavnili, ako dlho leží na trhu */}
+              {result.analysis.trh && (result.analysis.trh.avg_discount_pct != null || result.analysis.trh.median_dom != null || result.analysis.trh.realized_count) && (
+                <div style={{
+                  background: "linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)",
+                  border: "1px solid #fcd34d", borderRadius: "12px", padding: "16px",
+                }}>
+                  <div style={{ fontSize: "12px", fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "10px" }}>
+                    📊 Trh v segmente
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px 16px" }}>
+                    {result.analysis.trh.avg_discount_pct != null && (
+                      <div>
+                        <div style={{ fontSize: "11px", color: "#92400e" }}>Predajcovia bežne zľavnia</div>
+                        <div style={{ fontSize: "16px", fontWeight: 800, color: "#78350f" }}>
+                          {result.analysis.trh.avg_discount_pct}%
+                          <span style={{ fontSize: "11px", fontWeight: 500, color: "#92400e", marginLeft: "6px" }}>
+                            (z {result.analysis.trh.realized_count} predaných)
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {result.analysis.trh.median_dom != null && (
+                      <div>
+                        <div style={{ fontSize: "11px", color: "#92400e" }}>Typický čas na trhu</div>
+                        <div style={{ fontSize: "16px", fontWeight: 800, color: "#78350f" }}>
+                          {result.analysis.trh.median_dom} dní
+                        </div>
+                      </div>
+                    )}
+                    {result.analysis.trh.asking_median != null && result.analysis.trh.realized_median != null && (
+                      <>
+                        <div>
+                          <div style={{ fontSize: "11px", color: "#92400e" }}>Median ASKING (€/m²)</div>
+                          <div style={{ fontSize: "14px", fontWeight: 700, color: "#78350f" }}>
+                            {Math.round(result.analysis.trh.asking_median).toLocaleString("sk")}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: "11px", color: "#92400e" }}>Median REALIZAČNÉ (€/m²)</div>
+                          <div style={{ fontSize: "14px", fontWeight: 700, color: "#78350f" }}>
+                            {Math.round(result.analysis.trh.realized_median).toLocaleString("sk")}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {result.analysis.trh.zdroj === "asking" && (
+                    <div style={{ fontSize: "10px", color: "#92400e", marginTop: "8px", fontStyle: "italic" }}>
+                      Pozn.: málo predaných dát pre tento segment — analyzujeme z aktívnych ponúk. Po nazbieraní viac realizačných predajov sa presnosť zlepší.
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Hypotéka */}
               {result.analysis.hypoteka && (

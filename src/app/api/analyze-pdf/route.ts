@@ -20,6 +20,15 @@ export const runtime = "nodejs";
 interface Analysis {
   zaklad?: { cena?: number; plocha?: number; eurM2?: number; benchmark?: number; odchylka?: number; stav?: string };
   benchmark_zdroj?: string;
+  trh?: {
+    zdroj?: string;
+    asking_median?: number | null;
+    asking_count?: number;
+    realized_median?: number | null;
+    realized_count?: number;
+    avg_discount_pct?: number | null;
+    median_dom?: number | null;
+  };
   hypoteka?: {
     istina?: number; mesacna_splatka?: number; celkova_nakup?: number;
     hotovost_potrebna?: number; potrebny_prijem?: number;
@@ -167,6 +176,43 @@ export async function POST(req: NextRequest) {
     doc.text(stripDiacritics(`Zdroj benchmarku: ${a.benchmark_zdroj}`), M, y);
     doc.setTextColor(0);
     y += 6;
+  }
+
+  // ── Trh v segmente (ak máme dáta o realizovaných predajoch)
+  if (a.trh && (a.trh.avg_discount_pct != null || a.trh.median_dom != null || a.trh.realized_count)) {
+    y += 2;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text(stripDiacritics("Trh v segmente"), M, y);
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    const trhRows: [string, string][] = [];
+    if (a.trh.avg_discount_pct != null) {
+      trhRows.push(["Predajcovia bezne zlavnia", `${a.trh.avg_discount_pct}%${a.trh.realized_count ? ` (z ${a.trh.realized_count} predanych)` : ""}`]);
+    }
+    if (a.trh.median_dom != null) {
+      trhRows.push(["Typicky cas na trhu", `${a.trh.median_dom} dni`]);
+    }
+    if (a.trh.asking_median != null) {
+      trhRows.push(["Median ASKING (EUR/m2)", fmt(a.trh.asking_median)]);
+    }
+    if (a.trh.realized_median != null) {
+      trhRows.push(["Median REALIZACNE (EUR/m2)", fmt(a.trh.realized_median)]);
+    }
+    trhRows.forEach((r, i) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = M + col * colW;
+      const yy = y + row * 7;
+      doc.setTextColor(120);
+      doc.text(stripDiacritics(r[0]), x, yy);
+      doc.setTextColor(0);
+      doc.setFont("helvetica", "bold");
+      doc.text(stripDiacritics(r[1]), x + 50, yy);
+      doc.setFont("helvetica", "normal");
+    });
+    y += Math.ceil(trhRows.length / 2) * 7 + 6;
   }
 
   // ── Hypotéka box

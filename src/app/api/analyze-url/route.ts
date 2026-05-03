@@ -39,34 +39,129 @@ function staticBenchmark(lokalita: string): number {
   return 2500;
 }
 
-/** Vráti median €/m² zo skutočných monitor_inzeraty + count alebo null. */
+function median(values: number[]): number {
+  const s = [...values].sort((a, b) => a - b);
+  if (s.length === 0) return 0;
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? Math.round((s[mid - 1] + s[mid]) / 2) : Math.round(s[mid]);
+}
+
+interface BenchmarkResult {
+  median: number;             // hlavný benchmark €/m² ktorý sa používa pri verdikte
+  count: number;              // koľko inzerátov tvorí benchmark
+  source: "realized" | "asking" | "static";
+  asking_median?: number;     // median ponuk z aktívnych inzerátov
+  asking_count?: number;
+  realized_median?: number;   // median odhadovanej realizačnej ceny zo zmizlých inzerátov
+  realized_count?: number;
+  avg_discount_pct?: number;  // o koľko ľudia bežne zľavnili (z disappearances)
+  median_dom?: number;        // typický počet dní na trhu
+}
+
+/**
+ * Vypočítaj trhový benchmark s tromi vrstvami:
+ *  1. realized — median realizačnej ceny zo zmiznutých inzerátov (najpresnejšie)
+ *  2. asking — median z aktívnych ponúk (ak nedostatok realized)
+ *  3. static — natvrdo zadané hodnoty pre lokality (fallback)
+ *
+ * Plus extra metriky pre dashboard a AI prompt: asking-vs-realized gap,
+ * priemerné zľavy, typický DOM v segmente.
+ */
 async function marketBenchmark(
   lokalita: string,
   typ: string | null,
   izby: number | null,
-): Promise<{ median: number; count: number; source: "monitor" | "static" }> {
+): Promise<BenchmarkResult> {
   const sb = getSupabaseAdmin();
-  let q = sb
+  const locFilter = lokalita ? lokalita.split(" ")[0] : null;
+
+  // 1) Asking median z aktívnych monitor inzerátov
+  let askingQ = sb
     .from("monitor_inzeraty")
-    .select("cena, plocha, lokalita, typ, izby")
+    .select("cena, plocha")
+    .eq("is_active", true)
     .not("cena", "is", null)
     .not("plocha", "is", null)
     .gt("cena", 0)
     .gt("plocha", 0);
-  if (lokalita) q = q.ilike("lokalita", `%${lokalita.split(" ")[0]}%`);
-  if (typ) q = q.ilike("typ", `%${typ}%`);
-  if (izby != null) q = q.eq("izby", izby);
-  const { data } = await q.limit(200);
-  const vals = (data || [])
+  if (locFilter) askingQ = askingQ.ilike("lokalita", `%${locFilter}%`);
+  if (typ) askingQ = askingQ.ilike("typ", `%${typ}%`);
+  if (izby != null) askingQ = askingQ.eq("izby", izby);
+  const { data: asking } = await askingQ.limit(200);
+  const askingVals = (asking || [])
     .map(r => Number(r.cena) / Number(r.plocha))
-    .filter(v => Number.isFinite(v) && v > 100 && v < 30000)
-    .sort((a, b) => a - b);
-  if (vals.length >= 5) {
-    const mid = Math.floor(vals.length / 2);
-    const median = vals.length % 2 === 0 ? Math.round((vals[mid - 1] + vals[mid]) / 2) : Math.round(vals[mid]);
-    return { median, count: vals.length, source: "monitor" };
+    .filter(v => Number.isFinite(v) && v > 100 && v < 30000);
+
+  // 2) Realized median zo zmiznutých inzerátov (likely_sold s confidence ≥ 0.6,
+  //    posledných 12 mesiacov)
+  const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  let disapQ = sb
+    .from("monitor_inzeraty_disappearances")
+    .select("estimated_sale_price, last_known_eur_per_m2, estimated_discount_pct, total_days_on_market, monitor_inzeraty!inner(lokalita, typ, izby)")
+    .eq("classification", "likely_sold")
+    .gte("confidence_score", 0.6)
+    .gte("disappeared_on", yearAgo)
+    .not("estimated_sale_price", "is", null);
+  if (locFilter) disapQ = disapQ.ilike("monitor_inzeraty.lokalita", `%${locFilter}%`);
+  if (typ) disapQ = disapQ.ilike("monitor_inzeraty.typ", `%${typ}%`);
+  if (izby != null) disapQ = disapQ.eq("monitor_inzeraty.izby", izby);
+  const { data: disap } = await disapQ.limit(200);
+
+  // realized eur/m² = estimated_sale_price / plocha — máme last_known_eur_per_m2
+  // ktoré bolo asking. Z neho pomocou discount % spätne dopočítame realized:
+  //   realized_per_m2 = asking_per_m2 × (1 - discount/100)
+  const realizedVals: number[] = [];
+  const discounts: number[] = [];
+  const doms: number[] = [];
+  for (const d of disap || []) {
+    const askingPerM2 = d.last_known_eur_per_m2 ? Number(d.last_known_eur_per_m2) : null;
+    const discount = d.estimated_discount_pct != null ? Number(d.estimated_discount_pct) : null;
+    if (askingPerM2 && discount != null && askingPerM2 > 100 && askingPerM2 < 30000) {
+      realizedVals.push(askingPerM2 * (1 - discount / 100));
+    }
+    if (discount != null && discount >= 0 && discount < 50) discounts.push(discount);
+    if (d.total_days_on_market != null) doms.push(Number(d.total_days_on_market));
   }
-  return { median: staticBenchmark(lokalita), count: 0, source: "static" };
+
+  const askingMedian = askingVals.length >= 3 ? median(askingVals) : 0;
+  const realizedMedian = realizedVals.length >= 3 ? Math.round(median(realizedVals)) : 0;
+  const avgDiscount = discounts.length >= 3
+    ? Math.round((discounts.reduce((s, x) => s + x, 0) / discounts.length) * 10) / 10
+    : undefined;
+  const medDom = doms.length >= 3 ? median(doms) : undefined;
+
+  // Vyber primárny benchmark (realized > asking > static)
+  if (realizedMedian > 0 && realizedVals.length >= 3) {
+    return {
+      median: realizedMedian,
+      count: realizedVals.length,
+      source: "realized",
+      asking_median: askingMedian || undefined,
+      asking_count: askingVals.length,
+      realized_median: realizedMedian,
+      realized_count: realizedVals.length,
+      avg_discount_pct: avgDiscount,
+      median_dom: medDom,
+    };
+  }
+  if (askingMedian > 0 && askingVals.length >= 5) {
+    return {
+      median: askingMedian,
+      count: askingVals.length,
+      source: "asking",
+      asking_median: askingMedian,
+      asking_count: askingVals.length,
+      avg_discount_pct: avgDiscount,
+      median_dom: medDom,
+    };
+  }
+  return {
+    median: staticBenchmark(lokalita),
+    count: 0,
+    source: "static",
+    avg_discount_pct: avgDiscount,
+    median_dom: medDom,
+  };
 }
 
 const HTML_ENTITIES: Record<string, string> = {
@@ -178,17 +273,51 @@ ${text}`;
   }
 }
 
-async function aiVerdict(item: ExtractedListing, eurM2: number, benchmark: number, odchylka: number): Promise<Record<string, unknown> | null> {
+async function aiVerdict(
+  item: ExtractedListing,
+  eurM2: number,
+  benchmark: number,
+  odchylka: number,
+  bm: BenchmarkResult,
+): Promise<Record<string, unknown> | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
   const system = `Si senior realitný analytik na Slovensku. Stručne, vecne, po slovensky. Vráť IBA JSON bez markdown.`;
+
+  // Bohatší kontext z disappearance-detector dát: koľko ľudia zľavnili,
+  // koľko bežia inzeráty na trhu, či máme realizačné alebo len ponukové ceny.
+  const benchmarkContext: string[] = [];
+  if (bm.source === "realized" && bm.realized_count) {
+    benchmarkContext.push(`Benchmark = REALIZAČNÁ cena (median z ${bm.realized_count} skutočne predaných inzerátov za posledný rok)`);
+  } else if (bm.source === "asking" && bm.asking_count) {
+    benchmarkContext.push(`Benchmark = ASKING cena (median z ${bm.asking_count} aktívnych ponúk; málo predaných dát pre tento segment)`);
+  } else {
+    benchmarkContext.push(`Benchmark = statický odhad (málo dát z monitor)`);
+  }
+  if (bm.asking_median && bm.realized_median && bm.asking_median > 0) {
+    const gap = Math.round(((bm.asking_median - bm.realized_median) / bm.asking_median) * 100 * 10) / 10;
+    if (gap > 0.5) benchmarkContext.push(`Asking-vs-realized gap: ${gap}% (predajcovia v segmente bežne pýtajú o toľko viac ako sa naozaj predajú)`);
+  }
+  if (bm.avg_discount_pct != null && bm.avg_discount_pct > 0) {
+    benchmarkContext.push(`Priemerná zľava od pôvodnej ceny: ${bm.avg_discount_pct}% (z ${bm.realized_count || 0} predaných inzerátov)`);
+  }
+  if (bm.median_dom != null) {
+    benchmarkContext.push(`Typický čas na trhu pred predajom v tomto segmente: ${bm.median_dom} dní`);
+  }
+
   const prompt = `Analyzuj túto nehnuteľnosť:
 Názov: ${item.nazov || item.typ_nehnutelnosti}
 Lokalita: ${item.lokalita}
 Cena: ${item.cena}€ | Plocha: ${item.plocha}m² | €/m²: ${eurM2}
-Trhový benchmark (median): ${benchmark}€/m² | Odchýlka: ${odchylka > 0 ? "+" : ""}${odchylka}%
+Trhový benchmark: ${benchmark}€/m² | Odchýlka: ${odchylka > 0 ? "+" : ""}${odchylka}%
 Typ: ${item.typ_nehnutelnosti} | Stav: ${item.stav || "—"} | Izby: ${item.izby || "—"}
+
+Trhové info z nášho monitora:
+${benchmarkContext.map(s => `- ${s}`).join("\n")}
+
 Popis (úryvok): ${(item.popis || "").slice(0, 800)}
+
+Vyjednávacie argumenty MUSIA byť konkrétne — ak vieš že v segmente predajcovia zľavňujú o X%, použi to. Ak vieš že priemerný čas na trhu je Y dní, použi to.
 
 Vráť JSON:
 {
@@ -197,8 +326,8 @@ Vráť JSON:
   "slabe_stranky": ["max 3 body, krátke"],
   "odporucanie": "1-2 vety čo by mal maklér urobiť",
   "cielova_skupina": "kto je ideálny kupujúci",
-  "cas_predaja": "odhad v týždňoch (číslo + stručný kontext)",
-  "vyjednavacie_argumenty": ["max 3 body — čo môže maklér použiť pri vyjednávaní ceny"]
+  "cas_predaja": "odhad v týždňoch (číslo + stručný kontext, použi median DOM ak vieš)",
+  "vyjednavacie_argumenty": ["max 3 body — konkrétne čísla z trhových info"]
 }`;
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -283,17 +412,37 @@ export async function POST(req: NextRequest) {
   const odchylka = benchmark > 0 ? Math.round(((eurM2 - benchmark) / benchmark) * 100) : 0;
   const stav = odchylka < -10 ? "podhodnotene" : odchylka > 10 ? "nadhodnotene" : "trhova_cena";
 
-  const ai = await aiVerdict(extracted, eurM2, benchmark, odchylka);
+  const ai = await aiVerdict(extracted, eurM2, benchmark, odchylka, benchmarkRes);
   const hyp = hypoteka(cena);
+
+  // Popis zdroja benchmarku — povie maklérovi či bola cena merané proti reálne
+  // predaným inzerátom alebo len ponukám.
+  const benchmark_zdroj = (() => {
+    if (benchmarkRes.source === "realized") {
+      return `median REALIZAČNÝCH cien z ${benchmarkRes.realized_count} skutočne predaných inzerátov v ${extracted.lokalita} za posledný rok`;
+    }
+    if (benchmarkRes.source === "asking") {
+      return `median z ${benchmarkRes.asking_count} aktívnych ponúk v ${extracted.lokalita} (málo predaných dát pre tento segment)`;
+    }
+    return `statický odhad pre ${extracted.lokalita || "SR"} (málo dát z monitora)`;
+  })();
 
   return NextResponse.json({
     url,
     extracted,
     analysis: {
       zaklad: { cena, plocha, eurM2, benchmark, odchylka, stav },
-      benchmark_zdroj: benchmarkRes.source === "monitor"
-        ? `median z ${benchmarkRes.count} skutočných inzerátov v ${extracted.lokalita}`
-        : `statický odhad pre ${extracted.lokalita || "SR"}`,
+      benchmark_zdroj,
+      // Trhové štatistiky v segmente — nech UI vie zobraziť presne čísla
+      trh: {
+        zdroj: benchmarkRes.source,
+        asking_median: benchmarkRes.asking_median ?? null,
+        asking_count: benchmarkRes.asking_count ?? 0,
+        realized_median: benchmarkRes.realized_median ?? null,
+        realized_count: benchmarkRes.realized_count ?? 0,
+        avg_discount_pct: benchmarkRes.avg_discount_pct ?? null,
+        median_dom: benchmarkRes.median_dom ?? null,
+      },
       hypoteka: hyp,
       ai: ai || {
         verdikt: stav,
