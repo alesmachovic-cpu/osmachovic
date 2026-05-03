@@ -4,6 +4,7 @@ import { useState, useEffect, createContext, useContext } from "react";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { VianemaBranded, PoweredByAMGD } from "@/components/brand";
+import PasswordInput from "@/components/PasswordInput";
 
 interface User {
   id: string;
@@ -456,22 +457,18 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
             <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.7)", marginBottom: "6px", display: "block", textTransform: "uppercase", letterSpacing: "0.04em" }}>
               Heslo
             </label>
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={submitting}
               placeholder="••••••••"
+              inverse
               style={{
-                width: "100%", padding: "13px 16px", borderRadius: "12px",
                 background: "rgba(255,255,255,0.06)",
                 border: "1px solid rgba(255,255,255,0.12)",
-                color: "#fff", fontSize: "14px", outline: "none",
-                transition: "all 0.15s",
+                color: "#fff",
               }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
             />
           </div>
 

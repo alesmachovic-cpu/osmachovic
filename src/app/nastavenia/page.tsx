@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import type { User } from "@/components/AuthProvider";
 import PhoneInput from "@/components/PhoneInput";
+import PasswordInput from "@/components/PasswordInput";
 import { ALL_FEATURES, loadFeatureToggles, saveFeatureToggles } from "@/lib/featureToggles";
 import type { FeatureId, FeatureToggles } from "@/lib/featureToggles";
 import { getUserItem, setUserItem } from "@/lib/userStorage";
@@ -819,7 +820,12 @@ export default function NastaveniaPage() {
                 </div>
                 <div>
                   <div style={labelSt}>Heslo (voliteľné)</div>
-                  <input type="password" style={inputSt} value={newUserPw} onChange={e => setNewUserPw(e.target.value)} placeholder="Bez hesla = priamy prístup" />
+                  <PasswordInput
+                    autoComplete="new-password"
+                    value={newUserPw} onChange={e => setNewUserPw(e.target.value)}
+                    placeholder="Bez hesla = priamy prístup"
+                    style={inputSt as React.CSSProperties}
+                  />
                 </div>
               </div>
               <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
@@ -879,10 +885,15 @@ export default function NastaveniaPage() {
                         onChange={e => setEditingUser({ ...editingUser, login_email: e.target.value })}
                         style={{ ...inputSt, width: "200px", padding: "6px 10px", fontSize: "12px" }}
                       />
-                      <input type="password" placeholder="Nové heslo" value={editingUser.password || ""}
-                        onChange={e => setEditingUser({ ...editingUser, password: e.target.value })}
-                        style={{ ...inputSt, width: "140px", padding: "6px 10px", fontSize: "12px" }}
-                      />
+                      <div style={{ width: "180px" }}>
+                        <PasswordInput
+                          autoComplete="new-password"
+                          placeholder="Nové heslo"
+                          value={editingUser.password || ""}
+                          onChange={e => setEditingUser({ ...editingUser, password: e.target.value })}
+                          style={{ ...inputSt, padding: "6px 32px 6px 10px", fontSize: "12px" } as React.CSSProperties}
+                        />
+                      </div>
                       <button onClick={() => {
                         updateAccount(editingUser);
                         setEditingUser(null);
