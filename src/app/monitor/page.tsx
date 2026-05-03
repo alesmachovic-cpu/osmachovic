@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
 import { useAuth } from "@/components/AuthProvider";
+import PreCallBriefModal from "@/components/PreCallBriefModal";
+import PriceSparkline from "@/components/PriceSparkline";
 
 /* ── Typy ── */
 interface Inzerat {
@@ -179,6 +181,7 @@ function LokalitaInput({ value, onChange, placeholder }: { value: string; onChan
 /* ── Hlavná stránka ── */
 export default function MonitorPage() {
   const router = useRouter();
+  const [briefFor, setBriefFor] = useState<{ id: string; url?: string } | null>(null);
   const [inzeraty, setInzeraty] = useState<Inzerat[]>([]);
   const [filtre, setFiltre] = useState<Filter[]>([]);
   const [total, setTotal] = useState(0);
@@ -667,12 +670,22 @@ export default function MonitorPage() {
                           📡 {i.listed_on_n_portals} portálov
                         </span>
                       )}
+                      <PriceSparkline inzeratId={i.id} currentPrice={i.cena} />
                       <button onClick={(e) => {
                         e.preventDefault(); e.stopPropagation();
-                        // Otvor /analyzy s URL pre-vyplneným cez ?analyze=URL — page si to chytí a otvorí modal
-                        router.push(`/analyzy?analyze=${encodeURIComponent(i.url)}`);
+                        setBriefFor({ id: i.id, url: i.url });
                       }} style={{
                         marginLeft: "auto",
+                        fontSize: "11px", fontWeight: 600, color: "#7c2d12",
+                        background: "#fed7aa", border: "none",
+                        padding: "3px 10px", borderRadius: "6px", cursor: "pointer",
+                      }} title="Pre-call brief — čo povedať predajcovi pred zavolaním">
+                        📞 Brief
+                      </button>
+                      <button onClick={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        router.push(`/analyzy?analyze=${encodeURIComponent(i.url)}`);
+                      }} style={{
                         fontSize: "11px", fontWeight: 600, color: "#1e3a8a",
                         background: "#dbeafe", border: "none",
                         padding: "3px 10px", borderRadius: "6px", cursor: "pointer",
@@ -907,6 +920,14 @@ export default function MonitorPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         select:focus, input:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-light) !important; }
       `}</style>
+
+      {briefFor && (
+        <PreCallBriefModal
+          inzeratId={briefFor.id}
+          sourceUrl={briefFor.url}
+          onClose={() => setBriefFor(null)}
+        />
+      )}
     </div>
   );
 }

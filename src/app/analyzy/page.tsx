@@ -337,6 +337,78 @@ function AnalyzyInner() {
             </div>
           )}
 
+          {/* Cenová heatmap per district — z najnovších market_sentiments */}
+          {sentiments.length > 0 && (() => {
+            // Group sentimenty by lokalita (district = first word, napr. "Bratislava-Petržalka" → "Bratislava-Petržalka")
+            const byDistrict = new Map<string, { lokalita: string; segments: number; medians: number[]; demands: number[] }>();
+            for (const s of sentiments) {
+              if (!s.median_eur_per_m2) continue;
+              const key = s.lokalita.replace(/^Reality\s+/i, "");
+              if (!byDistrict.has(key)) byDistrict.set(key, { lokalita: key, segments: 0, medians: [], demands: [] });
+              const d = byDistrict.get(key)!;
+              d.segments++;
+              d.medians.push(Number(s.median_eur_per_m2));
+              d.demands.push(Number(s.demand_index));
+            }
+            const districts = Array.from(byDistrict.values()).map(d => ({
+              lokalita: d.lokalita,
+              segments: d.segments,
+              avg_eur_per_m2: Math.round(d.medians.reduce((s, x) => s + x, 0) / d.medians.length),
+              avg_demand: Math.round((d.demands.reduce((s, x) => s + x, 0) / d.demands.length) * 10) / 10,
+            }));
+            if (districts.length === 0) return null;
+            const maxPrice = Math.max(...districts.map(d => d.avg_eur_per_m2));
+            const minPrice = Math.min(...districts.map(d => d.avg_eur_per_m2));
+            const priceRange = maxPrice - minPrice || 1;
+            return (
+              <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", borderLeft: "4px solid #7c3aed" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                  <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)" }}>
+                    🗺 Cenová heatmap (per lokalita)
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                    {districts.length} lokalít · {minPrice.toLocaleString("sk")} – {maxPrice.toLocaleString("sk")} €/m²
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {districts.sort((a, b) => b.avg_eur_per_m2 - a.avg_eur_per_m2).map((d) => {
+                    const ratio = (d.avg_eur_per_m2 - minPrice) / priceRange;
+                    // Gradient: zelené (lacné) → žlté → červené (drahé)
+                    const hue = (1 - ratio) * 120; // 120 = zelená, 0 = červená
+                    const bg = `hsl(${hue}, 70%, 92%)`;
+                    const txt = `hsl(${hue}, 60%, 30%)`;
+                    return (
+                      <div key={d.lokalita} style={{
+                        display: "flex", alignItems: "center", gap: "10px",
+                        padding: "8px 12px", borderRadius: "8px", background: bg,
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: "13px", fontWeight: 600, color: txt }}>{d.lokalita}</div>
+                          <div style={{ fontSize: "11px", color: txt, opacity: 0.75 }}>
+                            {d.segments} segmentov · demand {d.avg_demand}/10
+                          </div>
+                        </div>
+                        <div style={{ fontSize: "14px", fontWeight: 800, color: txt }}>
+                          {d.avg_eur_per_m2.toLocaleString("sk")} €/m²
+                        </div>
+                        {/* Mini progress bar */}
+                        <div style={{
+                          width: "60px", height: "6px", borderRadius: "3px",
+                          background: "rgba(0,0,0,0.08)", overflow: "hidden",
+                        }}>
+                          <div style={{
+                            width: `${ratio * 100}%`, height: "100%",
+                            background: txt, opacity: 0.7,
+                          }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Recently detected sales — implicitne predané inzeráty z monitoringu */}
           {disappearances.length > 0 && (
             <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", borderLeft: "4px solid #16a34a" }}>
