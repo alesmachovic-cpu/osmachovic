@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
 import { useAuth } from "@/components/AuthProvider";
 
@@ -177,6 +178,7 @@ function LokalitaInput({ value, onChange, placeholder }: { value: string; onChan
 
 /* ── Hlavná stránka ── */
 export default function MonitorPage() {
+  const router = useRouter();
   const [inzeraty, setInzeraty] = useState<Inzerat[]>([]);
   const [filtre, setFiltre] = useState<Filter[]>([]);
   const [total, setTotal] = useState(0);
@@ -665,6 +667,18 @@ export default function MonitorPage() {
                           📡 {i.listed_on_n_portals} portálov
                         </span>
                       )}
+                      <button onClick={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        // Otvor /analyzy s URL pre-vyplneným cez ?analyze=URL — page si to chytí a otvorí modal
+                        router.push(`/analyzy?analyze=${encodeURIComponent(i.url)}`);
+                      }} style={{
+                        marginLeft: "auto",
+                        fontSize: "11px", fontWeight: 600, color: "#1e3a8a",
+                        background: "#dbeafe", border: "none",
+                        padding: "3px 10px", borderRadius: "6px", cursor: "pointer",
+                      }} title="Analyzovať tento inzerát — porovnanie s trhom + AI verdikt + PDF">
+                        🔍 Analyzovať
+                      </button>
                     </div>
                   </div>
                 </a>

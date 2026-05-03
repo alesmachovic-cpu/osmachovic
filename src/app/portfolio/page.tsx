@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
+import PricingEstimateModal from "@/components/PricingEstimateModal";
+import PropertyStoryModal from "@/components/PropertyStoryModal";
 
 /* ── Typy podľa skutočnej DB schémy ── */
 interface DBNehnutelnost {
@@ -93,6 +95,8 @@ export default function Portfolio() {
   const [deepDive, setDeepDive] = useState<DBNehnutelnost | null>(null);
   const [deepResult, setDeepResult] = useState<Record<string, unknown> | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
+  const [pricingFor, setPricingFor] = useState<DBNehnutelnost | null>(null);
+  const [storyFor, setStoryFor] = useState<DBNehnutelnost | null>(null);
   const [singleAnalyzing, setSingleAnalyzing] = useState<Record<string, boolean>>({});
   const [statusMenuFor, setStatusMenuFor] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
@@ -457,11 +461,29 @@ export default function Portfolio() {
                   </div>
 
                   {/* Vlastnosti */}
-                  <div style={{ display: "flex", gap: "8px", marginBottom: "14px" }}>
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
                     {n.balkon && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#F3F4F6", color: "#374151", borderRadius: "4px" }}>Balkón</span>}
                     {n.garaz && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#F3F4F6", color: "#374151", borderRadius: "4px" }}>Garáž</span>}
                     {n.vytah && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#F3F4F6", color: "#374151", borderRadius: "4px" }}>Výťah</span>}
                     {n.stav && <span style={{ fontSize: "11px", padding: "2px 8px", background: "#F3F4F6", color: "#374151", borderRadius: "4px" }}>{n.stav}</span>}
+                  </div>
+
+                  {/* Quick actions: pricing + AI popis (re-use modaly z /analyzy) */}
+                  <div style={{ display: "flex", gap: "6px", marginBottom: "12px" }}>
+                    <button onClick={(e) => { e.stopPropagation(); setPricingFor(n); }} style={{
+                      flex: 1, padding: "7px 10px", fontSize: "11px", fontWeight: 700,
+                      background: "linear-gradient(135deg, #064e3b 0%, #047857 100%)",
+                      color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer",
+                    }} title="Cenová kalkulačka — 3 stratégie + DOM predikcia">
+                      💰 Oceniť
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); setStoryFor(n); }} style={{
+                      flex: 1, padding: "7px 10px", fontSize: "11px", fontWeight: 700,
+                      background: "linear-gradient(135deg, #4338ca 0%, #6366f1 100%)",
+                      color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer",
+                    }} title="AI vygeneruje copy pre inzerát">
+                      ✨ AI popis
+                    </button>
                   </div>
 
                   {/* Analysis section */}
@@ -708,6 +730,45 @@ export default function Portfolio() {
             })()}
           </div>
         </div>
+      )}
+
+      {/* Pricing modal — pre-vyplnené z nehnuteľnosti */}
+      {pricingFor && (
+        <PricingEstimateModal
+          onClose={() => setPricingFor(null)}
+          userId={user?.id}
+          initialParams={{
+            nehnutelnost_id: pricingFor.id,
+            typ: pricingFor.typ_nehnutelnosti || pricingFor.typ || "byt",
+            lokalita: pricingFor.lokalita || "",
+            plocha: pricingFor.plocha || 0,
+            izby: pricingFor.izby || undefined,
+            stav: pricingFor.stav || undefined,
+            features: {
+              balkon: !!pricingFor.balkon,
+              garaz: !!pricingFor.garaz,
+              vytah: !!pricingFor.vytah,
+            },
+            owner_target_price: pricingFor.cena || undefined,
+          }}
+        />
+      )}
+
+      {/* AI Property Story modal — generátor copy pre tento konkrétny inzerát */}
+      {storyFor && (
+        <PropertyStoryModal
+          onClose={() => setStoryFor(null)}
+          userId={user?.id}
+          nehnutelnosti={[{
+            id: storyFor.id,
+            nazov: storyFor.nazov || null,
+            lokalita: storyFor.lokalita || null,
+            typ_nehnutelnosti: storyFor.typ_nehnutelnosti || storyFor.typ || null,
+            plocha: storyFor.plocha || null,
+            izby: storyFor.izby || null,
+            cena: storyFor.cena || null,
+          }]}
+        />
       )}
     </div>
   );

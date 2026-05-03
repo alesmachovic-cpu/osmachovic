@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { Klient, Nehnutelnost } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
@@ -29,7 +30,12 @@ interface DisapRow {
 }
 
 export default function AnalyzyPage() {
+  return <Suspense fallback={<div style={{ padding: "40px" }}>Načítavam…</div>}><AnalyzyInner /></Suspense>;
+}
+
+function AnalyzyInner() {
   const { user } = useAuth();
+  const search = useSearchParams();
   const [pricingModal, setPricingModal] = useState(false);
   const [storyModal, setStoryModal] = useState(false);
   const [klienti, setKlienti] = useState<Klient[]>([]);
@@ -39,6 +45,15 @@ export default function AnalyzyPage() {
   const [urlModal, setUrlModal] = useState(false);
   const [sentiments, setSentiments] = useState<MarketSentiment[]>([]);
   const [disappearances, setDisappearances] = useState<DisapRow[]>([]);
+
+  // Auto-open URL analyzer ak prišiel cez ?analyze=URL (z monitora)
+  useEffect(() => {
+    const u = search?.get("analyze");
+    if (u && /^https?:\/\//i.test(u)) {
+      setUrlInput(u);
+      setUrlModal(true);
+    }
+  }, [search]);
 
   useEffect(() => {
     Promise.all([
