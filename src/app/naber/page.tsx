@@ -11,6 +11,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { getUserItem } from "@/lib/userStorage";
 import { klientUpdate, naberUpdate } from "@/lib/klientApi";
+import SmsSignButton from "@/components/SmsSignButton";
 
 type TypNaber = "byt" | "rodinny_dom" | "pozemok";
 
@@ -721,6 +722,24 @@ function NaberPageContent() {
         <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 12px" }}>
           {submittedAt}
         </p>
+
+        {/* SMS podpis — keď maklér nie je pri klientovi */}
+        {savedNaberId && !savedNaberData?.podpis_data && (
+          <div style={{ marginBottom: "16px" }}>
+            <SmsSignButton
+              entityType="naber"
+              entityId={savedNaberId}
+              defaultPhone={selectedKlient?.telefon || ""}
+              userId={user?.id}
+              buttonStyle={{
+                padding: "10px 22px", borderRadius: "10px",
+                background: "#1d4ed8", color: "#fff", border: "none",
+                fontSize: "13px", fontWeight: 700, cursor: "pointer",
+              }}
+              buttonLabel="📱 Klient nie je tu — podpis cez SMS"
+            />
+          </div>
+        )}
 
         {/* Kalendár info */}
         {naberDatum && (

@@ -6,6 +6,7 @@ import type { Klient } from "@/lib/database.types";
 import SignatureCanvas from "./SignatureCanvas";
 import { useAuth } from "./AuthProvider";
 import { klientUpdate } from "@/lib/klientApi";
+import SmsSignButton from "./SmsSignButton";
 
 interface Props {
   klient: Klient;
@@ -270,7 +271,23 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
 
       {!simplified && (
         <div style={sectionSt}>
-          <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "12px" }}>✍️ Potvrdenie klientom</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>✍️ Potvrdenie klientom</div>
+            {existing?.id ? (
+              <SmsSignButton
+                entityType="objednavka"
+                entityId={String(existing.id)}
+                defaultPhone={klient.telefon || ""}
+                userId={user?.id}
+                buttonStyle={{
+                  padding: "6px 12px", borderRadius: "8px",
+                  background: "#1d4ed8", color: "#fff", border: "none",
+                  fontSize: "11px", fontWeight: 700, cursor: "pointer",
+                }}
+                buttonLabel="📱 Klient nie je tu — podpis cez SMS"
+              />
+            ) : null}
+          </div>
           <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px", lineHeight: "1.5" }}>
             Objednávateľ potvrdzuje obsah a záväznosť objednávky. Osobné údaje sú spracúvané podľa GDPR (zákon č. 18/2018 Z.z.).
           </p>
