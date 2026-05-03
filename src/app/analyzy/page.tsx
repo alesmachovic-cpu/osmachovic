@@ -5,6 +5,7 @@ import type { Klient, Nehnutelnost } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
 import UrlAnalyzeModal from "@/components/UrlAnalyzeModal";
 import PricingEstimateModal from "@/components/PricingEstimateModal";
+import PropertyStoryModal from "@/components/PropertyStoryModal";
 import { useAuth } from "@/components/AuthProvider";
 
 interface MarketSentiment {
@@ -30,6 +31,7 @@ interface DisapRow {
 export default function AnalyzyPage() {
   const { user } = useAuth();
   const [pricingModal, setPricingModal] = useState(false);
+  const [storyModal, setStoryModal] = useState(false);
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [nehnutelnosti, setNehnutelnosti] = useState<Nehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,26 +165,51 @@ export default function AnalyzyPage() {
             </form>
           </div>
 
-          {/* Cenová kalkulačka — manuálne zadanie parametrov, 3 stratégie + DOM */}
-          <div style={{
-            background: "linear-gradient(135deg, #064e3b 0%, #047857 100%)",
-            borderRadius: "16px", padding: "20px 24px", color: "#fff",
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px",
-          }}>
-            <div>
-              <div style={{ fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                💰 Cenová kalkulačka
+          {/* Cenová kalkulačka + AI Property Story (2 stĺpce) */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+            <div style={{
+              background: "linear-gradient(135deg, #064e3b 0%, #047857 100%)",
+              borderRadius: "16px", padding: "20px 24px", color: "#fff",
+              display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "12px",
+            }}>
+              <div>
+                <div style={{ fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+                  💰 Cenová kalkulačka
+                </div>
+                <div style={{ fontSize: "12px", opacity: 0.85, marginTop: "4px" }}>
+                  3 stratégie (agresívna / trhová / aspirational) + DOM predikcia + CMA z reálnych predaných.
+                </div>
               </div>
-              <div style={{ fontSize: "12px", opacity: 0.85, marginTop: "4px" }}>
-                Zadaj parametre nehnuteľnosti — dostaneš 3 cenové stratégie (agresívna / trhová / aspirational), predikciu dní na trhu a CMA z reálnych predaných.
-              </div>
+              <button onClick={() => setPricingModal(true)} style={{
+                padding: "10px 18px", borderRadius: "10px",
+                background: "#fff", color: "#064e3b",
+                border: "none", fontSize: "13px", fontWeight: 700, cursor: "pointer",
+                alignSelf: "flex-start",
+              }}>Otvoriť kalkulačku</button>
             </div>
-            <button onClick={() => setPricingModal(true)} style={{
-              padding: "12px 24px", borderRadius: "10px",
-              background: "#fff", color: "#064e3b",
-              border: "none", fontSize: "13px", fontWeight: 700, cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}>Otvoriť kalkulačku</button>
+
+            <div style={{
+              background: "linear-gradient(135deg, #4338ca 0%, #6366f1 100%)",
+              borderRadius: "16px", padding: "20px 24px", color: "#fff",
+              display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "12px",
+            }}>
+              <div>
+                <div style={{ fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+                  ✨ AI popis pre inzerát
+                </div>
+                <div style={{ fontSize: "12px", opacity: 0.85, marginTop: "4px" }}>
+                  Vyber nehnuteľnosť z portfólia — AI vygeneruje hook, lifestyle, investičnú logiku s číslami z monitora.
+                </div>
+              </div>
+              <button onClick={() => setStoryModal(true)} disabled={nehnutelnosti.length === 0} style={{
+                padding: "10px 18px", borderRadius: "10px",
+                background: "#fff", color: "#4338ca",
+                border: "none", fontSize: "13px", fontWeight: 700,
+                cursor: nehnutelnosti.length === 0 ? "default" : "pointer",
+                opacity: nehnutelnosti.length === 0 ? 0.5 : 1,
+                alignSelf: "flex-start",
+              }}>{nehnutelnosti.length === 0 ? "Žiadne nehnuteľnosti" : "Vygenerovať popis"}</button>
+            </div>
           </div>
 
           {/* Top stats */}
@@ -406,6 +433,21 @@ export default function AnalyzyPage() {
         <PricingEstimateModal
           onClose={() => setPricingModal(false)}
           userId={user?.id}
+        />
+      )}
+      {storyModal && (
+        <PropertyStoryModal
+          onClose={() => setStoryModal(false)}
+          userId={user?.id}
+          nehnutelnosti={nehnutelnosti.map(n => ({
+            id: n.id,
+            nazov: n.nazov,
+            lokalita: n.lokalita,
+            typ_nehnutelnosti: (n as { typ_nehnutelnosti?: string | null }).typ_nehnutelnosti ?? n.typ ?? null,
+            plocha: n.plocha,
+            izby: n.izby,
+            cena: n.cena,
+          }))}
         />
       )}
     </div>
