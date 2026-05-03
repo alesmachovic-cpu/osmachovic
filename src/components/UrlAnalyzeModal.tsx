@@ -10,6 +10,11 @@ interface Extracted {
   plocha?: number | null;
   izby?: number | null;
   stav?: string | null;
+  stav_inzerovany?: string | null;
+  stav_posudeny_ai?: string | null;
+  stav_odovodnenie?: string | null;
+  year_built?: number | null;
+  year_reconstructed?: number | null;
   popis?: string | null;
   predajca?: string | null;
   fotka_url?: string | null;
@@ -204,7 +209,7 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
                     ["€ / m²", eur(result.analysis.zaklad?.eurM2)],
                     ["Trhový benchmark", result.analysis.zaklad?.benchmark ? `${eur(result.analysis.zaklad?.benchmark)} / m²` : "—"],
                     ["Izby", result.extracted.izby != null ? String(result.extracted.izby) : "—"],
-                    ["Stav", result.extracted.stav || "—"],
+                    ["Stav", result.extracted.stav_posudeny_ai || result.extracted.stav || "—"],
                   ].map(([l, val]) => (
                     <div key={l}>
                       <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{l}</div>
@@ -212,6 +217,33 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
                     </div>
                   ))}
                 </div>
+
+                {/* Detail roku výstavby + AI posúdenie stavu */}
+                {(result.extracted.year_built || (result.extracted.stav_inzerovany && result.extracted.stav_posudeny_ai && result.extracted.stav_inzerovany !== result.extracted.stav_posudeny_ai)) && (
+                  <div style={{
+                    marginTop: "12px", padding: "10px 14px", borderRadius: "10px",
+                    background: "#eff6ff", border: "1px solid #bfdbfe",
+                  }}>
+                    {result.extracted.year_built && (
+                      <div style={{ fontSize: "12px", color: "#1e40af", marginBottom: result.extracted.stav_odovodnenie ? "6px" : 0 }}>
+                        🏗️ <strong>Postavené {result.extracted.year_built}</strong>
+                        {result.extracted.year_reconstructed ? <> · <strong>Rekonštrukcia {result.extracted.year_reconstructed}</strong></> : null}
+                      </div>
+                    )}
+                    {result.extracted.stav_inzerovany && result.extracted.stav_posudeny_ai && result.extracted.stav_inzerovany !== result.extracted.stav_posudeny_ai && (
+                      <div style={{ fontSize: "12px", color: "#1e40af" }}>
+                        💡 <strong>Inzerát uvádza:</strong> &quot;{result.extracted.stav_inzerovany}&quot; ·
+                        {" "}<strong>AI posúdenie:</strong> &quot;{result.extracted.stav_posudeny_ai}&quot;
+                        {result.extracted.stav_odovodnenie && (
+                          <div style={{ marginTop: "4px", fontStyle: "italic", color: "#3730a3" }}>
+                            {result.extracted.stav_odovodnenie}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {result.analysis.benchmark_zdroj && (
                   <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "10px", fontStyle: "italic" }}>
                     {result.analysis.benchmark_zdroj}

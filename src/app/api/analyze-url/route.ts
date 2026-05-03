@@ -203,6 +203,16 @@ interface ExtractedListing {
   plocha: number | null;
   izby: number | null;
   stav: string | null;
+  /** Pôvodná hodnota čo uvádza inzerát (môže byť nepresná) */
+  stav_inzerovany: string | null;
+  /** AI vlastné posúdenie stavu na základe popisu, roku výstavby, fotky.
+   *  Príklad: inzerát uvádza "pôvodný stav" ale rok výstavby 2018 + popis
+   *  spomína moderné kuchyne → AI prehodnotí na "po_rekonstrukcii". */
+  stav_posudeny_ai: string | null;
+  /** Krátke odôvodnenie posúdenia (pre transparentnosť) */
+  stav_odovodnenie: string | null;
+  year_built: number | null;
+  year_reconstructed: number | null;
   popis: string | null;
   predajca: string | null;
   fotka_url: string | null;
@@ -214,8 +224,21 @@ async function aiExtract(text: string, meta: Record<string, string>, url: string
     console.error("[analyze-url] ANTHROPIC_API_KEY missing");
     return null;
   }
-  const system = `Si extraktor údajov z realitných inzerátov v slovenčine. Vráť IBA validný JSON bez markdown, bez komentárov.`;
-  const user = `Z týchto údajov vytiahni informácie o nehnuteľnosti a vráť JSON v presnom formáte:
+  const system = `Si senior realitný analytik a extraktor údajov z inzerátov v slovenčine.
+Tvoja špecialita: posúdiť SKUTOČNÝ stav nehnuteľnosti — nielen čo inzerát hovorí,
+ale aj čo nepriamo naznačuje rok výstavby, popis a (ak je dostupná) fotka.
+
+KRITICKÉ pravidlo posúdenia stavu:
+- "pôvodný stav" v inzeráte ≠ vždy "schátrané"!
+- Ak rok výstavby ≥2010 + "pôvodný stav" → pravdepodobne **moderné** (developer odovzdal v štandarde, ďalej sa nič nemenilo). Posúď ako "po_rekonstrukcii" pre AVM účely.
+- Ak rok výstavby ≥2018 + "pôvodný stav" → posúď ako "novostavba" (developerský štandard moderný).
+- Ak rok výstavby <1990 + "pôvodný stav" → naozaj "povodny_stav" (treba investíciu).
+- Ak popis spomína "kompletná rekonštrukcia 2020", "nová kuchyňa", "nové okná po roku 2015" → hoci inzerát hovorí "pôvodný", posúď ako "po_rekonstrukcii".
+- Ak fotky ukazujú moderné rozvrhy/kuchyne/podlahy → po_rekonstrukcii alebo novostavba.
+
+Vráť IBA validný JSON bez markdown, bez komentárov.`;
+
+  const userText = `Z týchto údajov vytiahni informácie o nehnuteľnosti a vráť JSON v presnom formáte:
 
 {
   "nazov": string|null,
@@ -224,7 +247,11 @@ async function aiExtract(text: string, meta: Record<string, string>, url: string
   "cena": number|null,
   "plocha": number|null,
   "izby": number|null,
-  "stav": "novostavba"|"po_rekonstrukcii"|"povodny_stav"|"developersky_projekt"|null,
+  "stav_inzerovany": "novostavba"|"po_rekonstrukcii"|"povodny_stav"|"developersky_projekt"|null,
+  "stav_posudeny_ai": "novostavba"|"po_rekonstrukcii"|"povodny_stav"|"developersky_projekt"|null,
+  "stav_odovodnenie": "1-2 vety prečo posúdenie iné/rovnaké ako inzerát",
+  "year_built": number|null,
+  "year_reconstructed": number|null,
   "popis": string|null,
   "predajca": string|null,
   "fotka_url": string|null
@@ -234,6 +261,8 @@ Pre cenu: iba číslo v eurách (bez €, čiarok, "od", "vrátane DPH" atď).
 Pre plochu: iba číslo v m² (úžitková ak je viac plôch).
 Pre izby: iba číslo (ak píše "3-izbový" → 3, "garsónka" → 1, "1+kk" → 1).
 Pre lokalitu: konkrétna obec/mestská časť (napr. "Bratislava-Ružinov", nie len "Bratislava").
+Pre year_built: rok dokončenia (môže byť v popise alebo z roka kolaudácie).
+Pre stav_posudeny_ai: TVOJE posúdenie po zvážení year_built + popis + fotka. Ak je rovnaké ako stav_inzerovany, skopíruj.
 
 URL: ${url}
 Title: ${meta.title || meta["og:title"] || "—"}
@@ -242,6 +271,17 @@ OG description: ${meta["og:description"] || "—"}
 
 Text inzerátu:
 ${text}`;
+
+  // Vision input — ak má og:image, pripoj ako image content type
+  // (Claude môže analyzovať fotku spolu s textom)
+  const ogImage = meta["og:image"];
+  const messageContent: Array<Record<string, unknown>> = [{ type: "text", text: userText }];
+  if (ogImage && /^https?:\/\//i.test(ogImage)) {
+    messageContent.push({
+      type: "image",
+      source: { type: "url", url: ogImage },
+    });
+  }
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -253,20 +293,47 @@ ${text}`;
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-5",
-        max_tokens: 1500,
+        max_tokens: 2000,
         system,
-        messages: [{ role: "user", content: user }],
+        messages: [{ role: "user", content: messageContent }],
       }),
     });
     if (!res.ok) {
       console.error("[analyze-url] Anthropic HTTP", res.status, await res.text().catch(() => ""));
+      // Fallback bez fotky ak vision API zlyhalo
+      if (ogImage) {
+        const res2 = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-5",
+            max_tokens: 2000,
+            system,
+            messages: [{ role: "user", content: userText }],
+          }),
+        });
+        if (res2.ok) {
+          const d2 = await res2.json();
+          const r2 = d2?.content?.[0]?.text?.trim() || "";
+          const m2 = r2.match(/\{[\s\S]*\}/);
+          if (m2) {
+            const parsed = JSON.parse(m2[0]) as ExtractedListing;
+            // Spätná kompatibilita: ak je `stav` field, prepíš
+            if (!parsed.stav && parsed.stav_posudeny_ai) parsed.stav = parsed.stav_posudeny_ai;
+            return parsed;
+          }
+        }
+      }
       return null;
     }
     const data = await res.json();
     const raw = data?.content?.[0]?.text?.trim() || "";
     const m = raw.match(/\{[\s\S]*\}/);
     if (!m) return null;
-    return JSON.parse(m[0]) as ExtractedListing;
+    const parsed = JSON.parse(m[0]) as ExtractedListing;
+    // Pre spätnú kompatibilitu — `stav` field v UI/PDF používa stav_posudeny_ai
+    if (!parsed.stav && parsed.stav_posudeny_ai) parsed.stav = parsed.stav_posudeny_ai;
+    return parsed;
   } catch (e) {
     console.error("[analyze-url] AI extract failed:", e);
     return null;
@@ -305,17 +372,28 @@ async function aiVerdict(
     benchmarkContext.push(`Typický čas na trhu pred predajom v tomto segmente: ${bm.median_dom} dní`);
   }
 
+  const ext = item as ExtractedListing;
+  const stavLine = ext.stav_inzerovany && ext.stav_posudeny_ai && ext.stav_inzerovany !== ext.stav_posudeny_ai
+    ? `Stav inzerovaný: "${ext.stav_inzerovany}" | Stav posúdený AI: "${ext.stav_posudeny_ai}" (${ext.stav_odovodnenie || "—"})`
+    : `Stav: ${ext.stav_posudeny_ai || ext.stav || "—"}`;
+  const yearLine = ext.year_built
+    ? `Rok výstavby: ${ext.year_built}${ext.year_reconstructed ? ` | Rok rekonštrukcie: ${ext.year_reconstructed}` : ""}`
+    : "";
+
   const prompt = `Analyzuj túto nehnuteľnosť:
 Názov: ${item.nazov || item.typ_nehnutelnosti}
 Lokalita: ${item.lokalita}
 Cena: ${item.cena}€ | Plocha: ${item.plocha}m² | €/m²: ${eurM2}
 Trhový benchmark: ${benchmark}€/m² | Odchýlka: ${odchylka > 0 ? "+" : ""}${odchylka}%
-Typ: ${item.typ_nehnutelnosti} | Stav: ${item.stav || "—"} | Izby: ${item.izby || "—"}
+Typ: ${item.typ_nehnutelnosti} | ${stavLine} | Izby: ${item.izby || "—"}
+${yearLine}
 
 Trhové info z nášho monitora:
 ${benchmarkContext.map(s => `- ${s}`).join("\n")}
 
 Popis (úryvok): ${(item.popis || "").slice(0, 800)}
+
+DÔLEŽITÉ: Ak je rozdiel medzi inzerovaným a posúdeným stavom, ber do úvahy posúdený stav (napr. "pôvodný stav" v novostavbe z 2018 = moderné, nie schátrané — to ovplyvňuje cenovú primeranosť).
 
 Vyjednávacie argumenty MUSIA byť konkrétne — ak vieš že v segmente predajcovia zľavňujú o X%, použi to. Ak vieš že priemerný čas na trhu je Y dní, použi to.
 
