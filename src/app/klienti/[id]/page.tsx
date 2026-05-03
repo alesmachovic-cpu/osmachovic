@@ -1212,11 +1212,20 @@ export default function KlientDetailPage() {
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>📝 Vyplniť náberový list</button>
           )}
-          {workflowStep === 2 && isAdmin && (
-            <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
-              marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
-              border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-            }}>📰 Vytvoriť inzerát</button>
+          {/* Krok 2 = Nabraný. Ale ak ešte nie je vyplnený žiadny náberový list,
+              maklér nemôže preskočiť k inzerátu — najprv treba vyplniť náberák. */}
+          {workflowStep === 2 && (
+            nabery.length === 0 ? (
+              <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
+                marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
+                border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>📝 Vyplniť náberový list</button>
+            ) : isAdmin && (
+              <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
+                marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
+                border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>📰 Vytvoriť inzerát</button>
+            )
           )}
           {klient.datum_naberu && (
             <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
