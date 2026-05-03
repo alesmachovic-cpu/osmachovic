@@ -101,7 +101,208 @@ function FlipClock({ time, blink }: { time: string; blink: boolean }) {
   );
 }
 
-/* ── API Status Bell ── */
+/* ── Notifications Bell ── (rovnaký dizajn ako pôvodný ApiBell) */
+interface NotifRow {
+  id: string;
+  typ: string | null;
+  titulok: string | null;
+  sprava: string | null;
+  data: Record<string, unknown> | null;
+  precitane: boolean;
+  created_at: string;
+}
+
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return "teraz";
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} h`;
+  const d = Math.floor(h / 24);
+  return `${d} d`;
+}
+
+function NotificationsBell() {
+  const { user } = useAuth();
+  const [notifs, setNotifs] = useState<NotifRow[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  const fetchNotifs = async () => {
+    if (!user?.id || loading) return;
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/notifications?user_id=${encodeURIComponent(user.id)}`);
+      const d = await r.json();
+      setNotifs(d.notifications || []);
+      setUnread(d.unread || 0);
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchNotifs();
+    // Poll každých 60s aby ikona mala fresh count
+    const t = setInterval(fetchNotifs, 60_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const markRead = async (id: string) => {
+    if (!user?.id) return;
+    setNotifs(prev => prev.map(n => n.id === id ? { ...n, precitane: true } : n));
+    setUnread(u => Math.max(0, u - 1));
+    fetch("/api/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: user.id, mark_read: id }),
+    }).catch(() => {});
+  };
+
+  const markAllRead = async () => {
+    if (!user?.id) return;
+    setNotifs(prev => prev.map(n => ({ ...n, precitane: true })));
+    setUnread(0);
+    fetch("/api/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: user.id, mark_read: "all" }),
+    }).catch(() => {});
+  };
+
+  // Rovnaký dot color systém: zelený = nič nové, oranžový = sú neprečítané
+  const dotColor = !user ? "#AEAEB2" : unread === 0 ? "#34C759" : "#FF9500";
+
+  return (
+    <div style={{ position: "relative" }} ref={dropRef}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        title={unread > 0 ? `${unread} neprečítaných notifikácií` : "Notifikácie"}
+        style={{
+          width: "36px", height: "36px", borderRadius: "9px",
+          background: "var(--bg-elevated)", border: "1px solid var(--border)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", color: "var(--text-secondary)", position: "relative",
+          flexShrink: 0,
+        }}
+      >
+        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        <span style={{
+          position: "absolute", top: "7px", right: "7px",
+          width: "7px", height: "7px",
+          background: dotColor,
+          borderRadius: "50%", border: "1.5px solid var(--bg-surface)",
+          transition: "background 0.3s ease",
+        }} />
+        {unread > 0 && (
+          <span style={{
+            position: "absolute", top: "-4px", right: "-4px",
+            minWidth: "16px", height: "16px", padding: "0 4px",
+            background: "#FF3B30", color: "#fff",
+            borderRadius: "8px", fontSize: "10px", fontWeight: 700,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            border: "1.5px solid var(--bg-surface)",
+          }}>{unread > 9 ? "9+" : unread}</span>
+        )}
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "44px", right: 0,
+          background: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderRadius: "12px", padding: "12px 14px",
+          minWidth: "320px", maxWidth: "360px", maxHeight: "440px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.12)", zIndex: 100,
+          display: "flex", flexDirection: "column",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+            <p style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-secondary)", margin: 0, letterSpacing: "0.06em" }}>
+              NOTIFIKÁCIE {unread > 0 && <span style={{ color: "#FF9500" }}>· {unread} novej</span>}
+            </p>
+            {unread > 0 && (
+              <button onClick={markAllRead} style={{
+                fontSize: "11px", color: "var(--text-secondary)", fontWeight: 500,
+                background: "transparent", border: "none", cursor: "pointer",
+                textDecoration: "underline",
+              }}>Označiť všetky</button>
+            )}
+          </div>
+
+          <div style={{ overflowY: "auto", marginRight: "-8px", paddingRight: "6px", flex: 1 }}>
+            {!loading && notifs.length === 0 && (
+              <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "16px 0", textAlign: "center" }}>
+                Žiadne notifikácie
+              </p>
+            )}
+            {notifs.map(n => (
+              <button
+                key={n.id}
+                onClick={() => { if (!n.precitane) markRead(n.id); }}
+                style={{
+                  display: "block", width: "100%", textAlign: "left",
+                  padding: "10px 12px", borderRadius: "8px", marginBottom: "4px",
+                  background: n.precitane ? "transparent" : "var(--bg-elevated)",
+                  border: "1px solid", borderColor: n.precitane ? "transparent" : "var(--border)",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-elevated)"; }}
+                onMouseLeave={e => { if (n.precitane) e.currentTarget.style.background = "transparent"; }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                  {!n.precitane && (
+                    <span style={{
+                      width: "7px", height: "7px", borderRadius: "50%",
+                      background: "#FF9500", flexShrink: 0, marginTop: "5px",
+                    }} />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {n.titulok && (
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "2px" }}>
+                        {n.titulok}
+                      </div>
+                    )}
+                    {n.sprava && (
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: "1.4" }}>
+                        {n.sprava}
+                      </div>
+                    )}
+                    <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>
+                      {timeAgo(n.created_at)}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <a href="/notifikacie" onClick={() => setOpen(false)} style={{
+            display: "block", textAlign: "center", marginTop: "8px", padding: "7px 0",
+            background: "var(--bg-elevated)", border: "1px solid var(--border)",
+            borderRadius: "8px", fontSize: "12px", color: "var(--text-secondary)",
+            fontWeight: 500, textDecoration: "none",
+          }}>Zobraziť všetky</a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── API Status Bell ── (legacy, not rendered in navbar — replaced by NotificationsBell) */
 function ApiBell() {
   const [statuses, setStatuses] = useState<ApiStatuses | null>(null);
   const [loading, setLoading] = useState(false);
@@ -278,7 +479,7 @@ export default function Navbar() {
           <SystemSearch />
         </div>
 
-        <ApiBell />
+        <NotificationsBell />
 
         {/* Tier 1 — AMGD whisper pred avatarom (interný maklér view) */}
         <div className="navbar-amgd-whisper" style={{ color: "var(--text-muted)" }}>
