@@ -76,9 +76,9 @@ export default function Portfolio() {
   const isAdmin = user?.id === "ales";
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
   // "mine" = moje inzeráty, "all" = všetky, inak meno makléra
-  // Default "all" aby užívateľ po otvorení portfolia videl všetky záznamy
-  // (vrátane legacy bez makler_id). Môže si potom prefiltrovať.
-  const [filterMakler, setFilterMakler] = useState<string>("all");
+  // Default: bežný maklér vidí "mine" (svoje portfólio prvé), super_admin
+  // vidí "all" (potrebuje cross-makler prehľad). Maklér môže ručne prepnúť.
+  const [filterMakler, setFilterMakler] = useState<string>(isAdmin ? "all" : "mine");
   const [makleriList, setMakleriList] = useState<{ meno: string; email: string; id: string }[]>([]);
   const [items, setItems] = useState<DBNehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
