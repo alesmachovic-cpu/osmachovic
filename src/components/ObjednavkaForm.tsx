@@ -277,14 +277,14 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
               <SmsSignButton
                 entityType="objednavka"
                 entityId={String(existing.id)}
-                defaultPhone={klient.telefon || ""}
+                defaultEmail={klient.email || ""}
                 userId={user?.id}
                 buttonStyle={{
                   padding: "6px 12px", borderRadius: "8px",
                   background: "#1d4ed8", color: "#fff", border: "none",
                   fontSize: "11px", fontWeight: 700, cursor: "pointer",
                 }}
-                buttonLabel="📱 Klient nie je tu — podpis cez SMS"
+                buttonLabel="📧 Klient nie je tu — podpis cez email"
               />
             ) : null}
           </div>

@@ -729,14 +729,14 @@ function NaberPageContent() {
             <SmsSignButton
               entityType="naber"
               entityId={savedNaberId}
-              defaultPhone={selectedKlient?.telefon || ""}
+              defaultEmail={selectedKlient?.email || ""}
               userId={user?.id}
               buttonStyle={{
                 padding: "10px 22px", borderRadius: "10px",
                 background: "#1d4ed8", color: "#fff", border: "none",
                 fontSize: "13px", fontWeight: 700, cursor: "pointer",
               }}
-              buttonLabel="📱 Klient nie je tu — podpis cez SMS"
+              buttonLabel="📧 Klient nie je tu — podpis cez email"
             />
           </div>
         )}
