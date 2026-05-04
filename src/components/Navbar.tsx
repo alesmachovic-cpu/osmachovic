@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import SystemSearch from "@/components/SystemSearch";
 import { useAuth } from "@/components/AuthProvider";
 import { PoweredByAMGD } from "@/components/brand";
@@ -123,8 +124,47 @@ function timeAgo(iso: string): string {
   return `${d} d`;
 }
 
+/** Vyber URL kam má notifikácia po kliknutí navigovať. */
+function notifTargetUrl(n: NotifRow): string | null {
+  const data = (n.data || {}) as Record<string, unknown>;
+  const dataUrl = typeof data.url === "string" ? data.url : null;
+  const klientId = typeof data.klient_id === "string" ? data.klient_id : null;
+  const objednavkaId = typeof data.objednavka_id === "string" ? data.objednavka_id : null;
+  const inzeratId = typeof data.inzerat_id === "string" ? data.inzerat_id : null;
+
+  switch (n.typ) {
+    case "monitor_match":
+      // Match kupujúceho — otvor jeho kartu (tab Objednávky)
+      if (klientId) return `/klienti/${klientId}`;
+      if (dataUrl) return dataUrl; // fallback na URL inzerátu
+      return null;
+    case "monitor_novy_inzerat":
+      // Externý link na portál (nehnutelnosti.sk, bazos atď.) — otvor v novom tabe
+      return dataUrl;
+    case "monitor_summary":
+      return "/monitor";
+    case "lv_naber_pripravujeme":
+    case "lv_data":
+      return klientId ? `/klienti/${klientId}` : null;
+    case "naklady":
+      return "/operativa?tab=naklady";
+    case "novy_klient":
+    case "klient_zmena":
+      return klientId ? `/klienti/${klientId}` : null;
+    case "naber_dohodnuty":
+    case "naber_pripomienka":
+      return klientId ? `/klienti/${klientId}` : null;
+    case "objednavka":
+      return klientId ? `/klienti/${klientId}` : null;
+    default:
+      // Generický fallback — ak je url v dátach, použij ju
+      return dataUrl;
+  }
+}
+
 function NotificationsBell() {
   const { user } = useAuth();
+  const router = useRouter();
   const [notifs, setNotifs] = useState<NotifRow[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -249,10 +289,24 @@ function NotificationsBell() {
                 Žiadne notifikácie
               </p>
             )}
-            {notifs.map(n => (
+            {notifs.map(n => {
+              const target = notifTargetUrl(n);
+              const isExternal = !!target && /^https?:\/\//i.test(target);
+              return (
               <button
                 key={n.id}
-                onClick={() => { if (!n.precitane) markRead(n.id); }}
+                onClick={() => {
+                  if (!n.precitane) markRead(n.id);
+                  if (target) {
+                    setOpen(false);
+                    if (isExternal) {
+                      window.open(target, "_blank", "noopener,noreferrer");
+                    } else {
+                      router.push(target);
+                    }
+                  }
+                }}
+                title={target ? (isExternal ? `Otvoriť v novom okne: ${target}` : `Prejsť na ${target}`) : "Označiť ako prečítané"}
                 style={{
                   display: "block", width: "100%", textAlign: "left",
                   padding: "10px 12px", borderRadius: "8px", marginBottom: "4px",
@@ -281,13 +335,23 @@ function NotificationsBell() {
                         {n.sprava}
                       </div>
                     )}
-                    <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>
-                      {timeAgo(n.created_at)}
+                    <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                      <span>{timeAgo(n.created_at)}</span>
+                      {target && (
+                        <span style={{
+                          fontSize: "10px", fontWeight: 600,
+                          color: isExternal ? "#3B82F6" : "var(--text-secondary)",
+                          opacity: 0.8,
+                        }}>
+                          {isExternal ? "↗ otvoriť inzerát" : "→ otvoriť"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
 
           <a href="/notifikacie" onClick={() => setOpen(false)} style={{
