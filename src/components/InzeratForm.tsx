@@ -1625,8 +1625,12 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
 
       {/* Header */}
       <div style={{ marginBottom: "28px" }}>
-        <h1 style={{ fontSize: "26px", fontWeight: "700", color: "#374151", letterSpacing: "-0.03em" }}>Nový inzerát</h1>
-        <p style={{ fontSize: "14px", color: "#9CA3AF", marginTop: "4px" }}>Nahraj súbory, skontroluj údaje a publikuj</p>
+        <h1 style={{ fontSize: "26px", fontWeight: "700", color: "#374151", letterSpacing: "-0.03em" }}>
+          {isEditMode ? "Upraviť inzerát" : "Nový inzerát"}
+        </h1>
+        <p style={{ fontSize: "14px", color: "#9CA3AF", marginTop: "4px" }}>
+          {isEditMode ? "Uprav údaje, fotky a publikačné nastavenia" : "Nahraj súbory, skontroluj údaje a publikuj"}
+        </p>
       </div>
 
       {/* ═══ NÁBERÁK FALLBACK INFO ═══ */}

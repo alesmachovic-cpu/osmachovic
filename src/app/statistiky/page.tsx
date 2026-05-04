@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/AuthProvider";
 
 /* ── Typy ── */
 interface Nehnutelnost {
@@ -12,6 +13,15 @@ interface Nehnutelnost {
   plocha: number | null;
   lokalita: string | null;
   created_at: string;
+  makler_id: string | null;
+  makler_email: string | null;
+  makler: string | null;
+}
+
+interface MaklerOption {
+  id: string;
+  meno: string;
+  email: string;
 }
 
 interface MonthBucket {
@@ -86,18 +96,36 @@ const bigNumberStyle: React.CSSProperties = {
 
 /* ── Component ── */
 export default function Statistiky() {
-  const [data, setData] = useState<Nehnutelnost[]>([]);
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "super_admin" || user?.id === "ales";
+  const [allData, setAllData] = useState<Nehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [makleri, setMakleri] = useState<MaklerOption[]>([]);
+  const [selectedMakler, setSelectedMakler] = useState<string>("all");
 
   useEffect(() => {
     (async () => {
       const { data: rows } = await supabase
         .from("nehnutelnosti")
-        .select("id, typ_nehnutelnosti, stav_inzeratu, cena, plocha, lokalita, created_at");
-      setData((rows as Nehnutelnost[]) ?? []);
+        .select("id, typ_nehnutelnosti, stav_inzeratu, cena, plocha, lokalita, created_at, makler_id, makler_email, makler");
+      setAllData((rows as Nehnutelnost[]) ?? []);
       setLoading(false);
     })();
+    supabase.from("makleri").select("id, meno, email").order("meno").then(({ data: m }) => {
+      if (m) setMakleri(m as MaklerOption[]);
+    });
   }, []);
+
+  // Filter podľa vybraného makléra (TASK 12)
+  const data = selectedMakler === "all"
+    ? allData
+    : allData.filter(n => {
+        const sel = makleri.find(m => m.id === selectedMakler);
+        if (!sel) return false;
+        return n.makler_id === sel.id
+          || (n.makler_email || "").toLowerCase() === (sel.email || "").toLowerCase()
+          || (n.makler || "").toLowerCase() === sel.meno.toLowerCase();
+      });
 
   /* ── Computed stats ── */
   const withPrice = data.filter((n) => n.cena && n.plocha && n.plocha > 0);
@@ -109,10 +137,29 @@ export default function Statistiky() {
         )
       : 0;
 
-  // Typ breakdown
+  // Typ breakdown — slugy mapujeme na ľudské labely (Byt / Dom / Pozemok / Komercia / Garáž)
+  const TYPE_LABELS: Record<string, string> = {
+    // Byty
+    "byt": "Byt", "1-izbovy-byt": "Byt", "2-izbovy-byt": "Byt", "3-izbovy-byt": "Byt",
+    "4-izbovy-byt": "Byt", "5-izbovy-byt": "Byt", "6-izbovy-byt": "Byt",
+    "garsonka": "Byt", "loft": "Byt", "mezonet": "Byt",
+    // Domy
+    "dom": "Dom", "rodinny-dom": "Dom", "rodinny_dom": "Dom",
+    "vila": "Dom", "chata": "Dom", "chalupa": "Dom",
+    // Ostatné typy
+    "pozemok": "Pozemok", "stavebny-pozemok": "Pozemok", "zahrada": "Pozemok",
+    "komercia": "Komercia", "kancelaria": "Komercia", "obchodny-priestor": "Komercia",
+    "sklad": "Komercia", "vyrobny-priestor": "Komercia",
+    "garaz": "Garáž", "garazove-stojisko": "Garáž",
+  };
+  function normalizeTyp(raw: string | null | undefined): string {
+    if (!raw) return "Ostatné";
+    const key = String(raw).toLowerCase().trim();
+    return TYPE_LABELS[key] ?? "Ostatné";
+  }
   const typCounts: Record<string, number> = {};
   data.forEach((n) => {
-    const t = n.typ_nehnutelnosti || "ostatné";
+    const t = normalizeTyp(n.typ_nehnutelnosti);
     typCounts[t] = (typCounts[t] || 0) + 1;
   });
   const typEntries = Object.entries(typCounts).sort((a, b) => b[1] - a[1]);
@@ -203,11 +250,41 @@ export default function Statistiky() {
         style={{
           fontSize: 15,
           color: "var(--text-secondary, #8E8E93)",
-          margin: "0 0 24px",
+          margin: "0 0 16px",
         }}
       >
-        {fmt(data.length)} nehnuteľností v databáze
+        {fmt(data.length)} nehnuteľností {selectedMakler === "all" ? "v databáze" : "pre vybraného makléra"}
       </p>
+
+      {/* Filter podľa makléra — len pre super_admina (TASK 12) */}
+      {isSuperAdmin && makleri.length > 0 && (
+        <div style={{ marginBottom: "20px" }}>
+          <select
+            value={selectedMakler}
+            onChange={e => setSelectedMakler(e.target.value)}
+            style={{
+              padding: "9px 30px 9px 12px",
+              background: "var(--bg-surface, #1c1c1e)",
+              border: "1px solid var(--border, #38383A)",
+              borderRadius: "8px",
+              fontSize: "13px",
+              color: "var(--text-primary, #F5F5F7)",
+              cursor: "pointer",
+              outline: "none",
+              appearance: "none" as const,
+              backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 10px center",
+              minWidth: "220px",
+            }}
+          >
+            <option value="all">Všetci makléri</option>
+            {makleri.map(m => (
+              <option key={m.id} value={m.id}>{m.meno}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Grid */}
       <div

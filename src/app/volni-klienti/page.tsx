@@ -312,11 +312,46 @@ export default function VolniKlientiPage() {
                       Uvoľnený {timeAgo(k.volny_at)}
                       {k.datum_naberu && <> · pôvodný termín: {formatDate(k.datum_naberu)}</>}
                     </div>
-                    {k.poznamka && (
-                      <div style={{ marginTop: "8px", fontSize: "13px", color: "var(--text-secondary)", fontStyle: "italic" }}>
-                        &quot;{k.poznamka}&quot;
-                      </div>
-                    )}
+                    {(() => {
+                      // Vyčistíme historické "Adresa: . ." / prázdne "Typ:" riadky
+                      // a slugy nehnuteľnosti zmeníme na ľudské názvy.
+                      const TYP_HUMAN: Record<string, string> = {
+                        "1-izbovy-byt": "1-izbový byt", "2-izbovy-byt": "2-izbový byt",
+                        "3-izbovy-byt": "3-izbový byt", "4-izbovy-byt": "4-izbový byt",
+                        "5-izbovy-byt": "5-izbový byt", "garsonka": "garsónka",
+                        "rodinny-dom": "rodinný dom", "rodinny_dom": "rodinný dom",
+                        "vila": "vila", "chata": "chata", "pozemok": "pozemok",
+                        "kancelaria": "kancelária", "garaz": "garáž",
+                      };
+                      const cleaned = (k.poznamka || "")
+                        .split("\n")
+                        .map(line => {
+                          // Adresa cleanup
+                          const addrM = line.match(/^Adresa:\s*(.+)$/i);
+                          if (addrM) {
+                            const parts = addrM[1].split(/[,·]/)
+                              .map(p => p.trim())
+                              .filter(p => p && p !== "." && p !== "..");
+                            return parts.length > 0 ? `Adresa: ${parts.join(", ")}` : "";
+                          }
+                          // Typ slug → human label
+                          const typM = line.match(/^Typ(?:\s+nehnute(?:ľ|l)nosti)?:\s*(.+)$/i);
+                          if (typM) {
+                            const slug = typM[1].trim().toLowerCase();
+                            if (!slug || slug === "." || slug === "..") return "";
+                            const human = TYP_HUMAN[slug] || typM[1].trim();
+                            return `Typ: ${human}`;
+                          }
+                          return line.trim();
+                        })
+                        .filter(Boolean)
+                        .join(" · ");
+                      return cleaned ? (
+                        <div style={{ marginTop: "8px", fontSize: "13px", color: "var(--text-secondary)", fontStyle: "italic" }}>
+                          &quot;{cleaned}&quot;
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                     {!isMine && (

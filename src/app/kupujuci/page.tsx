@@ -285,19 +285,36 @@ function KupujuciInner() {
                             🗑
                           </button>
                           {klient && (
-                            <a href={`/klienti/${klient.id}`} target="_blank" rel="noopener noreferrer" style={{
-                              padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
-                              background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)", textDecoration: "none",
-                            }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                router.push(`/klienti/${klient.id}?from=kupujuci`);
+                              }}
+                              style={{
+                                padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                                background: "var(--bg-elevated)", color: "var(--text-secondary)",
+                                border: "1px solid var(--border)", cursor: "pointer",
+                              }}
+                            >
                               Karta
-                            </a>
+                            </button>
                           )}
-                          <a href={`/matching?objednavka=${obj.id}`} style={{
-                            padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
-                            background: "#F3F4F6", color: "#374151", border: "none", textDecoration: "none",
-                          }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              router.push(`/matching?objednavka=${obj.id}`);
+                            }}
+                            style={{
+                              padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                              background: "#F3F4F6", color: "#374151", border: "none", cursor: "pointer",
+                            }}
+                          >
                             Hľadať zhody →
-                          </a>
+                          </button>
                         </div>
                       </div>
                     </div>

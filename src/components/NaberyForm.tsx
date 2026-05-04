@@ -464,7 +464,9 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
   }
 
   async function handleSubmit() {
-    if (!provizia?.trim()) { setError("Provízia je povinné pole"); return; }
+    // 0 je platná hodnota provízie — kontrolujeme iba prázdny string / undefined / null
+    const proviziaTrim = (provizia ?? "").toString().trim();
+    if (proviziaTrim === "") { setError("Provízia je povinné pole"); return; }
     if (!remoteSignMode) {
       // Klasický mód — vyžaduje sa lokálny podpis a GDPR súhlas tu na zariadení
       if (!podpisData) { setError("Chýba podpis klienta"); return; }
@@ -1679,7 +1681,7 @@ Odpovedaj stručne po slovensky.`;
           <div>
             <label style={labelSt}>Provízia <span style={{ color: "#EF4444" }}>*</span></label>
             <input value={provizia} onChange={e => setProvizia(e.target.value)}
-              style={{ ...inputSt, borderColor: !provizia?.trim() ? "#FCA5A5" : "var(--border)" }}
+              style={{ ...inputSt, borderColor: ((provizia ?? "").toString().trim() === "") ? "#FCA5A5" : "var(--border)" }}
               placeholder="napr. 3% alebo 5000€" />
           </div>
           <div>
