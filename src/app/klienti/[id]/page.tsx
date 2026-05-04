@@ -13,6 +13,7 @@ import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
 import { createCalendarEvent, notifyCalendarFail } from "@/lib/calendar";
 import { klientUpdate } from "@/lib/klientApi";
+import SmsSignButton from "@/components/SmsSignButton";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
@@ -1892,7 +1893,11 @@ export default function KlientDetailPage() {
                       {card.cena != null && (
                         <span>💰 <strong style={{ color: "var(--text-primary)" }}>{Number(card.cena).toLocaleString("sk")} €</strong></span>
                       )}
-                      <span>{card.naberak ? "📝 Náberák ✓" : "📝 Bez náberáku"}</span>
+                      <span>
+                        {card.naberak
+                          ? ((card.naberak as Record<string, unknown>).podpis_data ? "📝 Náberák ✓ podpísaný" : "📝 Náberák · čaká na podpis")
+                          : "📝 Bez náberáku"}
+                      </span>
                       <span>{hasInzerat ? "📰 Inzerát ✓" : "📰 Bez inzerátu"}</span>
                       {nInzDocs > 0 && <span>📎 {nInzDocs} dokumentov</span>}
                     </div>
@@ -1925,6 +1930,22 @@ export default function KlientDetailPage() {
                           style={{ padding: "6px 12px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}>
                           📰 Vytvoriť inzerát
                         </button>
+                      )}
+                      {/* Email-podpis pre nepodpísaný náberák */}
+                      {naberakId && card.naberak && !(card.naberak as Record<string, unknown>).podpis_data && (
+                        <SmsSignButton
+                          entityType="naber"
+                          entityId={naberakId}
+                          defaultEmail={klient.email || ""}
+                          userId={user?.id}
+                          buttonStyle={{
+                            padding: "6px 12px", background: "#1d4ed8", color: "#fff",
+                            border: "none", borderRadius: "8px",
+                            fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                          }}
+                          buttonLabel="📧 Poslať klientovi link na podpis"
+                          onSigned={() => loadAll()}
+                        />
                       )}
                     </div>
                   </div>
@@ -2028,30 +2049,48 @@ export default function KlientDetailPage() {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {objednavky.map((o: Record<string, unknown>) => (
-                <div key={o.id as string} style={{
-                  display: "flex", alignItems: "center", gap: "14px",
-                  padding: "14px 16px", borderRadius: "10px", background: "var(--bg-elevated)",
-                  border: "1px solid var(--border)",
-                }}>
-                  <div style={{
-                    width: "40px", height: "40px", borderRadius: "10px",
-                    background: "#ECFDF5", display: "flex", alignItems: "center",
-                    justifyContent: "center", fontSize: "18px", flexShrink: 0,
-                  }}>📋</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
-                      {String(o.druh || "—")}
+              {objednavky.map((o: Record<string, unknown>) => {
+                const isPodpisana = !!o.podpis;
+                return (
+                  <div key={o.id as string} style={{
+                    display: "flex", alignItems: "center", gap: "14px",
+                    padding: "14px 16px", borderRadius: "10px", background: "var(--bg-elevated)",
+                    border: "1px solid var(--border)",
+                  }}>
+                    <div style={{
+                      width: "40px", height: "40px", borderRadius: "10px",
+                      background: "#ECFDF5", display: "flex", alignItems: "center",
+                      justifyContent: "center", fontSize: "18px", flexShrink: 0,
+                    }}>📋</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
+                        {String(o.druh || "—")}
+                      </div>
+                      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                        {o.cena_do ? `Max: ${Number(o.cena_do).toLocaleString("sk")} €` : "—"} · {isPodpisana ? "✓ podpísaná" : "čaká na podpis"}
+                      </div>
                     </div>
-                    <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                      {o.cena_do ? `Max: ${Number(o.cena_do).toLocaleString("sk")} €` : "—"}
+                    {!isPodpisana && (
+                      <SmsSignButton
+                        entityType="objednavka"
+                        entityId={String(o.id)}
+                        defaultEmail={klient.email || ""}
+                        userId={user?.id}
+                        buttonStyle={{
+                          padding: "6px 12px", background: "#1d4ed8", color: "#fff",
+                          border: "none", borderRadius: "8px",
+                          fontSize: "11px", fontWeight: 600, cursor: "pointer",
+                        }}
+                        buttonLabel="📧 Podpis cez email"
+                        onSigned={() => loadAll()}
+                      />
+                    )}
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                      {new Date(o.created_at as string).toLocaleDateString("sk")}
                     </div>
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                    {new Date(o.created_at as string).toLocaleDateString("sk")}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

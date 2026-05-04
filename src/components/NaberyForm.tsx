@@ -303,6 +303,8 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
 
   const [podpisData, setPodpisData] = useState<string | null>(null);
   const [gdprConsent, setGdprConsent] = useState(false);
+  // Remote-sign mode — keď klient nie je prítomný, pošleme mu email s linkom + OTP
+  const [remoteSignMode, setRemoteSignMode] = useState(false);
 
   // LV data + review
   const [lvMajitelia, setLvMajitelia] = useState<Array<{ meno: string; podiel?: string; datum_narodenia?: string }>>([]);
@@ -463,8 +465,14 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
 
   async function handleSubmit() {
     if (!provizia?.trim()) { setError("Provízia je povinné pole"); return; }
-    if (!podpisData) { setError("Chýba podpis klienta"); return; }
-    if (!gdprConsent) { setError("Súhlas so spracovaním osobných údajov je povinný"); return; }
+    if (!remoteSignMode) {
+      // Klasický mód — vyžaduje sa lokálny podpis a GDPR súhlas tu na zariadení
+      if (!podpisData) { setError("Chýba podpis klienta"); return; }
+      if (!gdprConsent) { setError("Súhlas so spracovaním osobných údajov je povinný"); return; }
+    } else {
+      // Remote-sign mód — náberák sa uloží bez podpisu, klient ho podpíše cez email link
+      if (!klient.email) { setError('Klient nemá email — doplň ho v karte klienta alebo vypni "Klient nie je prítomný".'); return; }
+    }
 
     // Kolízna kontrola — či nejaký iný maklér už eviduje rovnakú nehnuteľnosť
     // (rovnaká lokalita + typ + izby v aktívnych inzerátoch). Blokujeme save
@@ -555,19 +563,22 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
       predajna_cena: predajnaCena ? Number(predajnaCena) : null,
       makler: makler || null, zmluva, typ_zmluvy: zmluva ? typZmluvy : null,
       datum_podpisu: datumPodpisu || null, zmluva_do: zmluvaDo || null,
-      provizia: provizia || null, popis: popis || null, podpis_data: podpisData,
+      provizia: provizia || null, popis: popis || null,
+      // V remote-sign móde podpis aj GDPR vyplní endpoint /api/sign/verify keď klient potvrdí
+      podpis_data: remoteSignMode ? null : podpisData,
       parent_naberak_id: parentNaberakId || null,
-      // GDPR audit trail
-      gdpr_consent: true,
-      gdpr_consent_at: new Date().toISOString(),
-      podpis_meta: {
-        gdpr_version: "v1.0",
-        consent_evidence: true,
-        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        screen: typeof window !== "undefined" ? `${window.screen.width}x${window.screen.height}` : null,
-        // IP doplní /api/naber-pdf alebo iný server-side proces; tu klient-side
-      },
+      gdpr_consent: !remoteSignMode,
+      gdpr_consent_at: remoteSignMode ? null : new Date().toISOString(),
+      podpis_meta: remoteSignMode
+        ? { pending_remote_sign: true, requested_at: new Date().toISOString() }
+        : {
+            gdpr_version: "v1.0",
+            consent_evidence: true,
+            user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            screen: typeof window !== "undefined" ? `${window.screen.width}x${window.screen.height}` : null,
+            // IP doplní /api/naber-pdf alebo iný server-side proces; tu klient-side
+          },
     };
     if (!authUser?.id) { setSaving(false); setError("Nie si prihlásený"); return; }
     const insertRes = await naberInsert<{ id: string }>(authUser.id, { ...record, klient_id: klient.id });
@@ -2004,33 +2015,71 @@ Odpovedaj stručne po slovensky.`;
             ? `Vyššie uvedené informácie potvrdzuje: ${podpisOwners.join(", ")}${zastupca.trim() ? ` (zastupuje: ${zastupca.trim()})` : ""}`
             : "Vyššie uvedené informácie potvrdzuje (podpis klienta):"}
         </div>
-        <SignatureCanvas onSignatureChange={setPodpisData} />
 
-        {/* GDPR explicitný súhlas */}
+        {/* Toggle: Klient nie je prítomný — pošlem mu link na podpis cez email */}
         <label style={{
-          display: "flex", alignItems: "flex-start", gap: "10px",
-          padding: "12px 14px", marginTop: "14px",
-          background: "var(--bg-elevated)",
-          border: gdprConsent ? "1px solid #10B981" : "1px solid var(--border)",
+          display: "flex", alignItems: "center", gap: "10px",
+          padding: "12px 14px", marginBottom: "12px",
+          background: remoteSignMode ? "#EFF6FF" : "var(--bg-elevated)",
+          border: remoteSignMode ? "1px solid #3B82F6" : "1px solid var(--border)",
           borderRadius: "10px", cursor: "pointer",
-          fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
+          fontSize: "13px", color: remoteSignMode ? "#1E40AF" : "var(--text-secondary)",
+          fontWeight: remoteSignMode ? 600 : 400,
         }}>
           <input
             type="checkbox"
-            checked={gdprConsent}
-            onChange={e => setGdprConsent(e.target.checked)}
-            style={{ marginTop: "2px", cursor: "pointer", flexShrink: 0 }}
+            checked={remoteSignMode}
+            onChange={e => setRemoteSignMode(e.target.checked)}
+            style={{ cursor: "pointer", flexShrink: 0 }}
           />
-          <span>
-            Súhlasím so spracovaním mojich osobných údajov spoločnosťou Vianema s. r. o.
-            v zmysle GDPR pre účely sprostredkovania predaja/prenájmu nehnuteľnosti.
-            Plné znenie:{" "}
-            <a href="/gdpr" target="_blank" rel="noopener noreferrer"
-              style={{ color: "var(--accent, #3B82F6)", textDecoration: "underline" }}>
-              Zásady spracovania osobných údajov →
-            </a>
-          </span>
+          <span>📧 Klient nie je tu — pošlem mu link na podpis cez email{klient.email ? ` (${klient.email})` : ""}</span>
         </label>
+
+        {!remoteSignMode && (
+          <>
+            <SignatureCanvas onSignatureChange={setPodpisData} />
+
+            {/* GDPR explicitný súhlas */}
+            <label style={{
+              display: "flex", alignItems: "flex-start", gap: "10px",
+              padding: "12px 14px", marginTop: "14px",
+              background: "var(--bg-elevated)",
+              border: gdprConsent ? "1px solid #10B981" : "1px solid var(--border)",
+              borderRadius: "10px", cursor: "pointer",
+              fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
+            }}>
+              <input
+                type="checkbox"
+                checked={gdprConsent}
+                onChange={e => setGdprConsent(e.target.checked)}
+                style={{ marginTop: "2px", cursor: "pointer", flexShrink: 0 }}
+              />
+              <span>
+                Súhlasím so spracovaním mojich osobných údajov spoločnosťou Vianema s. r. o.
+                v zmysle GDPR pre účely sprostredkovania predaja/prenájmu nehnuteľnosti.
+                Plné znenie:{" "}
+                <a href="/gdpr" target="_blank" rel="noopener noreferrer"
+                  style={{ color: "var(--accent, #3B82F6)", textDecoration: "underline" }}>
+                  Zásady spracovania osobných údajov →
+                </a>
+              </span>
+            </label>
+          </>
+        )}
+
+        {remoteSignMode && (
+          <div style={{
+            padding: "14px 16px", borderRadius: "10px",
+            background: "var(--bg-elevated)", border: "1px solid var(--border)",
+            fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
+          }}>
+            Náberák uložíme bez podpisu. Po uložení automaticky pošleme klientovi
+            email s linkom + 6-ciferným kódom na podpis. GDPR súhlas zaznamenáme až
+            v momente jeho potvrdenia. {!klient.email && (
+              <strong style={{ color: "#B91C1C" }}>Klient nemá email — doplň ho v karte klienta.</strong>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Error */}
@@ -2045,12 +2094,13 @@ Odpovedaj stručne po slovensky.`;
 
       {/* Submit */}
       <button onClick={handleSubmit} disabled={saving} style={{
-        width: "100%", padding: "14px", background: saving ? "#9CA3AF" : "#374151",
+        width: "100%", padding: "14px",
+        background: saving ? "#9CA3AF" : remoteSignMode ? "#1d4ed8" : "#374151",
         color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px",
         fontWeight: "700", cursor: saving ? "default" : "pointer",
         marginBottom: "40px",
       }}>
-        {saving ? "Ukladám..." : "Uložiť náberový list"}
+        {saving ? "Ukladám..." : remoteSignMode ? "📧 Uložiť a poslať klientovi link na podpis" : "Uložiť náberový list"}
       </button>
     </div>
   );

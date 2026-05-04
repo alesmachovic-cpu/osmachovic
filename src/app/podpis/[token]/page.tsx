@@ -6,7 +6,9 @@ interface PageMeta {
   entity_type: "naber" | "objednavka";
   entity_id: string;
   expires_at: string;
-  telefon_masked: string;
+  channel?: "sms" | "email";
+  recipient_masked?: string;
+  telefon_masked?: string; // backward-compat
   entity_meta: Record<string, unknown>;
   error?: string;
 }
@@ -36,10 +38,11 @@ export default function PodpisPage({ params }: { params: Promise<{ token: string
     if (otp.length !== 6) { setError("Kód musí mať 6 číslic"); return; }
     setSubmitting(true);
     try {
+      const channelLabel = meta?.channel === "email" ? "EMAIL-OTP" : "SMS-OTP";
       const r = await fetch("/api/sign/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, otp, signature_data: `SMS-OTP signed ${new Date().toISOString()}` }),
+        body: JSON.stringify({ token, otp, signature_data: `${channelLabel} signed ${new Date().toISOString()}` }),
       });
       const d = await r.json();
       if (!r.ok) { setError(d.error || `Chyba HTTP ${r.status}`); setSubmitting(false); return; }
@@ -140,7 +143,7 @@ export default function PodpisPage({ params }: { params: Promise<{ token: string
                   textAlign: "center", outline: "none", fontFamily: "monospace",
                 }} />
               <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)", marginTop: "8px", textAlign: "center" }}>
-                Kód sme poslali na {meta.telefon_masked} · platí 15 min
+                {meta.channel === "email" ? "Kód sme poslali na email" : "Kód sme poslali SMS-kou"} {meta.recipient_masked || meta.telefon_masked} · platí 15 min
               </p>
             </div>
 
