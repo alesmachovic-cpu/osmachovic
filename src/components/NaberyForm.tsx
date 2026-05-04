@@ -469,10 +469,10 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
       // Klasický mód — vyžaduje sa lokálny podpis a GDPR súhlas tu na zariadení
       if (!podpisData) { setError("Chýba podpis klienta"); return; }
       if (!gdprConsent) { setError("Súhlas so spracovaním osobných údajov je povinný"); return; }
-    } else {
-      // Remote-sign mód — náberák sa uloží bez podpisu, klient ho podpíše cez email link
-      if (!klient.email) { setError('Klient nemá email — doplň ho v karte klienta alebo vypni "Klient nie je prítomný".'); return; }
     }
+    // V remote-sign móde sa email klienta zadáva v modáli pri klikutí "📧 Poslať email"
+    // (cez SmsSignButton). Tu žiadny hard-check nepotrebujeme — ak klient.email chýba,
+    // maklér ho ručne zadá v modáli na step 4.
 
     // Kolízna kontrola — či nejaký iný maklér už eviduje rovnakú nehnuteľnosť
     // (rovnaká lokalita + typ + izby v aktívnych inzerátoch). Blokujeme save
@@ -2032,7 +2032,7 @@ Odpovedaj stručne po slovensky.`;
             onChange={e => setRemoteSignMode(e.target.checked)}
             style={{ cursor: "pointer", flexShrink: 0 }}
           />
-          <span>📧 Klient nie je tu — pošlem mu link na podpis cez email{klient.email ? ` (${klient.email})` : ""}</span>
+          <span>📧 Klient nie je tu — pošlem mu link na podpis cez email{klient.email ? ` (${klient.email})` : " (email zadám pri odosielaní)"}</span>
         </label>
 
         {!remoteSignMode && (
@@ -2073,11 +2073,10 @@ Odpovedaj stručne po slovensky.`;
             background: "var(--bg-elevated)", border: "1px solid var(--border)",
             fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
           }}>
-            Náberák uložíme bez podpisu. Po uložení automaticky pošleme klientovi
-            email s linkom + 6-ciferným kódom na podpis. GDPR súhlas zaznamenáme až
-            v momente jeho potvrdenia. {!klient.email && (
-              <strong style={{ color: "#B91C1C" }}>Klient nemá email — doplň ho v karte klienta.</strong>
-            )}
+            Náberák uložíme bez podpisu. Po uložení sa otvorí dialóg kde
+            zadáš email klienta (predvyplníme ho z karty ak existuje) a pošle sa mu
+            link + 6-ciferný kód na podpis. GDPR súhlas zaznamenáme v momente jeho
+            potvrdenia.
           </div>
         )}
       </div>

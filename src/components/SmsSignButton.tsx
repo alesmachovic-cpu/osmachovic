@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Reusable tlačidlo "Podpis cez email" (s pripravenou SMS alternatívou).
@@ -19,6 +19,7 @@ export default function SmsSignButton({
   onSigned,
   buttonStyle,
   buttonLabel = "📧 Klient nie je tu — podpis cez email",
+  autoOpen = false,
 }: {
   entityType: "naber" | "objednavka";
   entityId: string;
@@ -29,9 +30,16 @@ export default function SmsSignButton({
   onSigned?: () => void;
   buttonStyle?: React.CSSProperties;
   buttonLabel?: string;
+  /** Ak true, modal sa otvorí automaticky pri mount (napr. hneď po uložení v remote-sign móde) */
+  autoOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
   const [email, setEmail] = useState(defaultEmail || "");
+
+  // Sync autoOpen → open keď sa prop zmení (napr. po uložení formulára)
+  useEffect(() => {
+    if (autoOpen) setOpen(true);
+  }, [autoOpen]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ link: string; manual: boolean; otp?: string; expires_at: string; channel: string } | null>(null);

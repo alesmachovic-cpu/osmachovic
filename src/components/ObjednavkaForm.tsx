@@ -101,6 +101,12 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
   const [zaloha, setZaloha] = useState("");
   const [ine, setIne] = useState("");
   const [podpis, setPodpis] = useState("");
+  // Remote-sign mód — keď klient nie je prítomný, podpis pošleme cez email link s OTP
+  const [remoteSignMode, setRemoteSignMode] = useState(false);
+  // Po uložení v remote móde si zapamätáme id objednávky aby SmsSignButton vedel
+  // ihneď otvoriť modal so správnym entityId.
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [autoOpenSms, setAutoOpenSms] = useState(false);
 
   // Načítaj existujúcu objednávku pri edite
   useEffect(() => {
@@ -165,6 +171,11 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
       makler: maklerMeno || "—",
     };
 
+    // V remote-sign móde uložíme objednávku BEZ podpisu (klient ho doplní cez email link)
+    if (remoteSignMode) {
+      payload.podpis = null;
+    }
+
     let resultId: string | null = null;
     if (existing?.id) {
       const r = await fetch("/api/objednavky", {
@@ -184,6 +195,15 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
       }
     }
     setSaving(false);
+
+    if (remoteSignMode && resultId) {
+      // Otvor SmsSignButton modal hneď po uložení (autoOpen). onSubmit zatiaľ nevoláme,
+      // aby sa nezavrel formulár — necháme makléra dokončiť email-podpis dialóg.
+      setSavedId(resultId);
+      setAutoOpenSms(true);
+      return;
+    }
+
     onSubmit({ id: resultId! });
   }
 
@@ -291,18 +311,75 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
           <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px", lineHeight: "1.5" }}>
             Objednávateľ potvrdzuje obsah a záväznosť objednávky. Osobné údaje sú spracúvané podľa GDPR (zákon č. 18/2018 Z.z.).
           </p>
-          <SignatureCanvas onSignatureChange={(v) => setPodpis(v || "")} />
+
+          {/* Toggle: klient nie je prítomný */}
+          <label style={{
+            display: "flex", alignItems: "center", gap: "10px",
+            padding: "12px 14px", marginBottom: "12px",
+            background: remoteSignMode ? "#EFF6FF" : "var(--bg-elevated)",
+            border: remoteSignMode ? "1px solid #3B82F6" : "1px solid var(--border)",
+            borderRadius: "10px", cursor: "pointer",
+            fontSize: "13px", color: remoteSignMode ? "#1E40AF" : "var(--text-secondary)",
+            fontWeight: remoteSignMode ? 600 : 400,
+          }}>
+            <input
+              type="checkbox"
+              checked={remoteSignMode}
+              onChange={e => setRemoteSignMode(e.target.checked)}
+              style={{ cursor: "pointer", flexShrink: 0 }}
+            />
+            <span>📧 Klient nie je tu — pošlem mu link na podpis cez email{klient.email ? ` (${klient.email})` : " (email zadám pri odosielaní)"}</span>
+          </label>
+
+          {!remoteSignMode ? (
+            <SignatureCanvas onSignatureChange={(v) => setPodpis(v || "")} />
+          ) : (
+            <div style={{
+              padding: "14px 16px", borderRadius: "10px",
+              background: "var(--bg-elevated)", border: "1px solid var(--border)",
+              fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
+            }}>
+              Objednávku uložíme bez podpisu. Hneď po uložení sa otvorí dialóg
+              kde zadáš email klienta a pošle sa mu link + 6-ciferný kód
+              na podpis.
+            </div>
+          )}
         </div>
       )}
 
-      <button onClick={handleSubmit} disabled={saving || druhy.length === 0} style={{
+      {/* SmsSignButton zobraziť aj po uložení v remote-sign móde
+          (existing.id ešte nie je nastavené hneď po INSERT, treba lokálny savedId). */}
+      {savedId && !existing?.id && (
+        <div style={{ ...sectionSt, textAlign: "center" }}>
+          <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "10px" }}>
+            ✓ Objednávka uložená — pošli klientovi link na podpis:
+          </div>
+          <SmsSignButton
+            entityType="objednavka"
+            entityId={savedId}
+            defaultEmail={klient.email || ""}
+            userId={user?.id}
+            autoOpen={autoOpenSms}
+            buttonStyle={{
+              padding: "10px 20px", borderRadius: "10px",
+              background: "#1d4ed8", color: "#fff", border: "none",
+              fontSize: "13px", fontWeight: 700, cursor: "pointer",
+            }}
+            buttonLabel="📧 Otvoriť dialóg na poslanie linku"
+            onSigned={() => setAutoOpenSms(false)}
+          />
+        </div>
+      )}
+
+      <button onClick={handleSubmit} disabled={saving || druhy.length === 0 || !!savedId} style={{
         width: "100%", padding: "16px", borderRadius: "12px", border: "none",
-        background: druhy.length === 0 ? "#D1D5DB" : "#374151",
+        background: druhy.length === 0 ? "#D1D5DB" : remoteSignMode ? "#1d4ed8" : "#374151",
         color: "#fff", fontSize: "15px", fontWeight: "700",
-        cursor: druhy.length === 0 ? "not-allowed" : "pointer",
+        cursor: druhy.length === 0 || !!savedId ? "not-allowed" : "pointer",
         marginBottom: "40px",
+        opacity: savedId ? 0.5 : 1,
       }}>
-        {saving ? "Ukladám..." : "Uložiť objednávku"}
+        {saving ? "Ukladám..." : savedId ? "✓ Uložené — pošli link na podpis vyššie" : remoteSignMode ? "📧 Uložiť a poslať klientovi link na podpis" : "Uložiť objednávku"}
       </button>
     </div>
   );

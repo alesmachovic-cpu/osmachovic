@@ -75,12 +75,21 @@ function typLabel(typ: string): string {
 export default function Portfolio() {
   const { user } = useAuth();
   const router = useRouter();
-  const isAdmin = user?.id === "ales";
+  const isAdmin = user?.id === "ales" || user?.role === "super_admin";
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
   // "mine" = moje inzeráty, "all" = všetky, inak meno makléra
   // Default: bežný maklér vidí "mine" (svoje portfólio prvé), super_admin
   // vidí "all" (potrebuje cross-makler prehľad). Maklér môže ručne prepnúť.
-  const [filterMakler, setFilterMakler] = useState<string>(isAdmin ? "all" : "mine");
+  const [filterMakler, setFilterMakler] = useState<string>("all");
+  const [filterTouched, setFilterTouched] = useState(false);
+
+  // useState({isAdmin?...}) sa vyhodnotí pred načítaním usera (user=null →
+  // !admin → "mine" → admin nevidí cudzie inzeráty). Tento effect sync-uje
+  // default po načítaní auth-u — kým user filter manuálne neprepol.
+  useEffect(() => {
+    if (filterTouched) return;
+    if (user) setFilterMakler(isAdmin ? "all" : "mine");
+  }, [user, isAdmin, filterTouched]);
   const [makleriList, setMakleriList] = useState<{ meno: string; email: string; id: string }[]>([]);
   const [items, setItems] = useState<DBNehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -317,7 +326,7 @@ export default function Portfolio() {
           <option value="archivovany">Archív</option>
         </select>
 
-        <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={{
+        <select value={filterMakler} onChange={e => { setFilterMakler(e.target.value); setFilterTouched(true); }} style={{
           padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
           appearance: "none" as const, backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
         }}>
