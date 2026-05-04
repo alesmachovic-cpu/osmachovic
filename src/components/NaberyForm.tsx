@@ -306,6 +306,79 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
   // Remote-sign mode — keď klient nie je prítomný, pošleme mu email s linkom + OTP
   const [remoteSignMode, setRemoteSignMode] = useState(false);
 
+  // TASK 11 — Auto-save draft do localStorage (každých 30s) + banner pri návrate
+  const draftLsKey = `naber_draft_${klient.id}`;
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftMeta, setDraftMeta] = useState<{ savedAt: string } | null>(null);
+
+  // Detekcia draftu pri mounte
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(draftLsKey);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d?.savedAt) {
+          setDraftMeta({ savedAt: d.savedAt });
+          setShowDraftBanner(true);
+        }
+      }
+    } catch { /* ignore */ }
+  }, [draftLsKey]);
+
+  function loadDraft() {
+    try {
+      const raw = localStorage.getItem(draftLsKey);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.obec !== undefined) setObec(d.obec);
+      if (d.ulica !== undefined) setUlica(d.ulica);
+      if (d.supisneCislo !== undefined) setSupisneCislo(d.supisneCislo);
+      if (d.plocha !== undefined) setPlocha(d.plocha);
+      if (d.pocetIzieb !== undefined) setPocetIzieb(d.pocetIzieb);
+      if (d.predajnaCena !== undefined) setPredajnaCena(d.predajnaCena);
+      if (d.provizia !== undefined) setProvizia(d.provizia);
+      if (d.proviziaTyp !== undefined) setProviziaTyp(d.proviziaTyp);
+      if (d.popis !== undefined) setPopis(d.popis);
+      if (d.makler !== undefined) setMakler(d.makler);
+      if (d.zmluva !== undefined) setZmluva(d.zmluva);
+      if (d.typZmluvy !== undefined) setTypZmluvy(d.typZmluvy);
+      if (d.datumPodpisu !== undefined) setDatumPodpisu(d.datumPodpisu);
+      if (d.zmluvaDo !== undefined) setZmluvaDo(d.zmluvaDo);
+      if (d.kurenie !== undefined) setKurenie(d.kurenie);
+      if (d.mesacnePoplatky !== undefined) setMesacnePoplatky(d.mesacnePoplatky);
+    } catch { /* ignore */ }
+    setShowDraftBanner(false);
+  }
+  function discardDraft() {
+    localStorage.removeItem(draftLsKey);
+    setShowDraftBanner(false);
+    setDraftMeta(null);
+  }
+
+  // Periodický autosave — každých 30s ulož snapshot fields
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tick = () => {
+      // Ukladaj iba ak je niečo už zadané (aby sme nevytvorili draft prázdny formulár)
+      const hasContent = obec.trim() || ulica.trim() || plocha || pocetIzieb || predajnaCena || provizia || popis.trim();
+      if (!hasContent) return;
+      try {
+        const payload = {
+          savedAt: new Date().toISOString(),
+          obec, ulica, supisneCislo, plocha, pocetIzieb, predajnaCena,
+          provizia, proviziaTyp, popis, makler, zmluva, typZmluvy,
+          datumPodpisu, zmluvaDo, kurenie, mesacnePoplatky,
+        };
+        localStorage.setItem(draftLsKey, JSON.stringify(payload));
+      } catch { /* quota exceeded etc. — ignore */ }
+    };
+    const interval = setInterval(tick, 30000);
+    return () => clearInterval(interval);
+  }, [draftLsKey, obec, ulica, supisneCislo, plocha, pocetIzieb, predajnaCena,
+      provizia, proviziaTyp, popis, makler, zmluva, typZmluvy,
+      datumPodpisu, zmluvaDo, kurenie, mesacnePoplatky]);
+
   // LV data + review
   const [lvMajitelia, setLvMajitelia] = useState<Array<{ meno: string; podiel?: string; datum_narodenia?: string }>>([]);
   const [lvPozemky, setLvPozemky] = useState<Array<{ cislo_parcely?: string; druh?: string; vymera?: number }>>([]);
@@ -619,6 +692,8 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
     }
 
     setSaving(false);
+    // TASK 11 — po úspešnom uložení vyčisti draft
+    try { localStorage.removeItem(draftLsKey); } catch { /* ignore */ }
     onSubmit({ id: data.id });
   }
 
@@ -719,6 +794,31 @@ Odpovedaj stručne po slovensky.`;
 
   return (
     <div style={{ maxWidth: "700px" }} spellCheck autoCorrect="on">
+      {/* Draft banner (TASK 11) */}
+      {showDraftBanner && draftMeta && (
+        <div style={{
+          padding: "12px 16px", marginBottom: "16px", borderRadius: "12px",
+          background: "#FEF3C7", border: "1px solid #FDE68A", color: "#92400E",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+          flexWrap: "wrap",
+        }}>
+          <div style={{ fontSize: "13px", lineHeight: 1.4 }}>
+            📝 Máš rozpracovaný náberák pre tohto klienta z{" "}
+            <strong>{new Date(draftMeta.savedAt).toLocaleString("sk", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</strong>.
+            Chceš pokračovať?
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button onClick={loadDraft} style={{
+              padding: "6px 14px", borderRadius: "8px", border: "none",
+              background: "#92400E", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer",
+            }}>Pokračovať</button>
+            <button onClick={discardDraft} style={{
+              padding: "6px 14px", borderRadius: "8px", border: "1px solid #92400E",
+              background: "transparent", color: "#92400E", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+            }}>Zahodiť</button>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
         <button onClick={onBack} style={{

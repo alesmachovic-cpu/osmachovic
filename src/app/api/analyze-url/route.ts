@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { analyzeOkolie } from "@/lib/okolie";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -493,6 +494,13 @@ export async function POST(req: NextRequest) {
   const ai = await aiVerdict(extracted, eurM2, benchmark, odchylka, benchmarkRes);
   const hyp = hypoteka(cena);
 
+  // NEW — analýza okolia cez Gemini (Google Maps knowledge)
+  // Beží paralelne v poradí — môžeme bezpečne ignorovať fail (vráti fallback)
+  const okolie = await analyzeOkolie({
+    lokalita: extracted.lokalita || "",
+    typ: extracted.typ_nehnutelnosti || null,
+  });
+
   // Popis zdroja benchmarku — povie maklérovi či bola cena merané proti reálne
   // predaným inzerátom alebo len ponukám.
   const benchmark_zdroj = (() => {
@@ -529,6 +537,7 @@ export async function POST(req: NextRequest) {
         cielova_skupina: "—", cas_predaja: "—",
         vyjednavacie_argumenty: [],
       },
+      okolie,
     },
   });
 }

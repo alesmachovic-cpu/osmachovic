@@ -9,6 +9,7 @@ import {
   isBazosListingFirma,
   sendPushForNewListings,
   recordInAppNotifications,
+  notifyKupujuciMatches,
 } from "@/lib/monitor";
 import type { ScrapedInzerat, MonitorFilter, ScrapeResult } from "@/lib/monitor";
 
@@ -202,6 +203,13 @@ export async function GET(request: Request) {
             await recordInAppNotifications(newItems);
           } catch (e) {
             console.warn("[scrape] in-app notif failed:", e);
+          }
+          // TASK 13 — porovnaj nové inzeráty s aktívnymi objednávkami kupujúcich
+          // a urob "match" notifikáciu pre toho ktorý daného kupujúceho spravuje.
+          try {
+            await notifyKupujuciMatches(newItems);
+          } catch (e) {
+            console.warn("[scrape] kupujuci-match notif failed:", e);
           }
         }
       }

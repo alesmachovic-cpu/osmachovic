@@ -46,6 +46,16 @@ interface Analysis {
     cas_predaja?: string;
     vyjednavacie_argumenty?: string[];
   };
+  okolie?: {
+    plusy?: string[];
+    minusy?: string[];
+    doprava?: string;
+    obcianska_vybavenost?: string;
+    charakter?: string;
+    shrnutie?: string;
+    skore?: number;
+    zdroj?: string;
+  };
 }
 
 interface Result {
@@ -381,6 +391,63 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
                       <div>⏱ <strong>Čas predaja:</strong> {result.analysis.ai.cas_predaja}</div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* OKOLIE — Gemini analýza okolia (NEW) */}
+              {result.analysis.okolie && (result.analysis.okolie.plusy?.length || result.analysis.okolie.minusy?.length || result.analysis.okolie.shrnutie) && (
+                <div style={{
+                  padding: "16px", background: "var(--bg-surface)",
+                  borderRadius: "12px", border: "1px solid var(--border)",
+                  display: "flex", flexDirection: "column", gap: "12px",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                    <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>
+                      📍 Okolie nehnuteľnosti
+                    </div>
+                    {typeof result.analysis.okolie.skore === "number" && result.analysis.okolie.skore > 0 && (
+                      <span style={{
+                        padding: "3px 10px", borderRadius: "12px", fontSize: "11px", fontWeight: 700,
+                        background: result.analysis.okolie.skore >= 7 ? "#DCFCE7" : result.analysis.okolie.skore >= 5 ? "#FEF3C7" : "#FEE2E2",
+                        color: result.analysis.okolie.skore >= 7 ? "#15803D" : result.analysis.okolie.skore >= 5 ? "#92400E" : "#991B1B",
+                      }}>
+                        Skóre: {result.analysis.okolie.skore}/10
+                      </span>
+                    )}
+                  </div>
+
+                  {result.analysis.okolie.shrnutie && (
+                    <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5, fontStyle: "italic" }}>
+                      {result.analysis.okolie.shrnutie}
+                    </div>
+                  )}
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    {result.analysis.okolie.plusy && result.analysis.okolie.plusy.length > 0 && (
+                      <div style={{ padding: "10px 12px", background: "#F0FDF4", borderRadius: "8px", border: "1px solid #BBF7D0" }}>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#15803D", marginBottom: "6px" }}>✓ PLUSY</div>
+                        <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "12px", color: "#14532D", lineHeight: 1.5 }}>
+                          {result.analysis.okolie.plusy.map((p, i) => <li key={i}>{p}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {result.analysis.okolie.minusy && result.analysis.okolie.minusy.length > 0 && (
+                      <div style={{ padding: "10px 12px", background: "#FEF2F2", borderRadius: "8px", border: "1px solid #FECACA" }}>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#991B1B", marginBottom: "6px" }}>✗ MÍNUSY</div>
+                        <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "12px", color: "#7F1D1D", lineHeight: 1.5 }}>
+                          {result.analysis.okolie.minusy.map((p, i) => <li key={i}>{p}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {(result.analysis.okolie.doprava || result.analysis.okolie.obcianska_vybavenost || result.analysis.okolie.charakter) && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                      {result.analysis.okolie.doprava && <div>🚌 <strong>Doprava:</strong> {result.analysis.okolie.doprava}</div>}
+                      {result.analysis.okolie.obcianska_vybavenost && <div>🏪 <strong>Vybavenosť:</strong> {result.analysis.okolie.obcianska_vybavenost}</div>}
+                      {result.analysis.okolie.charakter && <div>🌳 <strong>Charakter:</strong> {result.analysis.okolie.charakter}</div>}
+                    </div>
+                  )}
                 </div>
               )}
 
