@@ -155,11 +155,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   async function login(identifier: string, password: string): Promise<string | null> {
     if (!identifier.trim()) return "Zadaj meno alebo email";
 
-    // Cez server API — bcrypt hashovanie + rate limit + audit
+    // Cez server API — bcrypt hashovanie + rate limit + audit + HMAC session cookie
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // credentials: "include" — server set-cookie pre crm_session sa uchová
+        credentials: "include",
         body: JSON.stringify({ identifier: identifier.trim(), password }),
       });
       const body = await res.json();
@@ -205,6 +207,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   async function logout() {
     localStorage.removeItem("crm_user");
+    // Vymaž server-side HMAC session cookie aj Supabase auth (Google OAuth)
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
     await supabase.auth.signOut();
     setUser(null);
     if (typeof window !== "undefined") window.location.href = "/";
