@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { buildSessionCookieValue } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -128,7 +129,12 @@ export async function POST(request: Request) {
 
     // Nevracaj heslo
     const safeUser = { ...user, password: undefined };
-    return NextResponse.json({ user: safeUser });
+    const res = NextResponse.json({ user: safeUser });
+    // P0 security: nastav HMAC-signed httponly session cookie, aby sme mali
+    // server-side overiteľnú identitu. AuthProvider stále číta user z body,
+    // ale API endpointy budú vyžadovať tento cookie cez requireUser().
+    res.headers.set("Set-Cookie", buildSessionCookieValue(String(user.id)));
+    return res;
   } catch (e) {
     console.error("[login] error:", e);
     return NextResponse.json({ error: "Chyba pri prihlasovaní" }, { status: 500 });
