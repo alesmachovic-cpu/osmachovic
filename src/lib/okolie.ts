@@ -67,7 +67,6 @@ Skóre = 1-10 podľa atraktivity lokality. Buď konkrétny, NIE všeobecný. Slo
       generationConfig: {
         temperature: 0.3,
         maxOutputTokens: 1500,
-        responseMimeType: "application/json",
       },
     });
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
@@ -78,18 +77,34 @@ Skóre = 1-10 podľa atraktivity lokality. Buď konkrétny, NIE všeobecný. Slo
       res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
     }
     if (!res.ok) {
-      console.warn("[okolie] gemini HTTP", res.status);
+      const errBody = await res.text().catch(() => "");
+      console.warn("[okolie] gemini HTTP", res.status, errBody.slice(0, 300));
       return FALLBACK;
     }
     const data = await res.json();
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-    if (!raw) return FALLBACK;
-    // Gemini občas vráti JSON v ```json wrapper — odstráň
-    const cleaned = raw.replace(/^```json\s*/, "").replace(/```\s*$/, "").trim();
-    const parsed = JSON.parse(cleaned);
+    if (!raw) {
+      console.warn("[okolie] gemini empty response", JSON.stringify(data).slice(0, 300));
+      return FALLBACK;
+    }
+    // Gemini občas vráti JSON v ```json wrapper alebo s extra textom → extrahuj prvý {...} blok
+    let cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+    // Ak text obsahuje preamble pred JSON-om, vytiahni od { do }
+    const jsonStart = cleaned.indexOf("{");
+    const jsonEnd = cleaned.lastIndexOf("}");
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      cleaned = cleaned.slice(jsonStart, jsonEnd + 1);
+    }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.warn("[okolie] JSON parse failed:", (parseErr as Error).message, "raw:", raw.slice(0, 300));
+      return FALLBACK;
+    }
     return {
-      plusy: Array.isArray(parsed.plusy) ? parsed.plusy.slice(0, 6).map(String) : [],
-      minusy: Array.isArray(parsed.minusy) ? parsed.minusy.slice(0, 6).map(String) : [],
+      plusy: Array.isArray(parsed.plusy) ? (parsed.plusy as unknown[]).slice(0, 6).map(String) : [],
+      minusy: Array.isArray(parsed.minusy) ? (parsed.minusy as unknown[]).slice(0, 6).map(String) : [],
       doprava: String(parsed.doprava || ""),
       obcianska_vybavenost: String(parsed.obcianska_vybavenost || ""),
       charakter: String(parsed.charakter || ""),
