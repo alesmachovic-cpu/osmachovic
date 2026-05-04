@@ -36,7 +36,60 @@ type FilterStatus = "" | "novy" | "aktivny" | "pasivny" | "uzavrety" | "caka_na_
 type FilterTyp = "" | "kupujuci" | "predavajuci" | "oboje" | "prenajimatel";
 
 export default function KlientiPage() {
-  return <Suspense><KlientiContent /></Suspense>;
+  return <Suspense><KlientiWrapper /></Suspense>;
+}
+
+// TASK 1 — Tab wrapper: predavajuci (default) | kupujuci | volni
+import KupujuciPage from "@/app/kupujuci/page";
+import VolniKlientiPage from "@/app/volni-klienti/page";
+import { useSearchParams as useKlientiSearchParams, useRouter as useKlientiRouter, usePathname as useKlientiPathname } from "next/navigation";
+
+const KLIENTI_TABS = [
+  { key: "predavajuci", label: "Predávajúci", icon: "👥" },
+  { key: "kupujuci",    label: "Kupujúci",    icon: "🔍" },
+  { key: "volni",       label: "Voľní klienti", icon: "📭" },
+] as const;
+
+function KlientiWrapper() {
+  const sp = useKlientiSearchParams();
+  const router = useKlientiRouter();
+  const pathname = useKlientiPathname();
+  const raw = sp.get("tab");
+  const tab = (KLIENTI_TABS.find(t => t.key === raw)?.key) || "predavajuci";
+
+  return (
+    <div>
+      <div style={{
+        display: "flex", gap: "6px", marginBottom: "20px",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        {KLIENTI_TABS.map(t => {
+          const active = t.key === tab;
+          return (
+            <button
+              key={t.key}
+              onClick={() => router.push(`${pathname}?tab=${t.key}`)}
+              style={{
+                padding: "10px 18px", borderRadius: "10px 10px 0 0",
+                border: "none", background: active ? "var(--bg-elevated)" : "transparent",
+                color: active ? "var(--text-primary)" : "var(--text-muted)",
+                fontSize: "13px", fontWeight: active ? 700 : 500, cursor: "pointer",
+                borderBottom: active ? "2px solid var(--accent, #3B82F6)" : "2px solid transparent",
+                transition: "all 0.15s",
+              }}
+            >
+              <span style={{ marginRight: "6px" }}>{t.icon}</span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "predavajuci" && <KlientiContent />}
+      {tab === "kupujuci" && <KupujuciPage />}
+      {tab === "volni" && <VolniKlientiPage />}
+    </div>
+  );
 }
 
 function KlientiContent() {

@@ -30,6 +30,20 @@ const nextConfig: NextConfig = {
     return [
       // Premenovanie: /odklik → /volni-klienti (zachová staré bookmarks)
       { source: "/odklik", destination: "/volni-klienti", permanent: true },
+      // TASK 1 — Konsolidácia menu: staré URLs → nové tabové URLs
+      // /volni-klienti zostáva (priame URL), ale aj nový alias cez /klienti?tab=volni
+      // Tu len redirect-ujeme staré URLs do nového Klienti hubu:
+      { source: "/kupujuci", destination: "/klienti?tab=kupujuci", permanent: false },
+      { source: "/volni-klienti", destination: "/klienti?tab=volni", permanent: false },
+      // Monitor & Analýza — /analyzy zlúčená do /monitor?tab=analyza
+      { source: "/analyzy", destination: "/monitor?tab=analyza", permanent: false },
+      // Kalkulátor & Matching — staré /kalkulator a /matching zlúčené do /nastroje
+      { source: "/kalkulator", destination: "/nastroje?tab=kalkulator", permanent: false },
+      { source: "/matching", destination: "/nastroje?tab=matching", permanent: false },
+      // Operatíva — /naklady a /kalendar (a /obhliadky) zlúčené do /operativa
+      { source: "/naklady", destination: "/operativa?tab=naklady", permanent: false },
+      { source: "/kalendar", destination: "/operativa?tab=kalendar", permanent: false },
+      { source: "/obhliadky", destination: "/operativa?tab=obhliadky", permanent: false },
     ];
   },
 };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
 import { useAuth } from "@/components/AuthProvider";
 import PreCallBriefModal from "@/components/PreCallBriefModal";
@@ -179,7 +179,7 @@ function LokalitaInput({ value, onChange, placeholder }: { value: string; onChan
 }
 
 /* ── Hlavná stránka ── */
-export default function MonitorPage() {
+function MonitorContent() {
   const router = useRouter();
   const [briefFor, setBriefFor] = useState<{ id: string; url?: string } | null>(null);
   const [inzeraty, setInzeraty] = useState<Inzerat[]>([]);
@@ -929,5 +929,63 @@ export default function MonitorPage() {
         />
       )}
     </div>
+  );
+}
+
+// TASK 1 — Wrapper s tabmi: Scraping (default) | AI Analýza
+import AnalyzyPage from "@/app/analyzy/page";
+import { Suspense } from "react";
+
+const MONITOR_TABS = [
+  { key: "scraping", label: "Scraping", icon: "📡" },
+  { key: "analyza",  label: "AI Analýza", icon: "📈" },
+] as const;
+
+function MonitorWrapper() {
+  const sp = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const raw = sp.get("tab");
+  const tab = (MONITOR_TABS.find(t => t.key === raw)?.key) || "scraping";
+
+  return (
+    <div>
+      <div style={{
+        display: "flex", gap: "6px", marginBottom: "20px",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        {MONITOR_TABS.map(t => {
+          const active = t.key === tab;
+          return (
+            <button
+              key={t.key}
+              onClick={() => router.push(`${pathname}?tab=${t.key}`)}
+              style={{
+                padding: "10px 18px", borderRadius: "10px 10px 0 0",
+                border: "none", background: active ? "var(--bg-elevated)" : "transparent",
+                color: active ? "var(--text-primary)" : "var(--text-muted)",
+                fontSize: "13px", fontWeight: active ? 700 : 500, cursor: "pointer",
+                borderBottom: active ? "2px solid var(--accent, #3B82F6)" : "2px solid transparent",
+                transition: "all 0.15s",
+              }}
+            >
+              <span style={{ marginRight: "6px" }}>{t.icon}</span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "scraping" && <MonitorContent />}
+      {tab === "analyza" && <AnalyzyPage />}
+    </div>
+  );
+}
+
+export default function MonitorPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>Načítavam...</div>}>
+      <MonitorWrapper />
+    </Suspense>
   );
 }

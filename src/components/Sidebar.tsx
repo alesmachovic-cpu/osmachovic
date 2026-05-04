@@ -20,37 +20,33 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
   "/nastavenia": "nastavenia",
 };
 
+// TASK 1 — Konsolidované menu (14 → 8 hlavných položiek)
+// Každá zlúčená položka rieši taby v cieľovej stránke.
 const mainNavBase = [
-  { label: "Prehľad",      href: "/",           icon: "📊" },
-  { label: "Portfólio",    href: "/portfolio",  icon: "🏠" },
-  { label: "Klienti",      href: "/klienti",    icon: "👥" },
-  { label: "Kupujúci",     href: "/kupujuci",   icon: "🔍" },
-  { label: "Voľní klienti", href: "/volni-klienti", icon: "📭" },
+  { label: "Prehľad",                 href: "/",                         icon: "📊" },
+  { label: "Portfólio",               href: "/portfolio",                icon: "🏠" },
+  { label: "Klienti",                 href: "/klienti?tab=predavajuci",  icon: "👥", matchPrefix: "/klienti" },
+  { label: "Náberový list",           href: "/naber",                    icon: "📝" },
+  { label: "Monitor & Analýza",       href: "/monitor?tab=scraping",     icon: "📡", matchPrefix: "/monitor" },
+  { label: "Kalkulátor & Matching",   href: "/nastroje?tab=kalkulator",  icon: "🧮", matchPrefix: "/nastroje" },
+  { label: "Štatistiky",              href: "/statistiky",               icon: "📉" },
+  { label: "Operatíva",               href: "/operativa?tab=obhliadky",  icon: "📋", matchPrefix: "/operativa" },
 ];
 
-const toolsNav = [
-  { label: "Náberový list",   href: "/naber",      icon: "📝" },
-  // "Inzerát" zo sidebaru odstránený — inzerát sa tvorí iba z karty klienta
-  // (Pipeline → Vytvoriť inzerát, až po podpísaní náberáka).
-  { label: "Monitor",         href: "/monitor",    icon: "📡" },
-  { label: "Analýza trhu",    href: "/analyzy",    icon: "📈" },
-  { label: "Kalkulátor",      href: "/kalkulator", icon: "🧮" },
-  { label: "Matching",        href: "/matching",   icon: "🔗" },
-  { label: "Štatistiky",      href: "/statistiky", icon: "📉" },
-];
+const toolsNav: NavItem[] = []; // zrušená sekcia — všetko v hlavnom menu
 
 const operativaNav = [
-  { label: "Obhliadky",       href: "/obhliadky",           icon: "👁️" },
-  { label: "Náklady",         href: "/naklady",             icon: "💰" },
-  { label: "Produkcia",       href: "/produkcia",           icon: "📦" },
-  { label: "Vyťaženosť tímu", href: "/vytazenost",          icon: "👷" },
-  { label: "Provízie",        href: "/potvrdenie-provizii", icon: "✅" },
-  { label: "Odberatelia",     href: "/odberatelia",         icon: "🏷️" },
-  { label: "Faktúry",         href: "/faktury",             icon: "🧾" },
-  { label: "Prehľad financií",href: "/prehlad-financii",    icon: "💶" },
-  { label: "Provízie maklérov",href: "/provizie-maklerov",  icon: "💼" },
-  { label: "Účtovný prehľad", href: "/uctovny-prehlad",     icon: "📊" },
-  { label: "Pravidelné náklady",href: "/pravidelne-naklady",icon: "🔁" },
+  // Operatíva → Obhliadky/Náklady/Kalendár sú v /operativa taboch.
+  // Tu necháme finančno-administratívne nástroje ktoré nie sú v hlavnom menu.
+  { label: "Produkcia",          href: "/produkcia",            icon: "📦" },
+  { label: "Vyťaženosť tímu",    href: "/vytazenost",           icon: "👷" },
+  { label: "Provízie",           href: "/potvrdenie-provizii",  icon: "✅" },
+  { label: "Odberatelia",        href: "/odberatelia",          icon: "🏷️" },
+  { label: "Faktúry",            href: "/faktury",              icon: "🧾" },
+  { label: "Prehľad financií",   href: "/prehlad-financii",     icon: "💶" },
+  { label: "Provízie maklérov",  href: "/provizie-maklerov",    icon: "💼" },
+  { label: "Účtovný prehľad",    href: "/uctovny-prehlad",      icon: "📊" },
+  { label: "Pravidelné náklady", href: "/pravidelne-naklady",   icon: "🔁" },
 ];
 
 const systemNav = [
@@ -67,7 +63,7 @@ const systemNav = [
   { label: "System Log",      href: "/log",        icon: "📋" },
 ];
 
-type NavItem = { label: string; href: string; icon: string; badge?: number };
+type NavItem = { label: string; href: string; icon: string; badge?: number; matchPrefix?: string };
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
@@ -134,8 +130,8 @@ export default function Sidebar() {
 
   const mainNav: NavItem[] = mainNavBase.map((it) => {
     if (it.href === "/portfolio") return { ...it, badge: counts.portfolio };
-    if (it.href === "/klienti") return { ...it, badge: counts.klienti };
-    if (it.href === "/kupujuci") return { ...it, badge: counts.kupujuci };
+    // Klienti zlúčuje Predávajúci + Kupujúci → badge = súčet všetkých klientov
+    if (it.matchPrefix === "/klienti") return { ...it, badge: (counts.klienti || 0) + (counts.kupujuci || 0) };
     return it;
   });
 
@@ -186,10 +182,18 @@ export default function Sidebar() {
       {/* Nav */}
       <nav style={{ flex: 1, padding: "0 8px", overflowY: "auto" }}>
         <SectionLabel label="HLAVNÉ" />
-        {filterNav(mainNav).map(item => <NavLink key={item.href} item={item} active={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)} />)}
-        <SectionLabel label="NÁSTROJE" />
-        {filterNav(toolsNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
-        <SectionLabel label="OPERATÍVA" />
+        {filterNav(mainNav).map(item => {
+          const prefix = item.matchPrefix || (item.href.split("?")[0]);
+          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(prefix);
+          return <NavLink key={item.label} item={item} active={active} />;
+        })}
+        {toolsNav.length > 0 && (
+          <>
+            <SectionLabel label="NÁSTROJE" />
+            {filterNav(toolsNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
+          </>
+        )}
+        <SectionLabel label="ADMINISTRATÍVA" />
         {filterNav(operativaNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
         <SectionLabel label="SYSTÉM" />
         {filterNav(systemNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
