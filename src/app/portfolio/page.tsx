@@ -77,19 +77,12 @@ export default function Portfolio() {
   const router = useRouter();
   const isAdmin = user?.id === "ales" || user?.role === "super_admin";
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
-  // "mine" = moje inzeráty, "all" = všetky, inak meno makléra
-  // Default: bežný maklér vidí "mine" (svoje portfólio prvé), super_admin
-  // vidí "all" (potrebuje cross-makler prehľad). Maklér môže ručne prepnúť.
+  // "all" (default pre všetkých — vidí celé portfólio firmy) | "mine" | meno makléra
+  // Predtým sme bežnému maklérovi auto-zaplo "mine" — to spôsobovalo prázdne
+  // portfólio keď makler.id v users netušil čo má v makler_id na nehnutelnosti.
+  // Default = "all" nikdy nezhasne portfólio. Maklér si "Moje" prepne ručne.
   const [filterMakler, setFilterMakler] = useState<string>("all");
   const [filterTouched, setFilterTouched] = useState(false);
-
-  // useState({isAdmin?...}) sa vyhodnotí pred načítaním usera (user=null →
-  // !admin → "mine" → admin nevidí cudzie inzeráty). Tento effect sync-uje
-  // default po načítaní auth-u — kým user filter manuálne neprepol.
-  useEffect(() => {
-    if (filterTouched) return;
-    if (user) setFilterMakler(isAdmin ? "all" : "mine");
-  }, [user, isAdmin, filterTouched]);
   const [makleriList, setMakleriList] = useState<{ meno: string; email: string; id: string }[]>([]);
   const [items, setItems] = useState<DBNehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,11 +155,20 @@ export default function Portfolio() {
         body: JSON.stringify({ action: "batch", items: [item] }),
       });
       const data = await res.json();
-      if (data.results?.[0]) {
+      if (!res.ok) {
+        alert("Analýza zlyhala: " + (data.error || `HTTP ${res.status}`));
+        console.error("[portfolio] analyze failed:", data);
+      } else if (data.results?.[0]) {
         const r = data.results[0];
         setAnalysis(prev => ({ ...prev, [item.id]: r }));
+      } else {
+        alert("Analýza vrátila prázdny výsledok — skús to znova alebo skontroluj logy.");
+        console.error("[portfolio] analyze empty:", data);
       }
-    } catch { /* silent */ }
+    } catch (e) {
+      alert("Analýza zlyhala: " + (e as Error).message);
+      console.error("[portfolio] analyze exception:", e);
+    }
     setSingleAnalyzing(prev => ({ ...prev, [item.id]: false }));
   }
 

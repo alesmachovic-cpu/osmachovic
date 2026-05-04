@@ -61,7 +61,12 @@ interface Analysis {
 interface Result {
   url: string;
   extracted: Extracted;
-  analysis: Analysis;
+  analysis: Analysis | null;
+  ai_failed?: boolean;
+  ai_error?: string;
+  ai_debug?: string | null;
+  message?: string;
+  manual_input?: boolean;
 }
 
 const VERDIKT: Record<string, { label: string; bg: string; color: string }> = {
@@ -126,9 +131,67 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
     }
   }
 
-  const verdiktKey = result?.analysis.ai?.verdikt || result?.analysis.zaklad?.stav || "trhova_cena";
+  const verdiktKey = result?.analysis?.ai?.verdikt || result?.analysis?.zaklad?.stav || "trhova_cena";
   const v = VERDIKT[verdiktKey] || VERDIKT.trhova_cena;
-  const odch = result?.analysis.zaklad?.odchylka ?? 0;
+  const odch = result?.analysis?.zaklad?.odchylka ?? 0;
+
+  // TASK Bug#1 — Manual fallback formulár pri zlyhaní AI extrakcie
+  const [manualMode, setManualMode] = useState(false);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [mNazov, setMNazov] = useState("");
+  const [mTyp, setMTyp] = useState<"byt" | "rodinny_dom" | "pozemok" | "chata" | "komercna" | "garaz" | "">("");
+  const [mLokalita, setMLokalita] = useState("");
+  const [mCena, setMCena] = useState<string>("");
+  const [mPlocha, setMPlocha] = useState<string>("");
+  const [mIzby, setMIzby] = useState<string>("");
+  const [mStav, setMStav] = useState<"novostavba" | "po_rekonstrukcii" | "povodny_stav" | "">("");
+  const [mPopis, setMPopis] = useState("");
+
+  // Pri otvorení manuálneho módu predvyplň z meta tagov ktoré nám server vrátil
+  useEffect(() => {
+    if (manualMode && result?.extracted) {
+      setMNazov(result.extracted.nazov || "");
+      setMLokalita(result.extracted.lokalita || "");
+      setMPopis(result.extracted.popis || "");
+    }
+  }, [manualMode, result?.extracted]);
+
+  async function submitManual() {
+    if (!mLokalita || !mCena || !mPlocha) {
+      alert("Vyplň aspoň lokalitu, cenu a plochu — bez nich sa analýza nedá spočítať.");
+      return;
+    }
+    setManualSubmitting(true);
+    try {
+      const r = await fetch("/api/analyze-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: result?.url || "manual",
+          manual_data: {
+            nazov: mNazov || null,
+            typ_nehnutelnosti: mTyp || null,
+            lokalita: mLokalita,
+            cena: Number(mCena),
+            plocha: Number(mPlocha),
+            izby: mIzby ? Number(mIzby) : null,
+            stav: mStav || null,
+            stav_inzerovany: mStav || null,
+            stav_posudeny_ai: mStav || null,
+            popis: mPopis || null,
+          },
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) { alert("Chyba: " + (d.error || `HTTP ${r.status}`)); setManualSubmitting(false); return; }
+      setResult(d);
+      setManualMode(false);
+    } catch (e) {
+      alert("Chyba: " + (e as Error).message);
+    } finally {
+      setManualSubmitting(false);
+    }
+  }
 
   return (
     <div onClick={onClose} style={{
@@ -174,10 +237,126 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
             }}>
               <div style={{ fontWeight: 700, marginBottom: "4px" }}>❌ Chyba</div>
               <div style={{ fontSize: "13px" }}>{error}</div>
+              <button
+                onClick={() => { setError(""); setManualMode(true); }}
+                style={{
+                  marginTop: "10px", padding: "8px 14px", borderRadius: "8px",
+                  background: "#991b1b", color: "#fff", border: "none",
+                  fontSize: "12px", fontWeight: 700, cursor: "pointer",
+                }}
+              >📝 Vyplniť ručne a pokračovať</button>
             </div>
           )}
 
-          {result && (
+          {/* AI extraction failed — show banner + manual fallback option */}
+          {!loading && !error && result?.ai_failed && !manualMode && (
+            <div style={{
+              padding: "16px", borderRadius: "10px",
+              background: "#FEF3C7", border: "1px solid #FDE68A", color: "#92400E",
+              marginBottom: "16px",
+            }}>
+              <div style={{ fontWeight: 700, marginBottom: "4px" }}>⚠️ AI extrakcia zlyhala</div>
+              <div style={{ fontSize: "13px", marginBottom: "10px" }}>
+                {result.message || "Nepodarilo sa automaticky vytiahnuť údaje z inzerátu."}
+                {result.ai_error && (
+                  <div style={{ fontSize: "11px", color: "#78350F", marginTop: "4px", fontStyle: "italic" }}>
+                    Dôvod: {result.ai_error}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setManualMode(true)}
+                style={{
+                  padding: "8px 14px", borderRadius: "8px",
+                  background: "#92400E", color: "#fff", border: "none",
+                  fontSize: "12px", fontWeight: 700, cursor: "pointer",
+                }}
+              >📝 Vyplniť údaje ručne</button>
+            </div>
+          )}
+
+          {/* Manual fill form */}
+          {manualMode && (
+            <div style={{
+              padding: "20px", borderRadius: "12px",
+              background: "var(--bg-elevated)", border: "1px solid var(--border)",
+              display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px",
+            }}>
+              <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
+                📝 Manuálne údaje o nehnuteľnosti
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div>
+                  <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Názov inzerátu</label>
+                  <input value={mNazov} onChange={e => setMNazov(e.target.value)} placeholder="napr. 3-izbový byt..."
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Typ *</label>
+                  <select value={mTyp} onChange={e => setMTyp(e.target.value as typeof mTyp)}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px" }}>
+                    <option value="">— vyber —</option>
+                    <option value="byt">Byt</option>
+                    <option value="rodinny_dom">Rodinný dom</option>
+                    <option value="pozemok">Pozemok</option>
+                    <option value="chata">Chata</option>
+                    <option value="komercna">Komerčná</option>
+                    <option value="garaz">Garáž</option>
+                  </select>
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Lokalita * (mesto + mestská časť)</label>
+                  <input value={mLokalita} onChange={e => setMLokalita(e.target.value)} placeholder="napr. Bratislava-Ružinov"
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Cena (€) *</label>
+                  <input type="number" value={mCena} onChange={e => setMCena(e.target.value)} placeholder="200000"
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Plocha (m²) *</label>
+                  <input type="number" value={mPlocha} onChange={e => setMPlocha(e.target.value)} placeholder="65"
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Počet izieb</label>
+                  <input type="number" value={mIzby} onChange={e => setMIzby(e.target.value)} placeholder="3"
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Stav</label>
+                  <select value={mStav} onChange={e => setMStav(e.target.value as typeof mStav)}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px" }}>
+                    <option value="">— neuvedený —</option>
+                    <option value="novostavba">Novostavba</option>
+                    <option value="po_rekonstrukcii">Po rekonštrukcii</option>
+                    <option value="povodny_stav">Pôvodný stav</option>
+                  </select>
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>Popis (voliteľné, pomáha AI verdiktu)</label>
+                  <textarea value={mPopis} onChange={e => setMPopis(e.target.value)} rows={3}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px", fontFamily: "inherit", resize: "vertical" }} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                <button onClick={() => setManualMode(false)} style={{
+                  padding: "10px 16px", borderRadius: "8px", border: "1px solid var(--border)",
+                  background: "transparent", color: "var(--text-primary)",
+                  fontSize: "13px", fontWeight: 600, cursor: "pointer",
+                }}>Zrušiť</button>
+                <button onClick={submitManual} disabled={manualSubmitting} style={{
+                  padding: "10px 18px", borderRadius: "8px", border: "none",
+                  background: "#374151", color: "#fff",
+                  fontSize: "13px", fontWeight: 700, cursor: manualSubmitting ? "default" : "pointer",
+                  opacity: manualSubmitting ? 0.5 : 1,
+                }}>{manualSubmitting ? "Analyzujem..." : "Spustiť analýzu →"}</button>
+              </div>
+            </div>
+          )}
+
+          {result && result.analysis && !result.ai_failed && (
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               {/* Hlavička */}
               <div>

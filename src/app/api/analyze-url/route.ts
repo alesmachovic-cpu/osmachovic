@@ -219,11 +219,18 @@ interface ExtractedListing {
   fotka_url: string | null;
 }
 
-async function aiExtract(text: string, meta: Record<string, string>, url: string): Promise<ExtractedListing | null> {
+interface AiExtractResult {
+  data: ExtractedListing | null;
+  error?: string;
+  /** detail debugu pre logy: HTTP status, parse error message etc. */
+  debug?: string;
+}
+
+async function aiExtract(text: string, meta: Record<string, string>, url: string): Promise<AiExtractResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.error("[analyze-url] ANTHROPIC_API_KEY missing");
-    return null;
+    return { data: null, error: "ANTHROPIC_API_KEY nie je nakonfigurovaný na serveri" };
   }
   const system = `Si senior realitný analytik a extraktor údajov z inzerátov v slovenčine.
 Tvoja špecialita: posúdiť SKUTOČNÝ stav nehnuteľnosti — nielen čo inzerát hovorí,
@@ -300,8 +307,9 @@ ${text}`;
       }),
     });
     if (!res.ok) {
-      console.error("[analyze-url] Anthropic HTTP", res.status, await res.text().catch(() => ""));
-      // Fallback bez fotky ak vision API zlyhalo
+      const errBody = await res.text().catch(() => "");
+      console.error("[analyze-url] Anthropic HTTP", res.status, errBody.slice(0, 500));
+      // Fallback bez fotky ak vision API zlyhalo (image URL môže byť nedostupný)
       if (ogImage) {
         const res2 = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -318,26 +326,40 @@ ${text}`;
           const r2 = d2?.content?.[0]?.text?.trim() || "";
           const m2 = r2.match(/\{[\s\S]*\}/);
           if (m2) {
-            const parsed = JSON.parse(m2[0]) as ExtractedListing;
-            // Spätná kompatibilita: ak je `stav` field, prepíš
-            if (!parsed.stav && parsed.stav_posudeny_ai) parsed.stav = parsed.stav_posudeny_ai;
-            return parsed;
+            try {
+              const parsed = JSON.parse(m2[0]) as ExtractedListing;
+              if (!parsed.stav && parsed.stav_posudeny_ai) parsed.stav = parsed.stav_posudeny_ai;
+              return { data: parsed };
+            } catch (parseErr) {
+              return { data: null, error: "AI vrátil odpoveď, ale nepodarilo sa rozparsovať JSON", debug: `parse: ${(parseErr as Error).message}; raw: ${m2[0].slice(0, 200)}` };
+            }
           }
+          return { data: null, error: "AI fallback nevrátil JSON v očakávanom formáte", debug: `raw: ${r2.slice(0, 200)}` };
         }
+        const err2Body = await res2.text().catch(() => "");
+        return { data: null, error: `AI volanie zlyhalo: HTTP ${res.status} → fallback HTTP ${res2.status}`, debug: err2Body.slice(0, 300) };
       }
-      return null;
+      return { data: null, error: `AI volanie zlyhalo: HTTP ${res.status}`, debug: errBody.slice(0, 300) };
     }
     const data = await res.json();
     const raw = data?.content?.[0]?.text?.trim() || "";
+    if (!raw) {
+      return { data: null, error: "AI vrátil prázdnu odpoveď", debug: JSON.stringify(data).slice(0, 300) };
+    }
     const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) return null;
-    const parsed = JSON.parse(m[0]) as ExtractedListing;
-    // Pre spätnú kompatibilitu — `stav` field v UI/PDF používa stav_posudeny_ai
-    if (!parsed.stav && parsed.stav_posudeny_ai) parsed.stav = parsed.stav_posudeny_ai;
-    return parsed;
+    if (!m) {
+      return { data: null, error: "AI nevrátil JSON v očakávanom formáte", debug: `raw: ${raw.slice(0, 200)}` };
+    }
+    try {
+      const parsed = JSON.parse(m[0]) as ExtractedListing;
+      if (!parsed.stav && parsed.stav_posudeny_ai) parsed.stav = parsed.stav_posudeny_ai;
+      return { data: parsed };
+    } catch (parseErr) {
+      return { data: null, error: "AI vrátil JSON ktorý sa nepodarilo rozparsovať", debug: `parse: ${(parseErr as Error).message}; raw: ${m[0].slice(0, 200)}` };
+    }
   } catch (e) {
     console.error("[analyze-url] AI extract failed:", e);
-    return null;
+    return { data: null, error: `AI volanie hodilo výnimku: ${(e as Error).message}` };
   }
 }
 
@@ -443,11 +465,76 @@ function hypoteka(cena: number) {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { url?: string };
+  let body: { url?: string; manual_data?: Partial<ExtractedListing> };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
   const url = String(body.url || "").trim();
   if (!url || !/^https?:\/\//i.test(url)) {
     return NextResponse.json({ error: "Zadaj platný HTTP/HTTPS odkaz" }, { status: 400 });
+  }
+
+  // FALLBACK PATH — ak klient pošle `manual_data` (po zlyhaní AI extrakcie),
+  // preskoč fetch + AI a urob analýzu nad ručne zadanými údajmi.
+  if (body.manual_data) {
+    const m = body.manual_data;
+    const extracted: ExtractedListing = {
+      nazov: m.nazov ?? null,
+      typ_nehnutelnosti: m.typ_nehnutelnosti ?? null,
+      lokalita: m.lokalita ?? null,
+      cena: m.cena != null ? Number(m.cena) : null,
+      plocha: m.plocha != null ? Number(m.plocha) : null,
+      izby: m.izby != null ? Number(m.izby) : null,
+      stav: m.stav ?? m.stav_posudeny_ai ?? m.stav_inzerovany ?? null,
+      stav_inzerovany: m.stav_inzerovany ?? null,
+      stav_posudeny_ai: m.stav_posudeny_ai ?? m.stav_inzerovany ?? null,
+      stav_odovodnenie: m.stav_odovodnenie ?? "Údaje vyplnené ručne maklérom",
+      year_built: m.year_built != null ? Number(m.year_built) : null,
+      year_reconstructed: m.year_reconstructed != null ? Number(m.year_reconstructed) : null,
+      popis: m.popis ?? null,
+      predajca: m.predajca ?? null,
+      fotka_url: m.fotka_url ?? null,
+    };
+
+    const cena = Number(extracted.cena) || 0;
+    const plocha = Number(extracted.plocha) || 0;
+    const eurM2 = plocha > 0 ? Math.round(cena / plocha) : 0;
+    const benchmarkRes = await marketBenchmark(extracted.lokalita || "", extracted.typ_nehnutelnosti, extracted.izby);
+    const benchmark = benchmarkRes.median;
+    const odchylka = benchmark > 0 ? Math.round(((eurM2 - benchmark) / benchmark) * 100) : 0;
+    const stav = odchylka < -10 ? "podhodnotene" : odchylka > 10 ? "nadhodnotene" : "trhova_cena";
+
+    const ai = await aiVerdict(extracted, eurM2, benchmark, odchylka, benchmarkRes);
+    const hyp = hypoteka(cena);
+    const okolie = await analyzeOkolie({ lokalita: extracted.lokalita || "", typ: extracted.typ_nehnutelnosti || null });
+
+    return NextResponse.json({
+      url,
+      extracted,
+      analysis: {
+        zaklad: { cena, plocha, eurM2, benchmark, odchylka, stav },
+        benchmark_zdroj: benchmarkRes.source === "realized"
+          ? `median z ${benchmarkRes.realized_count} predaných inzerátov`
+          : benchmarkRes.source === "asking"
+          ? `median z ${benchmarkRes.asking_count} aktívnych ponúk`
+          : "statický odhad",
+        trh: {
+          zdroj: benchmarkRes.source,
+          asking_median: benchmarkRes.asking_median ?? null,
+          asking_count: benchmarkRes.asking_count ?? 0,
+          realized_median: benchmarkRes.realized_median ?? null,
+          realized_count: benchmarkRes.realized_count ?? 0,
+          avg_discount_pct: benchmarkRes.avg_discount_pct ?? null,
+          median_dom: benchmarkRes.median_dom ?? null,
+        },
+        hypoteka: hyp,
+        ai: ai || {
+          verdikt: stav, silne_stranky: [], slabe_stranky: [],
+          odporucanie: "Nedostatok dát", cielova_skupina: "—", cas_predaja: "—",
+          vyjednavacie_argumenty: [],
+        },
+        okolie,
+      },
+      manual_input: true,
+    });
   }
 
   // 1) Fetch URL — realistický UA aby cudzí weby neblokli
@@ -475,10 +562,38 @@ export async function POST(req: NextRequest) {
   const text = htmlToText(html);
 
   // 3) AI extract
-  const extracted = await aiExtract(text, meta, url);
-  if (!extracted) {
-    return NextResponse.json({ error: "AI extrakcia zlyhala — skús neskôr alebo vlož údaje ručne" }, { status: 500 });
+  const aiRes = await aiExtract(text, meta, url);
+  if (!aiRes.data) {
+    console.error("[analyze-url] aiExtract failed:", aiRes.error, aiRes.debug);
+    // Vytiahni z meta tagov aspoň základné údaje pre manuálny fallback
+    const fallbackData: ExtractedListing = {
+      nazov: meta["og:title"] || meta.title || null,
+      typ_nehnutelnosti: null,
+      lokalita: null,
+      cena: null,
+      plocha: null,
+      izby: null,
+      stav: null,
+      stav_inzerovany: null,
+      stav_posudeny_ai: null,
+      stav_odovodnenie: null,
+      year_built: null,
+      year_reconstructed: null,
+      popis: meta["og:description"] || null,
+      predajca: null,
+      fotka_url: meta["og:image"] || null,
+    };
+    return NextResponse.json({
+      url,
+      extracted: fallbackData,
+      analysis: null,
+      ai_failed: true,
+      ai_error: aiRes.error || "AI extrakcia zlyhala",
+      ai_debug: aiRes.debug || null,
+      message: "AI extrakcia zlyhala. Pošli formulár s ručne vyplnenými údajmi pre dokončenie analýzy.",
+    }, { status: 200 });
   }
+  const extracted = aiRes.data;
   // OG image fallback
   if (!extracted.fotka_url && meta["og:image"]) extracted.fotka_url = meta["og:image"];
 

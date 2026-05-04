@@ -37,6 +37,8 @@ const nextConfig: NextConfig = {
       { source: "/volni-klienti", destination: "/klienti?tab=volni", permanent: false },
       // Monitor & Analýza — /analyzy zlúčená do /monitor?tab=analyza
       { source: "/analyzy", destination: "/monitor?tab=analyza", permanent: false },
+      { source: "/analyza", destination: "/monitor?tab=analyza", permanent: false },
+      { source: "/analiza", destination: "/monitor?tab=analyza", permanent: false },
       // Kalkulátor & Matching — staré /kalkulator a /matching zlúčené do /nastroje
       { source: "/kalkulator", destination: "/nastroje?tab=kalkulator", permanent: false },
       { source: "/matching", destination: "/nastroje?tab=matching", permanent: false },
