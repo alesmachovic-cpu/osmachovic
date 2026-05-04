@@ -370,14 +370,36 @@ export default function Portfolio() {
 
       {/* Empty */}
       {!loading && filtered.length === 0 && (
-        <div style={{ textAlign: "center", padding: "80px 20px", background: "var(--bg-surface)", borderRadius: "16px", border: "1px solid var(--border)" }}>
+        <div style={{ textAlign: "center", padding: "60px 20px", background: "var(--bg-surface)", borderRadius: "16px", border: "1px solid var(--border)" }}>
           <div style={{ fontSize: "48px", marginBottom: "16px" }}>🏠</div>
           <div style={{ fontSize: "16px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "6px" }}>
-            {search ? "Žiadne výsledky" : "Portfólio je prázdne"}
+            {items.length === 0 ? "Portfólio je prázdne" : "Žiadne výsledky pre tieto filtre"}
           </div>
-          <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "20px" }}>
-            {search ? "Skús zmeniť vyhľadávanie" : "Zatiaľ žiadne inzeráty v portfóliu"}
+          <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "20px", lineHeight: 1.5 }}>
+            {items.length === 0 ? (
+              "Zatiaľ žiadne inzeráty v portfóliu — vytvor prvý cez kartu klienta."
+            ) : (
+              <>
+                V databáze je <strong>{items.length}</strong> {items.length === 1 ? "nehnuteľnosť" : items.length < 5 ? "nehnuteľnosti" : "nehnuteľností"}, ale aktívne filtre ich vyradili.<br />
+                Aktívne filtre:{" "}
+                {filterStatus && <span>Stav = <strong>{filterStatus}</strong>{" · "}</span>}
+                {filterTyp && <span>Typ = <strong>{filterTyp}</strong>{" · "}</span>}
+                {filterMakler !== "all" && <span>Maklér = <strong>{filterMakler}</strong>{" · "}</span>}
+                {search && <span>Vyhľadávanie = <strong>&quot;{search}&quot;</strong></span>}
+                {!filterStatus && !filterTyp && filterMakler === "all" && !search && <span>(žiadne)</span>}
+              </>
+            )}
           </div>
+          {items.length > 0 && (
+            <button onClick={() => {
+              setSearch(""); setFilterStatus(""); setFilterTyp("");
+              setFilterMakler("all"); setFilterTouched(true);
+            }} style={{
+              padding: "10px 22px", borderRadius: "10px",
+              background: "#374151", color: "#fff", border: "none",
+              fontSize: "13px", fontWeight: 700, cursor: "pointer",
+            }}>🔄 Vyčistiť všetky filtre</button>
+          )}
         </div>
       )}
 
