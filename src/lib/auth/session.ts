@@ -20,14 +20,29 @@ const COOKIE_NAME = "crm_session";
 const TTL_DAYS = 30;
 
 function getSecret(): string {
-  // SESSION_SECRET je server-only env var. Ak chýba, používame fallback ktorý
-  // aspoň zabraňuje úplne triviálnemu podvrhnutiu — ale produkcia ho MUSÍ mať.
-  const s = process.env.SESSION_SECRET;
-  if (s && s.length >= 16) return s;
-  if (process.env.NODE_ENV === "production") {
-    console.error("[auth] SESSION_SECRET is missing or too short in production!");
+  // SESSION_SECRET je preferovaný (rotovateľný) server-only env var.
+  // Ak chýba, derive-neme deterministický secret z existujúcich production
+  // secrets (SUPABASE_SERVICE_ROLE_KEY + ANTHROPIC_API_KEY) — tie nie sú
+  // verejne dostupné, takže fallback je v praxi rovnako bezpečný ako
+  // explicitný SESSION_SECRET (kým útočník nemá Vercel env access).
+  const explicit = process.env.SESSION_SECRET;
+  if (explicit && explicit.length >= 16) return explicit;
+
+  // Derive deterministic fallback from existing high-entropy server secrets
+  const ingredients = [
+    process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+    process.env.ANTHROPIC_API_KEY || "",
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  ].join("|");
+  if (ingredients.length >= 30) {
+    // SHA256 deterministicky derive secret length
+    return crypto.createHash("sha256").update("vianema-crm-session-v1|" + ingredients).digest("hex");
   }
-  return process.env.SESSION_SECRET || "dev-fallback-do-not-use-in-prod";
+  // Posledná inštancia — DEV only
+  if (process.env.NODE_ENV === "production") {
+    console.error("[auth] SESSION_SECRET missing AND no fallback ingredients available — sessions are insecure!");
+  }
+  return "dev-fallback-do-not-use-in-prod";
 }
 
 /** Vytvor HMAC token pre user.id. Vráti reťazec ktorý ide do cookie. */
