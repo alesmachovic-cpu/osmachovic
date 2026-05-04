@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
 /**
  * POST /api/monitor/classify-override
- * Body: { inzerat_id: uuid, typ: 'rk' | 'sukromny', user_id?: string, poznamka?: string }
+ * Body: { inzerat_id: uuid, typ: 'rk' | 'sukromny', poznamka?: string }
  *
- * 1. Aktualizuje monitor_inzeraty.predajca_typ_override + predajca_typ + predajca_typ_method = 'manual'
- * 2. Pridá záznam do rk_directory (telefón + meno + email_domain z popisu) — aby sa
- *    classifier učil pre budúce inzeráty od rovnakého predajcu.
- * 3. Vráti updatedRow + počet ďalších inzerátov ktoré sa preklasifikujú.
- *
- * Bez authu (interný CRM) — TODO: pripojiť na requireUser z Etapy security.
+ * Vyžaduje session (P0 hardening). user_id sa berie zo session.
  */
 export async function POST(req: NextRequest) {
-  let body: { inzerat_id?: string; typ?: string; user_id?: string; poznamka?: string };
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
+  let body: { inzerat_id?: string; typ?: string; poznamka?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 
   const inzeratId = String(body.inzerat_id || "").trim();
@@ -60,19 +59,19 @@ export async function POST(req: NextRequest) {
   const dirRows: Array<Record<string, unknown>> = [];
   if (row.predajca_telefon) {
     dirRows.push({
-      telefon: row.predajca_telefon, typ, pridal_user_id: body.user_id || null, poznamka: body.poznamka || null,
+      telefon: row.predajca_telefon, typ, pridal_user_id: auth.user.id, poznamka: body.poznamka || null,
     });
   }
   if (row.predajca_meno) {
     dirRows.push({
-      meno: row.predajca_meno, typ, pridal_user_id: body.user_id || null, poznamka: body.poznamka || null,
+      meno: row.predajca_meno, typ, pridal_user_id: auth.user.id, poznamka: body.poznamka || null,
     });
   }
   // Extract domain from popis
   const domainMatch = (row.popis || "").match(/[a-z0-9._%+-]+@([a-z0-9.-]+\.[a-z]{2,})/i);
   if (domainMatch) {
     dirRows.push({
-      email_domain: domainMatch[1].toLowerCase(), typ, pridal_user_id: body.user_id || null, poznamka: body.poznamka || null,
+      email_domain: domainMatch[1].toLowerCase(), typ, pridal_user_id: auth.user.id, poznamka: body.poznamka || null,
     });
   }
   let dirAdded = 0;
