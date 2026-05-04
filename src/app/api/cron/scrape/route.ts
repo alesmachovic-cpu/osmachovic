@@ -403,26 +403,39 @@ async function processFilter(
       }
 
       // Načítaj override-y a klasifikácie z minulosti (per portal+external_id)
+      // Defensive: ak migrácia 041 ešte nebola spustená, predajca_typ_override stĺpec
+      // ani rk_directory tabuľka nemusia existovať — všetky chyby ignorujeme.
       const externalIds = allListings.map(l => l.external_id);
       if (externalIds.length > 0) {
-        const { data: existingClass } = await sb
-          .from("monitor_inzeraty")
-          .select("portal, external_id, predajca_typ_override, listed_on_n_portals")
-          .in("external_id", externalIds);
-        (existingClass || []).forEach((r: { portal: string; external_id: string; predajca_typ_override: string | null; listed_on_n_portals: number | null }) => {
-          const key = `${r.portal}:${r.external_id}`;
-          if (r.predajca_typ_override) overrideByExternalId.set(key, r.predajca_typ_override);
-        });
+        try {
+          const { data: existingClass, error } = await sb
+            .from("monitor_inzeraty")
+            .select("portal, external_id, predajca_typ_override, listed_on_n_portals")
+            .in("external_id", externalIds);
+          if (!error) {
+            (existingClass || []).forEach((r: { portal: string; external_id: string; predajca_typ_override: string | null; listed_on_n_portals: number | null }) => {
+              const key = `${r.portal}:${r.external_id}`;
+              if (r.predajca_typ_override) overrideByExternalId.set(key, r.predajca_typ_override);
+            });
+          }
+        } catch { /* migrácia 041 nie je aplikovaná — preskočíme override */ }
       }
 
       // RK directory — telefóny/mená/domény ktoré už sú potvrdené ako RK
-      const { data: rkDir } = await sb
-        .from("rk_directory")
-        .select("telefon, email_domain, meno")
-        .eq("typ", "rk");
-      const rkPhones = new Set((rkDir || []).map((r: { telefon: string | null }) => r.telefon).filter(Boolean) as string[]);
-      const rkNames  = new Set((rkDir || []).map((r: { meno: string | null }) => r.meno).filter(Boolean) as string[]);
-      const rkDomains = new Set((rkDir || []).map((r: { email_domain: string | null }) => r.email_domain).filter(Boolean) as string[]);
+      let rkPhones = new Set<string>();
+      let rkNames = new Set<string>();
+      let rkDomains = new Set<string>();
+      try {
+        const { data: rkDir, error } = await sb
+          .from("rk_directory")
+          .select("telefon, email_domain, meno")
+          .eq("typ", "rk");
+        if (!error && rkDir) {
+          rkPhones = new Set(rkDir.map((r: { telefon: string | null }) => r.telefon).filter(Boolean) as string[]);
+          rkNames = new Set(rkDir.map((r: { meno: string | null }) => r.meno).filter(Boolean) as string[]);
+          rkDomains = new Set(rkDir.map((r: { email_domain: string | null }) => r.email_domain).filter(Boolean) as string[]);
+        }
+      } catch { /* tabuľka rk_directory nie je vytvorená — bez problému */ }
 
       // Klasifikuj každý listing
       for (const listing of allListings) {
@@ -487,11 +500,13 @@ async function processFilter(
       .filter((l) => matchesFilter(l, filter));
     totalFound = filteredListings.length;
 
-    // 3. Upsert do DB — PARALELNE (chunky po 20 aby sme neukatiovali Supabase)
-    const upsertRows = filteredListings.map((listing) => {
+    // 3. Upsert do DB — PARALELNE (chunky po 20 aby sme neukatiovali Supabase).
+    //    Defensive: stĺpce predajca_typ_signals (mig 041) môžu chýbať. Ak prvý
+    //    upsert zlyhá s chybou na chýbajúci stĺpec, zopakujeme ho bez nich.
+    const buildUpsertRow = (listing: typeof filteredListings[number], includeV2: boolean) => {
       const cKey = `${listing.portal}:${listing.external_id}`;
       const cls = classifierResults.get(cKey);
-      return {
+      const base = {
         portal: listing.portal,
         external_id: listing.external_id,
         url: listing.url,
@@ -507,24 +522,42 @@ async function processFilter(
         predajca_meno: listing.predajca_meno,
         predajca_telefon: listing.predajca_telefon,
         predajca_typ: listing.predajca_typ,
-        // Classifier v2 metadata (audit + ML training)
         predajca_typ_confidence: cls?.confidence ?? null,
         predajca_typ_method: cls?.method === "v2" ? (cls.signals.length > 0 ? "rule_v2" : null) : null,
-        predajca_typ_signals: cls ? { signals: cls.signals, raw_score: cls.raw_score, predajca_typ: cls.predajca_typ } : null,
         raw_data: listing.raw_data || {},
         last_seen_at: new Date().toISOString(),
         is_active: true,
       };
-    });
+      if (includeV2 && cls) {
+        return {
+          ...base,
+          predajca_typ_signals: { signals: cls.signals, raw_score: cls.raw_score, predajca_typ: cls.predajca_typ },
+        };
+      }
+      return base;
+    };
+    const upsertRows = filteredListings.map((l) => buildUpsertRow(l, true));
 
     if (upsertRows.length > 0) {
-      const { data, error } = await sb
+      let { data, error } = await sb
         .from("monitor_inzeraty")
         .upsert(upsertRows, {
           onConflict: "portal,external_id",
           ignoreDuplicates: false,
         })
         .select("id, portal, external_id, first_seen_at, last_seen_at");
+
+      // Fallback: ak migrácia 041 ešte nie je aplikovaná → retry bez v2 stĺpcov
+      if (error && /predajca_typ_signals/i.test(error.message)) {
+        console.warn("[scrape] mig 041 not applied — retrying upsert without predajca_typ_signals");
+        const fallbackRows = filteredListings.map((l) => buildUpsertRow(l, false));
+        const retry = await sb
+          .from("monitor_inzeraty")
+          .upsert(fallbackRows, { onConflict: "portal,external_id", ignoreDuplicates: false })
+          .select("id, portal, external_id, first_seen_at, last_seen_at");
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) {
         console.error("[scrape] batch upsert error:", error);

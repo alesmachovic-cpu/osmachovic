@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   // 2) Update predajca_typ + override
   const dbEnum = typ === "rk" ? "firma" : "sukromny"; // legacy DB enum
-  const { error: updErr } = await sb
+  let updRes = await sb
     .from("monitor_inzeraty")
     .update({
       predajca_typ: dbEnum,
@@ -47,7 +47,14 @@ export async function POST(req: NextRequest) {
       predajca_typ_confidence: 1.0,
     })
     .eq("id", inzeratId);
-  if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+  // Defensive: ak migrácia 041 nie je aplikovaná, skús bez predajca_typ_override
+  if (updRes.error && /predajca_typ_override/i.test(updRes.error.message)) {
+    updRes = await sb
+      .from("monitor_inzeraty")
+      .update({ predajca_typ: dbEnum, predajca_typ_method: "manual", predajca_typ_confidence: 1.0 })
+      .eq("id", inzeratId);
+  }
+  if (updRes.error) return NextResponse.json({ error: updRes.error.message }, { status: 500 });
 
   // 3) Pridaj do rk_directory pre training (silentne ignoruj duplikáty cez UNIQUE constraint)
   const dirRows: Array<Record<string, unknown>> = [];
@@ -69,13 +76,19 @@ export async function POST(req: NextRequest) {
     });
   }
   let dirAdded = 0;
+  let dirTableMissing = false;
   if (dirRows.length > 0) {
     // Insertujeme po jednom — UNIQUE constraints na (telefon,typ) a (email_domain,typ)
     // môžu duplikovať, ignorujeme chyby per-row.
     for (const r of dirRows) {
       const { error } = await sb.from("rk_directory").insert(r);
-      if (!error) dirAdded++;
-      // 23505 = unique violation, ignorujeme
+      if (!error) {
+        dirAdded++;
+      } else if (/relation "rk_directory" does not exist|Could not find the table/i.test(error.message)) {
+        dirTableMissing = true;
+        break; // tabuľka neexistuje (mig 041 nie je aplikovaná)
+      }
+      // 23505 = unique violation, ignorujeme — chytí sa per-row
     }
   }
 
@@ -96,8 +109,11 @@ export async function POST(req: NextRequest) {
     inzerat_id: inzeratId,
     new_typ: typ,
     rk_directory_added: dirAdded,
+    rk_directory_missing: dirTableMissing,
     cascade_count: cascadeCount,
-    message: cascadeCount > 0
+    message: dirTableMissing
+      ? "Override zaznamenaný (rk_directory tabuľka ešte nie je vytvorená — spusť migráciu 041)."
+      : cascadeCount > 0
       ? `Override zaznamenaný. ${cascadeCount} ďalších inzerátov sa pri ďalšom scrape preklasifikuje.`
       : "Override zaznamenaný.",
   });
