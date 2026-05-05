@@ -230,7 +230,7 @@ function MonitorContent() {
   }, [viewPortal, viewTyp]);
 
   const loadFiltre = async () => {
-    const res = await fetch("/api/monitor/filtre");
+    const res = await fetch("/api/monitor/filtre", { credentials: "include" });
     const d = await res.json();
     setFiltre(d.filtre || []);
   };
@@ -327,6 +327,7 @@ function MonitorContent() {
     const res = await fetch("/api/monitor/filtre", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(body),
     });
     if (res.ok) {
@@ -343,6 +344,7 @@ function MonitorContent() {
     await fetch("/api/monitor/filtre", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ id: f.id, is_active: !f.is_active }),
     });
     loadFiltre();

@@ -175,7 +175,7 @@ function NotificationsBell() {
     if (!user?.id || loading) return;
     setLoading(true);
     try {
-      const r = await fetch(`/api/notifications?user_id=${encodeURIComponent(user.id)}`);
+      const r = await fetch(`/api/notifications?user_id=${encodeURIComponent(user.id)}`, { credentials: "include" });
       const d = await r.json();
       setNotifs(d.notifications || []);
       setUnread(d.unread || 0);
@@ -207,6 +207,7 @@ function NotificationsBell() {
     fetch("/api/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ user_id: user.id, mark_read: id }),
     }).catch(() => {});
   };
@@ -218,6 +219,7 @@ function NotificationsBell() {
     fetch("/api/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ user_id: user.id, mark_read: "all" }),
     }).catch(() => {});
   };

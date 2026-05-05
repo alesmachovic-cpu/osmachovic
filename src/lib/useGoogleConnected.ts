@@ -11,7 +11,7 @@ export function useGoogleConnected(userId?: string | null): boolean | undefined 
   useEffect(() => {
     if (!userId) { setConnected(undefined); return; }
     let cancelled = false;
-    fetch(`/api/auth/google/status?userId=${encodeURIComponent(userId)}`)
+    fetch(`/api/auth/google/status?userId=${encodeURIComponent(userId)}`, { credentials: "include" })
       .then(r => r.json())
       .then(d => { if (!cancelled) setConnected(!!d?.connected); })
       .catch(() => { if (!cancelled) setConnected(false); });
