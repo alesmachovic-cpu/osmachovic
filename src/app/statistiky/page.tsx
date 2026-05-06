@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo } from "react";
+import React, { Suspense, useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/lib/supabase";
@@ -93,11 +93,12 @@ function Bar({ val, max, color = "var(--accent)" }: { val: number; max: number; 
 }
 
 function PeriodSwitch({ value, onChange, tabs }: { value: Period; onChange: (p: Period) => void; tabs?: Period[] }) {
-  const options: { key: Period; label: string }[] = [
-    { key: "month", label: "Mesiac" },
-    { key: "quarter", label: "Kvartál" },
-    { key: "year", label: "Rok" },
-  ].filter(o => !tabs || tabs.includes(o.key));
+  const allOptions: { key: Period; label: string }[] = [
+    { key: "month" as Period, label: "Mesiac" },
+    { key: "quarter" as Period, label: "Kvartál" },
+    { key: "year" as Period, label: "Rok" },
+  ];
+  const options = allOptions.filter(o => !tabs || tabs.includes(o.key));
   return (
     <div style={{ display: "flex", gap: "4px", background: "var(--bg-elevated)", borderRadius: "8px", padding: "3px" }}>
       {options.map(o => (
