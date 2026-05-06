@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
 import { useAuth } from "@/components/AuthProvider";
 import PreCallBriefModal from "@/components/PreCallBriefModal";
@@ -1041,9 +1042,183 @@ function MonitorContent() {
   );
 }
 
-// TASK 1 — Wrapper s tabmi: Scraping (default) | AI Analýza
-import AnalyzyPage from "@/app/analyzy/page";
+// ── Market Analýza (len trhové dáta, bez portfólio widgetov) ──
 import { Suspense } from "react";
+
+interface MarketSentiment {
+  lokalita: string; typ: string; izby: number | null;
+  active_count: number; median_eur_per_m2: number | null;
+  median_dom: number | null; demand_index: number; price_change_30d_pct: number | null;
+}
+interface MktDisapRow {
+  id: string; disappeared_on: string; estimated_sale_price: number | null;
+  total_days_on_market: number; estimated_discount_pct: number | null;
+  monitor_inzeraty: { lokalita: string | null; typ: string | null; izby: number | null; nazov: string | null } | null;
+}
+
+function MonitorAnalyzaContent() {
+  const [loading, setLoading] = useState(true);
+  const [sentiments, setSentiments] = useState<MarketSentiment[]>([]);
+  const [disappearances, setDisappearances] = useState<MktDisapRow[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from("market_sentiments")
+        .select("lokalita,typ,izby,active_count,median_eur_per_m2,median_dom,demand_index,price_change_30d_pct,sentiment_date")
+        .order("sentiment_date", { ascending: false })
+        .order("demand_index", { ascending: false })
+        .limit(50),
+      supabase.from("monitor_inzeraty_disappearances")
+        .select("id,disappeared_on,estimated_sale_price,total_days_on_market,estimated_discount_pct,monitor_inzeraty(lokalita,typ,izby,nazov)")
+        .eq("classification", "likely_sold")
+        .gte("confidence_score", 0.6)
+        .order("disappeared_on", { ascending: false })
+        .limit(20),
+    ]).then(([{ data: s }, { data: d }]) => {
+      const all = (s ?? []) as Array<MarketSentiment & { sentiment_date: string }>;
+      const latestDate = all[0]?.sentiment_date;
+      setSentiments(latestDate ? all.filter(x => x.sentiment_date === latestDate) : []);
+      setDisappearances((d ?? []) as unknown as MktDisapRow[]);
+      setLoading(false);
+    });
+  }, []);
+
+  const hotSegments = [...sentiments].sort((a, b) => b.demand_index - a.demand_index).slice(0, 5);
+  const coldSegments = [...sentiments].sort((a, b) => a.demand_index - b.demand_index).slice(0, 5);
+
+  if (loading) return <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Načítavam...</div>;
+  if (!sentiments.length && !disappearances.length) return (
+    <div style={{ padding: "60px 40px", textAlign: "center", color: "var(--text-muted)" }}>
+      <div style={{ fontSize: "32px", marginBottom: "12px" }}>📡</div>
+      <div style={{ fontWeight: 600, marginBottom: "6px" }}>Žiadne dáta</div>
+      <div style={{ fontSize: "13px" }}>Spusti scraping vo záložke Scraping — dáta sa objavia automaticky.</div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px", maxWidth: "1000px" }}>
+      <div>
+        <h2 style={{ fontSize: "18px", fontWeight: "700", margin: "0 0 4px", color: "var(--text-primary)" }}>AI Analýza trhu</h2>
+        <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: 0 }}>Segmentová analýza, cenová heatmap a detegované predaje z monitoringu</p>
+      </div>
+
+      {(hotSegments.length > 0 || coldSegments.length > 0) && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+          {hotSegments.length > 0 && (
+            <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", borderLeft: "4px solid #dc2626" }}>
+              <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)", marginBottom: "12px" }}>🔥 Najhorúcejšie segmenty</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {hotSegments.map((s, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>{s.lokalita}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
+                        {s.typ}{s.izby != null ? ` · ${s.izby} izb.` : ""} · {s.active_count} ponúk{s.median_eur_per_m2 ? ` · ${Math.round(s.median_eur_per_m2).toLocaleString("sk")} €/m²` : ""}
+                      </div>
+                    </div>
+                    <div style={{ padding: "6px 12px", borderRadius: "8px", background: "#fee2e2", color: "#991b1b", fontSize: "13px", fontWeight: 800 }}>{s.demand_index}/10</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {coldSegments.length > 0 && (
+            <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", borderLeft: "4px solid #3b82f6" }}>
+              <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)", marginBottom: "12px" }}>❄️ Pomalé segmenty</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {coldSegments.map((s, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>{s.lokalita}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
+                        {s.typ}{s.izby != null ? ` · ${s.izby} izb.` : ""} · {s.active_count} ponúk{s.median_dom != null ? ` · ${s.median_dom} dní na trhu` : ""}
+                      </div>
+                    </div>
+                    <div style={{ padding: "6px 12px", borderRadius: "8px", background: "#dbeafe", color: "#1e40af", fontSize: "13px", fontWeight: 800 }}>{s.demand_index}/10</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {sentiments.length > 0 && (() => {
+        const byDistrict = new Map<string, { lokalita: string; segments: number; medians: number[]; demands: number[] }>();
+        for (const s of sentiments) {
+          if (!s.median_eur_per_m2) continue;
+          const key = s.lokalita.replace(/^Reality\s+/i, "");
+          if (!byDistrict.has(key)) byDistrict.set(key, { lokalita: key, segments: 0, medians: [], demands: [] });
+          const d = byDistrict.get(key)!;
+          d.segments++; d.medians.push(Number(s.median_eur_per_m2)); d.demands.push(Number(s.demand_index));
+        }
+        const districts = Array.from(byDistrict.values()).map(d => ({
+          lokalita: d.lokalita, segments: d.segments,
+          avg_eur_per_m2: Math.round(d.medians.reduce((s, x) => s + x, 0) / d.medians.length),
+          avg_demand: Math.round((d.demands.reduce((s, x) => s + x, 0) / d.demands.length) * 10) / 10,
+        }));
+        if (!districts.length) return null;
+        const maxP = Math.max(...districts.map(d => d.avg_eur_per_m2));
+        const minP = Math.min(...districts.map(d => d.avg_eur_per_m2));
+        const range = maxP - minP || 1;
+        return (
+          <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", borderLeft: "4px solid #7c3aed" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+              <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)" }}>🗺 Cenová heatmap (per lokalita)</div>
+              <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{districts.length} lokalít · {minP.toLocaleString("sk")} – {maxP.toLocaleString("sk")} €/m²</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {districts.sort((a, b) => b.avg_eur_per_m2 - a.avg_eur_per_m2).map(d => {
+                const ratio = (d.avg_eur_per_m2 - minP) / range;
+                const hue = (1 - ratio) * 120;
+                const bg = `hsl(${hue},70%,92%)`; const txt = `hsl(${hue},60%,30%)`;
+                return (
+                  <div key={d.lokalita} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "8px", background: bg }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: txt }}>{d.lokalita}</div>
+                      <div style={{ fontSize: "11px", color: txt, opacity: 0.75 }}>{d.segments} segmentov · demand {d.avg_demand}/10</div>
+                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: 800, color: txt }}>{d.avg_eur_per_m2.toLocaleString("sk")} €/m²</div>
+                    <div style={{ width: "60px", height: "6px", borderRadius: "3px", background: "rgba(0,0,0,0.08)", overflow: "hidden" }}>
+                      <div style={{ width: `${ratio * 100}%`, height: "100%", background: txt, opacity: 0.7 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {disappearances.length > 0 && (
+        <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", borderLeft: "4px solid #16a34a" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)" }}>✅ Detegované predaje (z monitoringu)</div>
+            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Posledných {disappearances.length} · odhad realizačnej ceny</div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {disappearances.slice(0, 8).map(d => (
+              <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: "8px", background: "var(--bg-elevated)", fontSize: "12px" }}>
+                <div style={{ flex: 1, minWidth: 0, marginRight: "10px" }}>
+                  <div style={{ color: "var(--text-primary)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {d.monitor_inzeraty?.lokalita || "—"} · {d.monitor_inzeraty?.typ || "—"}{d.monitor_inzeraty?.izby != null ? ` · ${d.monitor_inzeraty.izby} izb.` : ""}
+                  </div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "11px", marginTop: "1px" }}>
+                    {new Date(d.disappeared_on).toLocaleDateString("sk")} · {d.total_days_on_market} dní na trhu
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ color: "#15803d", fontWeight: 700 }}>{d.estimated_sale_price != null ? `${Math.round(d.estimated_sale_price).toLocaleString("sk")} €` : "—"}</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "10px" }}>{d.estimated_discount_pct != null ? `−${d.estimated_discount_pct}% od pôvodnej` : ""}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const MONITOR_TABS = [
   { key: "scraping", label: "Scraping", icon: "📡" },
@@ -1086,7 +1261,7 @@ function MonitorWrapper() {
       </div>
 
       {tab === "scraping" && <MonitorContent />}
-      {tab === "analyza" && <AnalyzyPage />}
+      {tab === "analyza" && <MonitorAnalyzaContent />}
     </div>
   );
 }

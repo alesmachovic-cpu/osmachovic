@@ -55,7 +55,6 @@ const systemNav = [
   { label: "Google Disk",     href: "/disk",       icon: "💾" },
   { label: "Upozornenia",     href: "/upozornenia", icon: "🔔" },
   { label: "Tím",             href: "/tim",        icon: "👥" },
-  { label: "Manažér",         href: "/manazer",    icon: "📊" },
   { label: "Klientská zóna",  href: "/klientska-zona", icon: "🌐" },
   { label: "Plán systému",    href: "/plan",       icon: "🗺️" },
   { label: "Nastavenia",      href: "/nastavenia", icon: "⚙️" },
