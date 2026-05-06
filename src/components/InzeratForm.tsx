@@ -174,6 +174,13 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
           else merged.pozicia = "vyssie-poschodie";
         }
       }
+      // JSON object polia môžu byť null v starom DB rade — chráň pred crash
+      if (!merged.vykurovanie || typeof merged.vykurovanie !== "object" || Array.isArray(merged.vykurovanie))
+        merged.vykurovanie = { ...defaultForm.vykurovanie };
+      if (!merged.pripojenie || typeof merged.pripojenie !== "object" || Array.isArray(merged.pripojenie))
+        merged.pripojenie = { ...defaultForm.pripojenie };
+      if (!merged.export_portaly || typeof merged.export_portaly !== "object" || Array.isArray(merged.export_portaly))
+        merged.export_portaly = { ...defaultForm.export_portaly };
       return merged;
     }
     // Ak existuje uložený draft (napr. po idle-logout), uprednostni ho pred prefillom.
