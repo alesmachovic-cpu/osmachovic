@@ -1,13 +1,8 @@
 "use client";
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { Klient, Nehnutelnost } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
-import UrlAnalyzeModal from "@/components/UrlAnalyzeModal";
-import PricingEstimateModal from "@/components/PricingEstimateModal";
-import PropertyStoryModal from "@/components/PropertyStoryModal";
-import { useAuth } from "@/components/AuthProvider";
 
 interface MarketSentiment {
   lokalita: string;
@@ -34,26 +29,11 @@ export default function AnalyzyPage() {
 }
 
 function AnalyzyInner() {
-  const { user } = useAuth();
-  const search = useSearchParams();
-  const [pricingModal, setPricingModal] = useState(false);
-  const [storyModal, setStoryModal] = useState(false);
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [nehnutelnosti, setNehnutelnosti] = useState<Nehnutelnost[]>([]);
   const [loading, setLoading] = useState(true);
-  const [urlInput, setUrlInput] = useState("");
-  const [urlModal, setUrlModal] = useState(false);
   const [sentiments, setSentiments] = useState<MarketSentiment[]>([]);
   const [disappearances, setDisappearances] = useState<DisapRow[]>([]);
-
-  // Auto-open URL analyzer ak prišiel cez ?analyze=URL (z monitora)
-  useEffect(() => {
-    const u = search?.get("analyze");
-    if (u && /^https?:\/\//i.test(u)) {
-      setUrlInput(u);
-      setUrlModal(true);
-    }
-  }, [search]);
 
   useEffect(() => {
     Promise.all([
@@ -133,99 +113,6 @@ function AnalyzyInner() {
 
       {loading ? <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Načítavam...</div> : (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-
-          {/* URL Analýza — vlož link z portálu, AI vytiahne dáta + spraví analýzu */}
-          <div style={{
-            background: "linear-gradient(135deg, #1e3a8a 0%, #312e81 100%)",
-            borderRadius: "16px", padding: "20px 24px", color: "#fff",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-              <span style={{ fontSize: "22px" }}>🔍</span>
-              <div>
-                <div style={{ fontSize: "15px", fontWeight: 700 }}>Analýza nehnuteľnosti z URL</div>
-                <div style={{ fontSize: "12px", opacity: 0.75, marginTop: "2px" }}>
-                  Vlož link z nehnutelnosti.sk, reality.sk, bazos.sk, topreality.sk alebo z akéhokoľvek inzerátu
-                </div>
-              </div>
-            </div>
-            <form
-              onSubmit={(e) => { e.preventDefault(); if (urlInput.trim()) setUrlModal(true); }}
-              style={{ display: "flex", gap: "8px", marginTop: "12px" }}
-            >
-              <input
-                type="url"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="https://www.nehnutelnosti.sk/..."
-                style={{
-                  flex: 1, padding: "11px 14px", borderRadius: "10px",
-                  background: "rgba(255,255,255,0.12)",
-                  border: "1px solid rgba(255,255,255,0.18)",
-                  color: "#fff", fontSize: "13px", outline: "none",
-                }}
-              />
-              <button
-                type="submit"
-                disabled={!urlInput.trim() || !/^https?:\/\//i.test(urlInput.trim())}
-                style={{
-                  padding: "11px 22px", borderRadius: "10px",
-                  background: "#fff", color: "#1e3a8a",
-                  border: "none", fontSize: "13px", fontWeight: 700,
-                  cursor: urlInput.trim() && /^https?:\/\//i.test(urlInput.trim()) ? "pointer" : "default",
-                  opacity: urlInput.trim() && /^https?:\/\//i.test(urlInput.trim()) ? 1 : 0.5,
-                }}
-              >
-                Analyzovať
-              </button>
-            </form>
-          </div>
-
-          {/* Cenová kalkulačka + AI Property Story (2 stĺpce) */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-            <div style={{
-              background: "linear-gradient(135deg, #064e3b 0%, #047857 100%)",
-              borderRadius: "16px", padding: "20px 24px", color: "#fff",
-              display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "12px",
-            }}>
-              <div>
-                <div style={{ fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                  💰 Cenová kalkulačka
-                </div>
-                <div style={{ fontSize: "12px", opacity: 0.85, marginTop: "4px" }}>
-                  3 stratégie (agresívna / trhová / aspirational) + DOM predikcia + CMA z reálnych predaných.
-                </div>
-              </div>
-              <button onClick={() => setPricingModal(true)} style={{
-                padding: "10px 18px", borderRadius: "10px",
-                background: "#fff", color: "#064e3b",
-                border: "none", fontSize: "13px", fontWeight: 700, cursor: "pointer",
-                alignSelf: "flex-start",
-              }}>Otvoriť kalkulačku</button>
-            </div>
-
-            <div style={{
-              background: "linear-gradient(135deg, #4338ca 0%, #6366f1 100%)",
-              borderRadius: "16px", padding: "20px 24px", color: "#fff",
-              display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "12px",
-            }}>
-              <div>
-                <div style={{ fontSize: "15px", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
-                  ✨ AI popis pre inzerát
-                </div>
-                <div style={{ fontSize: "12px", opacity: 0.85, marginTop: "4px" }}>
-                  Vyber nehnuteľnosť z portfólia — AI vygeneruje hook, lifestyle, investičnú logiku s číslami z monitora.
-                </div>
-              </div>
-              <button onClick={() => setStoryModal(true)} disabled={nehnutelnosti.length === 0} style={{
-                padding: "10px 18px", borderRadius: "10px",
-                background: "#fff", color: "#4338ca",
-                border: "none", fontSize: "13px", fontWeight: 700,
-                cursor: nehnutelnosti.length === 0 ? "default" : "pointer",
-                opacity: nehnutelnosti.length === 0 ? 0.5 : 1,
-                alignSelf: "flex-start",
-              }}>{nehnutelnosti.length === 0 ? "Žiadne nehnuteľnosti" : "Vygenerovať popis"}</button>
-            </div>
-          </div>
 
           {/* Top stats */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px" }}>
@@ -510,33 +397,6 @@ function AnalyzyInner() {
         </div>
       )}
 
-      {urlModal && (
-        <UrlAnalyzeModal
-          url={urlInput.trim()}
-          onClose={() => setUrlModal(false)}
-        />
-      )}
-      {pricingModal && (
-        <PricingEstimateModal
-          onClose={() => setPricingModal(false)}
-          userId={user?.id}
-        />
-      )}
-      {storyModal && (
-        <PropertyStoryModal
-          onClose={() => setStoryModal(false)}
-          userId={user?.id}
-          nehnutelnosti={nehnutelnosti.map(n => ({
-            id: n.id,
-            nazov: n.nazov,
-            lokalita: n.lokalita,
-            typ_nehnutelnosti: (n as { typ_nehnutelnosti?: string | null }).typ_nehnutelnosti ?? n.typ ?? null,
-            plocha: n.plocha,
-            izby: n.izby,
-            cena: n.cena,
-          }))}
-        />
-      )}
     </div>
   );
 }

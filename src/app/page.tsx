@@ -14,6 +14,8 @@ import NewKlientModal from "@/components/NewKlientModal";
 import ActivityRings from "@/components/ActivityRings";
 import SystemSearch from "@/components/SystemSearch";
 import LinkGoogleBanner from "@/components/LinkGoogleBanner";
+import UrlAnalyzeModal from "@/components/UrlAnalyzeModal";
+import PricingEstimateModal from "@/components/PricingEstimateModal";
 import { useAuth } from "@/components/AuthProvider";
 import { getUserItem, setUserItem } from "@/lib/userStorage";
 import { getMaklerUuid } from "@/lib/maklerMap";
@@ -25,7 +27,7 @@ interface ActivityItem {
   sub: string;
 }
 
-type TileKey = "overenie" | "vyhladavanie" | "ciele" | "prehlad" | "aktivita" | "kalendar" | "pipeline";
+type TileKey = "overenie" | "vyhladavanie" | "ciele" | "prehlad" | "aktivita" | "kalendar" | "pipeline" | "urlanalyza" | "kalkulator";
 
 interface TileConfig {
   key: TileKey;
@@ -41,13 +43,16 @@ const ALL_TILES: TileConfig[] = [
   { key: "kalendar", label: "Kalendár", icon: "📅" },
   { key: "pipeline", label: "Pipeline", icon: "📈" },
   { key: "aktivita", label: "Posledná aktivita", icon: "⏱" },
+  { key: "urlanalyza", label: "Analýza URL", icon: "🔍" },
+  { key: "kalkulator", label: "Cenová kalkulačka", icon: "💰" },
 ];
 
-const DEFAULT_TILES: TileKey[] = ["overenie", "vyhladavanie", "ciele", "prehlad", "kalendar", "pipeline", "aktivita"];
+const DEFAULT_TILES: TileKey[] = ["overenie", "vyhladavanie", "ciele", "prehlad", "urlanalyza", "kalkulator", "kalendar", "pipeline", "aktivita"];
 
 /** Šírka tile-ov v 12-col gride: 4 = 1/3, 6 = 1/2, 12 = celá šírka. */
 const DEFAULT_TILE_WIDTHS: Record<TileKey, number> = {
   overenie: 6, vyhladavanie: 6, ciele: 6, prehlad: 6,
+  urlanalyza: 6, kalkulator: 6,
   kalendar: 12, pipeline: 12, aktivita: 12,
 };
 /** Cyklus veľkostí pri klikaní na resize tlačidlo. */
@@ -412,6 +417,9 @@ export default function Dashboard() {
     naberyTotal: 0, inzeraty: 0, predane: 0, objednavky: 0,
   });
   const [goals, setGoals] = useState({ obrat: 5000, zmluvy: 10, nabery: 20 });
+  const [urlInput, setUrlInput] = useState("");
+  const [urlModal, setUrlModal] = useState(false);
+  const [pricingModal, setPricingModal] = useState(false);
 
   // Tile customization
   const [tiles, setTiles] = useState<TileKey[]>(DEFAULT_TILES);
@@ -836,6 +844,50 @@ export default function Dashboard() {
                 );
               })()}
             </>)}
+            {key === "urlanalyza" && (<>
+              <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Analýza nehnuteľnosti</div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Vlož link z portálu — AI spraví rozbor</div>
+              <form onSubmit={(e) => { e.preventDefault(); if (urlInput.trim()) setUrlModal(true); }} style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  placeholder="https://www.nehnutelnosti.sk/..."
+                  style={{
+                    flex: 1, padding: "10px 14px", background: "var(--bg-elevated)",
+                    border: "1.5px solid var(--border)", borderRadius: "10px",
+                    fontSize: "13px", color: "var(--text-primary)", outline: "none",
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={!urlInput.trim() || !/^https?:\/\//i.test(urlInput.trim())}
+                  style={{
+                    padding: "10px 16px", borderRadius: "10px",
+                    background: "var(--text-primary)", color: "var(--bg-base)",
+                    border: "none", fontSize: "13px", fontWeight: 700,
+                    cursor: urlInput.trim() && /^https?:\/\//i.test(urlInput.trim()) ? "pointer" : "default",
+                    opacity: urlInput.trim() && /^https?:\/\//i.test(urlInput.trim()) ? 1 : 0.4,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Analyzovať
+                </button>
+              </form>
+            </>)}
+            {key === "kalkulator" && (<>
+              <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Cenová kalkulačka</div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px" }}>
+                3 stratégie · DOM predikcia · CMA z reálnych predaných
+              </div>
+              <button onClick={() => setPricingModal(true)} style={{
+                padding: "11px 20px", borderRadius: "10px",
+                background: "var(--text-primary)", color: "var(--bg-base)",
+                border: "none", fontSize: "13px", fontWeight: 700, cursor: "pointer",
+              }}>
+                💰 Otvoriť kalkulačku
+              </button>
+            </>)}
             {key === "aktivita" && (<>
               <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px", display: "block", textDecoration: "none" }}>Posledná aktivita →</Link>
               {loadingActivity && <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "10px 0" }}>Načítavam...</div>}
@@ -872,6 +924,8 @@ export default function Dashboard() {
       </div>
 
       {modal && <NewKlientModal open initialPhone={modalPhone} showTypKlienta defaultTyp="predavajuci" onClose={() => setModal(false)} onSaved={() => { setPhone(""); setFound(null); setChecked(false); loadDashboard(); }} />}
+      {urlModal && <UrlAnalyzeModal url={urlInput.trim()} onClose={() => setUrlModal(false)} />}
+      {pricingModal && <PricingEstimateModal onClose={() => setPricingModal(false)} userId={user?.id} />}
     </div>
   );
 }
