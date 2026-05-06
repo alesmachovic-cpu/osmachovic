@@ -97,12 +97,19 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
             // Ak bootstrap zlyhá, stále setUser → user vidí UI ale guard fetchy
             // budú 401 (lepšie ako stuck loading screen).
             try {
-              await fetch("/api/auth/session-bootstrap", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ user_id: found.id }),
-              });
+              const ctrl = new AbortController();
+              const bsTimeout = setTimeout(() => ctrl.abort(), 1500);
+              try {
+                await fetch("/api/auth/session-bootstrap", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify({ user_id: found.id }),
+                  signal: ctrl.signal,
+                });
+              } finally {
+                clearTimeout(bsTimeout);
+              }
             } catch (e) {
               console.warn("[auth] session-bootstrap failed:", e);
             }
