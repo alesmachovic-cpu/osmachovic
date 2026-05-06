@@ -92,17 +92,21 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         if (savedId) {
           const found = accs.find(a => a.id === savedId);
           if (found) {
+            // Najprv počkaj na bootstrap session cookie, potom setUser →
+            // všetky deti komponenty odštartujú fetch volania až keď cookie existuje.
+            // Ak bootstrap zlyhá, stále setUser → user vidí UI ale guard fetchy
+            // budú 401 (lepšie ako stuck loading screen).
+            try {
+              await fetch("/api/auth/session-bootstrap", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ user_id: found.id }),
+              });
+            } catch (e) {
+              console.warn("[auth] session-bootstrap failed:", e);
+            }
             setUser(found);
-            // P0 SECURITY backward-compat: vystav crm_session HMAC cookie aj pre
-            // legacy localStorage-based prihlásenie (bez tohto by guard endpointy
-            // ako /api/auth/google/status, /api/notifications, /api/monitor/filtre
-            // vracali 401 a UI by ukazovalo "Google nepripojený", prázdne notifikácie atď).
-            fetch("/api/auth/session-bootstrap", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              credentials: "include",
-              body: JSON.stringify({ user_id: found.id }),
-            }).catch(() => {});
           }
         }
       } catch (e) {
