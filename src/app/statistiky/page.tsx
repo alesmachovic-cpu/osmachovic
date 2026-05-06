@@ -1,521 +1,752 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import { Suspense, useState, useEffect, useMemo } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import { supabase } from "@/lib/supabase";
+import { STATUS_LABELS } from "@/lib/database.types";
 
-/* ── Typy ── */
+/* ─────────────────────────── Typy ─────────────────────────── */
+type Period = "month" | "quarter" | "year";
+type TabKey = "celkove" | "pobocky" | "makleri" | "sutaz";
+
 interface Nehnutelnost {
-  id: string;
-  typ_nehnutelnosti: string | null;
-  stav_inzeratu: string | null;
-  cena: number | null;
-  plocha: number | null;
-  lokalita: string | null;
-  created_at: string;
-  makler_id: string | null;
-  makler_email: string | null;
-  makler: string | null;
+  id: string; nazov: string | null; typ_nehnutelnosti: string | null;
+  stav_inzeratu: string | null; cena: number | null; plocha: number | null;
+  lokalita: string | null; created_at: string; updated_at: string | null;
+  makler_id: string | null; makler_email: string | null; makler: string | null;
+  makler_meno: string | null; provizia_hodnota: number | null;
 }
+interface Klient { id: string; status: string; created_at: string; makler_id: string | null; }
+interface Makler { id: string; meno: string; email: string; }
+interface User { id: string; name: string; role: string; email: string; pobocka_id: string | null; }
+interface Pobocka { id: string; nazov: string; mesto: string; }
 
-interface MaklerOption {
-  id: string;
-  meno: string;
-  email: string;
-}
+/* ─────────────────────────── Helpers ─────────────────────────── */
+function fmt(n: number) { return n.toLocaleString("sk"); }
+function fmtEur(n: number) { return n.toLocaleString("sk", { maximumFractionDigits: 0 }) + " €"; }
 
-interface MonthBucket {
-  label: string;
-  count: number;
-}
-
-/* ── Helpers ── */
-function fmt(n: number): string {
-  return n.toLocaleString("sk");
-}
-
-function fmtEur(n: number): string {
-  return n.toLocaleString("sk", { maximumFractionDigits: 0 }) + " €";
-}
-
-function pct(value: number, max: number): number {
-  return max > 0 ? Math.round((value / max) * 100) : 0;
-}
-
-const TYP_LABELS: Record<string, string> = {
-  byt: "Byt",
-  dom: "Dom",
-  pozemok: "Pozemok",
-  garsonka: "Garsónka",
-  "1-izbovy": "1i byt",
-  "2-izbovy": "2i byt",
-  "3-izbovy": "3i byt",
-  "4-izbovy": "4i byt",
-  "rodinny-dom": "Rodinný dom",
-  chata: "Chata",
-  komercny: "Komerčný",
-};
-
-const STAV_CONFIG: Record<string, { label: string; color: string }> = {
-  aktivna: { label: "Aktívna", color: "#34C759" },
-  "aktívny": { label: "Aktívny", color: "#34C759" },
-  pripravujeme: { label: "Pripravujeme", color: "#FF9F0A" },
-  pozastaveny: { label: "Pozastavený", color: "#FF9F0A" },
-  predany: { label: "Predaný", color: "#8E8E93" },
-  archiv: { label: "Archív", color: "#636366" },
-};
-
-const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "Máj", "Jún",
-  "Júl", "Aug", "Sep", "Okt", "Nov", "Dec",
-];
-
-/* ── Shared card style ── */
-const cardStyle: React.CSSProperties = {
-  background: "var(--bg-elevated, #1C1C1E)",
-  borderRadius: 16,
-  padding: "20px 22px",
-  border: "1px solid var(--border, rgba(255,255,255,0.08))",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 500,
-  color: "var(--text-secondary, #8E8E93)",
-  marginBottom: 4,
-  letterSpacing: 0.2,
-};
-
-const bigNumberStyle: React.CSSProperties = {
-  fontSize: 32,
-  fontWeight: 700,
-  color: "var(--text-primary, #F5F5F7)",
-  letterSpacing: -0.5,
-  lineHeight: 1.1,
-};
-
-/* ── Component ── */
-export default function Statistiky() {
-  const { user } = useAuth();
-  const isSuperAdmin = user?.role === "super_admin" || user?.id === "ales";
-  const [allData, setAllData] = useState<Nehnutelnost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [makleri, setMakleri] = useState<MaklerOption[]>([]);
-  const [selectedMakler, setSelectedMakler] = useState<string>("all");
-
-  useEffect(() => {
-    (async () => {
-      const { data: rows } = await supabase
-        .from("nehnutelnosti")
-        .select("id, typ_nehnutelnosti, stav_inzeratu, cena, plocha, lokalita, created_at, makler_id, makler_email, makler");
-      setAllData((rows as Nehnutelnost[]) ?? []);
-      setLoading(false);
-    })();
-    supabase.from("makleri").select("id, meno, email").order("meno").then(({ data: m }) => {
-      if (m) setMakleri(m as MaklerOption[]);
-    });
-  }, []);
-
-  // Filter podľa vybraného makléra (TASK 12)
-  const data = selectedMakler === "all"
-    ? allData
-    : allData.filter(n => {
-        const sel = makleri.find(m => m.id === selectedMakler);
-        if (!sel) return false;
-        return n.makler_id === sel.id
-          || (n.makler_email || "").toLowerCase() === (sel.email || "").toLowerCase()
-          || (n.makler || "").toLowerCase() === sel.meno.toLowerCase();
-      });
-
-  /* ── Computed stats ── */
-  const withPrice = data.filter((n) => n.cena && n.plocha && n.plocha > 0);
-  const avgPriceM2 =
-    withPrice.length > 0
-      ? Math.round(
-          withPrice.reduce((s, n) => s + n.cena! / n.plocha!, 0) /
-            withPrice.length
-        )
-      : 0;
-
-  // Typ breakdown — slugy mapujeme na ľudské labely (Byt / Dom / Pozemok / Komercia / Garáž)
-  const TYPE_LABELS: Record<string, string> = {
-    // Byty
-    "byt": "Byt", "1-izbovy-byt": "Byt", "2-izbovy-byt": "Byt", "3-izbovy-byt": "Byt",
-    "4-izbovy-byt": "Byt", "5-izbovy-byt": "Byt", "6-izbovy-byt": "Byt",
-    "garsonka": "Byt", "loft": "Byt", "mezonet": "Byt",
-    // Domy
-    "dom": "Dom", "rodinny-dom": "Dom", "rodinny_dom": "Dom",
-    "vila": "Dom", "chata": "Dom", "chalupa": "Dom",
-    // Ostatné typy
-    "pozemok": "Pozemok", "stavebny-pozemok": "Pozemok", "zahrada": "Pozemok",
-    "komercia": "Komercia", "kancelaria": "Komercia", "obchodny-priestor": "Komercia",
-    "sklad": "Komercia", "vyrobny-priestor": "Komercia",
-    "garaz": "Garáž", "garazove-stojisko": "Garáž",
-  };
-  function normalizeTyp(raw: string | null | undefined): string {
-    if (!raw) return "Ostatné";
-    const key = String(raw).toLowerCase().trim();
-    return TYPE_LABELS[key] ?? "Ostatné";
-  }
-  const typCounts: Record<string, number> = {};
-  data.forEach((n) => {
-    const t = normalizeTyp(n.typ_nehnutelnosti);
-    typCounts[t] = (typCounts[t] || 0) + 1;
-  });
-  const typEntries = Object.entries(typCounts).sort((a, b) => b[1] - a[1]);
-  const typMax = typEntries.length > 0 ? typEntries[0][1] : 1;
-
-  // Stav breakdown
-  const stavCounts: Record<string, number> = {};
-  data.forEach((n) => {
-    const s = n.stav_inzeratu || "neuvedený";
-    stavCounts[s] = (stavCounts[s] || 0) + 1;
-  });
-  const stavEntries = Object.entries(stavCounts).sort((a, b) => b[1] - a[1]);
-  const stavMax = stavEntries.length > 0 ? stavEntries[0][1] : 1;
-
-  // Price ranges
-  const priceRanges = [
-    { label: "Do 100 000 €", min: 0, max: 100000 },
-    { label: "100 – 200 000 €", min: 100000, max: 200000 },
-    { label: "200 – 500 000 €", min: 200000, max: 500000 },
-    { label: "Nad 500 000 €", min: 500000, max: Infinity },
-  ];
-  const priceBuckets = priceRanges.map((r) => ({
-    ...r,
-    count: data.filter((n) => n.cena !== null && n.cena >= r.min && n.cena < r.max).length,
-  }));
-  const priceMax = Math.max(...priceBuckets.map((b) => b.count), 1);
-
-  // Monthly trend (last 6 months)
+function periodStart(p: Period): Date {
   const now = new Date();
-  const months: MonthBucket[] = [];
+  if (p === "month") return new Date(now.getFullYear(), now.getMonth(), 1);
+  if (p === "quarter") {
+    const q = Math.floor(now.getMonth() / 3);
+    return new Date(now.getFullYear(), q * 3, 1);
+  }
+  return new Date(now.getFullYear(), 0, 1);
+}
+
+function prevPeriodStart(p: Period): Date {
+  const now = new Date();
+  if (p === "month") return new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  if (p === "quarter") {
+    const q = Math.floor(now.getMonth() / 3);
+    return new Date(now.getFullYear(), (q - 1) * 3, 1);
+  }
+  return new Date(now.getFullYear() - 1, 0, 1);
+}
+
+function isDeal(n: Nehnutelnost) {
+  return ["predany", "predaný", "archiv"].includes((n.stav_inzeratu ?? "").toLowerCase());
+}
+
+function dealDate(n: Nehnutelnost) { return new Date(n.updated_at ?? n.created_at); }
+
+function inPeriod(n: Nehnutelnost, from: Date) { return dealDate(n) >= from; }
+
+function avatarInitials(name: string) {
+  return name.split(" ").map(p => p[0]).join("").toUpperCase().slice(0, 2);
+}
+
+/* ─────────────────────────── Shared UI ─────────────────────────── */
+const S = {
+  card: {
+    background: "var(--bg-surface)", border: "1px solid var(--border)",
+    borderRadius: "12px", padding: "18px 20px",
+  } as React.CSSProperties,
+  kpi: {
+    background: "var(--bg-surface)", border: "1px solid var(--border)",
+    borderRadius: "12px", padding: "16px 18px",
+  } as React.CSSProperties,
+  tag: (color: string): React.CSSProperties => ({
+    display: "inline-block", padding: "2px 8px", borderRadius: "6px",
+    fontSize: "11px", fontWeight: 600, background: color + "20", color,
+  }),
+};
+
+function KpiCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
+  return (
+    <div style={S.kpi}>
+      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "6px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      <div style={{ fontSize: "26px", fontWeight: 800, color: color ?? "var(--text-primary)", lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>{sub}</div>}
+    </div>
+  );
+}
+
+function Bar({ val, max, color = "var(--accent)" }: { val: number; max: number; color?: string }) {
+  return (
+    <div style={{ height: "7px", background: "var(--border)", borderRadius: "4px", flex: 1 }}>
+      <div style={{ width: `${max ? Math.min((val / max) * 100, 100) : 0}%`, height: "100%", background: color, borderRadius: "4px", transition: "width 0.4s ease" }} />
+    </div>
+  );
+}
+
+function PeriodSwitch({ value, onChange, tabs }: { value: Period; onChange: (p: Period) => void; tabs?: Period[] }) {
+  const options: { key: Period; label: string }[] = [
+    { key: "month", label: "Mesiac" },
+    { key: "quarter", label: "Kvartál" },
+    { key: "year", label: "Rok" },
+  ].filter(o => !tabs || tabs.includes(o.key));
+  return (
+    <div style={{ display: "flex", gap: "4px", background: "var(--bg-elevated)", borderRadius: "8px", padding: "3px" }}>
+      {options.map(o => (
+        <button key={o.key} onClick={() => onChange(o.key)} style={{
+          padding: "5px 12px", borderRadius: "6px", border: "none", fontSize: "12px", fontWeight: value === o.key ? 700 : 500,
+          background: value === o.key ? "var(--bg-surface)" : "transparent",
+          color: value === o.key ? "var(--text-primary)" : "var(--text-muted)", cursor: "pointer",
+          boxShadow: value === o.key ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+        }}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────── Tab: CELKOVÉ ─────────────────────────── */
+function TabCelkove({ nehnutelnosti, klienti, period, onPeriodChange }: {
+  nehnutelnosti: Nehnutelnost[]; klienti: Klient[]; period: Period; onPeriodChange: (p: Period) => void;
+}) {
+  const from = periodStart(period);
+  const active = nehnutelnosti.filter(n => !isDeal(n));
+  const deals = nehnutelnosti.filter(isDeal);
+  const dealsThisPeriod = deals.filter(n => inPeriod(n, from));
+  const obrat = dealsThisPeriod.reduce((s, n) => s + (n.cena ?? 0), 0);
+  const provizia = dealsThisPeriod.reduce((s, n) => s + (n.provizia_hodnota ?? (n.cena ?? 0) * 0.03), 0);
+  const avgCena = active.length ? active.reduce((s, n) => s + (n.cena ?? 0), 0) / active.length : 0;
+  const klientiThisPeriod = klienti.filter(k => new Date(k.created_at) >= from);
+
+  const portfolioValue = active.reduce((s, n) => s + (n.cena ?? 0), 0);
+  const proviziaMinEstimate = active.reduce((s, n) => s + (n.cena ?? 0) * 0.02, 0);
+  const proviziaMaxEstimate = active.reduce((s, n) => s + (n.cena ?? 0) * 0.04, 0);
+
+  const statusDist = klienti.reduce((acc, k) => { acc[k.status] = (acc[k.status] ?? 0) + 1; return acc; }, {} as Record<string, number>);
+  const typDist = active.reduce((acc, n) => { const t = n.typ_nehnutelnosti || "iný"; acc[t] = (acc[t] ?? 0) + 1; return acc; }, {} as Record<string, number>);
+  const maxStatusCount = Math.max(...Object.values(statusDist), 1);
+  const maxTypCount = Math.max(...Object.values(typDist), 1);
+
+  const months: { label: string; key: string; obrat: number; deals: number }[] = [];
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const year = d.getFullYear();
-    const month = d.getMonth();
-    const count = data.filter((n) => {
-      const c = new Date(n.created_at);
-      return c.getFullYear() === year && c.getMonth() === month;
-    }).length;
-    months.push({ label: MONTH_NAMES[month], count });
+    const d = new Date(); d.setMonth(d.getMonth() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleDateString("sk", { month: "short" });
+    const mDeals = deals.filter(n => (n.updated_at ?? n.created_at).startsWith(key));
+    months.push({ label, key, obrat: mDeals.reduce((s, n) => s + (n.cena ?? 0), 0), deals: mDeals.length });
   }
-  const monthMax = Math.max(...months.map((m) => m.count), 1);
-
-  // Typ color palette
-  const typColors = ["#0A84FF", "#5E5CE6", "#BF5AF2", "#FF375F", "#FF9F0A", "#30D158", "#64D2FF", "#AC8E68"];
-
-  if (loading) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "100vh",
-          color: "var(--text-muted, #636366)",
-          fontSize: 15,
-          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif",
-        }}
-      >
-        Načítavam štatistiky...
-      </div>
-    );
-  }
+  const maxObrat = Math.max(...months.map(m => m.obrat), 1);
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--bg-surface, #000)",
-        padding: "24px 20px 120px",
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif",
-        maxWidth: 960,
-        margin: "0 auto",
-      }}
-    >
-      {/* Header */}
-      <h1
-        style={{
-          fontSize: 28,
-          fontWeight: 700,
-          color: "var(--text-primary, #F5F5F7)",
-          margin: "0 0 4px",
-          letterSpacing: -0.3,
-        }}
-      >
-        Štatistiky nehnuteľností
-      </h1>
-      <p
-        style={{
-          fontSize: 15,
-          color: "var(--text-secondary, #8E8E93)",
-          margin: "0 0 16px",
-        }}
-      >
-        {fmt(data.length)} nehnuteľností {selectedMakler === "all" ? "v databáze" : "pre vybraného makléra"}
-      </p>
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Firemné portfólio a výkon</div>
+        <PeriodSwitch value={period} onChange={onPeriodChange} />
+      </div>
 
-      {/* Filter podľa makléra — len pre super_admina (TASK 12) */}
-      {isSuperAdmin && makleri.length > 0 && (
-        <div style={{ marginBottom: "20px" }}>
-          <select
-            value={selectedMakler}
-            onChange={e => setSelectedMakler(e.target.value)}
-            style={{
-              padding: "9px 30px 9px 12px",
-              background: "var(--bg-surface, #1c1c1e)",
-              border: "1px solid var(--border, #38383A)",
-              borderRadius: "8px",
-              fontSize: "13px",
-              color: "var(--text-primary, #F5F5F7)",
-              cursor: "pointer",
-              outline: "none",
-              appearance: "none" as const,
-              backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right 10px center",
-              minWidth: "220px",
-            }}
-          >
-            <option value="all">Všetci makléri</option>
-            {makleri.map(m => (
-              <option key={m.id} value={m.id}>{m.meno}</option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* KPIs */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+        <KpiCard label="Klienti celkom" value={klienti.length} sub={`+${klientiThisPeriod.length} za obdobie`} color="var(--success)" />
+        <KpiCard label="Aktívne nehn." value={active.length} sub={`Priem. cena ${avgCena ? Math.round(avgCena / 1000) + "k €" : "—"}`} color="var(--warning)" />
+        <KpiCard label="Uzavreté obchody" value={dealsThisPeriod.length} sub="za vybrané obdobie" color="var(--accent)" />
+        <KpiCard label="Obrat za obdobie" value={obrat ? fmtEur(obrat) : "—"} sub={provizia ? `Prov. firmy ~${fmtEur(provizia)}` : undefined} color="var(--purple, #9f5cf7)" />
+      </div>
 
-      {/* Grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-          gap: 16,
-        }}
-      >
-        {/* ── 1. Priemerná cena za m² ── */}
-        <div style={cardStyle}>
-          <div style={labelStyle}>Priemerná cena za m²</div>
-          <div style={bigNumberStyle}>{fmtEur(avgPriceM2)}</div>
-          <div
-            style={{
-              fontSize: 13,
-              color: "var(--text-muted, #636366)",
-              marginTop: 8,
-            }}
-          >
-            Na základe {fmt(withPrice.length)} nehnuteľností s cenou aj plochou
+      {/* Pipeline */}
+      <div style={{ ...S.card, borderLeft: "4px solid var(--success)" }}>
+        <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)", marginBottom: "12px" }}>💰 Pipeline — Potenciálny zisk z aktívneho portfólia</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+          <div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>Celková hodnota</div>
+            <div style={{ fontSize: "22px", fontWeight: 800 }}>{fmtEur(portfolioValue)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>Min. provízia (2 %)</div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "var(--warning)" }}>{fmtEur(proviziaMinEstimate)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "4px" }}>Max. provízia (4 %)</div>
+            <div style={{ fontSize: "22px", fontWeight: 800, color: "var(--success)" }}>{fmtEur(proviziaMaxEstimate)}</div>
           </div>
         </div>
+      </div>
 
-        {/* ── 2. Rozloženie podľa typu ── */}
-        <div style={cardStyle}>
-          <div style={labelStyle}>Rozloženie podľa typu</div>
-          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-            {typEntries.slice(0, 6).map(([typ, count], i) => (
-              <div key={typ}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: 13,
-                    color: "var(--text-primary, #F5F5F7)",
-                    marginBottom: 4,
-                  }}
-                >
-                  <span>{TYP_LABELS[typ] || typ}</span>
-                  <span style={{ color: "var(--text-muted, #636366)" }}>{count}</span>
-                </div>
-                <div
-                  style={{
-                    height: 8,
-                    borderRadius: 4,
-                    background: "var(--border, rgba(255,255,255,0.06))",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      height: "100%",
-                      width: `${pct(count, typMax)}%`,
-                      borderRadius: 4,
-                      background: typColors[i % typColors.length],
-                      transition: "width 0.6s ease",
-                    }}
-                  />
-                </div>
+      {/* Mesačný trend */}
+      <div style={S.card}>
+        <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)", marginBottom: "16px" }}>📈 Trend obratu (6 mesiacov)</div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: "10px", height: "100px" }}>
+          {months.map(m => (
+            <div key={m.key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%" }}>
+              <div style={{ flex: 1, width: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                <div title={`${fmtEur(m.obrat)} · ${m.deals} obchodov`} style={{
+                  width: "100%", background: m.obrat > 0 ? "var(--accent)" : "var(--border)",
+                  borderRadius: "4px 4px 0 0", height: `${Math.max((m.obrat / maxObrat) * 100, m.deals > 0 ? 8 : 2)}%`,
+                }} />
+              </div>
+              <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>{m.label}</div>
+              {m.deals > 0 && <div style={{ fontSize: "9px", color: "var(--text-muted)" }}>{m.deals}×</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+        {/* Klienti by status */}
+        <div style={S.card}>
+          <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px" }}>Klienti podľa statusu</div>
+          {Object.keys(statusDist).length === 0
+            ? <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>Žiadni klienti</div>
+            : Object.entries(statusDist).sort((a, b) => b[1] - a[1]).map(([status, count]) => (
+              <div key={status} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)", minWidth: "130px" }}>{STATUS_LABELS[status as keyof typeof STATUS_LABELS] ?? status}</div>
+                <Bar val={count} max={maxStatusCount} />
+                <div style={{ fontSize: "12px", fontWeight: 600, minWidth: "24px", textAlign: "right" }}>{count}</div>
               </div>
             ))}
-          </div>
         </div>
 
-        {/* ── 3. Rozloženie podľa stavu ── */}
-        <div style={cardStyle}>
-          <div style={labelStyle}>Rozloženie podľa stavu</div>
-          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-            {stavEntries.map(([stav, count]) => {
-              const cfg = STAV_CONFIG[stav] || {
-                label: stav.charAt(0).toUpperCase() + stav.slice(1),
-                color: "#8E8E93",
-              };
+        {/* Portfolio by typ */}
+        <div style={S.card}>
+          <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px" }}>Portfólio podľa typu</div>
+          {Object.keys(typDist).length === 0
+            ? <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>Žiadne nehnuteľnosti</div>
+            : Object.entries(typDist).sort((a, b) => b[1] - a[1]).map(([typ, count]) => (
+              <div key={typ} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)", minWidth: "100px", textTransform: "capitalize" }}>{typ.replace(/-/g, " ")}</div>
+                <Bar val={count} max={maxTypCount} color="var(--success)" />
+                <div style={{ fontSize: "12px", fontWeight: 600, minWidth: "24px", textAlign: "right" }}>{count}</div>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* Top 5 nehn */}
+      {active.length > 0 && (
+        <div style={{ ...S.card, padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", fontWeight: 700, fontSize: "14px" }}>Top nehnuteľnosti v portfóliu</div>
+          {active.sort((a, b) => (b.cena ?? 0) - (a.cena ?? 0)).slice(0, 5).map((n, i, arr) => (
+            <div key={n.id} style={{ display: "grid", gridTemplateColumns: "2fr 1.2fr 1fr 1fr", padding: "12px 20px", borderBottom: i < arr.length - 1 ? "1px solid var(--border-subtle, var(--border))" : "none", alignItems: "center", fontSize: "13px" }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{n.nazov || "—"}</div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{n.lokalita}</div>
+              </div>
+              <div style={{ fontWeight: 700, color: "var(--accent)" }}>{n.cena ? fmtEur(n.cena) : "—"}</div>
+              <div style={{ color: "var(--text-secondary)", textTransform: "capitalize", fontSize: "12px" }}>{n.typ_nehnutelnosti || "—"}</div>
+              <div style={{ color: "var(--success)", fontSize: "12px" }}>~{n.cena ? fmtEur(Math.round(n.cena * 0.03)) : "—"} (3 %)</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────── Tab: POBOČKY ─────────────────────────── */
+function TabPobocky({ nehnutelnosti, klienti, users, pobocky, period, onPeriodChange, userRole, userPobockaId }: {
+  nehnutelnosti: Nehnutelnost[]; klienti: Klient[]; users: User[]; pobocky: Pobocka[];
+  period: Period; onPeriodChange: (p: Period) => void; userRole: string; userPobockaId: string | null;
+}) {
+  const from = periodStart(period);
+  const isManazer = userRole === "manazer";
+
+  type SortKey = "nazov" | "makleri" | "nabery" | "obrat" | "obchody";
+  const [sortKey, setSortKey] = useState<SortKey>("obrat");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [drillPobocka, setDrillPobocka] = useState<string | null>(null);
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  }
+
+  const rows = useMemo(() => pobocky.map(p => {
+    const pobockaUsers = users.filter(u => u.pobocka_id === p.id);
+    const pobockaUserIds = new Set(pobockaUsers.map(u => u.id));
+    const deals = nehnutelnosti.filter(n => isDeal(n) && inPeriod(n, from) && (n.makler_id ? pobockaUserIds.has(n.makler_id) : false));
+    const nabery = klienti.filter(k => new Date(k.created_at) >= from && (k.makler_id ? pobockaUserIds.has(k.makler_id) : false));
+    const obrat = deals.reduce((s, n) => s + (n.cena ?? 0), 0);
+    const provizia = deals.reduce((s, n) => s + (n.provizia_hodnota ?? (n.cena ?? 0) * 0.03), 0);
+    return { ...p, makleriCount: pobockaUsers.length, naberyCount: nabery.length, obchodovCount: deals.length, obrat, provizia };
+  }), [pobocky, users, nehnutelnosti, klienti, from]);
+
+  const sorted = [...rows].sort((a, b) => {
+    const v = sortDir === "asc" ? 1 : -1;
+    if (sortKey === "nazov") return v * a.nazov.localeCompare(b.nazov);
+    if (sortKey === "makleri") return v * (a.makleriCount - b.makleriCount);
+    if (sortKey === "nabery") return v * (a.naberyCount - b.naberyCount);
+    if (sortKey === "obrat") return v * (a.obrat - b.obrat);
+    return v * (a.obchodovCount - b.obchodovCount);
+  });
+
+  const SortTh = ({ k, label }: { k: SortKey; label: string }) => (
+    <th onClick={() => handleSort(k)} style={{ padding: "10px 14px", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", textAlign: k === "nazov" ? "left" : "right", cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>
+      {label}{sortKey === k ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+    </th>
+  );
+
+  const drill = drillPobocka ? rows.find(r => r.id === drillPobocka) : null;
+  const drillMakleri = drill ? users.filter(u => u.pobocka_id === drill.id) : [];
+  const drillDeals = drill ? nehnutelnosti.filter(n => isDeal(n) && inPeriod(n, from) && drillMakleri.some(u => u.id === n.makler_id)) : [];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Porovnanie pobočiek</div>
+        <PeriodSwitch value={period} onChange={onPeriodChange} />
+      </div>
+
+      {drillPobocka && drill ? (
+        <div>
+          <button onClick={() => setDrillPobocka(null)} style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: "13px", fontWeight: 600, marginBottom: "16px", padding: 0 }}>
+            ← Späť na prehľad
+          </button>
+          <div style={{ ...S.card, marginBottom: "16px" }}>
+            <div style={{ fontWeight: 700, fontSize: "16px", marginBottom: "4px" }}>{drill.nazov}</div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px" }}>{drill.mesto}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+              <KpiCard label="Makléri" value={drill.makleriCount} />
+              <KpiCard label="Nábery" value={drill.naberyCount} sub="za obdobie" />
+              <KpiCard label="Obchody" value={drill.obchodovCount} sub="za obdobie" />
+              <KpiCard label="Obrat" value={drill.obrat ? fmtEur(drill.obrat) : "—"} sub={drill.provizia ? `Prov. ~${fmtEur(drill.provizia)}` : undefined} color="var(--success)" />
+            </div>
+          </div>
+          <div style={{ ...S.card, padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", fontWeight: 600, fontSize: "13px" }}>Makléri pobočky</div>
+            {drillMakleri.length === 0 ? <div style={{ padding: "16px", color: "var(--text-muted)", fontSize: "13px" }}>Žiadni makléri</div> : drillMakleri.map((u, i) => {
+              const uDeals = drillDeals.filter(n => n.makler_id === u.id);
+              const uObrat = uDeals.reduce((s, n) => s + (n.cena ?? 0), 0);
               return (
-                <div key={stav}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: 13,
-                      color: "var(--text-primary, #F5F5F7)",
-                      marginBottom: 4,
-                    }}
-                  >
-                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          background: cfg.color,
-                          display: "inline-block",
-                          flexShrink: 0,
-                        }}
-                      />
-                      {cfg.label}
-                    </span>
-                    <span style={{ color: "var(--text-muted, #636366)" }}>{count}</span>
+                <div key={u.id} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", borderBottom: i < drillMakleri.length - 1 ? "1px solid var(--border)" : "none", fontSize: "13px" }}>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>{avatarInitials(u.name || u.email)}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600 }}>{u.name || u.email}</div>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{u.role}</div>
                   </div>
-                  <div
-                    style={{
-                      height: 8,
-                      borderRadius: 4,
-                      background: "var(--border, rgba(255,255,255,0.06))",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${pct(count, stavMax)}%`,
-                        borderRadius: 4,
-                        background: cfg.color,
-                        transition: "width 0.6s ease",
-                      }}
-                    />
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 700 }}>{uDeals.length} obchodov</div>
+                    <div style={{ fontSize: "11px", color: "var(--success)" }}>{uObrat ? fmtEur(uObrat) : "—"}</div>
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
-
-        {/* ── 4. Cenová mapa ── */}
-        <div style={cardStyle}>
-          <div style={labelStyle}>Cenová mapa</div>
-          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-            {priceBuckets.map((bucket) => (
-              <div key={bucket.label}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    fontSize: 13,
-                    color: "var(--text-primary, #F5F5F7)",
-                    marginBottom: 4,
-                  }}
-                >
-                  <span>{bucket.label}</span>
-                  <span style={{ color: "var(--text-muted, #636366)" }}>{bucket.count}</span>
-                </div>
-                <div
-                  style={{
-                    height: 8,
-                    borderRadius: 4,
-                    background: "var(--border, rgba(255,255,255,0.06))",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      height: "100%",
-                      width: `${pct(bucket.count, priceMax)}%`,
-                      borderRadius: 4,
-                      background: "var(--accent, #0A84FF)",
-                      transition: "width 0.6s ease",
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+      ) : (
+        <div style={{ ...S.card, padding: 0, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <SortTh k="nazov" label="Pobočka" />
+                <SortTh k="makleri" label="Makléri" />
+                <SortTh k="nabery" label="Nábery" />
+                <SortTh k="obchody" label="Obchody" />
+                <SortTh k="obrat" label="Obrat" />
+                {(userRole === "super_admin" || userRole === "majitel") && <th style={{ padding: "10px 14px", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", textAlign: "right" }}>Provízia</th>}
+                <th style={{ padding: "10px 14px" }} />
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.filter(r => isManazer ? r.id === userPobockaId : true).map((r, i) => {
+                const canDrill = userRole === "super_admin" || userRole === "majitel" || (isManazer && r.id === userPobockaId);
+                return (
+                  <tr key={r.id} style={{ borderBottom: i < sorted.length - 1 ? "1px solid var(--border)" : "none", background: isManazer && r.id === userPobockaId ? "var(--bg-elevated)" : "transparent" }}>
+                    <td style={{ padding: "12px 14px", fontWeight: 600, fontSize: "13px" }}>
+                      <div>{r.nazov}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 400 }}>{r.mesto}</div>
+                    </td>
+                    <td style={{ padding: "12px 14px", textAlign: "right", fontSize: "13px" }}>{r.makleriCount}</td>
+                    <td style={{ padding: "12px 14px", textAlign: "right", fontSize: "13px" }}>{r.naberyCount}</td>
+                    <td style={{ padding: "12px 14px", textAlign: "right", fontSize: "13px", fontWeight: 600 }}>{r.obchodovCount}</td>
+                    <td style={{ padding: "12px 14px", textAlign: "right", fontSize: "13px", fontWeight: 700, color: "var(--accent)" }}>{r.obrat ? fmtEur(r.obrat) : "—"}</td>
+                    {(userRole === "super_admin" || userRole === "majitel") && <td style={{ padding: "12px 14px", textAlign: "right", fontSize: "13px", color: "var(--success)" }}>{r.provizia ? fmtEur(r.provizia) : "—"}</td>}
+                    <td style={{ padding: "12px 14px", textAlign: "right" }}>
+                      {canDrill && <button onClick={() => setDrillPobocka(r.id)} style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "6px", padding: "4px 10px", fontSize: "12px", cursor: "pointer", color: "var(--text-primary)" }}>Detail →</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
+      )}
+    </div>
+  );
+}
 
-        {/* ── 5. Trend nových nehnuteľností ── */}
-        <div style={{ ...cardStyle, gridColumn: "1 / -1" }}>
-          <div style={labelStyle}>Nové nehnuteľnosti za posledných 6 mesiacov</div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-end",
-              gap: 12,
-              marginTop: 16,
-              height: 140,
-              paddingBottom: 24,
-              position: "relative",
-            }}
-          >
-            {months.map((m) => (
-              <div
-                key={m.label}
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  height: "100%",
-                  justifyContent: "flex-end",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "var(--text-primary, #F5F5F7)",
-                    marginBottom: 6,
-                  }}
-                >
-                  {m.count > 0 ? m.count : ""}
-                </span>
-                <div
-                  style={{
-                    width: "100%",
-                    maxWidth: 48,
-                    borderRadius: 8,
-                    background:
-                      m.count === monthMax
-                        ? "var(--accent, #0A84FF)"
-                        : "rgba(10, 132, 255, 0.35)",
-                    height: `${pct(m.count, monthMax)}%`,
-                    minHeight: m.count > 0 ? 6 : 2,
-                    transition: "height 0.6s ease",
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: "var(--text-muted, #636366)",
-                    marginTop: 8,
-                    position: "absolute",
-                    bottom: 0,
-                  }}
-                >
-                  {m.label}
-                </span>
-              </div>
-            ))}
-          </div>
+/* ─────────────────────────── Tab: MAKLÉRI ─────────────────────────── */
+function TabMakleri({ nehnutelnosti, klienti, users, pobocky, period, onPeriodChange, currentUser }: {
+  nehnutelnosti: Nehnutelnost[]; klienti: Klient[]; users: User[]; pobocky: Pobocka[];
+  period: Period; onPeriodChange: (p: Period) => void; currentUser: { id: string; role: string; pobocka_id?: string | null };
+}) {
+  const from = periodStart(period);
+  const isMakler = currentUser.role === "makler";
+  const isManazer = currentUser.role === "manazer";
+
+  const visibleUsers = useMemo(() => {
+    if (isMakler) return users.filter(u => u.id === currentUser.id);
+    if (isManazer) return users.filter(u => u.pobocka_id === currentUser.pobocka_id);
+    return users;
+  }, [users, currentUser, isMakler, isManazer]);
+
+  const [selectedId, setSelectedId] = useState<string>(() => isMakler ? currentUser.id : "");
+
+  const selected = selectedId ? visibleUsers.find(u => u.id === selectedId) : null;
+
+  const statForUser = (u: User) => {
+    const uDeals = nehnutelnosti.filter(n => isDeal(n) && inPeriod(n, from) && n.makler_id === u.id);
+    const uNabery = klienti.filter(k => new Date(k.created_at) >= from && k.makler_id === u.id);
+    const uAllKlienti = klienti.filter(k => k.makler_id === u.id);
+    const obrat = uDeals.reduce((s, n) => s + (n.cena ?? 0), 0);
+    const provizia = uDeals.reduce((s, n) => s + (n.provizia_hodnota ?? (n.cena ?? 0) * 0.03), 0);
+    return { nabery: uNabery.length, obchody: uDeals.length, obrat, provizia, klientiCelkom: uAllKlienti.length, konverzia: uAllKlienti.length > 0 ? Math.round((uDeals.length / uAllKlienti.length) * 100) : 0 };
+  };
+
+  const teamAvg = useMemo(() => {
+    if (visibleUsers.length === 0) return { nabery: 0, obchody: 0, obrat: 0 };
+    const stats = visibleUsers.map(statForUser);
+    return {
+      nabery: Math.round(stats.reduce((s, x) => s + x.nabery, 0) / stats.length),
+      obchody: Math.round(stats.reduce((s, x) => s + x.obchody, 0) / stats.length),
+      obrat: stats.reduce((s, x) => s + x.obrat, 0) / stats.length,
+    };
+  }, [visibleUsers, nehnutelnosti, klienti, from]);
+
+  const selStat = selected ? statForUser(selected) : null;
+  const pobocka = selected ? pobocky.find(p => p.id === selected.pobocka_id) : null;
+
+  const uMonths: { label: string; key: string; nabery: number; obchody: number }[] = [];
+  if (selected) {
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(); d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString("sk", { month: "short" });
+      uMonths.push({
+        label, key,
+        nabery: klienti.filter(k => k.makler_id === selected.id && k.created_at.startsWith(key)).length,
+        obchody: nehnutelnosti.filter(n => isDeal(n) && n.makler_id === selected.id && (n.updated_at ?? n.created_at).startsWith(key)).length,
+      });
+    }
+  }
+  const maxMonth = Math.max(...uMonths.map(m => Math.max(m.nabery, m.obchody)), 1);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {!isMakler && (
+            <select value={selectedId} onChange={e => setSelectedId(e.target.value)} style={{ padding: "6px 10px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px" }}>
+              <option value="">— Vyber makléra —</option>
+              {visibleUsers.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}
+            </select>
+          )}
+          {!selectedId && !isMakler && <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Vyber makléra pre detail</span>}
         </div>
+        <PeriodSwitch value={period} onChange={onPeriodChange} />
+      </div>
+
+      {selStat && selected ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", fontWeight: 800, color: "#fff" }}>{avatarInitials(selected.name || selected.email)}</div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "16px" }}>{selected.name || selected.email}</div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{pobocka?.nazov ?? "—"} · {selected.role}</div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+            <KpiCard label="Nábery" value={selStat.nabery} sub={`Priem. tímu: ${teamAvg.nabery}`} color={selStat.nabery >= teamAvg.nabery ? "var(--success)" : "var(--warning)"} />
+            <KpiCard label="Obchody" value={selStat.obchody} sub={`Priem. tímu: ${teamAvg.obchody}`} color={selStat.obchody >= teamAvg.obchody ? "var(--success)" : "var(--warning)"} />
+            <KpiCard label="Obrat" value={selStat.obrat ? fmtEur(selStat.obrat) : "—"} sub={`Prov. ~${fmtEur(selStat.provizia)}`} color="var(--accent)" />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <KpiCard label="Klienti celkom" value={selStat.klientiCelkom} />
+            <KpiCard label="Konverzia klient → obchod" value={selStat.konverzia + " %"} color={selStat.konverzia >= 30 ? "var(--success)" : undefined} />
+          </div>
+
+          {uMonths.length > 0 && (
+            <div style={S.card}>
+              <div style={{ fontWeight: 700, fontSize: "13px", marginBottom: "14px" }}>Trend makléra (6 mesiacov)</div>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", height: "80px" }}>
+                {uMonths.map(m => (
+                  <div key={m.key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%" }}>
+                    <div style={{ flex: 1, width: "100%", display: "flex", alignItems: "flex-end", gap: "2px" }}>
+                      <div style={{ flex: 1, background: "var(--accent)", opacity: 0.7, borderRadius: "3px 3px 0 0", height: `${Math.max((m.nabery / maxMonth) * 100, m.nabery > 0 ? 8 : 0)}%` }} title={`${m.nabery} náberov`} />
+                      <div style={{ flex: 1, background: "var(--success)", borderRadius: "3px 3px 0 0", height: `${Math.max((m.obchody / maxMonth) * 100, m.obchody > 0 ? 8 : 0)}%` }} title={`${m.obchody} obchodov`} />
+                    </div>
+                    <div style={{ fontSize: "9px", color: "var(--text-muted)", marginTop: "3px" }}>{m.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "10px", color: "var(--text-muted)" }}><div style={{ width: "10px", height: "10px", borderRadius: "2px", background: "var(--accent)", opacity: 0.7 }} /> Nábery</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "10px", color: "var(--text-muted)" }}><div style={{ width: "10px", height: "10px", borderRadius: "2px", background: "var(--success)" }} /> Obchody</div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : !isMakler ? (
+        <div style={{ ...S.card, textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>
+          Vyber makléra zo zoznamu pre zobrazenie detailu.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ─────────────────────────── Tab: SÚŤAŽ ─────────────────────────── */
+const MEDAL_COLORS = ["#FFD700", "#C0C0C0", "#CD7F32"];
+const MEDAL_EMOJI = ["🥇", "🥈", "🥉"];
+
+function TabSutaz({ nehnutelnosti, klienti, users, pobocky, period, onPeriodChange, currentUser }: {
+  nehnutelnosti: Nehnutelnost[]; klienti: Klient[]; users: User[]; pobocky: Pobocka[];
+  period: Period; onPeriodChange: (p: Period) => void;
+  currentUser: { id: string; role: string };
+}) {
+  const from = periodStart(period);
+  const prevFrom = prevPeriodStart(period);
+
+  const rows = useMemo(() => {
+    return users.map(u => {
+      const uDeals = nehnutelnosti.filter(n => isDeal(n) && inPeriod(n, from) && n.makler_id === u.id);
+      const uPrevDeals = nehnutelnosti.filter(n => isDeal(n) && dealDate(n) >= prevFrom && dealDate(n) < from && n.makler_id === u.id);
+      const obrat = uDeals.reduce((s, n) => s + (n.cena ?? 0), 0);
+      const prevObrat = uPrevDeals.reduce((s, n) => s + (n.cena ?? 0), 0);
+      const provizia = uDeals.length > 0 ? uDeals.reduce((s, n) => s + (n.provizia_hodnota ?? (n.cena ?? 0) * 0.03), 0) / uDeals.length : 0;
+      const nabery = klienti.filter(k => new Date(k.created_at) >= from && k.makler_id === u.id).length;
+      const zmena = prevObrat > 0 ? Math.round(((obrat - prevObrat) / prevObrat) * 100) : null;
+      return { user: u, obrat, provizia, obchodov: uDeals.length, nabery, zmena };
+    }).sort((a, b) => b.obrat - a.obrat);
+  }, [users, nehnutelnosti, klienti, from, prevFrom]);
+
+  // Badges
+  const badges = useMemo(() => {
+    const maklarMesiaca = rows[0];
+    const najvacsiObchod = (() => {
+      let best: Nehnutelnost | null = null;
+      for (const n of nehnutelnosti.filter(x => isDeal(x) && inPeriod(x, from))) {
+        if (!best || (n.provizia_hodnota ?? 0) > (best.provizia_hodnota ?? 0)) best = n;
+      }
+      return best ? users.find(u => u.id === best!.makler_id) : null;
+    })();
+    const najvacsiNaber = [...rows].sort((a, b) => b.nabery - a.nabery)[0];
+    const najvacsiSkok = rows.filter(r => r.zmena !== null).sort((a, b) => (b.zmena ?? 0) - (a.zmena ?? 0))[0];
+    return { maklarMesiaca, najvacsiObchod, najvacsiNaber, najvacsiSkok };
+  }, [rows, nehnutelnosti, users, from]);
+
+  const pobockaName = (u: User) => pobocky.find(p => p.id === u.pobocka_id)?.nazov ?? "";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Rebríček maklérov — celofiremný</div>
+        <PeriodSwitch value={period} onChange={onPeriodChange} />
+      </div>
+
+      {/* Badges */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px" }}>
+        {[
+          { icon: "🏆", title: `Maklér ${period === "month" ? "mesiaca" : period === "quarter" ? "kvartálu" : "roka"}`, who: badges.maklarMesiaca?.user },
+          { icon: "💰", title: "Najväčší obchod", who: badges.najvacsiObchod },
+          { icon: "📈", title: "Najviac náberov", who: badges.najvacsiNaber?.user },
+          { icon: "🚀", title: "Najväčší skok", who: badges.najvacsiSkok?.user, sub: badges.najvacsiSkok?.zmena != null ? `+${badges.najvacsiSkok.zmena} %` : undefined },
+        ].map(b => (
+          <div key={b.title} style={{ ...S.card, textAlign: "center", padding: "14px 12px" }}>
+            <div style={{ fontSize: "22px", marginBottom: "4px" }}>{b.icon}</div>
+            <div style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: "4px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>{b.title}</div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-primary)" }}>{b.who ? (b.who.name || b.who.email).split(" ")[0] : "—"}</div>
+            {b.sub && <div style={{ fontSize: "11px", color: "var(--success)", marginTop: "2px" }}>{b.sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {/* Leaderboard table */}
+      <div style={{ ...S.card, padding: 0, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <th style={{ padding: "10px 16px", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", textAlign: "center", width: "44px" }}>#</th>
+              <th style={{ padding: "10px 12px", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", textAlign: "left" }}>Maklér</th>
+              <th style={{ padding: "10px 12px", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", textAlign: "right" }}>Obrat</th>
+              <th style={{ padding: "10px 12px", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", textAlign: "right" }}>Priem. prov. firmy</th>
+              <th style={{ padding: "10px 12px", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", textAlign: "right" }}>Obchody</th>
+              <th style={{ padding: "10px 12px", fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", textAlign: "right" }}>Zmena</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const isMe = r.user.id === currentUser.id;
+              const top3 = i < 3 && r.obrat > 0;
+              return (
+                <tr key={r.user.id} style={{
+                  borderBottom: i < rows.length - 1 ? "1px solid var(--border)" : "none",
+                  background: isMe ? "var(--accent)18" : top3 ? MEDAL_COLORS[i] + "08" : "transparent",
+                }}>
+                  <td style={{ padding: "12px 16px", textAlign: "center", fontWeight: 800, fontSize: top3 ? "16px" : "13px", color: top3 ? MEDAL_COLORS[i] : "var(--text-muted)" }}>
+                    {top3 && r.obrat > 0 ? MEDAL_EMOJI[i] : i + 1}
+                  </td>
+                  <td style={{ padding: "12px 12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: top3 ? MEDAL_COLORS[i] + "40" : "var(--bg-elevated)", border: `2px solid ${top3 ? MEDAL_COLORS[i] : "var(--border)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 700, flexShrink: 0 }}>
+                        {avatarInitials(r.user.name || r.user.email)}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
+                          {r.user.name || r.user.email}
+                          {isMe && <span style={S.tag("var(--accent)")}>Ty</span>}
+                        </div>
+                        <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{pobockaName(r.user)}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ padding: "12px 12px", textAlign: "right", fontWeight: 700, fontSize: "13px", color: r.obrat > 0 ? "var(--text-primary)" : "var(--text-muted)" }}>
+                    {r.obrat > 0 ? fmtEur(r.obrat) : "—"}
+                  </td>
+                  <td style={{ padding: "12px 12px", textAlign: "right", fontSize: "13px", color: r.provizia > 0 ? "var(--success)" : "var(--text-muted)" }}>
+                    {r.provizia > 0 ? fmtEur(r.provizia) : "—"}
+                  </td>
+                  <td style={{ padding: "12px 12px", textAlign: "right", fontSize: "13px", fontWeight: 600 }}>
+                    {r.obchodov > 0 ? r.obchodov : "—"}
+                  </td>
+                  <td style={{ padding: "12px 12px", textAlign: "right", fontSize: "12px", fontWeight: 600, color: r.zmena == null ? "var(--text-muted)" : r.zmena > 0 ? "var(--success)" : r.zmena < 0 ? "#ef4444" : "var(--text-muted)" }}>
+                    {r.zmena == null ? "—" : r.zmena > 0 ? `↑ +${r.zmena} %` : r.zmena < 0 ? `↓ ${r.zmena} %` : "→ 0 %"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
+  );
+}
+
+/* ─────────────────────────── Hlavná stránka ─────────────────────────── */
+const TABS: { key: TabKey; label: string; icon: string }[] = [
+  { key: "celkove", label: "Celkové", icon: "📊" },
+  { key: "pobocky", label: "Pobočky", icon: "🏢" },
+  { key: "makleri", label: "Makléri", icon: "👤" },
+  { key: "sutaz", label: "Súťaž", icon: "🏆" },
+];
+
+function StatistikyInner() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
+  const rawTab = sp.get("tab") as TabKey | null;
+  const tab: TabKey = TABS.find(t => t.key === rawTab)?.key ?? "celkove";
+
+  const role = user?.role ?? "makler";
+  const isMakler = role === "makler";
+  const isManazer = role === "manazer";
+  const isElevated = role === "super_admin" || role === "majitel";
+
+  // Default period: Súťaž → rok, ostatné → mesiac
+  const [period, setPeriod] = useState<Period>(tab === "sutaz" ? "year" : "month");
+
+  // Pri zmene tabu reset period
+  function goTab(k: TabKey) {
+    setPeriod(k === "sutaz" ? "year" : "month");
+    router.push(`${pathname}?tab=${k}`);
+  }
+
+  // Data
+  const [loading, setLoading] = useState(true);
+  const [nehnutelnosti, setNehnutelnosti] = useState<Nehnutelnost[]>([]);
+  const [klienti, setKlienti] = useState<Klient[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [pobocky, setPobocky] = useState<Pobocka[]>([]);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      supabase.from("nehnutelnosti").select("id, nazov, typ_nehnutelnosti, stav_inzeratu, cena, plocha, lokalita, created_at, updated_at, makler_id, makler_email, makler, provizia_hodnota"),
+      supabase.from("klienti").select("id, status, created_at, makler_id"),
+      supabase.from("users").select("id, name, role, email, pobocka_id"),
+      supabase.from("pobocky").select("id, nazov, mesto").order("nazov"),
+    ]).then(([nh, kl, us, po]) => {
+      setNehnutelnosti((nh.data ?? []) as Nehnutelnost[]);
+      setKlienti((kl.data ?? []) as Klient[]);
+      setUsers((us.data ?? []) as User[]);
+      setPobocky((po.data ?? []) as Pobocka[]);
+      setLoading(false);
+    });
+  }, []);
+
+  // RBAC: skryté taby
+  const visibleTabs = TABS.filter(t => {
+    if (t.key === "celkove" && isMakler) return false;
+    if (t.key === "pobocky" && isMakler) return false;
+    return true;
+  });
+
+  // Ensure tab is visible
+  const activeTab: TabKey = visibleTabs.find(t => t.key === tab)?.key ?? visibleTabs[0]?.key ?? "sutaz";
+
+  const currentUser = { id: user?.id ?? "", role, pobocka_id: (user as unknown as User)?.pobocka_id ?? null };
+
+  return (
+    <div style={{ maxWidth: "1100px" }}>
+      {/* Header */}
+      <div style={{ marginBottom: "20px" }}>
+        <h2 style={{ fontSize: "20px", fontWeight: 700, margin: "0 0 4px", color: "var(--text-primary)" }}>Štatistiky</h2>
+        <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: 0 }}>Výkon firmy, pobočiek a maklérov</p>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: "4px", marginBottom: "24px", borderBottom: "1px solid var(--border)" }}>
+        {visibleTabs.map(t => {
+          const active = t.key === activeTab;
+          return (
+            <button key={t.key} onClick={() => goTab(t.key)} style={{
+              padding: "10px 18px", borderRadius: "10px 10px 0 0", border: "none",
+              background: active ? "var(--bg-elevated)" : "transparent",
+              color: active ? "var(--text-primary)" : "var(--text-muted)",
+              fontSize: "13px", fontWeight: active ? 700 : 500, cursor: "pointer",
+              borderBottom: active ? "2px solid var(--accent, #3B82F6)" : "2px solid transparent",
+              transition: "all 0.15s",
+            }}>
+              <span style={{ marginRight: "6px" }}>{t.icon}</span>{t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "60px", color: "var(--text-muted)", fontSize: "14px" }}>Načítavam...</div>
+      ) : (
+        <>
+          {activeTab === "celkove" && !isMakler && (
+            <TabCelkove nehnutelnosti={nehnutelnosti} klienti={klienti} period={period} onPeriodChange={setPeriod} />
+          )}
+          {activeTab === "pobocky" && !isMakler && (
+            <TabPobocky nehnutelnosti={nehnutelnosti} klienti={klienti} users={users} pobocky={pobocky} period={period} onPeriodChange={setPeriod} userRole={role} userPobockaId={currentUser.pobocka_id} />
+          )}
+          {activeTab === "makleri" && (
+            <TabMakleri nehnutelnosti={nehnutelnosti} klienti={klienti} users={users} pobocky={pobocky} period={period} onPeriodChange={setPeriod} currentUser={currentUser} />
+          )}
+          {activeTab === "sutaz" && (
+            <TabSutaz nehnutelnosti={nehnutelnosti} klienti={klienti} users={users} pobocky={pobocky} period={period} onPeriodChange={setPeriod} currentUser={currentUser} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function StatistikyPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>Načítavam...</div>}>
+      <StatistikyInner />
+    </Suspense>
   );
 }
