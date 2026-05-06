@@ -3,6 +3,33 @@
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
 import { detectFirma } from "./shared";
 
+/**
+ * Stiahne detail stránku reality.sk a zistí či inzerát patrí realitke.
+ * Spoľahlivý DOM signál: prítomnosť linky na profil RK
+ *   /realitna-kancelaria/<slug>/<UUID>/
+ * Ak link existuje → RK (firma). Ak nie → kandidát na súkromného.
+ */
+export async function fetchRealitySkIsAgency(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "sk-SK,sk;q=0.9",
+      },
+    });
+    if (!res.ok) return false;
+    const html = await res.text();
+    return /href="[^"]*\/realitna-kancelaria\/[^"]*"/.test(html);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 const PORTAL = "reality.sk";
 const BASE_URL = "https://www.reality.sk";
 

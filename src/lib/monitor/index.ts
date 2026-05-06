@@ -1,7 +1,7 @@
 /* ── Realitný Monitor — hlavná orchestrácia ── */
 
 export { nehnutelnostiSkParser, fetchNehnDetailInfo } from "./parsers/nehnutelnosti-sk";
-export { realitySkParser } from "./parsers/reality-sk";
+export { realitySkParser, fetchRealitySkIsAgency } from "./parsers/reality-sk";
 export { toprealitySkParser } from "./parsers/topreality-sk";
 export { bazosSkParser, isBazosListingFirma } from "./parsers/bazos-sk";
 export { bytySkParser } from "./parsers/byty-sk";

@@ -6,6 +6,7 @@ import {
   PORTALS_NO_SCRAPINGBEE,
   fetchPage,
   fetchNehnDetailInfo,
+  fetchRealitySkIsAgency,
   isBazosListingFirma,
   sendPushForNewListings,
   recordInAppNotifications,
@@ -364,7 +365,32 @@ async function processFilter(
       );
     }
 
-    // 2d. CLASSIFIER v2 — multi-signal scoring (sukromny/rk/unknown + confidence + signals[]).
+    // 2d. Reality.sk enrichment — pre listings kde predajca_typ je undefined (neznámy),
+    //     stiahni detail stránku a skontroluj prítomnosť linky /realitna-kancelaria/.
+    //     Ak link existuje → firma. Ak nie → sukromny.
+    //     Len nové listings (nie v DB) — existujúce majú predajca_typ už uložený.
+    const realityNewListings = allListings.filter((l) => l.portal === "reality.sk" && !l.predajca_typ);
+    if (realityNewListings.length > 0) {
+      const realityExternalIds = realityNewListings.map((l) => l.external_id);
+      const { data: realityExisting } = await sb
+        .from("monitor_inzeraty")
+        .select("external_id, predajca_typ")
+        .eq("portal", "reality.sk")
+        .in("external_id", realityExternalIds);
+      const realityExistingSet = new Set((realityExisting || []).map((r) => r.external_id as string));
+      const realityNeedsEnrich = realityNewListings.filter((l) => !realityExistingSet.has(l.external_id));
+
+      await Promise.all(
+        realityNeedsEnrich.map(async (listing) => {
+          try {
+            const isAgency = await fetchRealitySkIsAgency(listing.url);
+            listing.predajca_typ = isAgency ? "firma" : "sukromny";
+          } catch { /* fail-safe: keep undefined → classifier rozhodne */ }
+        })
+      );
+    }
+
+    // 2e. CLASSIFIER v2 — multi-signal scoring (sukromny/rk/unknown + confidence + signals[]).
     //     Ide cez ClassifierDbContext: phone/name counts za 30 dní + listed_on_n_portals
     //     + in_rk_directory (manuálny override z minulosti). Klasifikácia rešpektuje
     //     existujúci predajca_typ_override — ten má prednosť pred algoritmom.

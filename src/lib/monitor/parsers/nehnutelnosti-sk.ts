@@ -14,6 +14,9 @@ import { detectFirma } from "./shared";
 export async function fetchNehnDetailInfo(url: string): Promise<{
   predajca_meno?: string;
   predajca_typ: "firma" | "sukromny";
+  advertiser_type?: string;
+  agency_ico?: string;
+  agency_name?: string;
 }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
@@ -26,37 +29,56 @@ export async function fetchNehnDetailInfo(url: string): Promise<{
         "Accept-Language": "sk-SK,sk;q=0.9",
       },
     });
-    if (!res.ok) return { predajca_typ: "firma" }; // safe default
+    if (!res.ok) return { predajca_typ: "firma" };
     const html = await res.text();
 
-    // React-serialized JSON má escaped quotes: \"advertiser\":{...}
-    // Try both escaped a non-escaped varianty.
-    const agencyMatch =
-      html.match(/\\"agencyName\\":\\"([^"\\]+)\\"/) ||
-      html.match(/"agencyName":"([^"]+)"/);
-    const nameMatch =
-      html.match(/\\"advertiser\\":\{[^}]*?\\"name\\":\\"([^"\\]+)\\"/) ||
-      html.match(/"advertiser":\{[^}]*?"name":"([^"]+)"/);
+    // nehnuteľnosti.sk serializuje Next.js props ako escaped JSON: \"advertiser\":{...}
+    // advertiser.type je deterministický: PRIVATE_PERSON | AGENT | COMPANY | DEVELOPER
+    const typeMatch =
+      html.match(/\\"advertiser\\":\{[\s\S]{0,800}?\\"type\\":\\"(PRIVATE_PERSON|AGENT|COMPANY|DEVELOPER)\\"/) ||
+      html.match(/"advertiser":\{[\s\S]{0,800}?"type":"(PRIVATE_PERSON|AGENT|COMPANY|DEVELOPER)"/);
+    const advertiser_type = typeMatch?.[1];
 
-    const agencyName = agencyMatch?.[1];
+    // Meno inzerenta
+    const nameMatch =
+      html.match(/\\"advertiser\\":\{[\s\S]{0,200}?\\"name\\":\\"([^"\\]+)\\"/) ||
+      html.match(/"advertiser":\{[\s\S]{0,200}?"name":"([^"]+)"/);
     const advertiserName = nameMatch?.[1];
 
-    const predajca_meno = advertiserName || agencyName || undefined;
+    // IČO agentúry (pre budúcu rk_companies DB)
+    const icoMatch =
+      html.match(/\\"companyId\\":\\"(\d{6,10})\\"/) ||
+      html.match(/"companyId":"(\d{6,10})"/);
+    const agency_ico = icoMatch?.[1];
 
-    // Rozhodovanie:
-    // 1. Ak má agencyName → firma
-    // 2. Ak meno obsahuje s.r.o./a.s./spol. atď. (detectFirma) → firma
-    // 3. Inak súkromný
-    let predajca_typ: "firma" | "sukromny" = "sukromny";
-    if (agencyName && agencyName !== "$undefined") {
+    // Meno agentúry
+    const agencyNameMatch =
+      html.match(/\\"agency\\":\{[\s\S]{0,200}?\\"name\\":\\"([^"\\]+)\\"/) ||
+      html.match(/"agency":\{[\s\S]{0,200}?"name":"([^"]+)"/);
+    const agency_name = agencyNameMatch?.[1];
+
+    const predajca_meno = agency_name || advertiserName || undefined;
+
+    // Mapovanie advertiser.type na predajca_typ:
+    //   PRIVATE_PERSON → sukromny (deterministicky z portálu)
+    //   AGENT / COMPANY / DEVELOPER → firma (DEVELOPER = developerský projekt, nie lead)
+    let predajca_typ: "firma" | "sukromny";
+    if (advertiser_type === "PRIVATE_PERSON") {
+      predajca_typ = "sukromny";
+    } else if (advertiser_type) {
       predajca_typ = "firma";
-    } else if (detectFirma(advertiserName, agencyName)) {
-      predajca_typ = "firma";
+    } else {
+      // Fallback ak advertiser.type nie je v HTML (starý formát stránky)
+      const agencyMatch = html.match(/\\"agencyName\\":\\"([^"\\]+)\\"/) || html.match(/"agencyName":"([^"]+)"/);
+      const agencyFallback = agencyMatch?.[1];
+      predajca_typ = (agencyFallback && agencyFallback !== "$undefined") || detectFirma(advertiserName, agencyFallback)
+        ? "firma"
+        : "sukromny";
     }
 
-    return { predajca_meno, predajca_typ };
+    return { predajca_meno, predajca_typ, advertiser_type, agency_ico, agency_name };
   } catch {
-    return { predajca_typ: "firma" }; // safe default
+    return { predajca_typ: "firma" };
   } finally {
     clearTimeout(timeout);
   }
