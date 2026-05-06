@@ -1,7 +1,7 @@
 /* ── Parser pre reality.sk ── */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
-import { detectFirma } from "./shared";
+import { detectFirma, extractPoschodie, extractStav } from "./shared";
 
 /**
  * Stiahne detail stránku reality.sk a zistí či inzerát patrí realitke.
@@ -113,6 +113,11 @@ export const realitySkParser: PortalParser = {
       const descMatch = block.match(/class="offer-desc[^"]*"[^>]*>([\s\S]*?)<\/p>/);
       const popis = descMatch?.[1]?.replace(/<[^>]*>/g, "").trim().slice(0, 500) || undefined;
 
+      // Poschodie + stav z titulu, popisu a celého bloku
+      const textForMeta = `${nazov} ${popis || ""} ${block.replace(/<[^>]*>/g, " ")}`;
+      const poschodie = extractPoschodie(textForMeta);
+      const stav = extractStav(textForMeta);
+
       // Detekcia firmy: nazov + popis. undefined = neznámy (prejde filtrom len_sukromni).
       // Zámerne NEskenujeme celý blok — obsahuje breadcrumby a related listings kde
       // sa môže objaviť "realit" aj pri súkromnom inzeráte (false positive).
@@ -131,6 +136,8 @@ export const realitySkParser: PortalParser = {
         foto_url,
         popis,
         predajca_typ,
+        poschodie,
+        stav,
         raw_data: {},
       });
     }

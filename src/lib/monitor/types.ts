@@ -16,6 +16,8 @@ export interface ScrapedInzerat {
   predajca_meno?: string;
   predajca_telefon?: string;
   predajca_typ?: string; // 'sukromny' | 'realitka' | 'developer'
+  poschodie?: string;   // "4/8", "prízemie", "podkrovie"
+  stav?: string;        // "novostavba", "po rekonštrukcii", "pôvodný stav"
   raw_data?: Record<string, unknown>;
 }
 

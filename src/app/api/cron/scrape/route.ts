@@ -90,11 +90,11 @@ function matchesFilter(listing: ScrapedInzerat, filter: MonitorFilter): boolean 
   // Zámerne tvrdé: "iny" (napr. garáž, sklad, pozemok) sa NEbude matchovať ak user chce byt.
   if (filter.typ && listing.typ && listing.typ !== filter.typ) return false;
 
-  // Predaj vs prenájom — bazos.sk niekedy prepúšťa prenájmy do /predaj/ listu.
-  // Ak URL alebo názov obsahuje "prenajom"/"prenájom"/"podnajom" → vyradíme.
-  const textLow = ((listing.url || "") + " " + (listing.nazov || "")).toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (/\bprena?jom|podna?jom|na\s+prenaj/i.test(textLow)) return false;
+  // Predaj vs prenájom — portály niekedy prepúšťajú prenájmy do /predaj/ listov.
+  // Kontrolujeme URL + názov + popis (popis obsahuje "prenájom" aj keď URL nie).
+  const textLow = ((listing.url || "") + " " + (listing.nazov || "") + " " + (listing.popis || ""))
+    .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (/\bprena?jom\b|\bpodna?jom\b|\bnajom\b|na[-_]prenaj/i.test(textLow)) return false;
 
   // Cena — ak máme cena_od/do, vyžadujeme aby listing cena bola v rozsahu.
   // Ak listing nemá cenu (undefined), nechávame ju ako potenciálne relevantnú (nechytí všetko).
@@ -550,6 +550,8 @@ async function processFilter(
         predajca_typ: listing.predajca_typ,
         predajca_typ_confidence: cls?.confidence ?? null,
         predajca_typ_method: cls?.method === "v2" ? (cls.signals.length > 0 ? "rule_v2" : null) : null,
+        poschodie: listing.poschodie ?? null,
+        stav: listing.stav ?? null,
         raw_data: listing.raw_data || {},
         last_seen_at: new Date().toISOString(),
         is_active: true,

@@ -308,12 +308,57 @@ function MonitorContent() {
       return new Date(b.first_seen_at).getTime() - new Date(a.first_seen_at).getTime();
     });
 
-  const [nf, setNf] = useState({
+  const defaultForm = {
     nazov: "", portal: "reality.sk", typ: "byt", lokalita: "",
     cena_od: "", cena_do: "", search_url: "",
     notify_email: true, notify_telegram: false,
-    len_sukromni: true,  // Default: len súkromní predajcovia
-  });
+    len_sukromni: true,
+  };
+  const [nf, setNf] = useState(defaultForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [ef, setEf] = useState(defaultForm);
+
+  const startEdit = (f: Filter) => {
+    setEditingId(f.id);
+    setEf({
+      nazov: f.nazov || "",
+      portal: f.portal || "reality.sk",
+      typ: f.typ || "",
+      lokalita: f.lokalita || "",
+      cena_od: f.cena_od ? String(f.cena_od) : "",
+      cena_do: f.cena_do ? String(f.cena_do) : "",
+      search_url: f.search_url || "",
+      notify_email: f.notify_email,
+      notify_telegram: f.notify_telegram,
+      len_sukromni: f.len_sukromni ?? true,
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const body = {
+      id: editingId,
+      ...ef,
+      cena_od: ef.cena_od ? parseFloat(ef.cena_od) : null,
+      cena_do: ef.cena_do ? parseFloat(ef.cena_do) : null,
+      typ: ef.typ || null,
+      lokalita: ef.lokalita || null,
+      search_url: ef.search_url || null,
+    };
+    const res = await fetch("/api/monitor/filtre", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      setEditingId(null);
+      loadFiltre();
+      showToast("Filter aktualizovaný");
+    } else {
+      showToast("Chyba pri ukladaní", "error");
+    }
+  };
 
   const createFilter = async () => {
     const body = {
@@ -857,60 +902,122 @@ function MonitorContent() {
             )}
             {filtre.map(f => (
               <div key={f.id} style={{ ...S.card, padding: "18px", opacity: f.is_active ? 1 : 0.5 }}>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px" }}>{f.nazov}</h3>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                      <span style={{
-                        fontSize: "12px", padding: "3px 10px", borderRadius: "6px", fontWeight: 500,
-                        background: f.portal === "vsetky" ? "var(--bg-hover)" : f.portal === "reality.sk" ? "var(--success-light)" : f.portal === "nehnutelnosti.sk" ? "var(--accent-light)" : "var(--purple-light)",
-                        color: f.portal === "vsetky" ? "var(--text-secondary)" : f.portal === "reality.sk" ? "var(--success)" : f.portal === "nehnutelnosti.sk" ? "var(--accent)" : "var(--purple)",
-                      }}>
-                        {f.portal === "vsetky" ? "Všetky" : f.portal}
-                      </span>
-                      {f.typ && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>{f.typ}</span>}
-                      {f.lokalita && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>📍 {f.lokalita}</span>}
-                      {(f.cena_od || f.cena_do) && (
-                        <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
-                          {f.cena_od ? `${fmt(Number(f.cena_od))} €` : "0 €"} – {f.cena_do ? `${fmt(Number(f.cena_do))} €` : "∞"}
-                        </span>
-                      )}
-                      {f.len_sukromni === false && (
-                        <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--accent-light)", color: "var(--accent)", fontWeight: 600 }}>
-                          📊 Vrátane RK (analýzy cien)
-                        </span>
-                      )}
-                      {f.notify_email && <span style={{ fontSize: "12px", color: "var(--accent)", fontWeight: 500 }}>📧 Email</span>}
-                      {f.notify_telegram && <span style={{ fontSize: "12px", color: "var(--purple)", fontWeight: 500 }}>✈️ Telegram</span>}
+                {editingId === f.id ? (
+                  /* ── EDIT FORM ── */
+                  <div>
+                    <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 14px" }}>Upraviť filter</h3>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={S.label}>Názov</label>
+                        <input type="text" value={ef.nazov} onChange={e => setEf({ ...ef, nazov: e.target.value })} style={S.input} />
+                      </div>
+                      <div>
+                        <label style={S.label}>Portál</label>
+                        <select value={ef.portal} onChange={e => setEf({ ...ef, portal: e.target.value })} style={S.select}>
+                          {PORTALS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={S.label}>Typ</label>
+                        <select value={ef.typ} onChange={e => setEf({ ...ef, typ: e.target.value })} style={S.select}>
+                          {TYPY.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={S.label}>Lokalita</label>
+                        <LokalitaInput value={ef.lokalita} onChange={v => setEf({ ...ef, lokalita: v })} placeholder="Bratislava - Petržalka" />
+                      </div>
+                      <div>
+                        <label style={S.label}>Cena od</label>
+                        <input type="number" placeholder="50 000" value={ef.cena_od} onChange={e => setEf({ ...ef, cena_od: e.target.value })} style={S.input} />
+                      </div>
+                      <div>
+                        <label style={S.label}>Cena do</label>
+                        <input type="number" placeholder="200 000" value={ef.cena_do} onChange={e => setEf({ ...ef, cena_do: e.target.value })} style={S.input} />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={S.label}>Priamy URL <span style={{ fontWeight: 400, textTransform: "none" }}>(voliteľné)</span></label>
+                        <input type="url" value={ef.search_url} onChange={e => setEf({ ...ef, search_url: e.target.value })} style={S.input} placeholder="https://www.reality.sk/..." />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1", padding: "10px", background: ef.len_sukromni ? "var(--warning-light)" : "var(--accent-light)", border: `1px solid ${ef.len_sukromni ? "var(--warning)" : "var(--accent)"}`, borderRadius: "var(--radius-sm)" }}>
+                        <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", fontSize: "13px", cursor: "pointer", color: ef.len_sukromni ? "var(--warning)" : "var(--accent)", fontWeight: 600 }}>
+                          <input type="checkbox" checked={ef.len_sukromni} onChange={e => setEf({ ...ef, len_sukromni: e.target.checked })} style={{ width: "16px", height: "16px", marginTop: "2px" }} />
+                          <div>
+                            {ef.len_sukromni ? "👤 Len súkromní predajcovia (leady + notifikácie)" : "📊 Vrátane RK — pre prehľad cien a analýzy"}
+                            <div style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 400, marginTop: "2px" }}>
+                              {ef.len_sukromni
+                                ? "Vypni ak chceš aj RK inzeráty na sledovanie trhových cien"
+                                : "RK inzeráty sa ukladajú ale neposielajú notifikácie — slúžia len pre cenové analýzy"}
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", marginTop: "14px", paddingTop: "12px", borderTop: "1px solid var(--border-subtle)" }}>
+                      <button onClick={saveEdit} disabled={!ef.nazov} style={{ ...S.btnPrimary, opacity: ef.nazov ? 1 : 0.4 }}>Uložiť</button>
+                      <button onClick={() => setEditingId(null)} style={{ ...S.btnSecondary, border: "none", background: "transparent" }}>Zrušiť</button>
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <button
-                      onClick={() => toggleFilter(f)}
-                      style={{
-                        height: "30px", padding: "0 12px", borderRadius: "6px",
-                        fontSize: "12px", fontWeight: 600, border: "none", cursor: "pointer",
-                        background: f.is_active ? "var(--success-light)" : "var(--bg-hover)",
-                        color: f.is_active ? "var(--success)" : "var(--text-muted)",
-                      }}
-                    >
-                      {f.is_active ? "Aktívny" : "Pauznutý"}
-                    </button>
-                    <button
-                      onClick={() => deleteFilter(f.id)}
-                      style={{
-                        width: "30px", height: "30px", borderRadius: "6px",
-                        border: "none", background: "transparent", color: "var(--text-muted)",
-                        cursor: "pointer", fontSize: "14px",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--danger-light)"; (e.currentTarget as HTMLElement).style.color = "var(--danger)"; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
-                    >
-                      ✕
-                    </button>
+                ) : (
+                  /* ── DISPLAY ROW ── */
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <h3 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px" }}>{f.nazov}</h3>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        <span style={{
+                          fontSize: "12px", padding: "3px 10px", borderRadius: "6px", fontWeight: 500,
+                          background: f.portal === "vsetky" ? "var(--bg-hover)" : f.portal === "reality.sk" ? "var(--success-light)" : f.portal === "nehnutelnosti.sk" ? "var(--accent-light)" : "var(--purple-light)",
+                          color: f.portal === "vsetky" ? "var(--text-secondary)" : f.portal === "reality.sk" ? "var(--success)" : f.portal === "nehnutelnosti.sk" ? "var(--accent)" : "var(--purple)",
+                        }}>
+                          {f.portal === "vsetky" ? "Všetky" : f.portal}
+                        </span>
+                        {f.typ && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>{f.typ}</span>}
+                        {f.lokalita && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>📍 {f.lokalita}</span>}
+                        {(f.cena_od || f.cena_do) && (
+                          <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+                            {f.cena_od ? `${fmt(Number(f.cena_od))} €` : "0 €"} – {f.cena_do ? `${fmt(Number(f.cena_do))} €` : "∞"}
+                          </span>
+                        )}
+                        {f.len_sukromni === false
+                          ? <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--accent-light)", color: "var(--accent)", fontWeight: 600 }}>📊 Vrátane RK</span>
+                          : <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--warning-light)", color: "var(--warning)", fontWeight: 600 }}>👤 Len súkromní</span>
+                        }
+                        {f.notify_email && <span style={{ fontSize: "12px", color: "var(--accent)", fontWeight: 500 }}>📧 Email</span>}
+                        {f.notify_telegram && <span style={{ fontSize: "12px", color: "var(--purple)", fontWeight: 500 }}>✈️ Telegram</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <button
+                        onClick={() => startEdit(f)}
+                        style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+                        title="Upraviť filter"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => toggleFilter(f)}
+                        style={{
+                          height: "30px", padding: "0 12px", borderRadius: "6px",
+                          fontSize: "12px", fontWeight: 600, border: "none", cursor: "pointer",
+                          background: f.is_active ? "var(--success-light)" : "var(--bg-hover)",
+                          color: f.is_active ? "var(--success)" : "var(--text-muted)",
+                        }}
+                      >
+                        {f.is_active ? "Aktívny" : "Pauznutý"}
+                      </button>
+                      <button
+                        onClick={() => deleteFilter(f.id)}
+                        style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--danger-light)"; (e.currentTarget as HTMLElement).style.color = "var(--danger)"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </div>

@@ -1,7 +1,7 @@
 /* ── Parser pre nehnutelnosti.sk ── */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
-import { detectFirma } from "./shared";
+import { detectFirma, extractPoschodie, extractStav } from "./shared";
 
 /**
  * Stiahne detail stránku listingu a vráti predajca info.
@@ -239,6 +239,10 @@ export const nehnutelnostiSkParser: PortalParser = {
       const predajca_typ: "firma" | "sukromny" = isFirmaByText ? "firma" : "firma";
       void predajca_meno;
 
+      // Poschodie + stav z kontextu
+      const poschodie = extractPoschodie(context);
+      const stav = extractStav(`${nazov} ${context}`);
+
       listings.push({
         portal: PORTAL,
         external_id: externalId,
@@ -252,6 +256,8 @@ export const nehnutelnostiSkParser: PortalParser = {
         foto_url,
         predajca_meno,
         predajca_typ,
+        poschodie,
+        stav,
         raw_data: {},
       });
     }
