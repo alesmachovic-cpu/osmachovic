@@ -52,8 +52,8 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Audit log
-  await sb.from("audit_log").insert({
+  // Audit log (fire and forget — neblokujeme response)
+  void sb.from("audit_log").insert({
     user_id: auth.user.id,
     action: "client_interaction_create",
     entity_type: "klient",
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     detail: { typ: body.typ, subject: body.subject },
     ip: req.headers.get("x-forwarded-for") ?? "unknown",
     user_agent: req.headers.get("user-agent") ?? "unknown",
-  }).catch(() => {});
+  });
 
   return NextResponse.json({ interaction: data });
 }
