@@ -34,6 +34,7 @@ function loadGoals(userId?: string) {
 export default function NastaveniaPage() {
   const { user: authUser, accounts, updateAccount, addAccount, deleteAccount } = useAuth();
   const isAdmin = authUser?.id === "ales";
+  const isPrivileged = isAdmin || authUser?.role === "super_admin" || authUser?.role === "majitel";
   const [goals, setGoals] = useState(DEFAULT_GOALS);
   const [saved, setSaved] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -69,6 +70,11 @@ export default function NastaveniaPage() {
   const [companyIco, setCompanyIco] = useState("");
   const [companyRegistracia, setCompanyRegistracia] = useState("");
   const [companySaved, setCompanySaved] = useState(false);
+
+  // DPO (zodpovedná osoba pre GDPR)
+  const [dpoName, setDpoName] = useState("");
+  const [dpoEmail, setDpoEmail] = useState("");
+  const [dpoSaved, setDpoSaved] = useState(false);
 
   // Active category
   const [activeCategory, setActiveCategory] = useState("profil");
@@ -160,6 +166,15 @@ export default function NastaveniaPage() {
 
       // Load feature toggles (global - admin manages all)
       setFeatureToggles(loadFeatureToggles());
+
+      // Load DPO contact (privileged users only)
+      if (authUser?.role === "super_admin" || authUser?.role === "majitel" || authUser?.id === "ales") {
+        supabase.from("users").select("dpo_name, dpo_email").eq("id", uid).single()
+          .then(({ data }) => {
+            if (data?.dpo_name) setDpoName(data.dpo_name);
+            if (data?.dpo_email) setDpoEmail(data.dpo_email);
+          });
+      }
     } catch { /* ignore */ }
 
     // Check Google connection status
@@ -228,6 +243,17 @@ export default function NastaveniaPage() {
     setGoogleStatus({ connected: false, email: null });
   }
 
+  async function handleSaveDpo() {
+    if (!uid) return;
+    await fetch(`/api/users?id=${uid}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dpo_name: dpoName, dpo_email: dpoEmail }),
+    });
+    setDpoSaved(true);
+    setTimeout(() => setDpoSaved(false), 2000);
+  }
+
   async function handleSaveCompany() {
     try {
       const { supabase: sb } = await import("@/lib/supabase");
@@ -269,8 +295,11 @@ export default function NastaveniaPage() {
     { id: "ciele", label: "Ciele a kalkulácie", icon: "🎯" },
     { id: "integracie", label: "Integrácie", icon: "🔗" },
     { id: "faktury", label: "Faktúry", icon: "🧾", href: "/nastavenia/faktury" },
-    ...(isAdmin ? [
+    ...(isPrivileged ? [
       { id: "spolocnost", label: "Spoločnosť", icon: "🏢" },
+      { id: "gdpr", label: "GDPR & DPO", icon: "🔐" },
+    ] : []),
+    ...(isAdmin ? [
       { id: "ucty", label: "Účty", icon: "👥" },
     ] : []),
   ];
@@ -729,8 +758,8 @@ export default function NastaveniaPage() {
         </div>
       )}
 
-      {/* ═══ Spoločnosť (admin only) ═══ */}
-      {activeCategory === "spolocnost" && isAdmin && (
+      {/* ═══ Spoločnosť (privileged) ═══ */}
+      {activeCategory === "spolocnost" && isPrivileged && (
         <div style={cardSt}>
           <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "4px" }}>
             🏢 Info o spoločnosti
@@ -767,6 +796,49 @@ export default function NastaveniaPage() {
               borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>Uložiť</button>
             {companySaved && <span style={{ fontSize: "13px", color: "#059669", fontWeight: "600" }}>✓ Uložené</span>}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ GDPR & DPO (privileged) ═══ */}
+      {activeCategory === "gdpr" && isPrivileged && (
+        <div style={cardSt}>
+          <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "4px" }}>
+            🔐 GDPR — Zodpovedná osoba (DPO)
+          </div>
+          <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 20px" }}>
+            Zodpovedná osoba za ochranu osobných údajov podľa čl. 37 GDPR.
+            Kontakt sa automaticky prepojí do GDPR modulu, oznámení ÚOOÚ a žiadostí dotknutých osôb.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div>
+              <label style={labelSt}>Meno DPO / zodpovednej osoby</label>
+              <input value={dpoName} onChange={e => setDpoName(e.target.value)} style={inputSt}
+                placeholder="napr. Aleš Machovič" />
+            </div>
+            <div>
+              <label style={labelSt}>Email DPO</label>
+              <input type="email" value={dpoEmail} onChange={e => setDpoEmail(e.target.value)} style={inputSt}
+                placeholder="napr. gdpr@vianema.eu" />
+            </div>
+          </div>
+          <div style={{
+            marginTop: "16px", padding: "12px 14px", borderRadius: "10px",
+            background: "var(--bg-elevated)", border: "1px solid var(--border)",
+            fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6,
+          }}>
+            DPO kontakt sa použije pri:<br />
+            • Žiadostiach o prístup k údajom (čl. 15 GDPR)<br />
+            • Notifikáciách o deadlinoch DSR žiadostí (30 dní)<br />
+            • Exportoch pre ÚOOÚ (zákon č. 18/2018 Z. z.)<br />
+            • AML hláseniach (zákon č. 297/2008 Z. z.)
+          </div>
+          <div style={{ marginTop: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
+            <button onClick={handleSaveDpo} style={{
+              padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
+              borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            }}>Uložiť DPO kontakt</button>
+            {dpoSaved && <span style={{ fontSize: "13px", color: "#059669", fontWeight: "600" }}>✓ Uložené</span>}
           </div>
         </div>
       )}

@@ -14,6 +14,7 @@ import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type Kli
 import { createCalendarEvent, notifyCalendarFail } from "@/lib/calendar";
 import { klientUpdate } from "@/lib/klientApi";
 import SmsSignButton from "@/components/SmsSignButton";
+import ClientInteractionsTab from "@/components/ClientInteractionsTab";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
@@ -286,7 +287,7 @@ export default function KlientDetailPage() {
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
-  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia" | "interakcie">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
@@ -750,6 +751,7 @@ export default function KlientDetailPage() {
     ...(isCistyKupujuci ? [] : [{ key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length }]),
     { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
     { key: "objednavky", label: "Objednávky", count: objednavky.length },
+    { key: "interakcie", label: "Interakcie", count: 0 },
     { key: "dokumenty", label: "Dokumenty", count: 0 },
     { key: "historia", label: "História", count: 0 },
   ];
@@ -2416,6 +2418,16 @@ export default function KlientDetailPage() {
           </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* Interakcie — call/email/meeting log */}
+      {activeTab === "interakcie" && (
+        <div style={cardSt}>
+          <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
+            Interakcie s klientom
+          </div>
+          <ClientInteractionsTab klientId={klient.id} userId={user?.id ?? ""} />
         </div>
       )}
 

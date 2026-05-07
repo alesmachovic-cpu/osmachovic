@@ -14,6 +14,8 @@ interface User {
   email: string;        // Business email (napr. @vianema.eu) — faktúry, komunikácia
   login_email?: string; // Google email (Gmail) pre OAuth login — môže byť rôzny
   password?: string;
+  dpo_name?: string;
+  dpo_email?: string;
 }
 
 interface AuthContextType {
