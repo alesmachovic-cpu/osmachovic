@@ -49,6 +49,9 @@ export default function VyhradnaZmluvaModal({ klientId, naberId, prefill, onClos
   const [provizia, setProvizia] = useState(prefill.provizia);
   const [proviziaText, setProviziaText] = useState("");
   const [mesiacov, setMesiacov] = useState("6");
+  const [znizenieDni, setZnizenieDni] = useState("30");
+  const [znizenieCena, setZnizenieCena] = useState("");
+  const [dodatocnaProvizia, setDodatocnaProvizia] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -64,6 +67,9 @@ export default function VyhradnaZmluvaModal({ klientId, naberId, prefill, onClos
         zmluva_mesiacov: mesiacov,
         provizia: provizia,
         provizia_slovom: proviziaText,
+        znizenie_dni: znizenieDni,
+        znizenie_cena: znizenieCena,
+        dodatocna_provizia: dodatocnaProvizia,
       };
       owners.forEach((o, i) => {
         const n = i + 1;
@@ -172,6 +178,18 @@ export default function VyhradnaZmluvaModal({ klientId, naberId, prefill, onClos
             <div style={{ gridColumn: "1/-1" }}>
               <label style={labelSt}>Provízia slovom</label>
               <input style={inputSt} value={proviziaText} onChange={e => setProviziaText(e.target.value)} placeholder="napr. tri percentá z kúpnej ceny" />
+            </div>
+            <div>
+              <label style={labelSt}>Zníženie ceny po X dňoch</label>
+              <input style={inputSt} type="number" min="1" value={znizenieDni} onChange={e => setZnizenieDni(e.target.value)} placeholder="napr. 30" />
+            </div>
+            <div>
+              <label style={labelSt}>Zníženie o (EUR)</label>
+              <input style={inputSt} value={znizenieCena} onChange={e => setZnizenieCena(e.target.value)} placeholder="napr. 5000" />
+            </div>
+            <div style={{ gridColumn: "1/-1" }}>
+              <label style={labelSt}>Dodatočná provízia (podiel z rozdielu cien)</label>
+              <input style={inputSt} value={dodatocnaProvizia} onChange={e => setDodatocnaProvizia(e.target.value)} placeholder="napr. 50%" />
             </div>
           </div>
         </div>
