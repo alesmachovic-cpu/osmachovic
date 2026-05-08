@@ -16,6 +16,7 @@ import { klientUpdate } from "@/lib/klientApi";
 import SmsSignButton from "@/components/SmsSignButton";
 import ClientInteractionsTab from "@/components/ClientInteractionsTab";
 import ObchodTab from "@/components/Obchod/ObchodTab";
+import VyhradnaZmluvaModal from "@/components/Zmluva/VyhradnaZmluvaModal";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
@@ -295,6 +296,7 @@ export default function KlientDetailPage() {
   const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia" | "interakcie" | "obchod">("timeline");
   const [obchodyCount, setObchodyCount] = useState(0);
   const [obchodStatus, setObchodStatus] = useState<string | null>(null);
+  const [showVyhradnaModal, setShowVyhradnaModal] = useState<string | null>(null); // naberak id
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
@@ -2011,6 +2013,15 @@ export default function KlientDetailPage() {
                           📰 Vytvoriť inzerát
                         </button>
                       )}
+                      {/* Výhradná zmluva — len ak existuje náberák */}
+                      {naberakId && (
+                        <button onClick={() => setShowVyhradnaModal(naberakId)} style={{
+                          padding: "6px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+                          borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer",
+                        }}>
+                          📄 Výhradná zmluva
+                        </button>
+                      )}
                       {/* Email-podpis pre nepodpísaný náberák */}
                       {naberakId && card.naberak && !(card.naberak as Record<string, unknown>).podpis_data && (
                         <SmsSignButton
@@ -2809,6 +2820,28 @@ export default function KlientDetailPage() {
           onLvPrompt={() => setShowLVPrompt(true)}
         />
       )}
+
+      {/* Modal: Výhradná zmluva */}
+      {showVyhradnaModal && klient && (() => {
+        const lv = (klient.lv_data ?? {}) as Record<string, unknown>;
+        const maj = (lv.majitelia as Array<{ meno?: string; podiel?: string; datum_narodenia?: string }> | undefined) ?? [];
+        const naber = (nabery.find(n => (n as Record<string, unknown>).id === showVyhradnaModal) ?? nabery[0]) as Record<string, unknown> | undefined;
+        return (
+          <VyhradnaZmluvaModal
+            klientId={klient.id}
+            naberId={showVyhradnaModal}
+            prefill={{
+              owners: maj.length > 0
+                ? maj.map(m => ({ meno: m.meno, datum_nar: m.datum_narodenia, kontakt: undefined }))
+                : [{ meno: klient.meno, datum_nar: undefined, kontakt: `${klient.email ?? ""}, ${klient.telefon ?? ""}`.replace(/^, |, $/, "") }],
+              obec: String(lv.obec ?? naber?.obec ?? ""),
+              provizia: String(naber?.provizia ?? (klient as unknown as Record<string, unknown>).proviziaeur ?? ""),
+              predajnaCena: String(naber?.predajna_cena ?? ""),
+            }}
+            onClose={() => setShowVyhradnaModal(null)}
+          />
+        );
+      })()}
 
     </div>
   );
