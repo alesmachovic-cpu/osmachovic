@@ -261,20 +261,16 @@ const TYP_LABELS: Record<string, string> = {
 };
 
 // Workflow kroky
-const WORKFLOW_STEPS = [
-  { key: "novy_kontakt", label: "Kontakt", icon: "📞", statuses: ["novy", "novy_kontakt", "aktivny"] },
-  { key: "dohodnuty_naber", label: "Dohodnutý", icon: "🤝", statuses: ["dohodnuty_naber"] },
-  { key: "nabrany", label: "Nabraný", icon: "📝", statuses: ["nabrany"] },
-  { key: "inzerovany", label: "Inzerovaný", icon: "📰", statuses: [] },
-  { key: "predany", label: "Predaný", icon: "✅", statuses: ["uzavrety"] },
-];
-
-const DEAL_STEPS = [
-  { key: "obhliadky", label: "Obhliadky" },
-  { key: "rezervacia", label: "Rezervácia" },
-  { key: "podpis_kz", label: "Podpis KZ" },
-  { key: "vklad", label: "Vklad" },
-  { key: "ukoncenie", label: "Ukončenie" },
+const COMBINED_STEPS = [
+  { key: "kontakt",     label: "Kontakt" },
+  { key: "dohodnuty",   label: "Dohodnutý" },
+  { key: "nabrany",     label: "Nabraný" },
+  { key: "inzerovany",  label: "Inzerovaný" },
+  { key: "obhliadky",   label: "Obhliadky" },
+  { key: "rezervacia",  label: "Rezervácia" },
+  { key: "podpis_kz",   label: "Podpis KZ" },
+  { key: "vklad",       label: "Vklad" },
+  { key: "predany",     label: "Predaný" },
 ];
 
 export default function KlientDetailPage() {
@@ -1193,74 +1189,88 @@ export default function KlientDetailPage() {
           <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Pipeline predávajúceho
           </div>
-          {/* Scrollovateľná pipeline */}
-          <div style={{
-            overflowX: "auto", overflowY: "visible",
-            paddingBottom: "6px",
-            scrollbarWidth: "thin",
-            scrollbarColor: "#374151 var(--border)",
-          }}>
-            <div style={{ display: "flex", alignItems: "flex-start", minWidth: "max-content", gap: "0", paddingBottom: "2px" }}>
-            {WORKFLOW_STEPS.map((ws, i) => {
-              const isCompleted = i < workflowStep;
-              const isCurrent = i === workflowStep;
-              const STEP_STATUS = ["novy_kontakt", "dohodnuty_naber", null, null, "uzavrety"] as (string | null)[];
-              const targetStatus = STEP_STATUS[i];
-              const isClickable = isOwner && targetStatus !== null && i !== workflowStep;
-              return (
-                <div key={ws.key} style={{ display: "flex", alignItems: "center" }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", width: "80px" }}>
-                    {/* Outer halo pre current krok */}
-                    <div style={{
-                      width: isCurrent ? "56px" : "48px",
-                      height: isCurrent ? "56px" : "48px",
-                      borderRadius: "50%",
-                      background: isCurrent ? "rgba(55,65,81,0.08)" : "transparent",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      transition: "all 0.2s",
-                    }}>
-                      <div
-                        onClick={isClickable ? () => handleStatusChange(targetStatus!) : undefined}
-                        title={isClickable ? (i < workflowStep ? `Vrátiť na: ${ws.label}` : `Posunúť na: ${ws.label}`) : undefined}
-                        style={{
-                          width: "40px", height: "40px", borderRadius: "50%",
-                          background: isCompleted || isCurrent ? "#374151" : "var(--bg-elevated)",
-                          color: isCompleted || isCurrent ? "#fff" : "var(--text-muted)",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: isCompleted ? "16px" : "14px", fontWeight: "700",
-                          border: isCompleted || isCurrent ? "none" : "1.5px solid var(--border)",
-                          transition: "all 0.2s",
-                          cursor: isClickable ? "pointer" : "default",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {isCompleted ? "✓" : i + 1}
+          {/* Jeden riadok — všetkých 9 krokov spolu */}
+          {(() => {
+            const dealSubStep = obchodyCount === 0 ? 0
+              : obchodStatus === "v_procese" ? 1
+              : obchodStatus === "pred_podpisom_kz" ? 2
+              : obchodStatus === "podpisane" ? 3
+              : obchodStatus === "vklad" ? 4
+              : obchodStatus === "ukoncene" ? 5
+              : 1;
+            const combinedCurrent = workflowStep >= 4 ? 8
+              : workflowStep <= 2 ? workflowStep
+              : Math.min(4 + dealSubStep, 8);
+            const STEP_HANDLERS: ((() => void) | null)[] = [
+              isOwner ? () => handleStatusChange("novy_kontakt") : null,
+              isOwner ? () => handleStatusChange("dohodnuty_naber") : null,
+              null,
+              null,
+              () => setShowObhliadkaModal(true),
+              () => setActiveTab("obchod"),
+              () => setActiveTab("obchod"),
+              () => setActiveTab("obchod"),
+              isOwner ? () => handleStatusChange("uzavrety") : null,
+            ];
+            return (
+              <div style={{ overflowX: "auto", overflowY: "visible", paddingBottom: "6px", scrollbarWidth: "thin", scrollbarColor: "#374151 var(--border)" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", minWidth: "max-content", gap: "0", paddingBottom: "2px" }}>
+                  {COMBINED_STEPS.map((step, i) => {
+                    const isCompleted = i < combinedCurrent;
+                    const isCurrent = i === combinedCurrent;
+                    const handler = STEP_HANDLERS[i];
+                    const isClickable = handler !== null && (i <= 3 || i === 8 ? i !== combinedCurrent : true);
+                    return (
+                      <div key={step.key} style={{ display: "flex", alignItems: "center" }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", width: "80px" }}>
+                          <div style={{
+                            width: isCurrent ? "56px" : "48px",
+                            height: isCurrent ? "56px" : "48px",
+                            borderRadius: "50%",
+                            background: isCurrent ? "rgba(55,65,81,0.08)" : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            transition: "all 0.2s",
+                          }}>
+                            <div
+                              onClick={isClickable ? handler! : undefined}
+                              style={{
+                                width: "40px", height: "40px", borderRadius: "50%",
+                                background: isCompleted || isCurrent ? "#374151" : "var(--bg-elevated)",
+                                color: isCompleted || isCurrent ? "#fff" : "var(--text-muted)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: isCompleted ? "16px" : "14px", fontWeight: "700",
+                                border: isCompleted || isCurrent ? "none" : "1.5px solid var(--border)",
+                                transition: "all 0.2s",
+                                cursor: isClickable ? "pointer" : "default",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {isCompleted ? "✓" : i + 1}
+                            </div>
+                          </div>
+                          <span onClick={isClickable ? handler! : undefined} style={{
+                            fontSize: "11px", fontWeight: isCurrent ? "700" : "500",
+                            color: isCurrent ? "var(--text-primary)" : "var(--text-muted)",
+                            textAlign: "center", lineHeight: "1.3",
+                            cursor: isClickable ? "pointer" : "default",
+                            whiteSpace: "nowrap",
+                          }}>{step.label}</span>
+                        </div>
+                        {i < COMBINED_STEPS.length - 1 && (
+                          <div style={{
+                            height: "1.5px", width: "32px", flexShrink: 0,
+                            background: isCompleted ? "#374151" : "var(--border)",
+                            marginBottom: "28px", borderRadius: "1px",
+                          }} />
+                        )}
                       </div>
-                    </div>
-                    <span
-                      onClick={isClickable ? () => handleStatusChange(targetStatus!) : undefined}
-                      style={{
-                        fontSize: "11px", fontWeight: isCurrent ? "700" : "500",
-                        color: isCurrent ? "var(--text-primary)" : "var(--text-muted)",
-                        textAlign: "center", lineHeight: "1.3",
-                        cursor: isClickable ? "pointer" : "default",
-                        whiteSpace: "nowrap",
-                      }}
-                    >{ws.label}</span>
-                  </div>
-                  {i < WORKFLOW_STEPS.length - 1 && (
-                    <div style={{
-                      height: "1.5px", width: "32px", flexShrink: 0,
-                      background: isCompleted ? "#374151" : "var(--border)",
-                      marginBottom: "28px", borderRadius: "1px",
-                    }} />
-                  )}
+                    );
+                  })}
                 </div>
-              );
-            })}
-            </div>
-          </div>
-          {/* Akčné tlačidlo podľa kroku */}
+              </div>
+            );
+          })()}
+          {/* Akčné tlačidlo podľa kroku — len pre seller kroky */}
           {workflowStep === 0 && (
             <button onClick={() => handleStatusChange("dohodnuty_naber")} style={{
               marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
@@ -1273,8 +1283,6 @@ export default function KlientDetailPage() {
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>📝 Vyplniť náberový list</button>
           )}
-          {/* Krok 2 = Nabraný. Ale ak ešte nie je vyplnený žiadny náberový list,
-              maklér nemôže preskočiť k inzerátu — najprv treba vyplniť náberák. */}
           {workflowStep === 2 && (
             nabery.length === 0 ? (
               <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
@@ -1288,78 +1296,6 @@ export default function KlientDetailPage() {
               }}>📰 Vytvoriť inzerát</button>
             )
           )}
-          {/* Postup obchodu — priamo pod hlavnou pipeline, klikateľné kroky */}
-          {workflowStep >= 3 && (() => {
-            const dealSubStep = obchodyCount === 0 ? 0
-              : obchodStatus === "v_procese" ? 1
-              : obchodStatus === "pred_podpisom_kz" ? 2
-              : obchodStatus === "podpisane" ? 3
-              : obchodStatus === "vklad" ? 4
-              : obchodStatus === "ukoncene" ? 5
-              : 1;
-            const dealActions = [
-              () => setShowObhliadkaModal(true),
-              () => setActiveTab("obchod"),
-              () => setActiveTab("obchod"),
-              () => setActiveTab("obchod"),
-              () => setActiveTab("obchod"),
-            ];
-            return (
-              <div style={{ marginTop: "12px" }}>
-                <div style={{ overflowX: "auto", overflowY: "visible", paddingBottom: "4px", scrollbarWidth: "thin", scrollbarColor: "#374151 var(--border)" }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", minWidth: "max-content", gap: "0" }}>
-                    {DEAL_STEPS.map((ds, i) => {
-                      const isCompleted = i < dealSubStep;
-                      const isCurrent = i === dealSubStep && dealSubStep < DEAL_STEPS.length;
-                      const isDone = dealSubStep >= DEAL_STEPS.length;
-                      const action = dealActions[i];
-                      return (
-                        <div key={ds.key} style={{ display: "flex", alignItems: "center" }}>
-                          <div
-                            onClick={action}
-                            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", width: "68px", cursor: "pointer" }}
-                          >
-                            <div style={{
-                              width: isCurrent ? "44px" : "36px",
-                              height: isCurrent ? "44px" : "36px",
-                              borderRadius: "50%",
-                              background: isCurrent ? "rgba(55,65,81,0.08)" : "transparent",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              transition: "all 0.2s",
-                            }}>
-                              <div style={{
-                                width: "28px", height: "28px", borderRadius: "50%",
-                                background: isCompleted || isDone ? "#374151" : isCurrent ? "#374151" : "var(--bg-elevated)",
-                                color: isCompleted || isCurrent || isDone ? "#fff" : "var(--text-muted)",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "11px", fontWeight: "700",
-                                border: isCompleted || isCurrent || isDone ? "none" : "1.5px solid var(--border)",
-                                transition: "all 0.2s",
-                              }}>
-                                {isCompleted || isDone ? "✓" : i + 1}
-                              </div>
-                            </div>
-                            <span style={{
-                              fontSize: "10px", fontWeight: isCurrent ? "700" : "500",
-                              color: isCurrent ? "var(--text-primary)" : "var(--text-muted)",
-                              textAlign: "center", lineHeight: "1.3", whiteSpace: "nowrap",
-                            }}>{ds.label}</span>
-                          </div>
-                          {i < DEAL_STEPS.length - 1 && (
-                            <div style={{
-                              height: "1.5px", width: "24px", flexShrink: 0,
-                              background: isCompleted || isDone ? "#374151" : "var(--border)",
-                              marginBottom: "22px", borderRadius: "1px",
-                            }} />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
           {klient.datum_naberu && (
             <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
               📅 Termín náberu: {new Date(klient.datum_naberu).toLocaleString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
