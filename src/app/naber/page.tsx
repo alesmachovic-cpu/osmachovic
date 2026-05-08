@@ -12,6 +12,7 @@ import { getMaklerUuid } from "@/lib/maklerMap";
 import { getUserItem } from "@/lib/userStorage";
 import { klientUpdate, naberUpdate } from "@/lib/klientApi";
 import SmsSignButton from "@/components/SmsSignButton";
+import VyhradnaZmluvaModal from "@/components/Zmluva/VyhradnaZmluvaModal";
 
 type TypNaber = "byt" | "rodinny_dom" | "pozemok";
 
@@ -88,6 +89,7 @@ function NaberPageContent() {
   const [emailSending, setEmailSending] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const [showVyhradnaModal, setShowVyhradnaModal] = useState(false);
 
   // Klient search
   const [klienti, setKlienti] = useState<Klient[]>([]);
@@ -822,6 +824,16 @@ function NaberPageContent() {
           </div>
         )}
 
+        {savedNaberData?.zmluva && savedNaberData?.typ_zmluvy === "exkluzivna" && savedNaberId && selectedKlient && (
+          <div style={{ marginBottom: "20px" }}>
+            <button onClick={() => setShowVyhradnaModal(true)} style={{
+              padding: "12px 28px", background: "#374151", color: "#fff", border: "none",
+              borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
+              width: "100%",
+            }}>📄 Generovať výhradnú zmluvu</button>
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
           <button onClick={() => {
             window.location.href = "/";
@@ -853,6 +865,24 @@ function NaberPageContent() {
           )}
         </div>
       </div>
+
+      {showVyhradnaModal && savedNaberId && selectedKlient && (() => {
+        const lv = (selectedKlient.lv_data ?? {}) as Record<string, unknown>;
+        const majitelia = (lv.majitelia as Array<{ meno?: string; datum_narodenia?: string }> | undefined) ?? [];
+        return (
+          <VyhradnaZmluvaModal
+            klientId={selectedKlient.id}
+            naberId={savedNaberId}
+            prefill={{
+              owners: majitelia.map(m => ({ meno: m.meno, datum_nar: m.datum_narodenia, kontakt: selectedKlient.email ? `${selectedKlient.email}, ${selectedKlient.telefon ?? ""}`.replace(/, $/, "") : (selectedKlient.telefon ?? "") })),
+              obec: String(lv.obec ?? savedNaberData?.obec ?? ""),
+              provizia: String(savedNaberData?.provizia ?? ""),
+              predajnaCena: String(savedNaberData?.predajna_cena ?? ""),
+            }}
+            onClose={() => setShowVyhradnaModal(false)}
+          />
+        );
+      })()}
     </div>
   );
 }
