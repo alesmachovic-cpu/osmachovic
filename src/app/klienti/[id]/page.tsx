@@ -1198,9 +1198,6 @@ export default function KlientDetailPage() {
               : obchodStatus === "vklad" ? 4
               : obchodStatus === "ukoncene" ? 5
               : 1;
-            const combinedCurrent = workflowStep >= 4 ? 8
-              : workflowStep <= 2 ? workflowStep
-              : Math.min(4 + dealSubStep, 8);
             const STEP_HANDLERS: ((() => void) | null)[] = [
               isOwner ? () => handleStatusChange("novy_kontakt") : null,
               isOwner ? () => handleStatusChange("dohodnuty_naber") : null,
@@ -1216,10 +1213,25 @@ export default function KlientDetailPage() {
               <div style={{ overflowX: "auto", overflowY: "visible", paddingBottom: "6px", scrollbarWidth: "thin", scrollbarColor: "#374151 var(--border)" }}>
                 <div style={{ display: "flex", alignItems: "flex-start", minWidth: "max-content", gap: "0", paddingBottom: "2px" }}>
                   {COMBINED_STEPS.map((step, i) => {
-                    const isCompleted = i < combinedCurrent;
-                    const isCurrent = i === combinedCurrent;
+                    // Seller kroky (0-3): stav podľa workflowStep
+                    // Deal kroky (4-7): stav len podľa reálneho obchodStatus — nie z klient.status
+                    // Predaný (8): aktívny keď klient.status = uzavrety
+                    let isCompleted: boolean;
+                    let isCurrent: boolean;
+                    if (i <= 3) {
+                      isCompleted = workflowStep > i;
+                      isCurrent = workflowStep === i;
+                    } else if (i === 8) {
+                      isCompleted = false;
+                      isCurrent = workflowStep >= 4;
+                    } else {
+                      // i = 4,5,6,7 — deal kroky
+                      const dealI = i - 4;
+                      isCompleted = workflowStep >= 3 && dealSubStep > dealI;
+                      isCurrent = workflowStep === 3 && dealSubStep === dealI;
+                    }
                     const handler = STEP_HANDLERS[i];
-                    const isClickable = handler !== null && (i <= 3 || i === 8 ? i !== combinedCurrent : true);
+                    const isClickable = handler !== null && (i <= 3 || i === 8 ? !isCurrent : true);
                     return (
                       <div key={step.key} style={{ display: "flex", alignItems: "center" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", width: "80px" }}>
