@@ -1,227 +1,304 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/components/AuthProvider";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+import Link from "next/link";
 
-interface InAppNotif {
+interface Notif {
   id: string;
-  type: "info" | "success" | "warning" | "danger" | "sla" | "manager" | "match" | "kolizia";
+  type: "info" | "warning" | "success" | "action" | "match";
   title: string;
-  body: string | null;
-  url: string | null;
-  meta: Record<string, unknown> | null;
-  read_at: string | null;
-  created_at: string;
+  detail: string;
+  time: string;
+  read: boolean;
+  link?: string;
 }
 
-const TYPE_LABEL: Record<InAppNotif["type"], string> = {
-  info: "Info", success: "Úspech", warning: "Upozornenie", danger: "Dôležité",
-  sla: "SLA", manager: "Manažér", match: "Zhoda", kolizia: "Kolízia",
+const TYPE_CONFIG: Record<string, { bg: string; border: string; color: string; icon: string }> = {
+  info: { bg: "#EFF6FF", border: "#BFDBFE", color: "#2563EB", icon: "ℹ️" },
+  warning: { bg: "#FEF3C7", border: "#FDE68A", color: "#D97706", icon: "⚠️" },
+  success: { bg: "#F0FDF4", border: "#BBF7D0", color: "#059669", icon: "✓" },
+  action: { bg: "#FEF2F2", border: "#FECACA", color: "#DC2626", icon: "❗" },
+  match: { bg: "#F5F3FF", border: "#DDD6FE", color: "#7C3AED", icon: "🔗" },
 };
-
-const TYPE_COLOR: Record<InAppNotif["type"], { bg: string; color: string; icon: string }> = {
-  info:    { bg: "#EFF6FF", color: "#2563EB", icon: "ℹ" },
-  success: { bg: "#F0FDF4", color: "#10B981", icon: "✓" },
-  warning: { bg: "#FEF3C7", color: "#F59E0B", icon: "!" },
-  danger:  { bg: "#FEE2E2", color: "#DC2626", icon: "‼" },
-  sla:     { bg: "#FEF3C7", color: "#F59E0B", icon: "⏱" },
-  manager: { bg: "#F5F3FF", color: "#7C3AED", icon: "👤" },
-  match:   { bg: "#F5F3FF", color: "#7C3AED", icon: "🔗" },
-  kolizia: { bg: "#FEE2E2", color: "#DC2626", icon: "⚠" },
-};
-
-const FILTERS = [
-  { value: "all", label: "Všetky" },
-  { value: "unread", label: "Neprečítané" },
-  { value: "sla", label: "SLA" },
-  { value: "manager", label: "Manažér" },
-  { value: "kolizia", label: "Kolízie" },
-];
-
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString("sk", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
 
 export default function NotifikaciePage() {
-  const router = useRouter();
-  const { user } = useAuth();
-  const [items, setItems] = useState<InAppNotif[]>([]);
+  const [notifs, setNotifs] = useState<Notif[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
 
-  const load = useCallback(async () => {
-    if (!user?.id) return;
+  useEffect(() => { generateNotifications(); }, []);
+
+  async function generateNotifications() {
     setLoading(true);
-    try {
-      const res = await fetch(`/api/notifikacie?user_id=${user.id}&limit=200`);
-      const d = await res.json();
-      setItems(d.notifications || []);
-    } finally { setLoading(false); }
-  }, [user?.id]);
+    const notifications: Notif[] = [];
 
-  useEffect(() => { load(); }, [load]);
+    // 1. Matching zhody — kupujúci vs nehnuteľnosti
+    const [{ data: kupujuci }, { data: nehnutelnosti }, { data: objednavky }] = await Promise.all([
+      supabase.from("klienti").select("id,meno,rozpocet_max,lokalita").eq("typ", "kupujuci").limit(50),
+      supabase.from("nehnutelnosti").select("id,nazov,typ,cena,lokalita,created_at").neq("stav", "predane").limit(50),
+      supabase.from("objednavky").select("id,klient_id,druh,cena_do,lokalita,created_at").limit(50),
+    ]);
 
-  async function markRead(ids: string[]) {
-    if (!user?.id || ids.length === 0) return;
-    await fetch("/api/notifikacie", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "mark_read", user_id: user.id, ids }),
+    // Generuj match notifikácie
+    (objednavky ?? []).forEach(obj => {
+      const klient = (kupujuci ?? []).find(k => k.id === obj.klient_id);
+      if (!klient) return;
+
+      const matches = (nehnutelnosti ?? []).filter(n => {
+        if (obj.druh && n.typ && obj.druh !== n.typ) return false;
+        if (obj.cena_do && n.cena && n.cena > obj.cena_do) return false;
+        return true;
+      });
+
+      if (matches.length > 0) {
+        notifications.push({
+          id: `match-${obj.id}`,
+          type: "match",
+          title: `${matches.length} zhôd pre ${klient.meno}`,
+          detail: `Objednávka na ${obj.druh || "nehnuteľnosť"}${obj.cena_do ? ` do ${Number(obj.cena_do).toLocaleString("sk")} €` : ""} — nájdené ponuky v portfóliu`,
+          time: new Date(obj.created_at).toLocaleDateString("sk"),
+          read: false,
+          link: "/matching",
+        });
+      }
     });
-    load();
+
+    // 2. Nové nábery za posledných 7 dní
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    const { data: recentNabery } = await supabase
+      .from("naberove_listy")
+      .select("id,typ_nehnutelnosti,obec,predajna_cena,created_at,klient_id")
+      .gte("created_at", weekAgo)
+      .order("created_at", { ascending: false });
+
+    (recentNabery ?? []).forEach(n => {
+      notifications.push({
+        id: `naber-${n.id}`,
+        type: "success",
+        title: "Nový náber uložený",
+        detail: `${n.typ_nehnutelnosti || "Nehnuteľnosť"}, ${n.obec || "—"}${n.predajna_cena ? ` — ${Number(n.predajna_cena).toLocaleString("sk")} €` : ""}`,
+        time: new Date(n.created_at).toLocaleDateString("sk"),
+        read: true,
+        link: n.klient_id ? `/klienti/${n.klient_id}` : undefined,
+      });
+    });
+
+    // 3. Klienti bez aktivity > 7 dní (typ predavajuci, aktívny)
+    const { data: staleKlienti } = await supabase
+      .from("klienti")
+      .select("id,meno,created_at")
+      .in("status", ["aktivny", "novy_kontakt", "dohodnuty_naber"])
+      .lte("created_at", weekAgo)
+      .order("created_at", { ascending: true })
+      .limit(5);
+
+    (staleKlienti ?? []).forEach(k => {
+      const daysSince = Math.floor((Date.now() - new Date(k.created_at).getTime()) / 86400000);
+      notifications.push({
+        id: `stale-${k.id}`,
+        type: "action",
+        title: "Ozvať sa klientovi",
+        detail: `${k.meno} — posledný kontakt pred ${daysSince} dňami`,
+        time: new Date(k.created_at).toLocaleDateString("sk"),
+        read: false,
+        link: `/klienti/${k.id}`,
+      });
+    });
+
+    // 4. Stagnujúce a nedokončené inzeráty — smart suggestions
+    const { data: inzeraty } = await supabase
+      .from("nehnutelnosti")
+      .select("id,nazov,cena,typ,kategoria,lokalita,obec,status,created_at,updated_at,klient_id")
+      .in("status", ["aktivny", "koncept"])
+      .order("updated_at", { ascending: true })
+      .limit(20);
+
+    const now = Date.now();
+    (inzeraty ?? []).forEach(inz => {
+      const updatedAt = new Date(inz.updated_at || inz.created_at).getTime();
+      const createdAt = new Date(inz.created_at).getTime();
+      const daysInactive = Math.floor((now - updatedAt) / 86400000);
+      const daysOnMarket = Math.floor((now - createdAt) / 86400000);
+      const title = inz.nazov || `${inz.typ || inz.kategoria || "Inzerát"} — ${inz.obec || inz.lokalita || ""}`.trim();
+      const link = inz.klient_id ? `/klienti/${inz.klient_id}` : "/portfolio";
+
+      // Nedokončený koncept > 2 dni
+      if (inz.status === "koncept" && daysOnMarket > 2) {
+        notifications.push({
+          id: `koncept-${inz.id}`,
+          type: "warning",
+          title: `Nedokončený koncept: ${title}`,
+          detail: `Rozpracovaný inzerát čaká na publikovanie ${daysOnMarket} dní. Dokončite a publikujte.`,
+          time: new Date(inz.created_at).toLocaleDateString("sk"),
+          read: false,
+          link,
+        });
+        return;
+      }
+
+      if (inz.status !== "aktivny") return;
+
+      const cena = Number(inz.cena) || 0;
+      const cena2pct = Math.round(cena * 0.98 / 100) * 100 - 100; // -2% zaokrúhlená Baťova
+      const cena5pct = Math.round(cena * 0.95 / 100) * 100 - 100; // -5%
+
+      if (daysInactive >= 7 && daysInactive < 15) {
+        notifications.push({
+          id: `stale-7-${inz.id}`,
+          type: "info",
+          title: `Skontroluj inzerát: ${title}`,
+          detail: `${daysOnMarket} dní na trhu bez zmeny. Skontroluj aktualitu fotiek a textu.`,
+          time: new Date(inz.updated_at || inz.created_at).toLocaleDateString("sk"),
+          read: true,
+          link,
+        });
+      } else if (daysInactive >= 15 && daysInactive < 30) {
+        const tip = daysOnMarket >= 21
+          ? "Zníž cenu alebo aktualizuj text — inzerát stráca viditeľnosť na portáloch."
+          : "Vymeň titulnú fotku — vizuálna obnova zvyčajne zvýši kliky o 15–20 %.";
+        notifications.push({
+          id: `stale-15-${inz.id}`,
+          type: "warning",
+          title: `Obnov záujem: ${title}`,
+          detail: `${daysInactive} dní bez aktivity (${daysOnMarket} dní na trhu). ${tip}`,
+          time: new Date(inz.updated_at || inz.created_at).toLocaleDateString("sk"),
+          read: false,
+          link,
+        });
+      } else if (daysInactive >= 30 && daysInactive < 60) {
+        const tip = cena > 0
+          ? `Zníž cenu o 2 % (${cena.toLocaleString("sk")} € → ${cena2pct.toLocaleString("sk")} €) — najefektívnejší krok pri stagnácii.`
+          : "Zníž cenu o 2–3 % — najefektívnejší krok pri stagnácii.";
+        notifications.push({
+          id: `stale-30-${inz.id}`,
+          type: "action",
+          title: `Inzerát stagnuje: ${title}`,
+          detail: `${daysInactive} dní bez zmeny (${daysOnMarket} dní na trhu). ${tip} Obnov aj fotky a text.`,
+          time: new Date(inz.updated_at || inz.created_at).toLocaleDateString("sk"),
+          read: false,
+          link,
+        });
+      } else if (daysInactive >= 60) {
+        const tip = cena > 0
+          ? `Zásadná revízia: zníž cenu o 5 %+ (${cena.toLocaleString("sk")} € → ${cena5pct.toLocaleString("sk")} €), nové profesionálne fotky, prepíš celý text.`
+          : "Zásadná revízia: zníženie ceny 5 %+, nové fotky, nový text.";
+        notifications.push({
+          id: `stale-60-${inz.id}`,
+          type: "action",
+          title: `Kritická stagnácia: ${title}`,
+          detail: `${daysInactive} dní bez aktivity (${daysOnMarket} dní na trhu). ${tip}`,
+          time: new Date(inz.updated_at || inz.created_at).toLocaleDateString("sk"),
+          read: false,
+          link,
+        });
+      }
+    });
+
+    // 5. Nehnuteľnosti bez dokumentov (warning)
+    const { data: noDocProps } = await supabase
+      .from("nehnutelnosti")
+      .select("id,nazov")
+      .is("energeticky_certifikat", null)
+      .neq("stav", "predane")
+      .limit(3);
+
+    (noDocProps ?? []).forEach(n => {
+      notifications.push({
+        id: `doc-${n.id}`,
+        type: "warning",
+        title: "Chýba energetický certifikát",
+        detail: `${n.nazov || "Nehnuteľnosť"} — dokument treba doplniť`,
+        time: "systém",
+        read: true,
+        link: "/portfolio",
+      });
+    });
+
+    // Sort: unread first, then by time
+    notifications.sort((a, b) => {
+      if (a.read !== b.read) return a.read ? 1 : -1;
+      return 0;
+    });
+
+    setNotifs(notifications);
+    setLoading(false);
   }
 
-  async function markAllRead() {
-    if (!user?.id) return;
-    await fetch("/api/notifikacie", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "mark_read", user_id: user.id }),
-    });
-    load();
+  function markAllRead() {
+    setNotifs(ns => ns.map(n => ({ ...n, read: true })));
   }
 
-  async function deleteNotif(id: string) {
-    if (!user?.id) return;
-    if (!confirm("Zmazať notifikáciu?")) return;
-    await fetch("/api/notifikacie", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "delete", user_id: user.id, ids: [id] }),
-    });
-    load();
-  }
-
-  const filtered = items.filter(n => {
-    if (filter === "all") return true;
-    if (filter === "unread") return !n.read_at;
-    return n.type === filter;
-  });
-
-  const unreadCount = items.filter(n => !n.read_at).length;
+  const unread = notifs.filter(n => !n.read).length;
 
   return (
-    <div style={{ maxWidth: "880px", margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+    <div style={{ maxWidth: "700px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <div>
-          <h1 style={{ fontSize: "26px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em", margin: 0 }}>
-            Notifikácie
-          </h1>
-          <p style={{ fontSize: "14px", color: "var(--text-secondary)", margin: "4px 0 0" }}>
-            {unreadCount > 0 ? `${unreadCount} neprečítaných` : "Všetky prečítané"}
+          <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>Notifikácie</h1>
+          <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "4px 0 0" }}>
+            {loading ? "Načítavam..." : unread > 0 ? `${unread} neprečítaných` : "Všetko prečítané"}
           </p>
         </div>
-        {unreadCount > 0 && (
+        {unread > 0 && (
           <button onClick={markAllRead} style={{
-            height: "36px", padding: "0 16px", background: "#374151",
-            color: "#fff", border: "none", borderRadius: "8px",
-            fontSize: "13px", fontWeight: 600, cursor: "pointer",
-          }}>Označiť všetky ako prečítané</button>
+            padding: "8px 16px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+            borderRadius: "10px", fontSize: "12px", fontWeight: "600", cursor: "pointer", color: "var(--text-primary)",
+          }}>Označiť všetko</button>
         )}
       </div>
 
-      {/* Filters */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
-        {FILTERS.map(f => (
-          <button key={f.value} onClick={() => setFilter(f.value)} style={{
-            height: "32px", padding: "0 12px", borderRadius: "8px",
-            background: filter === f.value ? "#374151" : "var(--bg-elevated)",
-            color: filter === f.value ? "#fff" : "var(--text-secondary)",
-            border: "1px solid " + (filter === f.value ? "#374151" : "var(--border)"),
-            fontSize: "12px", fontWeight: 600, cursor: "pointer",
-          }}>{f.label}</button>
-        ))}
-      </div>
+      {loading && (
+        <div style={{ padding: "60px", textAlign: "center", color: "var(--text-muted)" }}>Načítavam notifikácie...</div>
+      )}
 
-      {loading ? (
-        <div style={{ padding: "60px", textAlign: "center", color: "var(--text-muted)", fontSize: "13px" }}>
-          Načítavam...
-        </div>
-      ) : filtered.length === 0 ? (
+      {!loading && notifs.length === 0 && (
         <div style={{
-          padding: "80px 32px", textAlign: "center",
-          background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px",
+          padding: "60px", textAlign: "center", background: "var(--bg-surface)",
+          border: "1px solid var(--border)", borderRadius: "14px",
         }}>
-          <div style={{ fontSize: "48px", marginBottom: "12px" }}>🔔</div>
-          <h3 style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 4px" }}>
-            Žiadne notifikácie
-          </h3>
-          <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>
-            {filter === "all" ? "Nič tu zatiaľ nie je. Notifikácie sa objavia pri SLA porušeniach, kolíziách a iných udalostiach." : "Skús zmeniť filter."}
-          </p>
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {filtered.map(n => {
-            const cfg = TYPE_COLOR[n.type] || TYPE_COLOR.info;
-            const isUnread = !n.read_at;
-            return (
-              <div key={n.id} style={{
-                display: "flex", alignItems: "flex-start", gap: "12px",
-                padding: "14px 16px", background: "var(--bg-surface)",
-                border: isUnread ? `1px solid ${cfg.color}40` : "1px solid var(--border-subtle)",
-                borderLeft: `3px solid ${cfg.color}`,
-                borderRadius: "10px",
-                transition: "all 0.15s",
-              }}>
-                <div style={{
-                  width: "36px", height: "36px", borderRadius: "50%",
-                  background: cfg.bg, color: cfg.color,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "16px", fontWeight: 700, flexShrink: 0,
-                }}>{cfg.icon}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                    <h3 style={{
-                      fontSize: "14px", fontWeight: isUnread ? 700 : 500,
-                      color: "var(--text-primary)", margin: 0,
-                    }}>{n.title}</h3>
-                    <span style={{
-                      fontSize: "10px", padding: "2px 6px", borderRadius: "4px",
-                      background: cfg.bg, color: cfg.color, fontWeight: 600,
-                      textTransform: "uppercase", letterSpacing: "0.04em",
-                    }}>{TYPE_LABEL[n.type]}</span>
-                    {isUnread && <span style={{
-                      width: "6px", height: "6px", borderRadius: "50%", background: cfg.color,
-                    }} />}
-                  </div>
-                  {n.body && (
-                    <p style={{
-                      fontSize: "13px", color: "var(--text-secondary)",
-                      lineHeight: 1.5, margin: "6px 0 0",
-                    }}>{n.body}</p>
-                  )}
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "8px" }}>
-                    {fmtTime(n.created_at)}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: "6px", flexDirection: "column", alignItems: "flex-end" }}>
-                  {n.url && (
-                    <button onClick={() => { if (isUnread) markRead([n.id]); router.push(n.url!); }} style={{
-                      padding: "6px 12px", background: "var(--bg-elevated)",
-                      border: "1px solid var(--border)", borderRadius: "6px",
-                      fontSize: "11px", fontWeight: 600, color: "var(--text-primary)",
-                      cursor: "pointer",
-                    }}>Otvoriť →</button>
-                  )}
-                  {isUnread && (
-                    <button onClick={() => markRead([n.id])} style={{
-                      padding: "4px 8px", background: "transparent",
-                      border: "1px solid var(--border-subtle)", borderRadius: "6px",
-                      fontSize: "10px", fontWeight: 500, color: "var(--text-muted)",
-                      cursor: "pointer",
-                    }}>Označiť prečítané</button>
-                  )}
-                  <button onClick={() => deleteNotif(n.id)} style={{
-                    padding: "4px 8px", background: "transparent",
-                    border: "none", color: "var(--text-muted)",
-                    fontSize: "11px", cursor: "pointer",
-                  }} title="Zmazať">🗑</button>
-                </div>
-              </div>
-            );
-          })}
+          <div style={{ fontSize: "36px", marginBottom: "12px" }}>🔔</div>
+          <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>Žiadne notifikácie</div>
+          <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>Všetko je v poriadku</div>
         </div>
       )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        {notifs.map(n => {
+          const c = TYPE_CONFIG[n.type] || TYPE_CONFIG.info;
+          const inner = (
+            <div style={{
+              display: "flex", gap: "14px", padding: "16px",
+              background: n.read ? "var(--bg-surface)" : c.bg,
+              border: `1px solid ${n.read ? "var(--border)" : c.border}`,
+              borderRadius: "12px", cursor: "pointer", transition: "all 0.15s",
+              opacity: n.read ? 0.7 : 1,
+            }}
+              onClick={() => setNotifs(ns => ns.map(x => x.id === n.id ? { ...x, read: true } : x))}
+            >
+              <div style={{
+                width: "40px", height: "40px", borderRadius: "12px",
+                background: n.read ? "var(--bg-elevated)" : `${c.color}15`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "16px", flexShrink: 0,
+              }}>{c.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                  <div style={{ fontSize: "14px", fontWeight: n.read ? "500" : "700", color: "var(--text-primary)" }}>{n.title}</div>
+                  {!n.read && <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: c.color, flexShrink: 0, marginTop: "6px" }} />}
+                </div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>{n.detail}</div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>{n.time}</div>
+              </div>
+              {n.link && <span style={{ fontSize: "14px", color: "var(--text-muted)", alignSelf: "center" }}>→</span>}
+            </div>
+          );
+
+          if (n.link) {
+            return <Link key={n.id} href={n.link} style={{ textDecoration: "none" }}>{inner}</Link>;
+          }
+          return <div key={n.id}>{inner}</div>;
+        })}
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, createContext, useContext } from "react";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { VianemaBranded, PoweredByAMGD } from "@/components/brand";
+import PasswordInput from "@/components/PasswordInput";
 
 interface User {
   id: string;
@@ -90,7 +91,30 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
         if (savedId) {
           const found = accs.find(a => a.id === savedId);
-          if (found) setUser(found);
+          if (found) {
+            // Najprv počkaj na bootstrap session cookie, potom setUser →
+            // všetky deti komponenty odštartujú fetch volania až keď cookie existuje.
+            // Ak bootstrap zlyhá, stále setUser → user vidí UI ale guard fetchy
+            // budú 401 (lepšie ako stuck loading screen).
+            try {
+              const ctrl = new AbortController();
+              const bsTimeout = setTimeout(() => ctrl.abort(), 1500);
+              try {
+                await fetch("/api/auth/session-bootstrap", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify({ user_id: found.id }),
+                  signal: ctrl.signal,
+                });
+              } finally {
+                clearTimeout(bsTimeout);
+              }
+            } catch (e) {
+              console.warn("[auth] session-bootstrap failed:", e);
+            }
+            setUser(found);
+          }
         }
       } catch (e) {
         console.error("[auth] initial load error:", e);
@@ -154,11 +178,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   async function login(identifier: string, password: string): Promise<string | null> {
     if (!identifier.trim()) return "Zadaj meno alebo email";
 
-    // Cez server API — bcrypt hashovanie + rate limit + audit
+    // Cez server API — bcrypt hashovanie + rate limit + audit + HMAC session cookie
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // credentials: "include" — server set-cookie pre crm_session sa uchová
+        credentials: "include",
         body: JSON.stringify({ identifier: identifier.trim(), password }),
       });
       const body = await res.json();
@@ -204,6 +230,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   async function logout() {
     localStorage.removeItem("crm_user");
+    // Vymaž server-side HMAC session cookie aj Supabase auth (Google OAuth)
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
     await supabase.auth.signOut();
     setUser(null);
     if (typeof window !== "undefined") window.location.href = "/";
@@ -456,22 +484,18 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
             <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.7)", marginBottom: "6px", display: "block", textTransform: "uppercase", letterSpacing: "0.04em" }}>
               Heslo
             </label>
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={submitting}
               placeholder="••••••••"
+              inverse
               style={{
-                width: "100%", padding: "13px 16px", borderRadius: "12px",
                 background: "rgba(255,255,255,0.06)",
                 border: "1px solid rgba(255,255,255,0.12)",
-                color: "#fff", fontSize: "14px", outline: "none",
-                transition: "all 0.15s",
+                color: "#fff",
               }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
             />
           </div>
 

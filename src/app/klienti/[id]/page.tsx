@@ -1,23 +1,22 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { STATUS_LABELS } from "@/lib/database.types";
 import type { Klient } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import SlaTimer from "@/components/SlaTimer";
 import KlientHistoryTab from "@/components/KlientHistoryTab";
-import KlientMatchingTab from "@/components/KlientMatchingTab";
-import NovaNehnutelnostModal from "@/components/NovaNehnutelnostModal";
-import { calcMatch, type MatchObjednavka } from "@/lib/matching";
-import type { Nehnutelnost } from "@/lib/database.types";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
+import { createCalendarEvent, notifyCalendarFail } from "@/lib/calendar";
+import { klientUpdate } from "@/lib/klientApi";
+import SmsSignButton from "@/components/SmsSignButton";
 
 // ── LV sekcia s uploadom a parsovaním ──
-function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation }: {
+function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
   klientId: string;
   lvData: Record<string, unknown> | null | undefined;
   onParsed: (data: Record<string, unknown>) => void;
@@ -26,6 +25,7 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
   klientLokalita?: string;
   onFixName?: (newName: string) => Promise<void>;
   onFixLocation?: (newLokalita: string) => Promise<void>;
+  userId: string;
 }) {
   const [parsing, setParsing] = useState(false);
   const [err, setErr] = useState("");
@@ -53,9 +53,8 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
       if (!res.ok) throw new Error(await res.text());
       const parsed = await res.json();
 
-      // Ulož do klienta
-      const { supabase: sb } = await import("@/lib/supabase");
-      await sb.from("klienti").update({ lv_data: parsed }).eq("id", klientId);
+      // Ulož do klienta cez API endpoint (ownership check)
+      await klientUpdate(userId, klientId, { lv_data: parsed });
       console.log("[LVSection] LV uložené do DB, volám onParsed...");
       onParsed(parsed);
       console.log("[LVSection] onParsed hotové, rodičovský modal by mal byť otvorený");
@@ -271,8 +270,14 @@ const WORKFLOW_STEPS = [
 export default function KlientDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const id = params.id as string;
+  // Kam sa vrátiť tlačidlom "späť" — rešpektuje odkial používateľ prišiel
+  // (z /kupujuci by sa mal vrátiť do /kupujuci, default je /klienti).
+  const fromParam = searchParams.get("from");
+  const backHref = fromParam === "kupujuci" ? "/kupujuci" : "/klienti";
+  const backLabel = fromParam === "kupujuci" ? "Kupujúci" : "Klienti";
 
   const [klient, setKlient] = useState<Klient | null>(null);
   const [loading, setLoading] = useState(true);
@@ -281,13 +286,10 @@ export default function KlientDetailPage() {
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
-  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia" | "zhody">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
-  const [showNovaNehnModal, setShowNovaNehnModal] = useState(false);
-  // Matching stats — počet zhôd + top skóre pre stat tile v karte klienta
-  const [matchingStats, setMatchingStats] = useState<{ count: number; topScore: number }>({ count: 0, topScore: 0 });
   const [obhliadkaPrefill, setObhliadkaPrefill] = useState<{ datum: string; miesto: string } | null>(null);
   // Pamätáme si, či sa Obhliadka modal otvoril z datetime pickeru (tlačidlo "Späť")
   const [obhliadkaCameFromPicker, setObhliadkaCameFromPicker] = useState(false);
@@ -376,31 +378,14 @@ export default function KlientDetailPage() {
     if (user?.id) getMaklerUuid(user.id).then(setMyMaklerUuid);
   }, [id]);
 
-  // Matching stats — pre kupujúcich vypočítaj počet zhôd s nehnuteľnosťami
-  // (skóre ≥ 30) + top skóre. Načítava nehnuteľnosti + objednavky tohto klienta.
+  // Ak sa typ zmení na "kupujuci" počas zobrazeného tabu "nehnutelnosti"
+  // (alebo sa otvorí kupujúci s tým tabom), tab v karte už neexistuje —
+  // prepni na "objednavky" aby používateľ neostal s prázdnym obsahom.
   useEffect(() => {
-    if (!klient || (klient.typ !== "kupujuci" && klient.typ !== "oboje")) return;
-    let stopped = false;
-    (async () => {
-      const [{ data: ns }, { data: os }] = await Promise.all([
-        supabase.from("nehnutelnosti").select("*").neq("stav", "predane"),
-        supabase.from("objednavky").select("id, klient_id, druh, poziadavky, lokalita, cena_do").eq("klient_id", klient.id),
-      ]);
-      if (stopped) return;
-      const nehn = (ns ?? []) as Nehnutelnost[];
-      const obj = (os ?? []) as MatchObjednavka[];
-      let count = 0, topScore = 0;
-      for (const n of nehn) {
-        const r = calcMatch(klient, n, obj);
-        if (r.score >= 30) {
-          count++;
-          if (r.score > topScore) topScore = r.score;
-        }
-      }
-      setMatchingStats({ count, topScore });
-    })();
-    return () => { stopped = true; };
-  }, [klient?.id, klient?.typ]);
+    if (klient?.typ === "kupujuci" && activeTab === "nehnutelnosti") {
+      setActiveTab("objednavky");
+    }
+  }, [klient?.typ, activeTab]);
 
   // 15-minútová pripomienka na LV ak chýba
   useEffect(() => {
@@ -499,11 +484,11 @@ export default function KlientDetailPage() {
         <div style={{ fontSize: "16px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "8px" }}>
           Klient nenájdený
         </div>
-        <button onClick={() => router.push("/klienti")} style={{
+        <button onClick={() => router.push(backHref)} style={{
           padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
           borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
         }}>
-          ← Späť na klientov
+          ← Späť na {backLabel.toLowerCase()}
         </button>
       </div>
     );
@@ -536,7 +521,7 @@ export default function KlientDetailPage() {
       return;
     }
     // Pre ostatné statusy — len update
-    await supabase.from("klienti").update({ status: newStatus }).eq("id", klient.id);
+    if (user?.id) await klientUpdate(user.id, klient.id, { status: newStatus });
     loadAll();
   }
 
@@ -582,40 +567,32 @@ export default function KlientDetailPage() {
         const cleaned = existingNote.replace(/Adresa:\s*.+/i, "").trim();
         updates.poznamka = cleaned ? `${cleaned}\n${addrLine}` : addrLine;
       }
-      await supabase.from("klienti").update(updates).eq("id", klient.id);
-    } else if (isNaber && naberDatum) {
-      await supabase.from("klienti").update({ datum_naberu: new Date(naberDatum).toISOString() }).eq("id", klient.id);
+      if (user?.id) await klientUpdate(user.id, klient.id, updates);
+    } else if (isNaber && naberDatum && user?.id) {
+      await klientUpdate(user.id, klient.id, { datum_naberu: new Date(naberDatum).toISOString() });
     }
 
-    // 2. Vytvor Google Calendar event
+    // 2. Vytvor Google Calendar event — pri zlyhaní upozorni maklera
     if (naberDatum && user?.id) {
-      try {
-        const startDt = new Date(naberDatum).toISOString();
-        const endDt = new Date(new Date(naberDatum).getTime() + durationMs).toISOString();
-        const summary = `${evCfg.label} — ${klient.meno}`;
-        const res = await fetch("/api/google/calendar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: user.id,
-            summary,
-            start: startDt,
-            end: endDt,
-            description: [
-              !isVolat && naberMiesto && `Adresa: ${naberMiesto}`,
-              klient.telefon && `Tel: ${klient.telefon}`,
-              klient.email && `Email: ${klient.email}`,
-            ].filter(Boolean).join("\n"),
-            location: isVolat ? "" : naberMiesto,
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.event?.id) {
-            await supabase.from("klienti").update({ calendar_event_id: data.event.id }).eq("id", klient.id);
-          }
-        }
-      } catch { /* kalendár zlyhá ticho */ }
+      const startDt = new Date(naberDatum).toISOString();
+      const endDt = new Date(new Date(naberDatum).getTime() + durationMs).toISOString();
+      const result = await createCalendarEvent({
+        userId: user.id,
+        summary: `${evCfg.label} — ${klient.meno}`,
+        start: startDt,
+        end: endDt,
+        description: [
+          !isVolat && naberMiesto && `Adresa: ${naberMiesto}`,
+          klient.telefon && `Tel: ${klient.telefon}`,
+          klient.email && `Email: ${klient.email}`,
+        ].filter(Boolean).join("\n"),
+        location: isVolat ? "" : naberMiesto,
+      });
+      if (result.ok) {
+        if (user?.id) await klientUpdate(user.id, klient.id, { calendar_event_id: result.eventId });
+      } else {
+        notifyCalendarFail(result, klient.meno);
+      }
     }
 
     setCalendarSyncing(false);
@@ -675,7 +652,7 @@ export default function KlientDetailPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       const parsed = await res.json();
-      await supabase.from("klienti").update({ lv_data: parsed }).eq("id", klient.id);
+      if (user?.id) await klientUpdate(user.id, klient.id, { lv_data: parsed });
       setKlient(k => k ? { ...k, lv_data: parsed } : k);
       setShowLVPrompt(false);
 
@@ -764,13 +741,15 @@ export default function KlientDetailPage() {
     return cards;
   })();
 
-  const isKlientBuyer = klient.typ === "kupujuci" || klient.typ === "oboje";
+  // Pre čistého kupujúceho (typ="kupujuci") skryjeme tab "Nehnuteľnosti" —
+  // kupujuci predáva nič, iba kupuje. Nábery, LV a vlastné inzeráty sa ho
+  // netýkajú; relevantnejšie tým je sekcia Objednávky (čo hľadá).
+  const isCistyKupujuci = klient.typ === "kupujuci";
   const tabs = [
     { key: "timeline", label: "Aktivita", count: timeline.length },
-    { key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length },
+    ...(isCistyKupujuci ? [] : [{ key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length }]),
     { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
     { key: "objednavky", label: "Objednávky", count: objednavky.length },
-    ...(isKlientBuyer ? [{ key: "zhody", label: "Zhody", count: 0 }] : []),
     { key: "dokumenty", label: "Dokumenty", count: 0 },
     { key: "historia", label: "História", count: 0 },
   ];
@@ -784,15 +763,15 @@ export default function KlientDetailPage() {
           onMouseEnter={e => e.currentTarget.style.color = "var(--text-primary)"}
           onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>🏠 Prehľad</a>
         <span style={{ color: "var(--text-muted)" }}>›</span>
-        <a href="/klienti" style={{ color: "var(--text-muted)", textDecoration: "none" }}
+        <a href={backHref} style={{ color: "var(--text-muted)", textDecoration: "none" }}
           onMouseEnter={e => e.currentTarget.style.color = "var(--text-primary)"}
-          onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>Klienti</a>
+          onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}>{backLabel}</a>
         <span style={{ color: "var(--text-muted)" }}>›</span>
         <span style={{ color: "var(--text-primary)", fontWeight: "600" }}>{klient.meno}</span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
-        <button onClick={() => router.push("/klienti")} style={{
+        <button onClick={() => router.push(backHref)} style={{
           width: "36px", height: "36px", borderRadius: "50%", border: "1px solid var(--border)",
           background: "var(--bg-surface)", cursor: "pointer", fontSize: "16px", color: "var(--text-muted)",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -807,6 +786,58 @@ export default function KlientDetailPage() {
         </div>
         {isOwner ? (
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            {/* Toggle typu klienta — predavajuci/kupujuci/oboje. Maklér môže
+                jednoducho doplniť alebo zúžiť rolu klienta bez nutnosti otvárať
+                úpravu. Tlačidlá sa menia podľa aktuálneho typu (jeden klik =
+                jedna logická akcia). */}
+            {klient.typ === "predavajuci" && (
+              <button onClick={async () => {
+                if (!confirm(`Doplniť ${klient.meno} aj ako kupujúceho?\n\nObjaví sa aj v sekcii Kupujúci.`)) return;
+                if (user?.id) await klientUpdate(user.id, klient.id, { typ: "oboje" });
+                loadAll();
+              }} style={{
+                padding: "9px 14px", background: "#ECFDF5", color: "#065F46",
+                border: "1px solid #A7F3D0", borderRadius: "10px", fontSize: "13px",
+                fontWeight: "600", cursor: "pointer",
+              }} title="Klient sa doplní aj ako kupujúci (zostane aj predávajúcim)">
+                + aj kupujúci
+              </button>
+            )}
+            {klient.typ === "kupujuci" && (
+              <button onClick={async () => {
+                if (!confirm(`Doplniť ${klient.meno} aj ako predávajúceho?\n\nObjaví sa aj v sekcii Klienti.`)) return;
+                if (user?.id) await klientUpdate(user.id, klient.id, { typ: "oboje" });
+                loadAll();
+              }} style={{
+                padding: "9px 14px", background: "#EFF6FF", color: "#1E40AF",
+                border: "1px solid #BFDBFE", borderRadius: "10px", fontSize: "13px",
+                fontWeight: "600", cursor: "pointer",
+              }} title="Klient sa doplní aj ako predávajúci (zostane aj kupujúcim)">
+                + aj predávajúci
+              </button>
+            )}
+            {klient.typ === "oboje" && (
+              <>
+                <button onClick={async () => {
+                  if (!confirm(`Nechať ${klient.meno} iba ako kupujúceho?\n\nZmizne zo sekcie Klienti.`)) return;
+                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "kupujuci" });
+                  loadAll();
+                }} style={{
+                  padding: "9px 14px", background: "#ECFDF5", color: "#065F46",
+                  border: "1px solid #A7F3D0", borderRadius: "10px", fontSize: "13px",
+                  fontWeight: "600", cursor: "pointer",
+                }}>iba kupujúci</button>
+                <button onClick={async () => {
+                  if (!confirm(`Nechať ${klient.meno} iba ako predávajúceho?\n\nZmizne zo sekcie Kupujúci.`)) return;
+                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "predavajuci" });
+                  loadAll();
+                }} style={{
+                  padding: "9px 14px", background: "#EFF6FF", color: "#1E40AF",
+                  border: "1px solid #BFDBFE", borderRadius: "10px", fontSize: "13px",
+                  fontWeight: "600", cursor: "pointer",
+                }}>iba predávajúci</button>
+              </>
+            )}
             <button onClick={() => setEditModal(true)} style={{
               padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
               border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
@@ -818,11 +849,11 @@ export default function KlientDetailPage() {
             {!klient.je_volny && (klient as { anonymized_at?: string | null }).anonymized_at == null && (
               <button onClick={async () => {
                 if (!confirm(`Uvoľniť klienta ${klient.meno}? Stane sa voľným pre celú kanceláriu.`)) return;
-                await supabase.from("klienti").update({
+                if (user?.id) await klientUpdate(user.id, klient.id, {
                   je_volny: true,
                   volny_dovod: klient.status,
                   volny_at: new Date().toISOString(),
-                }).eq("id", klient.id);
+                });
                 await supabase.from("klienti_history").insert({
                   klient_id: klient.id,
                   action: "uvolneny",
@@ -868,33 +899,6 @@ export default function KlientDetailPage() {
                 border: "1px solid var(--border)", borderRadius: "10px", fontSize: "12px",
                 fontWeight: "600",
               }}>Anonymizovaný {new Date((klient as { anonymized_at: string }).anonymized_at).toLocaleDateString("sk")}</span>
-            )}
-            {/* Admin-only: Trvalé zmazanie klienta */}
-            {(user?.role === "admin" || user?.role === "manager") && (
-              <button onClick={async () => {
-                const c1 = window.confirm(
-                  `Trvalo zmazať klienta "${klient.meno}"?\n\n` +
-                  "• Karta klienta sa zmaže nenávratne\n" +
-                  "• Náberáky a obhliadky zostanú v evidencii bez identifikácie\n" +
-                  "• História klienta sa zmaže\n\n" +
-                  "Operácia je NEVRATNÁ. Pre len skrytie použi 'Anonymizovať (GDPR)'."
-                );
-                if (!c1) return;
-                const c2 = window.prompt(`Pre potvrdenie napíš meno klienta presne: "${klient.meno}"`);
-                if (c2?.trim() !== klient.meno.trim()) { alert("Mená sa nezhodujú, mazanie zrušené"); return; }
-                const r = await fetch("/api/volni-klienti", {
-                  method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "zmazat", klient_id: klient.id, by_user_id: user?.id }),
-                });
-                if (!r.ok) { const e = await r.json(); alert(e.error || "Chyba"); return; }
-                router.push("/klienti");
-              }} style={{
-                padding: "9px 14px", background: "transparent", color: "#DC2626",
-                border: "1px solid #FECACA", borderRadius: "10px", fontSize: "12px",
-                fontWeight: "600", cursor: "pointer",
-              }} title="Trvalé zmazanie (len admin/manager)">
-                🗑 Zmazať
-              </button>
             )}
           </div>
         ) : (
@@ -1083,7 +1087,7 @@ export default function KlientDetailPage() {
             <select
               value={klient.makler_id || ""}
               onChange={async (e) => {
-                await supabase.from("klienti").update({ makler_id: e.target.value || null }).eq("id", klient.id);
+                if (user?.id) await klientUpdate(user.id, klient.id, { makler_id: e.target.value || null });
                 loadAll();
               }}
               style={{
@@ -1134,7 +1138,7 @@ export default function KlientDetailPage() {
               </div>
               {isOwner && (
                 <button onClick={async () => {
-                  await supabase.from("klienti").update({ spolupracujuci_makler_id: null, spolupracujuci_provizia_pct: null }).eq("id", klient.id);
+                  if (user?.id) await klientUpdate(user.id, klient.id, { spolupracujuci_makler_id: null, spolupracujuci_provizia_pct: null });
                   loadAll();
                 }} style={{
                   padding: "4px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "700",
@@ -1209,11 +1213,20 @@ export default function KlientDetailPage() {
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>📝 Vyplniť náberový list</button>
           )}
-          {workflowStep === 2 && isAdmin && (
-            <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
-              marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
-              border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-            }}>📰 Vytvoriť inzerát</button>
+          {/* Krok 2 = Nabraný. Ale ak ešte nie je vyplnený žiadny náberový list,
+              maklér nemôže preskočiť k inzerátu — najprv treba vyplniť náberák. */}
+          {workflowStep === 2 && (
+            nabery.length === 0 ? (
+              <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
+                marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
+                border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>📝 Vyplniť náberový list</button>
+            ) : isAdmin && (
+              <button onClick={() => router.push(`/inzerat?klient_id=${klient.id}`)} style={{
+                marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
+                border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>📰 Vytvoriť inzerát</button>
+            )
           )}
           {klient.datum_naberu && (
             <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
@@ -1398,8 +1411,8 @@ export default function KlientDetailPage() {
                     const updates: Record<string, unknown> = {};
                     if (lvEditFixName && lvEditPickedOwner) updates.meno = lvEditPickedOwner;
                     if (lvEditFixLok && lvEditPickedLok) updates.lokalita = lvEditPickedLok;
-                    if (Object.keys(updates).length > 0) {
-                      await supabase.from("klienti").update(updates).eq("id", klient.id);
+                    if (Object.keys(updates).length > 0 && user?.id) {
+                      await klientUpdate(user.id, klient.id, updates);
                       setKlient(k => k ? { ...k, ...updates } as Klient : k);
                     }
                     // Sync kalendár event — VŽDY keď máme calEventId (aj adresa sa updatuje)
@@ -1497,9 +1510,8 @@ export default function KlientDetailPage() {
                     }
                   }
                 }
-                if (Object.keys(updates).length > 0) {
-                  const { supabase: sb } = await import("@/lib/supabase");
-                  await sb.from("klienti").update(updates).eq("id", klient.id);
+                if (Object.keys(updates).length > 0 && user?.id) {
+                  await klientUpdate(user.id, klient.id, updates);
                   setKlient(k => k ? { ...k, ...updates } as typeof k : k);
                 }
                 setShowLVDiff(false);
@@ -1553,9 +1565,8 @@ export default function KlientDetailPage() {
                 border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
               }}>Ponechať &quot;{klient.meno}&quot;</button>
               <button onClick={async () => {
-                if (!selectedLvOwner) return;
-                const { supabase: sb } = await import("@/lib/supabase");
-                await sb.from("klienti").update({ meno: selectedLvOwner }).eq("id", klient.id);
+                if (!selectedLvOwner || !user?.id) return;
+                await klientUpdate(user.id, klient.id, { meno: selectedLvOwner });
                 // Aktualizuj Google Calendar event s novým menom
                 const calEventId = (klient as { calendar_event_id?: string | null }).calendar_event_id;
                 if (calEventId && user?.id) {
@@ -1588,102 +1599,153 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {/* Rýchle akcie + Štatistiky — jeden zjednotený grid s rovnakou tile veľkosťou.
-          Filter podľa typu klienta:
-          - kupujúci: Objednávka, Zavolať, Kalendár | Objednávky, Zhody, Obhliadky
-          - predávajúci/oboje: Zavolať, Kalendár | Nábery, Inzeráty, Obhliadky
-          Všetky tile rovnaký padding/výška → vizuálne konzistentné. */}
-      {(() => {
-        const isBuyer = klient.typ === "kupujuci";
-        const isBoth = klient.typ === "oboje";
-        type Tile =
-          | { kind: "action"; key: string; icon: string; label: string; onClick: () => void }
-          | { kind: "stat"; key: string; label: string; value: number; tab: "nehnutelnosti" | "objednavky" | "obhliadky" | "zhody"; topScore?: number };
+      {/* Rýchle akcie — Inzerát/Vyplniť náberák odstránené, pracujú sa cez Pipeline predávajúceho */}
+      <div style={{
+        display: "grid", gridTemplateColumns: klient.typ === "kupujuci" ? "repeat(3, 1fr)" : "repeat(2, 1fr)",
+        gap: "10px", marginBottom: "20px",
+      }} className="cards-grid">
+        {klient.typ === "kupujuci" && (
+          <button onClick={() => router.push(`/kupujuci?klient_id=${klient.id}`)} style={{
+            padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+            borderRadius: "12px", cursor: "pointer", textAlign: "center",
+            transition: "border-color 0.15s",
+          }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
+            onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
+          >
+            <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📋</div>
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Objednávka</div>
+          </button>
+        )}
+        <button onClick={() => { if (klient.telefon) window.open(`tel:${klient.telefon}`); }} style={{
+          padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderRadius: "12px", cursor: "pointer", textAlign: "center",
+          transition: "border-color 0.15s",
+        }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
+          onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
+        >
+          <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📞</div>
+          <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Zavolať</div>
+        </button>
+        <button onClick={() => {
+          setPendingStatus(null);
+          setShowDatePicker(true);
+        }} style={{
+          padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+          borderRadius: "12px", cursor: "pointer", textAlign: "center",
+          transition: "border-color 0.15s",
+        }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
+          onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
+        >
+          <div style={{ fontSize: "16px", marginBottom: "4px", opacity: 0.7 }}>📅</div>
+          <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Kalendár</div>
+        </button>
+      </div>
 
-        const actions: Tile[] = [];
-        if (isBuyer || isBoth) {
-          actions.push({ kind: "action", key: "objednavka", icon: "📋", label: "Objednávka",
-            onClick: () => router.push(`/kupujuci?klient_id=${klient.id}`) });
-        }
-        actions.push({ kind: "action", key: "zavolat", icon: "📞", label: "Zavolať",
-          onClick: () => { if (klient.telefon) window.open(`tel:${klient.telefon}`); } });
-        actions.push({ kind: "action", key: "kalendar", icon: "📅", label: "Kalendár",
-          onClick: () => { setPendingStatus(null); setShowDatePicker(true); } });
-
-        const stats: Tile[] = [];
-        if (!isBuyer || isBoth) {
-          stats.push({ kind: "stat", key: "nabery",   label: "Nábery",    value: nabery.length,    tab: "nehnutelnosti" });
-          stats.push({ kind: "stat", key: "inzeraty", label: "Inzeráty",  value: inzeraty.length,  tab: "nehnutelnosti" });
-        }
-        if (isBuyer || isBoth) {
-          stats.push({ kind: "stat", key: "objednavky", label: "Objednávky", value: objednavky.length, tab: "objednavky" });
-          stats.push({ kind: "stat", key: "zhody", label: "Zhody", value: matchingStats.count, tab: "zhody", topScore: matchingStats.topScore });
-        }
-        stats.push({ kind: "stat", key: "obhliadky", label: "Obhliadky", value: obhliadky.length, tab: "obhliadky" });
-
-        const renderTile = (t: Tile) => {
-          const isActive = t.kind === "stat" && activeTab === t.tab;
-          const tileSt: React.CSSProperties = {
-            padding: "16px 14px", borderRadius: "12px", textAlign: "center",
-            background: isActive ? "var(--bg-elevated)" : "var(--bg-surface)",
-            border: isActive ? "1px solid #374151" : "1px solid var(--border)",
-            cursor: "pointer", transition: "all 0.15s",
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-            minHeight: "84px",
-          };
-          const onClick = t.kind === "action" ? t.onClick : () => {
-            setActiveTab(t.tab);
+      {/* Štatistiky klienta — kliknuteľné, presmerujú na príslušný tab */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px",
+      }} className="cards-grid">
+        {([
+          { label: "Nábery", value: nabery.length, tab: "nehnutelnosti" as const },
+          { label: "Objednávky", value: objednavky.length, tab: "objednavky" as const },
+          { label: "Inzeráty", value: inzeraty.length, tab: "nehnutelnosti" as const },
+          { label: "Obhliadky", value: obhliadky.length, tab: "obhliadky" as const },
+        ]).map(s => (
+          <button key={s.label} onClick={() => {
+            setActiveTab(s.tab);
+            // Scroll k tabom
             setTimeout(() => {
               const el = document.querySelector('[data-tabs-anchor]');
               if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
             }, 50);
-          };
-          return (
-            <button key={t.key} onClick={onClick} style={tileSt}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "#374151"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = isActive ? "#374151" : "var(--border)"; }}
-            >
-              {t.kind === "action" ? (
-                <>
-                  <div style={{ fontSize: "20px", marginBottom: "6px", opacity: 0.85 }}>{t.icon}</div>
-                  <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>{t.label}</div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", letterSpacing: "-0.02em", lineHeight: 1 }}>{t.value}</div>
-                  <div style={{ fontSize: "10px", fontWeight: "600", color: "var(--text-muted)", marginTop: "6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{t.label}</div>
-                  {/* Pre Zhody tile: ukáž top skóre ako malý chip */}
-                  {t.key === "zhody" && t.topScore && t.topScore > 0 && (
-                    <div style={{
-                      marginTop: "4px", padding: "2px 8px", borderRadius: "10px",
-                      fontSize: "9px", fontWeight: 700,
-                      background: t.topScore >= 70 ? "#ECFDF5" : t.topScore >= 50 ? "#FEF3C7" : "#F3F4F6",
-                      color: t.topScore >= 70 ? "#10B981" : t.topScore >= 50 ? "#F59E0B" : "#6B7280",
-                    }}>top {t.topScore}</div>
-                  )}
-                </>
-              )}
-            </button>
-          );
-        };
+          }} style={{
+            padding: "18px 16px", borderRadius: "12px",
+            background: activeTab === s.tab ? "var(--bg-elevated)" : "var(--bg-surface)",
+            border: activeTab === s.tab ? "1px solid #374151" : "1px solid var(--border)",
+            textAlign: "center", cursor: "pointer", transition: "all 0.15s",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#374151"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = activeTab === s.tab ? "#374151" : "var(--border)"; }}
+          >
+            <div style={{ fontSize: "24px", fontWeight: "700", color: "var(--text-primary)", letterSpacing: "-0.02em" }}>{s.value}</div>
+            <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", marginTop: "4px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</div>
+          </button>
+        ))}
+      </div>
 
+      {/* Info-strip pre čistého kupujúceho — zhrnie "čo hľadá" z najnovšej
+          objednávky (lokality, druh, cena_do, izby z poziadavky). Bez kliknutia
+          na tab Objednávky vidí maklér hneď to najpodstatnejšie. */}
+      {isCistyKupujuci && (() => {
+        const last = (objednavky[0] as Record<string, unknown> | undefined) ?? null;
+        if (!last) {
+          return (
+            <div style={{
+              marginBottom: "16px", padding: "16px 18px", borderRadius: "12px",
+              background: "var(--bg-elevated)", border: "1px dashed var(--border)",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+            }}>
+              <div>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>🔎 Čo hľadá</div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                  Klient zatiaľ nemá objednávku — vytvor ju aby si vedel čo presne hľadá.
+                </div>
+              </div>
+              <button onClick={() => router.push(`/kupujuci?klient_id=${klient.id}`)} style={{
+                padding: "8px 16px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>+ Pridať preferencie</button>
+            </div>
+          );
+        }
+        const lokalita = last.lokalita as Record<string, unknown> | string | null | undefined;
+        const lokalitaText = typeof lokalita === "string"
+          ? lokalita
+          : lokalita && typeof lokalita === "object"
+            ? Object.values(lokalita).filter(Boolean).join(", ")
+            : "";
+        const poz = (last.poziadavky as Record<string, unknown> | null | undefined) ?? null;
+        const izby = poz?.izby ?? poz?.pocet_izieb;
+        const druh = last.druh as string | undefined;
+        const cenaDo = last.cena_do as number | undefined;
         return (
-          <>
-            {/* Akcie */}
-            <div style={{
-              display: "grid", gridTemplateColumns: `repeat(${actions.length}, 1fr)`,
-              gap: "10px", marginBottom: "10px",
-            }} className="cards-grid">
-              {actions.map(renderTile)}
+          <div style={{
+            marginBottom: "16px", padding: "16px 18px", borderRadius: "12px",
+            background: "#EFF6FF", border: "1px solid #BFDBFE",
+          }}>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "#1E3A8A", marginBottom: "10px" }}>
+              🔎 Čo hľadá
             </div>
-            {/* Štatistiky — rovnaký počet stĺpcov ako akcie pre vizuálnu konzistenciu */}
-            <div style={{
-              display: "grid", gridTemplateColumns: `repeat(${Math.max(stats.length, actions.length)}, 1fr)`,
-              gap: "10px", marginBottom: "20px",
-            }} className="cards-grid">
-              {stats.map(renderTile)}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
+              {lokalitaText && (
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Lokalita</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{lokalitaText}</div>
+                </div>
+              )}
+              {druh && (
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Typ</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{druh}</div>
+                </div>
+              )}
+              {cenaDo != null && (
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Cena do</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{Number(cenaDo).toLocaleString("sk")} €</div>
+                </div>
+              )}
+              {izby != null && (
+                <div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Izby</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{String(izby)}</div>
+                </div>
+              )}
             </div>
-          </>
+          </div>
         );
       })()}
 
@@ -1781,7 +1843,7 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
               🏠 Nehnuteľnosti klienta
             </div>
-            <button onClick={() => setShowNovaNehnModal(true)} style={{
+            <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
               padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
             }}>+ Pridať nehnuteľnosť</button>
@@ -1831,7 +1893,11 @@ export default function KlientDetailPage() {
                       {card.cena != null && (
                         <span>💰 <strong style={{ color: "var(--text-primary)" }}>{Number(card.cena).toLocaleString("sk")} €</strong></span>
                       )}
-                      <span>{card.naberak ? "📝 Náberák ✓" : "📝 Bez náberáku"}</span>
+                      <span>
+                        {card.naberak
+                          ? ((card.naberak as Record<string, unknown>).podpis_data ? "📝 Náberák ✓ podpísaný" : "📝 Náberák · čaká na podpis")
+                          : "📝 Bez náberáku"}
+                      </span>
                       <span>{hasInzerat ? "📰 Inzerát ✓" : "📰 Bez inzerátu"}</span>
                       {nInzDocs > 0 && <span>📎 {nInzDocs} dokumentov</span>}
                     </div>
@@ -1864,6 +1930,22 @@ export default function KlientDetailPage() {
                           style={{ padding: "6px 12px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}>
                           📰 Vytvoriť inzerát
                         </button>
+                      )}
+                      {/* Email-podpis pre nepodpísaný náberák */}
+                      {naberakId && card.naberak && !(card.naberak as Record<string, unknown>).podpis_data && (
+                        <SmsSignButton
+                          entityType="naber"
+                          entityId={naberakId}
+                          defaultEmail={klient.email || ""}
+                          userId={user?.id}
+                          buttonStyle={{
+                            padding: "6px 12px", background: "#1d4ed8", color: "#fff",
+                            border: "none", borderRadius: "8px",
+                            fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                          }}
+                          buttonLabel="📧 Poslať klientovi link na podpis"
+                          onSigned={() => loadAll()}
+                        />
                       )}
                     </div>
                   </div>
@@ -1967,30 +2049,48 @@ export default function KlientDetailPage() {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {objednavky.map((o: Record<string, unknown>) => (
-                <div key={o.id as string} style={{
-                  display: "flex", alignItems: "center", gap: "14px",
-                  padding: "14px 16px", borderRadius: "10px", background: "var(--bg-elevated)",
-                  border: "1px solid var(--border)",
-                }}>
-                  <div style={{
-                    width: "40px", height: "40px", borderRadius: "10px",
-                    background: "#ECFDF5", display: "flex", alignItems: "center",
-                    justifyContent: "center", fontSize: "18px", flexShrink: 0,
-                  }}>📋</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
-                      {String(o.druh || "—")}
+              {objednavky.map((o: Record<string, unknown>) => {
+                const isPodpisana = !!o.podpis;
+                return (
+                  <div key={o.id as string} style={{
+                    display: "flex", alignItems: "center", gap: "14px",
+                    padding: "14px 16px", borderRadius: "10px", background: "var(--bg-elevated)",
+                    border: "1px solid var(--border)",
+                  }}>
+                    <div style={{
+                      width: "40px", height: "40px", borderRadius: "10px",
+                      background: "#ECFDF5", display: "flex", alignItems: "center",
+                      justifyContent: "center", fontSize: "18px", flexShrink: 0,
+                    }}>📋</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
+                        {String(o.druh || "—")}
+                      </div>
+                      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                        {o.cena_do ? `Max: ${Number(o.cena_do).toLocaleString("sk")} €` : "—"} · {isPodpisana ? "✓ podpísaná" : "čaká na podpis"}
+                      </div>
                     </div>
-                    <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                      {o.cena_do ? `Max: ${Number(o.cena_do).toLocaleString("sk")} €` : "—"}
+                    {!isPodpisana && (
+                      <SmsSignButton
+                        entityType="objednavka"
+                        entityId={String(o.id)}
+                        defaultEmail={klient.email || ""}
+                        userId={user?.id}
+                        buttonStyle={{
+                          padding: "6px 12px", background: "#1d4ed8", color: "#fff",
+                          border: "none", borderRadius: "8px",
+                          fontSize: "11px", fontWeight: 600, cursor: "pointer",
+                        }}
+                        buttonLabel="📧 Podpis cez email"
+                        onSigned={() => loadAll()}
+                      />
+                    )}
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                      {new Date(o.created_at as string).toLocaleDateString("sk")}
                     </div>
                   </div>
-                  <div style={{ fontSize: "11px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                    {new Date(o.created_at as string).toLocaleDateString("sk")}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -2001,12 +2101,13 @@ export default function KlientDetailPage() {
           {/* LV sekcia */}
           <LVSection
             klientId={klient.id}
+            userId={user?.id || ""}
             lvData={klient.lv_data}
             canEdit={!!isOwner}
             klientMeno={klient.meno || ""}
             klientLokalita={klient.lokalita || ""}
             onFixName={async (newName) => {
-              await supabase.from("klienti").update({ meno: newName }).eq("id", klient.id);
+              if (user?.id) await klientUpdate(user.id, klient.id, { meno: newName });
               setKlient(k => k ? { ...k, meno: newName } : k);
               // Sync kalendár event
               const calEventId = (klient as { calendar_event_id?: string | null }).calendar_event_id;
@@ -2024,7 +2125,7 @@ export default function KlientDetailPage() {
               }
             }}
             onFixLocation={async (newLok) => {
-              await supabase.from("klienti").update({ lokalita: newLok }).eq("id", klient.id);
+              if (user?.id) await klientUpdate(user.id, klient.id, { lokalita: newLok });
               setKlient(k => k ? { ...k, lokalita: newLok } : k);
             }}
             onParsed={(data) => {
@@ -2318,16 +2419,6 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {/* Zhody — matching nehnuteľností pre kupujúceho */}
-      {activeTab === "zhody" && (
-        <div style={cardSt}>
-          <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
-            🔗 Vyhovujúce nehnuteľnosti
-          </div>
-          <KlientMatchingTab klient={klient} />
-        </div>
-      )}
-
       {/* História — audit log z klienti_history */}
       {activeTab === "historia" && (
         <div style={cardSt}>
@@ -2348,15 +2439,6 @@ export default function KlientDetailPage() {
             {klient.poznamka}
           </div>
         </div>
-      )}
-
-      {/* Modal: Pre-check pri pridávaní novej nehnuteľnosti */}
-      {showNovaNehnModal && (
-        <NovaNehnutelnostModal
-          klientId={klient.id}
-          klientMeno={klient.meno || ""}
-          onClose={() => setShowNovaNehnModal(false)}
-        />
       )}
 
       {/* Modal: Nová obhliadka */}
@@ -2589,10 +2671,10 @@ export default function KlientDetailPage() {
                 border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
               }}>Zrušiť</button>
               <button disabled={!spolupracaMakler} onClick={async () => {
-                await supabase.from("klienti").update({
+                if (user?.id) await klientUpdate(user.id, klient.id, {
                   spolupracujuci_makler_id: spolupracaMakler,
                   spolupracujuci_provizia_pct: spolupracaPct,
-                }).eq("id", klient.id);
+                });
                 setShowSpolupracaModal(false);
                 setSpolupracaMakler("");
                 setSpolupracaPct(50);

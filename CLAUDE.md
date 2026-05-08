@@ -1,78 +1,53 @@
-# CLAUDE.md
+# Realitné CRM — Pravidlá projektu
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## O projekte
+Realitné CRM s AI copywriterom pre maklérov. Generuje "Property Stories" z bullet pointov a market dát.
 
-## Project Overview
+## Jazyk a štýl komunikácie
+- **Komunikuj so mnou v slovenčine.**
+- Buď stručný, konkrétny, bez zbytočných úvodov.
+- Keď nieco neviem alebo si neistý, povedz to priamo. Žiadne "isto budeš zvládať".
 
-**os-machovic** is a Next.js real estate CRM for Vianema real estate agency (Slovakia). It handles clients, properties, showings, commissions, invoices, and AI-powered document processing. All UI labels and domain terms are in Slovak.
+## Workflow — DÔLEŽITÉ
+1. **Pri každej netriviálnej úlohe (3+ kroky) najprv vytvor plán** v `plan.md`.
+1. Pred kódom prečítaj existujúci kód, aby si pochopil kontext.
+1. Po napísaní kódu vždy spusti dev server alebo testy a over, že to funguje.
+1. Nikdy neoznač úlohu ako hotovú bez verifikácie.
 
-## Commands
+## Tri hlavné princípy (Boris Cherny)
+1. **Jednoduchosť** — minimálny kód. Ak vieš niečo zmazať namiesto pridať, sprav to.
+1. **Žiadne band-aidy** — hľadaj koreňovú príčinu, nie rýchle záplaty.
+1. **Žiadne vedľajšie účinky** — meň len to, čo treba. Nepridávaj nové bugy pri opravovaní starých.
 
-```bash
-npm run dev      # Start dev server at http://localhost:3000
-npm run build    # Production build
-npm run lint     # Run ESLint
-```
+## Style guide pre Property Stories (NIKDY NEPORUŠIŤ)
+Toto je copywriter brief pre celý projekt. Vždy keď generuješ inzerát alebo property story:
+- **Žiadne klišé.** Zakázané: "exclusive opportunity", "dream home", "must see", "jedinečná príležitosť", "vysnívaný domov".
+- **Pravidlo troch.** Presne 3 unique selling points. Nie 2, nie 5.
+- **Neviditeľná technológia.** Nepopisuj features, popisuj pocit. Nie "south-facing windows" — "natural light that follows your morning coffee".
+- **Data-driven.** Použi market sentiment dáta na zdôvodnenie ceny.
 
-No test suite is configured.
+## Output format pre Property Story (striktne)
+- **[The Hook]** — 1 veta, hlavička zachytávajúca esenciu
+- **[The Lifestyle]** — 3 krátke odstavce
+- **[The Investment Logic]** — 1 veta o tom, prečo má kúpa zmysel dnes
+- **[Social Snippet]** — 2-vetová verzia pre IG/WhatsApp
 
-## Architecture
+## Tech stack
+- Framework: Next.js 16.1.7 (App Router)
+- Databáza: Supabase (@supabase/supabase-js)
+- Styling: Tailwind CSS
+- Hosting: Vercel
 
-**Stack**: Next.js (App Router) + React 19 + TypeScript + Tailwind CSS 4 + Supabase (PostgreSQL) + Anthropic Claude SDK + Google APIs
+## Konvencie kódu
+- TypeScript: preferuj `type` pred `interface`. Nikdy `enum` (radšej string literal unions).
+- Slovenské stringy v UI patria do prekladového súboru, nie hardcoded.
+- API routes vrátane error handling, žiadne `any` typy.
 
-### Key Directories
+## Čo NIKDY nerob
+- Nemeň schému databázy bez výslovného potvrdenia.
+- Nepridávaj nové npm packages bez toho, aby si sa opýtal.
+- Negeneruj copy s emoji, pokiaľ to nie je výslovne pre social media snippet.
 
-- `src/app/` — App Router pages and API routes
-- `src/app/api/` — Backend API routes (AI features, Google integrations, document parsing, invoices)
-- `src/components/` — Reusable React components; large forms like `InzeratForm.tsx` (listings) and `NaberyForm.tsx` (acquisitions) live here
-- `src/lib/` — Utilities: `supabase.ts` (singleton client), `database.types.ts` (all TypeScript DB types), `google.ts` (OAuth helpers), `featureToggles.ts`
-- `src/hooks/` — Custom hooks (e.g. `useKoliziaCheck.ts` for property collision detection)
-- `supabase/migrations/` — Database schema migrations
-
-### Data Flow
-
-1. **Auth**: `AuthProvider.tsx` context wraps the app; sessions persisted in localStorage
-2. **Database**: All data access goes through Supabase client from `src/lib/supabase.ts`
-3. **AI features**: API routes in `src/app/api/ai-writer/`, `ai-analyze/`, `ai-fill/` call Anthropic Claude (currently `gemini-2.5-flash` via Google for parse-doc) with `thinkingBudget: 0`
-4. **Document parsing**: `parse-doc/` handles DOCX/PDF upload → AI extraction → structured JSON; PDFs are rasterized client-side before sending (Vercel 60s timeout constraint)
-5. **Google integration**: OAuth flow in `api/auth/google/`; Drive, Gmail, and Calendar APIs in `api/google/` and `api/calendar/`
-
-### UI Layout
-
-- Desktop: `Sidebar.tsx` (left nav) + `Navbar.tsx` (top)
-- Mobile: `BottomTabs.tsx` (bottom navigation)
-- Dark mode supported via CSS variables in `globals.css`
-
-## Environment Variables
-
-```
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY        # Server-side only
-ANTHROPIC_API_KEY
-GEMINI_API_KEY
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
-RESEND_API_KEY
-MANAGER_EMAIL
-```
-
-## Domain Vocabulary (Slovak → English)
-
-| Slovak | English |
-|--------|---------|
-| klient | client |
-| nehnutelnost | property |
-| naberovy list | acquisition/purchase list |
-| inzerat | listing/ad |
-| provizia | commission |
-| faktura | invoice |
-| makler | real estate agent/broker |
-| odberatel | subscriber/buyer |
-| znalecky posudok | property appraisal document |
-
-## Important Constraints
-
-- **Vercel Hobby plan**: 60s max for most routes; `parse-doc` is set to 300s (`maxDuration`). PDFs must be rasterized client-side before upload to avoid timeouts.
-- **TypeScript path alias**: `@/*` maps to `./src/*`
-- **Supabase client**: Always import from `src/lib/supabase.ts` (singleton proxy pattern, not direct instantiation)
+## Self-improvement loop
+Po každej oprave alebo nedorozumení sa ma opýtaj: "Mám to pridať do CLAUDE.md?"
+Tento súbor je živý dokument — má sa zlepšovať každým týždňom.

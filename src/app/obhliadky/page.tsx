@@ -1,16 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 interface Obhliadka {
   id: string;
   nehnutelnostId?: string;
+  klientId?: string | null;
   klientMeno: string;
   datum: string;
   cas: string;
   adresa: string;
   poznamka: string;
   stav: "planovana" | "dokoncena" | "zrusena";
+}
+
+interface KlientOption {
+  id: string;
+  meno: string;
+  telefon?: string | null;
 }
 
 type FilterStav = "vsetky" | "planovana" | "dokoncena" | "zrusena";
@@ -43,13 +51,30 @@ export default function ObhliadkyPage() {
 
   /* form fields */
   const [klientMeno, setKlientMeno] = useState("");
+  const [klientId, setKlientId] = useState<string | null>(null);
   const [datum, setDatum] = useState("");
   const [cas, setCas] = useState("");
   const [adresa, setAdresa] = useState("");
   const [poznamka, setPoznamka] = useState("");
 
+  /* klient autocomplete (TASK 9) */
+  const [klientiList, setKlientiList] = useState<KlientOption[]>([]);
+  const [klientQuery, setKlientQuery] = useState("");
+  const [showKlientDropdown, setShowKlientDropdown] = useState(false);
+
+  /* edit modal (TASK 6) */
+  const [editing, setEditing] = useState<Obhliadka | null>(null);
+
   useEffect(() => {
     setItems(loadObhliadky());
+    // Načítaj klientov pre autocomplete
+    supabase
+      .from("klienti")
+      .select("id, meno, telefon")
+      .order("meno", { ascending: true })
+      .then(({ data }) => {
+        if (data) setKlientiList(data as KlientOption[]);
+      });
   }, []);
 
   function persist(next: Obhliadka[]) {
@@ -61,6 +86,7 @@ export default function ObhliadkyPage() {
     if (!klientMeno.trim() || !datum || !cas || !adresa.trim()) return;
     const nova: Obhliadka = {
       id: crypto.randomUUID(),
+      klientId,
       klientMeno: klientMeno.trim(),
       datum,
       cas,
@@ -70,11 +96,18 @@ export default function ObhliadkyPage() {
     };
     persist([nova, ...items]);
     setKlientMeno("");
+    setKlientId(null);
+    setKlientQuery("");
     setDatum("");
     setCas("");
     setAdresa("");
     setPoznamka("");
     setShowForm(false);
+  }
+
+  function handleSaveEdit(updated: Obhliadka) {
+    persist(items.map(o => o.id === updated.id ? updated : o));
+    setEditing(null);
   }
 
   function cycleStav(id: string) {
@@ -183,9 +216,50 @@ export default function ObhliadkyPage() {
         }}>
           <h3 style={{ fontSize: "15px", fontWeight: "600", color: "var(--text-primary)", margin: "0 0 16px" }}>Nová obhliadka</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
+            <div style={{ position: "relative" }}>
               <label style={labelStyle}>Meno klienta *</label>
-              <input value={klientMeno} onChange={e => setKlientMeno(e.target.value)} placeholder="Ján Novák" style={inputStyle} />
+              <input
+                value={klientQuery || klientMeno}
+                onChange={e => { setKlientQuery(e.target.value); setKlientMeno(e.target.value); setKlientId(null); setShowKlientDropdown(true); }}
+                onFocus={() => setShowKlientDropdown(true)}
+                onBlur={() => setTimeout(() => setShowKlientDropdown(false), 150)}
+                placeholder="Hľadaj klienta alebo zadaj meno..."
+                style={inputStyle}
+              />
+              {showKlientDropdown && klientQuery.trim().length >= 1 && (() => {
+                const q = klientQuery.toLowerCase();
+                const matches = klientiList.filter(k =>
+                  k.meno.toLowerCase().includes(q) || (k.telefon || "").includes(q)
+                ).slice(0, 6);
+                if (matches.length === 0) return null;
+                return (
+                  <div style={{
+                    position: "absolute", top: "100%", left: 0, right: 0,
+                    marginTop: "4px", background: "var(--bg-surface)",
+                    border: "1px solid var(--border)", borderRadius: "8px",
+                    boxShadow: "0 8px 16px rgba(0,0,0,0.08)", zIndex: 100,
+                    maxHeight: "240px", overflowY: "auto",
+                  }}>
+                    {matches.map(k => (
+                      <button key={k.id} type="button"
+                        onMouseDown={() => {
+                          setKlientId(k.id);
+                          setKlientMeno(k.meno);
+                          setKlientQuery(k.meno);
+                          setShowKlientDropdown(false);
+                        }}
+                        style={{
+                          display: "block", width: "100%", textAlign: "left",
+                          padding: "10px 12px", border: "none", background: "transparent",
+                          cursor: "pointer", fontSize: "13px", color: "var(--text-primary)",
+                        }}>
+                        <strong>{k.meno}</strong>
+                        {k.telefon && <span style={{ color: "var(--text-muted)", marginLeft: "8px", fontSize: "12px" }}>{k.telefon}</span>}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <label style={labelStyle}>Adresa *</label>
@@ -248,12 +322,16 @@ export default function ObhliadkyPage() {
           const cfg = STAV_CONFIG[o.stav];
           const dStr = new Date(o.datum).toLocaleDateString("sk-SK", { day: "numeric", month: "short", year: "numeric" });
           return (
-            <div key={o.id} style={{
-              display: "flex", alignItems: "center", gap: "14px",
-              padding: "14px 18px", background: "var(--bg-surface)",
-              borderRadius: "12px", border: "1px solid var(--border)",
-              transition: "background .12s",
-            }}>
+            <div key={o.id}
+              onClick={() => setEditing(o)}
+              style={{
+                display: "flex", alignItems: "center", gap: "14px",
+                padding: "14px 18px", background: "var(--bg-surface)",
+                borderRadius: "12px", border: "1px solid var(--border)",
+                transition: "background .12s", cursor: "pointer",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "var(--bg-surface)")}>
               {/* date block */}
               <div style={{
                 minWidth: "56px", textAlign: "center", padding: "8px 6px",
@@ -283,7 +361,7 @@ export default function ObhliadkyPage() {
 
               {/* badge - click to cycle */}
               <button
-                onClick={() => cycleStav(o.id)}
+                onClick={(e) => { e.stopPropagation(); cycleStav(o.id); }}
                 title="Kliknite pre zmenu stavu"
                 style={{
                   padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
@@ -296,7 +374,7 @@ export default function ObhliadkyPage() {
 
               {/* delete */}
               <button
-                onClick={() => handleDelete(o.id)}
+                onClick={(e) => { e.stopPropagation(); handleDelete(o.id); }}
                 title="Odstrániť"
                 style={{
                   width: "30px", height: "30px", borderRadius: "8px",
@@ -310,6 +388,145 @@ export default function ObhliadkyPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* Edit modal (TASK 6) */}
+      {editing && (
+        <ObhliadkaEditModal
+          obhliadka={editing}
+          klientiList={klientiList}
+          onClose={() => setEditing(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
+    </div>
+  );
+}
+
+function ObhliadkaEditModal({ obhliadka, klientiList, onClose, onSave }: {
+  obhliadka: Obhliadka;
+  klientiList: KlientOption[];
+  onClose: () => void;
+  onSave: (o: Obhliadka) => void;
+}) {
+  const [klientMeno, setKlientMeno] = useState(obhliadka.klientMeno);
+  const [klientId, setKlientId] = useState<string | null>(obhliadka.klientId ?? null);
+  const [klientQuery, setKlientQuery] = useState(obhliadka.klientMeno);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [datum, setDatum] = useState(obhliadka.datum);
+  const [cas, setCas] = useState(obhliadka.cas);
+  const [adresa, setAdresa] = useState(obhliadka.adresa);
+  const [poznamka, setPoznamka] = useState(obhliadka.poznamka);
+  const [stav, setStav] = useState<Obhliadka["stav"]>(obhliadka.stav);
+
+  const inputSt: React.CSSProperties = {
+    width: "100%", padding: "10px 14px", background: "var(--bg-elevated)",
+    border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px",
+    color: "var(--text-primary)", outline: "none", boxSizing: "border-box",
+  };
+  const labelSt: React.CSSProperties = {
+    fontSize: "12px", fontWeight: "600", color: "var(--text-secondary)",
+    marginBottom: "4px", display: "block",
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: "40px 20px", zIndex: 1500,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: "var(--bg-surface)", borderRadius: "16px", padding: "24px",
+        maxWidth: "560px", width: "100%", boxShadow: "0 24px 48px rgba(0,0,0,0.3)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+          <h3 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+            Upraviť obhliadku
+          </h3>
+          <button onClick={onClose} style={{
+            width: "28px", height: "28px", borderRadius: "50%", border: "none",
+            background: "var(--bg-elevated)", cursor: "pointer", color: "var(--text-muted)",
+          }}>✕</button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div style={{ position: "relative" }}>
+            <label style={labelSt}>Meno klienta</label>
+            <input
+              value={klientQuery}
+              onChange={e => { setKlientQuery(e.target.value); setKlientMeno(e.target.value); setKlientId(null); setShowDropdown(true); }}
+              onFocus={() => setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+              style={inputSt}
+            />
+            {showDropdown && klientQuery.trim().length >= 1 && (() => {
+              const q = klientQuery.toLowerCase();
+              const m = klientiList.filter(k => k.meno.toLowerCase().includes(q) || (k.telefon || "").includes(q)).slice(0, 6);
+              if (m.length === 0) return null;
+              return (
+                <div style={{
+                  position: "absolute", top: "100%", left: 0, right: 0, marginTop: "4px",
+                  background: "var(--bg-surface)", border: "1px solid var(--border)",
+                  borderRadius: "8px", boxShadow: "0 8px 16px rgba(0,0,0,0.08)", zIndex: 100,
+                  maxHeight: "200px", overflowY: "auto",
+                }}>
+                  {m.map(k => (
+                    <button key={k.id} type="button"
+                      onMouseDown={() => {
+                        setKlientId(k.id); setKlientMeno(k.meno); setKlientQuery(k.meno); setShowDropdown(false);
+                      }}
+                      style={{
+                        display: "block", width: "100%", textAlign: "left",
+                        padding: "10px 12px", border: "none", background: "transparent",
+                        cursor: "pointer", fontSize: "13px", color: "var(--text-primary)",
+                      }}>
+                      <strong>{k.meno}</strong>
+                      {k.telefon && <span style={{ color: "var(--text-muted)", marginLeft: "8px", fontSize: "12px" }}>{k.telefon}</span>}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+          <div>
+            <label style={labelSt}>Adresa</label>
+            <input value={adresa} onChange={e => setAdresa(e.target.value)} style={inputSt} />
+          </div>
+          <div>
+            <label style={labelSt}>Dátum</label>
+            <input type="date" value={datum} onChange={e => setDatum(e.target.value)} style={inputSt} />
+          </div>
+          <div>
+            <label style={labelSt}>Čas</label>
+            <input type="time" value={cas} onChange={e => setCas(e.target.value)} style={inputSt} />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelSt}>Stav</label>
+            <select value={stav} onChange={e => setStav(e.target.value as Obhliadka["stav"])} style={inputSt}>
+              <option value="planovana">Plánovaná</option>
+              <option value="dokoncena">Dokončená</option>
+              <option value="zrusena">Zrušená</option>
+            </select>
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelSt}>Poznámka</label>
+            <textarea value={poznamka} onChange={e => setPoznamka(e.target.value)}
+              style={{ ...inputSt, minHeight: "80px", resize: "vertical", fontFamily: "inherit" }} />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "20px" }}>
+          <button onClick={onClose} style={{
+            padding: "10px 16px", borderRadius: "8px", border: "1px solid var(--border)",
+            background: "var(--bg-elevated)", color: "var(--text-primary)",
+            fontSize: "13px", fontWeight: 600, cursor: "pointer",
+          }}>Zrušiť</button>
+          <button onClick={() => onSave({ ...obhliadka, klientId, klientMeno, datum, cas, adresa, poznamka, stav })} style={{
+            padding: "10px 18px", borderRadius: "8px", border: "none",
+            background: "#374151", color: "#fff",
+            fontSize: "13px", fontWeight: 700, cursor: "pointer",
+          }}>Uložiť</button>
+        </div>
       </div>
     </div>
   );

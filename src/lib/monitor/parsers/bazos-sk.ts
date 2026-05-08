@@ -1,7 +1,7 @@
 /* ── Parser pre bazos.sk (reality.bazos.sk) ── */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
-import { detectFirma } from "./shared";
+import { detectFirma, extractPoschodie, extractStav } from "./shared";
 
 const PORTAL = "bazos.sk";
 const BASE_URL = "https://reality.bazos.sk";
@@ -187,6 +187,10 @@ export const bazosSkParser: PortalParser = {
       const roomMatch = nazov.match(/(\d+)\s*[-]?\s*izb/i) || nazov.match(/\b(\d+)i\b/);
       const izby = roomMatch ? parseInt(roomMatch[1]) : undefined;
 
+      // Poschodie + stav z titulu + popisu
+      const poschodie = extractPoschodie(`${nazov} ${popis || ""}`);
+      const stav = extractStav(`${nazov} ${popis || ""}`);
+
       listings.push({
         portal: PORTAL,
         external_id: externalId,
@@ -201,6 +205,8 @@ export const bazosSkParser: PortalParser = {
         popis,
         predajca_meno: sellerName || undefined,
         predajca_typ,
+        poschodie,
+        stav,
         raw_data: {},
       });
     }

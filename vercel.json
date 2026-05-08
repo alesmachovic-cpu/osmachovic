@@ -25,8 +25,8 @@
       "schedule": "0 4 * * *"
     },
     {
-      "path": "/api/cron/analyzy-tyzdenne",
-      "schedule": "0 7 * * 1"
+      "path": "/api/cron/monitor-daily",
+      "schedule": "0 9 * * *"
     }
   ]
 }

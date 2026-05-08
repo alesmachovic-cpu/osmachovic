@@ -231,35 +231,3 @@ input:focus, select:focus, textarea:focus {
   .sidebar-overlay { display: none !important; }
 }
 
-/* ── PRINT — schovaj všetku navigáciu a UI okolo obsahu ──
-   Pri Cmd+P / window.print() chceme tlačiť IBA obsah dokumentu
-   (faktúra, obhliadkový list, náberák, atď.) — žiadny sidebar,
-   navbar, bottom-tabs, .no-print elementy. */
-@media print {
-  /* Skrytie všetkých nav komponentov */
-  .bottom-tabs,
-  .sidebar-desktop,
-  .sidebar-mobile,
-  .sidebar-overlay,
-  header,
-  .no-print,
-  .navbar-amgd-whisper,
-  .hamburger-btn { display: none !important; }
-
-  /* Layout — full width, žiadne padding/margin okolo */
-  body, html { background: #fff !important; }
-  main { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
-
-  /* Stránka A4 s minimálnym marginom — znižuje viditeľnosť default headers/footers */
-  @page { margin: 12mm; size: A4; }
-
-  /* Tlačený obsah — žiadny rounded border, žiadny shadow */
-  #faktura-print, .printable {
-    border: none !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-    padding: 0 !important;
-    max-width: 100% !important;
-  }
-}
-

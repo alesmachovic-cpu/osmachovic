@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { getUserScope, canEditRecord } from "@/lib/scope";
 
 export const runtime = "nodejs";
 
@@ -59,6 +60,35 @@ export async function POST(req: NextRequest) {
   if (!body.datum) return NextResponse.json({ error: "datum required" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
+
+  // 0) Conflict check — ak iný maklér plánuje obhliadku tej istej nehnuteľnosti
+  // v okne ±60 minút, nedovoľ insert pokiaľ klient explicitne neposlal
+  // allow_conflict: true (UI to po varovaní pošle pri "áno, plánuj aj tak").
+  if (body.nehnutelnost_id && !body.allow_conflict) {
+    // DB ukladá obhliadky.datum bez tz konvertuje cez Postgres ako UTC. JS new Date()
+    // bez tz suffixu by interpretoval string ako local — preto pre konzistentnosť
+    // dopĺňame 'Z' aby sme oba parsing aj DB porovnávali v UTC.
+    const datumStr = String(body.datum);
+    const datumIso = /Z|[+-]\d{2}:?\d{2}$/.test(datumStr) ? datumStr : `${datumStr}Z`;
+    const targetMs = new Date(datumIso).getTime();
+    if (!Number.isNaN(targetMs)) {
+      const fromIso = new Date(targetMs - 60 * 60 * 1000).toISOString();
+      const toIso = new Date(targetMs + 60 * 60 * 1000).toISOString();
+      const { data: clash } = await sb
+        .from("obhliadky")
+        .select("id, datum, makler_id, kupujuci_meno, status")
+        .eq("nehnutelnost_id", body.nehnutelnost_id)
+        .gte("datum", fromIso)
+        .lte("datum", toIso)
+        .neq("status", "zrusena");
+      if (clash && clash.length > 0) {
+        return NextResponse.json({
+          error: "Časový konflikt — na tejto nehnuteľnosti je iná obhliadka v okolí ±1h",
+          conflicts: clash,
+        }, { status: 409 });
+      }
+    }
+  }
 
   // 1) Vlož obhliadku
   const payload: Record<string, unknown> = {
@@ -130,6 +160,9 @@ export async function POST(req: NextRequest) {
           poznamka: noteLine,
         };
         const { data: created, error: cErr } = await sb.from("klienti").insert(newKlient).select("id").single();
+        if (cErr) {
+          console.warn("[obhliadky POST] auto-create kupujúci failed:", cErr.message, cErr.code);
+        }
         if (!cErr && created) {
           kupujuciInfo = { klient_id: String(created.id), created: true, updated: false };
           // Prepoj obhliadku
@@ -181,6 +214,19 @@ export async function PATCH(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
+
+  // Ownership: ak caller pošle user_id, overíme. Bez user_id povoľujeme
+  // (legacy clients) — UI sa postupne migruje.
+  if (body.user_id) {
+    const scope = await getUserScope(String(body.user_id));
+    if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+    const { data: existing } = await sb.from("obhliadky").select("makler_id").eq("id", id).single();
+    if (!existing) return NextResponse.json({ error: "Obhliadka nenájdená" }, { status: 404 });
+    const ok = await canEditRecord(scope, existing.makler_id);
+    if (!ok) return NextResponse.json({ error: "Nemáš oprávnenie editovať túto obhliadku" }, { status: 403 });
+    if (!scope.isAdmin && body.makler_id) delete body.makler_id; // anti-impersonation
+  }
+
   const allowed = [
     "status","miesto","poznamka","datum",
     "kupujuci_klient_id","kupujuci_meno","kupujuci_telefon","kupujuci_email",
@@ -210,12 +256,23 @@ export async function PATCH(req: NextRequest) {
 }
 
 /**
- * DELETE /api/obhliadky?id=X
+ * DELETE /api/obhliadky?id=X&user_id=Y
  */
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
+  const userId = req.nextUrl.searchParams.get("user_id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const sb = getSupabaseAdmin();
+
+  if (userId) {
+    const scope = await getUserScope(userId);
+    if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+    const { data: existing } = await sb.from("obhliadky").select("makler_id").eq("id", id).single();
+    if (!existing) return NextResponse.json({ error: "Obhliadka nenájdená" }, { status: 404 });
+    const ok = await canEditRecord(scope, existing.makler_id);
+    if (!ok) return NextResponse.json({ error: "Nemáš oprávnenie zmazať túto obhliadku" }, { status: 403 });
+  }
+
   const { error } = await sb.from("obhliadky").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

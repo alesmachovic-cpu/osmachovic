@@ -112,45 +112,17 @@ export default function VolniKlientiPage() {
     else showToast(d.error || "Chyba", "error");
   };
 
-  const zmazat = async (klient_id: string, meno: string) => {
-    const c1 = confirm(`Trvalo zmazať klienta "${meno}"?\n\n• Karta klienta sa zmaže\n• Náberáky a obhliadky zostanú evidované, ale bez identifikácie\n• História klienta sa zmaže\n\nOperácia je NEVRATNÁ.`);
-    if (!c1) return;
-    const c2 = prompt(`Pre potvrdenie napíš meno klienta presne tak ako je: "${meno}"`);
-    if (c2?.trim() !== meno.trim()) {
-      showToast("Mená sa nezhodujú, mazanie zrušené", "error");
-      return;
-    }
+  const prebrat = async (klient_id: string, meno: string) => {
+    if (!myMaklerUuid) { showToast("Nie si zaregistrovaný ako maklér", "error"); return; }
+    if (!confirm(`Prebrať klienta ${meno}? Stane sa tvojím a začne plynúť 24h SLA.`)) return;
     const res = await fetch("/api/volni-klienti", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "zmazat", klient_id, by_user_id: user?.id }),
+      body: JSON.stringify({ action: "prebrat", klient_id, makler_id: myMaklerUuid, by_user_id: user?.id }),
     });
     const d = await res.json();
-    if (res.ok) { showToast(`Klient ${meno} zmazaný`); await load(); }
+    if (res.ok) { showToast(`Klient ${meno} je teraz tvoj`); await load(); }
     else showToast(d.error || "Chyba", "error");
   };
-
-  const prebrat = async (klient_id: string, meno: string, targetMaklerId?: string) => {
-    const maklerId = targetMaklerId || myMaklerUuid;
-    if (!maklerId) { showToast("Nie je vybraný maklér", "error"); return; }
-    const targetMakler = makleri.find(m => m.id === maklerId);
-    const isMine = maklerId === myMaklerUuid;
-    const promptMsg = isMine
-      ? `Prebrať klienta ${meno}? Stane sa tvojím a začne plynúť 24h SLA.`
-      : `Prideliť klienta ${meno} maklerovi ${targetMakler?.meno || "?"}?`;
-    if (!confirm(promptMsg)) return;
-    const res = await fetch("/api/volni-klienti", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "prebrat", klient_id, makler_id: maklerId, by_user_id: user?.id }),
-    });
-    const d = await res.json();
-    if (res.ok) {
-      showToast(isMine ? `Klient ${meno} je teraz tvoj` : `Klient ${meno} pridelený ${targetMakler?.meno}`);
-      await load();
-    } else showToast(d.error || "Chyba", "error");
-  };
-
-  // Manažér / admin môže prideliť klienta hocikomu
-  const isManager = user?.role === "manager" || user?.role === "admin";
 
   // Unique lokality — pre filter dropdown
   const uniqueLokality = useMemo(() => {
@@ -217,7 +189,7 @@ export default function VolniKlientiPage() {
           disabled={running}
           style={{
             height: "38px", padding: "0 18px",
-            background: running ? "#9CA3AF" : "#374151",
+            background: running ? "var(--text-muted)" : "var(--text-primary)",
             color: "#fff", border: "none", borderRadius: "var(--radius-sm)",
             fontSize: "14px", fontWeight: 600, cursor: running ? "not-allowed" : "pointer",
             display: "flex", alignItems: "center", gap: "8px",
@@ -245,9 +217,9 @@ export default function VolniKlientiPage() {
             style={{
               height: "38px", padding: "0 16px", borderRadius: "var(--radius-sm)",
               fontSize: "13px", fontWeight: 600, cursor: "pointer",
-              background: filter === f.value ? "#374151" : "var(--bg-elevated)",
+              background: filter === f.value ? "var(--text-primary)" : "var(--bg-base)",
               color: filter === f.value ? "#fff" : "var(--text-secondary)",
-              border: "1px solid " + (filter === f.value ? "#374151" : "var(--border)"),
+              border: "1px solid " + (filter === f.value ? "var(--text-primary)" : "var(--border-subtle)"),
             }}
           >
             {f.label}
@@ -340,50 +312,54 @@ export default function VolniKlientiPage() {
                       Uvoľnený {timeAgo(k.volny_at)}
                       {k.datum_naberu && <> · pôvodný termín: {formatDate(k.datum_naberu)}</>}
                     </div>
-                    {k.poznamka && (
-                      <div style={{ marginTop: "8px", fontSize: "13px", color: "var(--text-secondary)", fontStyle: "italic" }}>
-                        &quot;{k.poznamka}&quot;
-                      </div>
-                    )}
+                    {(() => {
+                      // Vyčistíme historické "Adresa: . ." / prázdne "Typ:" riadky
+                      // a slugy nehnuteľnosti zmeníme na ľudské názvy.
+                      const TYP_HUMAN: Record<string, string> = {
+                        "1-izbovy-byt": "1-izbový byt", "2-izbovy-byt": "2-izbový byt",
+                        "3-izbovy-byt": "3-izbový byt", "4-izbovy-byt": "4-izbový byt",
+                        "5-izbovy-byt": "5-izbový byt", "garsonka": "garsónka",
+                        "rodinny-dom": "rodinný dom", "rodinny_dom": "rodinný dom",
+                        "vila": "vila", "chata": "chata", "pozemok": "pozemok",
+                        "kancelaria": "kancelária", "garaz": "garáž",
+                      };
+                      const cleaned = (k.poznamka || "")
+                        .split("\n")
+                        .map(line => {
+                          // Adresa cleanup
+                          const addrM = line.match(/^Adresa:\s*(.+)$/i);
+                          if (addrM) {
+                            const parts = addrM[1].split(/[,·]/)
+                              .map(p => p.trim())
+                              .filter(p => p && p !== "." && p !== "..");
+                            return parts.length > 0 ? `Adresa: ${parts.join(", ")}` : "";
+                          }
+                          // Typ slug → human label
+                          const typM = line.match(/^Typ(?:\s+nehnute(?:ľ|l)nosti)?:\s*(.+)$/i);
+                          if (typM) {
+                            const slug = typM[1].trim().toLowerCase();
+                            if (!slug || slug === "." || slug === "..") return "";
+                            const human = TYP_HUMAN[slug] || typM[1].trim();
+                            return `Typ: ${human}`;
+                          }
+                          return line.trim();
+                        })
+                        .filter(Boolean)
+                        .join(" · ");
+                      return cleaned ? (
+                        <div style={{ marginTop: "8px", fontSize: "13px", color: "var(--text-secondary)", fontStyle: "italic" }}>
+                          &quot;{cleaned}&quot;
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                    {/* Manažér / admin: dropdown s výberom makléra + Prideliť */}
-                    {isManager && (
-                      <>
-                        <select id={`assign-makler-${k.id}`} style={{
-                          height: "34px", padding: "0 10px", borderRadius: "var(--radius-sm)",
-                          background: "var(--bg-base)", border: "1px solid var(--border-subtle)",
-                          fontSize: "12px", color: "var(--text-primary)",
-                        }}>
-                          <option value="">Prideliť makléron…</option>
-                          {makleri.map(m => (
-                            <option key={m.id} value={m.id}>{m.meno}{m.id === myMaklerUuid ? " (mne)" : ""}</option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={() => {
-                            const sel = (document.getElementById(`assign-makler-${k.id}`) as HTMLSelectElement)?.value;
-                            if (!sel) { showToast("Najprv vyber makléra", "error"); return; }
-                            prebrat(k.id, k.meno, sel);
-                          }}
-                          style={{
-                            height: "34px", padding: "0 14px",
-                            background: "#374151", color: "#fff",
-                            border: "none", borderRadius: "var(--radius-sm)",
-                            fontSize: "13px", fontWeight: 600, cursor: "pointer",
-                          }}
-                        >
-                          Prideliť
-                        </button>
-                      </>
-                    )}
-                    {/* Bežný maklér: Prebrať tlačidlo (priradí sebe) */}
-                    {!isManager && !isMine && (
+                    {!isMine && (
                       <button
                         onClick={() => prebrat(k.id, k.meno)}
                         style={{
                           height: "34px", padding: "0 14px",
-                          background: "#374151", color: "#fff",
+                          background: "var(--text-primary)", color: "#fff",
                           border: "none", borderRadius: "var(--radius-sm)",
                           fontSize: "13px", fontWeight: 600, cursor: "pointer",
                         }}
@@ -396,7 +372,7 @@ export default function VolniKlientiPage() {
                       style={{
                         height: "34px", padding: "0 14px",
                         background: "var(--success-light)", color: "var(--success)",
-                        border: "1px solid #A7F3D0", borderRadius: "var(--radius-sm)",
+                        border: "none", borderRadius: "var(--radius-sm)",
                         fontSize: "13px", fontWeight: 600, cursor: "pointer",
                       }}
                     >
@@ -406,28 +382,13 @@ export default function VolniKlientiPage() {
                       onClick={() => router.push(`/klienti/${k.id}`)}
                       style={{
                         height: "34px", padding: "0 14px",
-                        background: "var(--bg-elevated)", color: "var(--text-primary)",
-                        border: "1px solid var(--border)", borderRadius: "var(--radius-sm)",
+                        background: "var(--bg-base)", color: "var(--text-secondary)",
+                        border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)",
                         fontSize: "13px", fontWeight: 500, cursor: "pointer",
                       }}
                     >
                       Otvoriť
                     </button>
-                    {/* Admin-only Zmazať */}
-                    {isManager && (
-                      <button
-                        onClick={() => zmazat(k.id, k.meno)}
-                        title="Trvalo zmazať klienta (len admin/manager)"
-                        style={{
-                          height: "34px", padding: "0 12px",
-                          background: "transparent", color: "#DC2626",
-                          border: "1px solid #FECACA", borderRadius: "var(--radius-sm)",
-                          fontSize: "13px", fontWeight: 600, cursor: "pointer",
-                        }}
-                      >
-                        🗑 Zmazať
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>

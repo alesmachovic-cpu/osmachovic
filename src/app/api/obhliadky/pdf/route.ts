@@ -43,37 +43,18 @@ function fmtDateTime(iso: string): string {
 }
 
 function buildPdf(lines: string[], title: string): Buffer {
-  // A4, Vianema cobrand: VIANEMA hlavička + REAL podtext + tenká linka, AMGD whisper v patičke.
-  // Tier 1 (klient-facing): Vianema dominuje, AMGD šepká.
+  // Minimalistický 1-stránkový PDF, A4, font Helvetica
   const pageW = 595, pageH = 842, margin = 64;
-  let stream = "";
+  let stream = "BT\n/F1 18 Tf\n";
+  stream += `${margin} ${pageH - 80} Td\n(${esc(title)}) Tj\nET\n`;
 
-  // === HLAVIČKA — VIANEMA / REAL (Tier 1) ===
-  // VIANEMA, font 28, centrované. Helvetica je proportional, "VIANEMA" má pri 28pt cca 130pt šírky.
-  // Aproximácia centrovania: x = (pageW - approxWidth) / 2
-  const vianemaApproxWidth = 130;
-  const vianemaX = Math.round((pageW - vianemaApproxWidth) / 2);
-  stream += `BT\n/F2 28 Tf\n${vianemaX} ${pageH - 60} Td\n(VIANEMA) Tj\nET\n`;
-  // REAL pod tým, font 8 s rozšíreným spacingom (simulujeme pridaním medzier)
-  const realText = "R E A L";
-  const realApproxWidth = 35;
-  const realX = Math.round((pageW - realApproxWidth) / 2);
-  stream += `BT\n/F1 8 Tf\n0.5 0.5 0.5 rg\n${realX} ${pageH - 75} Td\n(${realText}) Tj\nET\n`;
-  // Tenká linka pod hlavičkou
-  stream += `0.85 0.85 0.85 RG\n0.5 w\n${margin} ${pageH - 90} m ${pageW - margin} ${pageH - 90} l S\n`;
-  stream += `0 0 0 rg\n`; // reset farba na čiernu
-
-  // === TITLE — ľavé zarovnanie pod hlavičkou ===
-  stream += `BT\n/F2 16 Tf\n${margin} ${pageH - 115} Td\n(${esc(title)}) Tj\nET\n`;
-
-  // === BODY LINES ===
-  let yPos = pageH - 145;
+  let yPos = pageH - 120;
   for (const line of lines) {
-    if (yPos < margin + 40) break; // nechaj miesto pre patičku
+    if (yPos < margin) break;
     if (line === "") { yPos -= 8; continue; }
     if (line.startsWith("# ")) {
-      stream += `BT\n/F2 12 Tf\n${margin} ${yPos} Td\n(${esc(line.slice(2))}) Tj\nET\n`;
-      yPos -= 20;
+      stream += `BT\n/F1 13 Tf\n${margin} ${yPos} Td\n(${esc(line.slice(2))}) Tj\nET\n`;
+      yPos -= 22;
       continue;
     }
     // Wrap dlhé riadky na ~80 znakov
@@ -85,31 +66,20 @@ function buildPdf(lines: string[], title: string): Buffer {
         const lastSpace = chunk.lastIndexOf(" ");
         if (lastSpace > 40) chunk = chunk.slice(0, lastSpace);
       }
-      stream += `BT\n/F1 10 Tf\n${margin} ${yPos} Td\n(${esc(chunk)}) Tj\nET\n`;
-      yPos -= 14;
-      if (yPos < margin + 40) break;
+      stream += `BT\n/F1 11 Tf\n${margin} ${yPos} Td\n(${esc(chunk)}) Tj\nET\n`;
+      yPos -= 16;
+      if (yPos < margin) break;
       remaining = remaining.slice(chunk.length).trimStart();
     }
   }
 
-  // === PATIČKA — POWERED BY AMGD (Tier 1 whisper) ===
-  // Tenká linka nad patičkou
-  stream += `0.85 0.85 0.85 RG\n0.5 w\n${margin} ${margin + 20} m ${pageW - margin} ${margin + 20} l S\n`;
-  // POWERED BY (8pt) + AMGD (10pt), centrované, sivá
-  const poweredText = "POWERED BY  AMGD";
-  const poweredWidth = 75;
-  const poweredX = Math.round((pageW - poweredWidth) / 2);
-  stream += `BT\n/F1 8 Tf\n0.4 0.4 0.4 rg\n${poweredX} ${margin + 5} Td\n(${esc(poweredText)}) Tj\nET\n`;
-  stream += `0 0 0 rg\n`;
-
-  // === Manual PDF assembly — Helvetica (F1) + Helvetica-Bold (F2) ===
+  // Manual PDF assembly — replicate naber-pdf style
   const objs: string[] = [];
   objs.push(`<</Type/Catalog/Pages 2 0 R>>`);
   objs.push(`<</Type/Pages/Kids[3 0 R]/Count 1>>`);
-  objs.push(`<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${pageW} ${pageH}]/Contents 4 0 R/Resources<</Font<</F1 5 0 R/F2 6 0 R>>>>>>`);
+  objs.push(`<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${pageW} ${pageH}]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>`);
   objs.push(`<</Length ${stream.length}>>\nstream\n${stream}\nendstream`);
   objs.push(`<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>`);
-  objs.push(`<</Type/Font/Subtype/Type1/BaseFont/Helvetica-Bold>>`);
 
   let body = "%PDF-1.4\n";
   const offsets: number[] = [];
@@ -123,16 +93,6 @@ function buildPdf(lines: string[], title: string): Buffer {
   body += `trailer\n<</Size ${objs.length + 1}/Root 1 0 R>>\nstartxref\n${xrefOffset}\n%%EOF\n`;
 
   return Buffer.from(body, "binary");
-}
-
-/** Slugify meno klienta na safe filename: "Aleš Máchovič" → "ales_machovic" */
-function slugifyMeno(s: string): string {
-  return (s || "klient")
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")  // remove diakritika
-    .replace(/[^a-zA-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .toLowerCase()
-    .slice(0, 60) || "klient";
 }
 
 async function fetchObhliadkaContext(id: string) {
@@ -219,18 +179,10 @@ export async function GET(req: NextRequest) {
 
   const lines = buildLines(ctx);
   const pdf = buildPdf(lines, "Obhliadkovy list");
-
-  // Filename: obhliadka-{kupujuci_meno}-{datum}.pdf
-  // Pri downloade vidí klient meno kupujúceho — najľahšie sa orientuje vo svojich PDF.
-  const kupMeno = slugifyMeno(String(ctx.ob.kupujuci_meno || ctx.predKlient?.meno || "klient"));
-  const ymd = new Date(String(ctx.ob.datum || ctx.ob.created_at || Date.now()))
-    .toISOString().slice(0, 10);
-  const filename = `obhliadka-${kupMeno}-${ymd}.pdf`;
-
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${filename}"`,
+      "Content-Disposition": `inline; filename="obhliadkovy-list-${id.slice(0, 8)}.pdf"`,
     },
   });
 }
@@ -290,10 +242,7 @@ export async function POST(req: NextRequest) {
           </div>
         </div>
       `,
-      attachments: [{
-        filename: `obhliadka-${slugifyMeno(kupMeno)}-${new Date(String(ctx.ob.datum || Date.now())).toISOString().slice(0,10)}.pdf`,
-        content: pdfBase64,
-      }],
+      attachments: [{ filename: "obhliadkovy-list.pdf", content: pdfBase64 }],
     }),
   });
 

@@ -8,6 +8,7 @@ import { STATUS_LABELS } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
+import { klientUpdate, klientDelete } from "@/lib/klientApi";
 
 const statusColors: Record<string, { color: string; bg: string }> = {
   novy:                { color: "#374151", bg: "#F3F4F6" },
@@ -35,7 +36,60 @@ type FilterStatus = "" | "novy" | "aktivny" | "pasivny" | "uzavrety" | "caka_na_
 type FilterTyp = "" | "kupujuci" | "predavajuci" | "oboje" | "prenajimatel";
 
 export default function KlientiPage() {
-  return <Suspense><KlientiContent /></Suspense>;
+  return <Suspense><KlientiWrapper /></Suspense>;
+}
+
+// TASK 1 — Tab wrapper: predavajuci (default) | kupujuci | volni
+import KupujuciPage from "@/app/kupujuci/page";
+import VolniKlientiPage from "@/app/volni-klienti/page";
+import { useSearchParams as useKlientiSearchParams, useRouter as useKlientiRouter, usePathname as useKlientiPathname } from "next/navigation";
+
+const KLIENTI_TABS = [
+  { key: "predavajuci", label: "Predávajúci", icon: "👥" },
+  { key: "kupujuci",    label: "Kupujúci",    icon: "🔍" },
+  { key: "volni",       label: "Voľní klienti", icon: "📭" },
+] as const;
+
+function KlientiWrapper() {
+  const sp = useKlientiSearchParams();
+  const router = useKlientiRouter();
+  const pathname = useKlientiPathname();
+  const raw = sp.get("tab");
+  const tab = (KLIENTI_TABS.find(t => t.key === raw)?.key) || "predavajuci";
+
+  return (
+    <div>
+      <div style={{
+        display: "flex", gap: "6px", marginBottom: "20px",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        {KLIENTI_TABS.map(t => {
+          const active = t.key === tab;
+          return (
+            <button
+              key={t.key}
+              onClick={() => router.push(`${pathname}?tab=${t.key}`)}
+              style={{
+                padding: "10px 18px", borderRadius: "10px 10px 0 0",
+                border: "none", background: active ? "var(--bg-elevated)" : "transparent",
+                color: active ? "var(--text-primary)" : "var(--text-muted)",
+                fontSize: "13px", fontWeight: active ? 700 : 500, cursor: "pointer",
+                borderBottom: active ? "2px solid var(--accent, #3B82F6)" : "2px solid transparent",
+                transition: "all 0.15s",
+              }}
+            >
+              <span style={{ marginRight: "6px" }}>{t.icon}</span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "predavajuci" && <KlientiContent />}
+      {tab === "kupujuci" && <KupujuciPage />}
+      {tab === "volni" && <VolniKlientiPage />}
+    </div>
+  );
 }
 
 function KlientiContent() {
@@ -93,7 +147,7 @@ function KlientiContent() {
       });
       if (!res.ok) throw new Error(await res.text());
       const parsed = await res.json();
-      await supabase.from("klienti").update({ lv_data: parsed }).eq("id", klientId);
+      if (user?.id) await klientUpdate(user.id, klientId, { lv_data: parsed });
 
       // Zachyť klienta PRED setLvPromptKlient(null) aby sa neztratil
       const targetKlient = lvPromptKlient || klienti.find(k => k.id === klientId);
@@ -221,7 +275,7 @@ function KlientiContent() {
     // nabrany can't be set manually
     if (newStatus === "nabrany") return;
     // Direct update for other statuses
-    supabase.from("klienti").update({ status: newStatus }).eq("id", k.id).then(() => fetchKlienti());
+    if (user?.id) klientUpdate(user.id, k.id, { status: newStatus }).then(() => fetchKlienti());
   }
 
   // Confirm status change with date/location
@@ -247,7 +301,7 @@ function KlientiContent() {
       const cleaned = existing.replace(/Adresa:\s*.+/i, "").trim();
       updates.poznamka = cleaned ? `${cleaned}\n${addrLine}` : addrLine;
     }
-    await supabase.from("klienti").update(updates).eq("id", k.id);
+    if (user?.id) await klientUpdate(user.id, k.id, updates);
 
     // Create calendar event
     if (user?.id) {
@@ -273,8 +327,8 @@ function KlientiContent() {
         });
         if (res.ok) {
           const data = await res.json();
-          if (data.event?.id) {
-            await supabase.from("klienti").update({ calendar_event_id: data.event.id }).eq("id", k.id);
+          if (data.event?.id && user?.id) {
+            await klientUpdate(user.id, k.id, { calendar_event_id: data.event.id });
           }
         }
       } catch { /* calendar fails silently */ }
@@ -291,9 +345,11 @@ function KlientiContent() {
     fetchKlienti();
   }
 
-  // Assign makler to klient (admin only)
+  // Assign makler to klient (admin only — endpoint dovolí prepis makler_id len adminovi)
   async function assignMakler(klientId: string, newMaklerId: string) {
-    await supabase.from("klienti").update({ makler_id: newMaklerId }).eq("id", klientId);
+    if (!user?.id) return;
+    const { error } = await klientUpdate(user.id, klientId, { makler_id: newMaklerId });
+    if (error) { alert(error.message); return; }
     fetchKlienti();
   }
 
@@ -514,7 +570,8 @@ function KlientiContent() {
                 <div style={{ textAlign: "center", display: "flex", gap: "4px", justifyContent: "center" }} onClick={e => e.stopPropagation()}>
                   {isAdmin && k.status === "caka_na_schvalenie" && (
                     <button onClick={async () => {
-                      await supabase.from("klienti").update({ status: "novy_kontakt" }).eq("id", k.id);
+                      if (!user?.id) return;
+                      await klientUpdate(user.id, k.id, { status: "novy_kontakt" });
                       fetchKlienti();
                     }} style={{
                       padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
@@ -535,10 +592,11 @@ function KlientiContent() {
                   )}
                   {isAdmin && (
                     <button onClick={async () => {
-                      if (confirm("Odstrániť klienta " + k.meno + "?")) {
-                        await supabase.from("klienti").delete().eq("id", k.id);
-                        fetchKlienti();
-                      }
+                      if (!confirm("Odstrániť klienta " + k.meno + "?")) return;
+                      if (!user?.id) { alert("Nie si prihlásený"); return; }
+                      const { error } = await klientDelete(user.id, k.id);
+                      if (error) { alert(error.message); return; }
+                      fetchKlienti();
                     }} style={{
                       padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
                       background: "#FEE2E2", color: "#991B1B", border: "none", cursor: "pointer",
@@ -734,8 +792,8 @@ function KlientiContent() {
                     const updates: Record<string, unknown> = {};
                     if (lvEditFixName && lvEditPickedOwner) updates.meno = lvEditPickedOwner;
                     if (lvEditFixLok && lvEditPickedLok) updates.lokalita = lvEditPickedLok;
-                    if (Object.keys(updates).length > 0) {
-                      await supabase.from("klienti").update(updates).eq("id", lvEditModalKlient.id);
+                    if (Object.keys(updates).length > 0 && user?.id) {
+                      await klientUpdate(user.id, lvEditModalKlient.id, updates);
                     }
                     // Sync Google Kalendár
                     const calEventId = (lvEditModalKlient as { calendar_event_id?: string | null }).calendar_event_id;

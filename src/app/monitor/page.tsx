@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
 import { useAuth } from "@/components/AuthProvider";
+import PreCallBriefModal from "@/components/PreCallBriefModal";
+import PriceSparkline from "@/components/PriceSparkline";
 
 /* ── Typy ── */
 interface Inzerat {
@@ -23,6 +26,11 @@ interface Inzerat {
   first_seen_at: string;
   last_seen_at: string;
   is_active: boolean;
+  motivation_score?: number;
+  listed_on_n_portals?: number;
+  predajca_typ_confidence?: number;
+  predajca_typ_method?: string;
+  canonical_id?: string | null;
 }
 
 interface Filter {
@@ -41,6 +49,7 @@ interface Filter {
   notify_email: boolean;
   notify_telegram: boolean;
   is_active: boolean;
+  len_sukromni: boolean;
 }
 
 /* ── Konštanty ── */
@@ -170,7 +179,9 @@ function LokalitaInput({ value, onChange, placeholder }: { value: string; onChan
 }
 
 /* ── Hlavná stránka ── */
-export default function MonitorPage() {
+function MonitorContent() {
+  const router = useRouter();
+  const [briefFor, setBriefFor] = useState<{ id: string; url?: string } | null>(null);
   const [inzeraty, setInzeraty] = useState<Inzerat[]>([]);
   const [filtre, setFiltre] = useState<Filter[]>([]);
   const [total, setTotal] = useState(0);
@@ -184,6 +195,8 @@ export default function MonitorPage() {
   const [sort, setSort] = useState("newest");
   const [lenSukromni, setLenSukromni] = useState(true);  // Default: zobraz len súkromných
   const [onlyToday, setOnlyToday] = useState(false);
+  const [onlyMotivated, setOnlyMotivated] = useState(false);
+  const [hideDuplicates, setHideDuplicates] = useState(true); // Default: skry dupy z viacerých portálov
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { user } = useAuth();
@@ -217,7 +230,7 @@ export default function MonitorPage() {
   }, [viewPortal, viewTyp]);
 
   const loadFiltre = async () => {
-    const res = await fetch("/api/monitor/filtre");
+    const res = await fetch("/api/monitor/filtre", { credentials: "include" });
     const d = await res.json();
     setFiltre(d.filtre || []);
   };
@@ -274,12 +287,15 @@ export default function MonitorPage() {
   const today = new Date().toISOString().split("T")[0];
   const noveDnes = inzeraty.filter(i => i.first_seen_at?.startsWith(today)).length;
   const sukromniCount = inzeraty.filter(i => i.predajca_typ === "sukromny").length;
+  const motivovaniCount = inzeraty.filter(i => (i.motivation_score ?? 0) >= 30).length;
   const aktivneFiltre = filtre.filter(f => f.is_active).length;
 
   const filtered = inzeraty
     .filter(i => {
       if (lenSukromni && i.predajca_typ !== "sukromny") return false;
       if (onlyToday && !(i.first_seen_at || "").startsWith(today)) return false;
+      if (onlyMotivated && (i.motivation_score ?? 0) < 30) return false;
+      if (hideDuplicates && i.canonical_id) return false; // skry duplikáty (canonical_id ≠ null = sekundárny)
       if (search) {
         const q = search.toLowerCase();
         if (!(i.nazov || "").toLowerCase().includes(q) && !(i.lokalita || "").toLowerCase().includes(q)) return false;
@@ -292,12 +308,57 @@ export default function MonitorPage() {
       return new Date(b.first_seen_at).getTime() - new Date(a.first_seen_at).getTime();
     });
 
-  const [nf, setNf] = useState({
+  const defaultForm = {
     nazov: "", portal: "reality.sk", typ: "byt", lokalita: "",
     cena_od: "", cena_do: "", search_url: "",
     notify_email: true, notify_telegram: false,
-    len_sukromni: true,  // Default: len súkromní predajcovia
-  });
+    len_sukromni: true,
+  };
+  const [nf, setNf] = useState(defaultForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [ef, setEf] = useState(defaultForm);
+
+  const startEdit = (f: Filter) => {
+    setEditingId(f.id);
+    setEf({
+      nazov: f.nazov || "",
+      portal: f.portal || "reality.sk",
+      typ: f.typ || "",
+      lokalita: f.lokalita || "",
+      cena_od: f.cena_od ? String(f.cena_od) : "",
+      cena_do: f.cena_do ? String(f.cena_do) : "",
+      search_url: f.search_url || "",
+      notify_email: f.notify_email,
+      notify_telegram: f.notify_telegram,
+      len_sukromni: f.len_sukromni ?? true,
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const body = {
+      id: editingId,
+      ...ef,
+      cena_od: ef.cena_od ? parseFloat(ef.cena_od) : null,
+      cena_do: ef.cena_do ? parseFloat(ef.cena_do) : null,
+      typ: ef.typ || null,
+      lokalita: ef.lokalita || null,
+      search_url: ef.search_url || null,
+    };
+    const res = await fetch("/api/monitor/filtre", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      setEditingId(null);
+      loadFiltre();
+      showToast("Filter aktualizovaný");
+    } else {
+      showToast("Chyba pri ukladaní", "error");
+    }
+  };
 
   const createFilter = async () => {
     const body = {
@@ -311,6 +372,7 @@ export default function MonitorPage() {
     const res = await fetch("/api/monitor/filtre", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(body),
     });
     if (res.ok) {
@@ -327,6 +389,7 @@ export default function MonitorPage() {
     await fetch("/api/monitor/filtre", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ id: f.id, is_active: !f.is_active }),
     });
     loadFiltre();
@@ -414,22 +477,27 @@ export default function MonitorPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px", marginBottom: "24px" }}>
         {[
           {
             label: "Celkom inzerátov", value: total, color: "var(--text-primary)",
-            onClick: () => { setTab("inzeraty"); setSearch(""); setViewPortal(""); setViewTyp(""); setLenSukromni(false); setOnlyToday(false); },
-            active: tab === "inzeraty" && !lenSukromni && !onlyToday && !search && !viewPortal && !viewTyp,
+            onClick: () => { setTab("inzeraty"); setSearch(""); setViewPortal(""); setViewTyp(""); setLenSukromni(false); setOnlyToday(false); setOnlyMotivated(false); },
+            active: tab === "inzeraty" && !lenSukromni && !onlyToday && !onlyMotivated && !search && !viewPortal && !viewTyp,
           },
           {
             label: "Nové dnes", value: noveDnes, color: noveDnes > 0 ? "var(--accent)" : "var(--text-primary)",
-            onClick: () => { setTab("inzeraty"); setOnlyToday(true); },
+            onClick: () => { setTab("inzeraty"); setOnlyToday(true); setOnlyMotivated(false); },
             active: tab === "inzeraty" && onlyToday,
           },
           {
             label: "Súkromní", value: sukromniCount, color: sukromniCount > 0 ? "var(--warning)" : "var(--text-primary)",
-            onClick: () => { setTab("inzeraty"); setLenSukromni(true); },
-            active: tab === "inzeraty" && lenSukromni,
+            onClick: () => { setTab("inzeraty"); setLenSukromni(true); setOnlyMotivated(false); },
+            active: tab === "inzeraty" && lenSukromni && !onlyMotivated,
+          },
+          {
+            label: "🔥 Motivovaní", value: motivovaniCount, color: motivovaniCount > 0 ? "#dc2626" : "var(--text-primary)",
+            onClick: () => { setTab("inzeraty"); setOnlyMotivated(true); setLenSukromni(false); },
+            active: tab === "inzeraty" && onlyMotivated,
           },
           {
             label: "Aktívne filtre", value: aktivneFiltre, color: aktivneFiltre > 0 ? "var(--success)" : "var(--text-muted)",
@@ -624,13 +692,53 @@ export default function MonitorPage() {
                       {i.izby > 0 && <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>{i.izby}-izb</span>}
                       {i.lokalita && <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>📍 {i.lokalita}</span>}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{timeAgo(i.first_seen_at)}</span>
                       {i.predajca_typ === "sukromny" && (
                         <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--warning)", background: "var(--warning-light)", padding: "2px 8px", borderRadius: "6px" }}>
                           👤 Súkromný
                         </span>
                       )}
+                      {(i.motivation_score ?? 0) >= 60 && (
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#fff", background: "#dc2626", padding: "2px 8px", borderRadius: "6px" }}
+                          title="Vysoko motivovaný predajca">
+                          🔥🔥🔥 {i.motivation_score}
+                        </span>
+                      )}
+                      {(i.motivation_score ?? 0) >= 30 && (i.motivation_score ?? 0) < 60 && (
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#fff", background: "#ea580c", padding: "2px 8px", borderRadius: "6px" }}
+                          title="Motivovaný predajca">
+                          🔥 {i.motivation_score}
+                        </span>
+                      )}
+                      {(i.listed_on_n_portals ?? 1) >= 3 && (
+                        <span style={{ fontSize: "11px", fontWeight: 600, color: "#1e40af", background: "#dbeafe", padding: "2px 8px", borderRadius: "6px" }}
+                          title="Inzerát je listovaný na viacerých portáloch">
+                          📡 {i.listed_on_n_portals} portálov
+                        </span>
+                      )}
+                      <PriceSparkline inzeratId={i.id} currentPrice={i.cena} />
+                      <button onClick={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        setBriefFor({ id: i.id, url: i.url });
+                      }} style={{
+                        marginLeft: "auto",
+                        fontSize: "11px", fontWeight: 600, color: "#7c2d12",
+                        background: "#fed7aa", border: "none",
+                        padding: "3px 10px", borderRadius: "6px", cursor: "pointer",
+                      }} title="Pre-call brief — čo povedať predajcovi pred zavolaním">
+                        📞 Brief
+                      </button>
+                      <button onClick={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        router.push(`/analyzy?analyze=${encodeURIComponent(i.url)}`);
+                      }} style={{
+                        fontSize: "11px", fontWeight: 600, color: "#1e3a8a",
+                        background: "#dbeafe", border: "none",
+                        padding: "3px 10px", borderRadius: "6px", cursor: "pointer",
+                      }} title="Analyzovať tento inzerát — porovnanie s trhom + AI verdikt + PDF">
+                        🔍 Analyzovať
+                      </button>
                     </div>
                   </div>
                 </a>
@@ -741,7 +849,8 @@ export default function MonitorPage() {
                     <div>
                       👤 Len súkromní predajcovia
                       <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 400, marginTop: "2px" }}>
-                        Odfiltruje realitné kancelárie (odporúčané — súkromní predajcovia sú potenciálne leady)
+                        Zapnuté = potenciálne leady (notifikácie, kupujúci pre teba).<br/>
+                        Vypnuté = uložia sa aj RK inzeráty pre <strong>analýzy cien</strong> (bez notifikácií).
                       </div>
                     </div>
                   </label>
@@ -793,55 +902,122 @@ export default function MonitorPage() {
             )}
             {filtre.map(f => (
               <div key={f.id} style={{ ...S.card, padding: "18px", opacity: f.is_active ? 1 : 0.5 }}>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px" }}>{f.nazov}</h3>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                      <span style={{
-                        fontSize: "12px", padding: "3px 10px", borderRadius: "6px", fontWeight: 500,
-                        background: f.portal === "vsetky" ? "var(--bg-hover)" : f.portal === "reality.sk" ? "var(--success-light)" : f.portal === "nehnutelnosti.sk" ? "var(--accent-light)" : "var(--purple-light)",
-                        color: f.portal === "vsetky" ? "var(--text-secondary)" : f.portal === "reality.sk" ? "var(--success)" : f.portal === "nehnutelnosti.sk" ? "var(--accent)" : "var(--purple)",
-                      }}>
-                        {f.portal === "vsetky" ? "Všetky" : f.portal}
-                      </span>
-                      {f.typ && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>{f.typ}</span>}
-                      {f.lokalita && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>📍 {f.lokalita}</span>}
-                      {(f.cena_od || f.cena_do) && (
-                        <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
-                          {f.cena_od ? `${fmt(Number(f.cena_od))} €` : "0 €"} – {f.cena_do ? `${fmt(Number(f.cena_do))} €` : "∞"}
-                        </span>
-                      )}
-                      {f.notify_email && <span style={{ fontSize: "12px", color: "var(--accent)", fontWeight: 500 }}>📧 Email</span>}
-                      {f.notify_telegram && <span style={{ fontSize: "12px", color: "var(--purple)", fontWeight: 500 }}>✈️ Telegram</span>}
+                {editingId === f.id ? (
+                  /* ── EDIT FORM ── */
+                  <div>
+                    <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 14px" }}>Upraviť filter</h3>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={S.label}>Názov</label>
+                        <input type="text" value={ef.nazov} onChange={e => setEf({ ...ef, nazov: e.target.value })} style={S.input} />
+                      </div>
+                      <div>
+                        <label style={S.label}>Portál</label>
+                        <select value={ef.portal} onChange={e => setEf({ ...ef, portal: e.target.value })} style={S.select}>
+                          {PORTALS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={S.label}>Typ</label>
+                        <select value={ef.typ} onChange={e => setEf({ ...ef, typ: e.target.value })} style={S.select}>
+                          {TYPY.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={S.label}>Lokalita</label>
+                        <LokalitaInput value={ef.lokalita} onChange={v => setEf({ ...ef, lokalita: v })} placeholder="Bratislava - Petržalka" />
+                      </div>
+                      <div>
+                        <label style={S.label}>Cena od</label>
+                        <input type="number" placeholder="50 000" value={ef.cena_od} onChange={e => setEf({ ...ef, cena_od: e.target.value })} style={S.input} />
+                      </div>
+                      <div>
+                        <label style={S.label}>Cena do</label>
+                        <input type="number" placeholder="200 000" value={ef.cena_do} onChange={e => setEf({ ...ef, cena_do: e.target.value })} style={S.input} />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={S.label}>Priamy URL <span style={{ fontWeight: 400, textTransform: "none" }}>(voliteľné)</span></label>
+                        <input type="url" value={ef.search_url} onChange={e => setEf({ ...ef, search_url: e.target.value })} style={S.input} placeholder="https://www.reality.sk/..." />
+                      </div>
+                      <div style={{ gridColumn: "1 / -1", padding: "10px", background: ef.len_sukromni ? "var(--warning-light)" : "var(--accent-light)", border: `1px solid ${ef.len_sukromni ? "var(--warning)" : "var(--accent)"}`, borderRadius: "var(--radius-sm)" }}>
+                        <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", fontSize: "13px", cursor: "pointer", color: ef.len_sukromni ? "var(--warning)" : "var(--accent)", fontWeight: 600 }}>
+                          <input type="checkbox" checked={ef.len_sukromni} onChange={e => setEf({ ...ef, len_sukromni: e.target.checked })} style={{ width: "16px", height: "16px", marginTop: "2px" }} />
+                          <div>
+                            {ef.len_sukromni ? "👤 Len súkromní predajcovia (leady + notifikácie)" : "📊 Vrátane RK — pre prehľad cien a analýzy"}
+                            <div style={{ fontSize: "11px", color: "var(--text-secondary)", fontWeight: 400, marginTop: "2px" }}>
+                              {ef.len_sukromni
+                                ? "Vypni ak chceš aj RK inzeráty na sledovanie trhových cien"
+                                : "RK inzeráty sa ukladajú ale neposielajú notifikácie — slúžia len pre cenové analýzy"}
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", marginTop: "14px", paddingTop: "12px", borderTop: "1px solid var(--border-subtle)" }}>
+                      <button onClick={saveEdit} disabled={!ef.nazov} style={{ ...S.btnPrimary, opacity: ef.nazov ? 1 : 0.4 }}>Uložiť</button>
+                      <button onClick={() => setEditingId(null)} style={{ ...S.btnSecondary, border: "none", background: "transparent" }}>Zrušiť</button>
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <button
-                      onClick={() => toggleFilter(f)}
-                      style={{
-                        height: "30px", padding: "0 12px", borderRadius: "6px",
-                        fontSize: "12px", fontWeight: 600, border: "none", cursor: "pointer",
-                        background: f.is_active ? "var(--success-light)" : "var(--bg-hover)",
-                        color: f.is_active ? "var(--success)" : "var(--text-muted)",
-                      }}
-                    >
-                      {f.is_active ? "Aktívny" : "Pauznutý"}
-                    </button>
-                    <button
-                      onClick={() => deleteFilter(f.id)}
-                      style={{
-                        width: "30px", height: "30px", borderRadius: "6px",
-                        border: "none", background: "transparent", color: "var(--text-muted)",
-                        cursor: "pointer", fontSize: "14px",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--danger-light)"; (e.currentTarget as HTMLElement).style.color = "var(--danger)"; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
-                    >
-                      ✕
-                    </button>
+                ) : (
+                  /* ── DISPLAY ROW ── */
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "16px" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <h3 style={{ fontSize: "15px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 8px" }}>{f.nazov}</h3>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        <span style={{
+                          fontSize: "12px", padding: "3px 10px", borderRadius: "6px", fontWeight: 500,
+                          background: f.portal === "vsetky" ? "var(--bg-hover)" : f.portal === "reality.sk" ? "var(--success-light)" : f.portal === "nehnutelnosti.sk" ? "var(--accent-light)" : "var(--purple-light)",
+                          color: f.portal === "vsetky" ? "var(--text-secondary)" : f.portal === "reality.sk" ? "var(--success)" : f.portal === "nehnutelnosti.sk" ? "var(--accent)" : "var(--purple)",
+                        }}>
+                          {f.portal === "vsetky" ? "Všetky" : f.portal}
+                        </span>
+                        {f.typ && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>{f.typ}</span>}
+                        {f.lokalita && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>📍 {f.lokalita}</span>}
+                        {(f.cena_od || f.cena_do) && (
+                          <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
+                            {f.cena_od ? `${fmt(Number(f.cena_od))} €` : "0 €"} – {f.cena_do ? `${fmt(Number(f.cena_do))} €` : "∞"}
+                          </span>
+                        )}
+                        {f.len_sukromni === false
+                          ? <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--accent-light)", color: "var(--accent)", fontWeight: 600 }}>📊 Vrátane RK</span>
+                          : <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--warning-light)", color: "var(--warning)", fontWeight: 600 }}>👤 Len súkromní</span>
+                        }
+                        {f.notify_email && <span style={{ fontSize: "12px", color: "var(--accent)", fontWeight: 500 }}>📧 Email</span>}
+                        {f.notify_telegram && <span style={{ fontSize: "12px", color: "var(--purple)", fontWeight: 500 }}>✈️ Telegram</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <button
+                        onClick={() => startEdit(f)}
+                        style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+                        title="Upraviť filter"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => toggleFilter(f)}
+                        style={{
+                          height: "30px", padding: "0 12px", borderRadius: "6px",
+                          fontSize: "12px", fontWeight: 600, border: "none", cursor: "pointer",
+                          background: f.is_active ? "var(--success-light)" : "var(--bg-hover)",
+                          color: f.is_active ? "var(--success)" : "var(--text-muted)",
+                        }}
+                      >
+                        {f.is_active ? "Aktívny" : "Pauznutý"}
+                      </button>
+                      <button
+                        onClick={() => deleteFilter(f.id)}
+                        style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--danger-light)"; (e.currentTarget as HTMLElement).style.color = "var(--danger)"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </div>
@@ -853,6 +1029,72 @@ export default function MonitorPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
         select:focus, input:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-light) !important; }
       `}</style>
+
+      {briefFor && (
+        <PreCallBriefModal
+          inzeratId={briefFor.id}
+          sourceUrl={briefFor.url}
+          onClose={() => setBriefFor(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// TASK 1 — Wrapper s tabmi: Scraping (default) | AI Analýza
+import AnalyzyPage from "@/app/analyzy/page";
+import { Suspense } from "react";
+
+const MONITOR_TABS = [
+  { key: "scraping", label: "Scraping", icon: "📡" },
+  { key: "analyza",  label: "AI Analýza", icon: "📈" },
+] as const;
+
+function MonitorWrapper() {
+  const sp = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const raw = sp.get("tab");
+  const tab = (MONITOR_TABS.find(t => t.key === raw)?.key) || "scraping";
+
+  return (
+    <div>
+      <div style={{
+        display: "flex", gap: "6px", marginBottom: "20px",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        {MONITOR_TABS.map(t => {
+          const active = t.key === tab;
+          return (
+            <button
+              key={t.key}
+              onClick={() => router.push(`${pathname}?tab=${t.key}`)}
+              style={{
+                padding: "10px 18px", borderRadius: "10px 10px 0 0",
+                border: "none", background: active ? "var(--bg-elevated)" : "transparent",
+                color: active ? "var(--text-primary)" : "var(--text-muted)",
+                fontSize: "13px", fontWeight: active ? 700 : 500, cursor: "pointer",
+                borderBottom: active ? "2px solid var(--accent, #3B82F6)" : "2px solid transparent",
+                transition: "all 0.15s",
+              }}
+            >
+              <span style={{ marginRight: "6px" }}>{t.icon}</span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "scraping" && <MonitorContent />}
+      {tab === "analyza" && <AnalyzyPage />}
+    </div>
+  );
+}
+
+export default function MonitorPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>Načítavam...</div>}>
+      <MonitorWrapper />
+    </Suspense>
   );
 }

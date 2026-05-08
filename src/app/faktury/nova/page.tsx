@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadDodavatel } from "@/app/nastavenia/faktury/page";
+import { fetchDodavatel } from "@/app/nastavenia/faktury/page";
 import { useAuth } from "@/components/AuthProvider";
 
 type Odberatel = {
@@ -66,13 +66,17 @@ export default function NovaFakturaPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("/api/odberatelia").then((r) => r.json()).then((d) => {
+    if (!user?.id) return;
+    fetch(`/api/odberatelia?user_id=${user.id}`).then((r) => r.json()).then((d) => {
       setOdberatelia(Array.isArray(d) ? d : []);
       if (Array.isArray(d) && d.length > 0) setOdberatelId(d[0].id);
     });
-    const dod = loadDodavatel(user?.id);
-    if (dod.splatnost_dni) setDatumSplatnosti(addDays(today, dod.splatnost_dni));
-    if (dod.poznamka_default) setPoznamka(dod.poznamka_default);
+    if (user?.id) {
+      fetchDodavatel(user.id).then((dod) => {
+        if (dod.splatnost_dni) setDatumSplatnosti(addDays(today, dod.splatnost_dni));
+        if (dod.poznamka_default) setPoznamka(dod.poznamka_default);
+      });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
@@ -97,12 +101,14 @@ export default function NovaFakturaPage() {
 
   async function save() {
     if (!odb) return alert("Vyber odberateľa");
+    if (!user?.id) return alert("Nie si prihlásený");
     if (polozky.every((p) => !p.popis.trim())) return alert("Pridaj aspoň jednu položku");
     setSaving(true);
     const r = await fetch("/api/faktury", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        user_id: user.id,
         odberatel_id: odb.id,
         odberatel_snapshot: odb,
         datum_vystavenia: datumVystavenia,

@@ -25,14 +25,24 @@ export const bytySkParser: PortalParser = {
   buildSearchUrl(filter: MonitorFilter): string {
     if (filter.search_url) return filter.search_url;
 
-    const typSlug = filter.typ ? TYP_URL[filter.typ] || "nehnutelnosti" : "nehnutelnosti";
+    // byty.sk má deterministický portálový filter pre súkromné osoby v URL:
+    //   /predaj/<lokalita>/sukromna-osoba/   (interné value=18)
+    // Portál filtruje sám — spoľahlivejšie ako post-filter na našej strane.
+    if (filter.len_sukromni) {
+      if (filter.lokalita) {
+        const slug = filter.lokalita
+          .toLowerCase()
+          .normalize("NFD").replace(/[̀-ͯ]/g, "")
+          .replace(/[\s-]+/g, "-")
+          .replace(/[^a-z0-9-]/g, "")
+          .replace(/^-|-$/g, "");
+        return `${BASE_URL}/predaj/${slug}/sukromna-osoba/`;
+      }
+      return `${BASE_URL}/predaj/sukromna-osoba/`;
+    }
 
-    // Lokalitu ani cenu NEDÁVAME do URL — byty.sk oba z nich odmieta
-    // (vráti prázdnu 81KB stránku s 0 listings):
-    //   - neplatný slug lokality ('bratislava-ruzinov' → 0)
-    //   - `?cena_od=`/`?cena_do=` query param (iný názov v skutočnom form-e)
-    // Fetchneme root /byty/predaj/ (18–19 najnovších) a všetky filter kritériá
-    // aplikuje post-filter matchesFilter() v cron scrape.
+    // Fallback bez len_sukromni — pôvodná URL (bez lokality, byty.sk ju odmieta)
+    const typSlug = filter.typ ? TYP_URL[filter.typ] || "nehnutelnosti" : "nehnutelnosti";
     return `${BASE_URL}/${typSlug}/predaj/`;
   },
 

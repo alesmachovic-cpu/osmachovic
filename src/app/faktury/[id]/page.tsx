@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { loadDodavatel, DEFAULT_DODAVATEL, type DodavatelSettings } from "@/app/nastavenia/faktury/page";
+import { fetchDodavatel, DEFAULT_DODAVATEL, type DodavatelSettings } from "@/app/nastavenia/faktury/page";
 import { useAuth } from "@/components/AuthProvider";
 
 type Polozka = { id: string; popis: string; mnozstvo: number; jednotka: string; cena_jednotka: number; spolu: number };
@@ -30,7 +30,7 @@ export default function FakturaDetail() {
 
   useEffect(() => {
     fetch(`/api/faktury?id=${params.id}`).then((r) => r.json()).then(setF);
-    setDodavatel(loadDodavatel(user?.id));
+    if (user?.id) fetchDodavatel(user.id).then(setDodavatel);
   }, [params.id, user?.id]);
 
   if (!f) return <div style={{ padding: "24px" }}>Načítavam…</div>;
@@ -39,9 +39,14 @@ export default function FakturaDetail() {
     <div style={{ maxWidth: "900px", margin: "0 auto" }}>
       <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <Link href="/faktury" style={{ fontSize: "13px", color: "var(--text-secondary)", textDecoration: "none" }}>← Späť na faktúry</Link>
-        <button onClick={() => window.print()} style={{ background: "#374151", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
-          🖨️ Tlačiť / PDF
-        </button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button onClick={() => window.print()} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-primary)", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
+            Tlačiť
+          </button>
+          <a href={`/api/faktury/pdf?id=${f.id}`} target="_blank" rel="noopener noreferrer" style={{ background: "#374151", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer", textDecoration: "none" }}>
+            Stiahnuť PDF
+          </a>
+        </div>
       </div>
 
       <div id="faktura-print" style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: "14px", padding: "40px", color: "#1d1d1f" }}>

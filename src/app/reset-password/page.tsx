@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import PasswordInput from "@/components/PasswordInput";
 
 function ResetPasswordInner() {
   const params = useSearchParams();
@@ -83,32 +84,32 @@ function ResetPasswordInner() {
               <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.7)", marginBottom: "6px", display: "block", textTransform: "uppercase" }}>
                 Nové heslo
               </label>
-              <input
-                type="password" autoComplete="new-password"
+              <PasswordInput
+                autoComplete="new-password"
                 value={password} onChange={e => setPassword(e.target.value)}
                 placeholder="Minimálne 8 znakov"
                 disabled={submitting || !token}
+                inverse
                 style={{
-                  width: "100%", padding: "13px 16px", borderRadius: "12px",
                   background: "rgba(255,255,255,0.06)",
                   border: "1px solid rgba(255,255,255,0.12)",
-                  color: "#fff", fontSize: "14px", outline: "none",
+                  color: "#fff",
                 }} />
             </div>
             <div>
               <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.7)", marginBottom: "6px", display: "block", textTransform: "uppercase" }}>
                 Potvrdiť heslo
               </label>
-              <input
-                type="password" autoComplete="new-password"
+              <PasswordInput
+                autoComplete="new-password"
                 value={password2} onChange={e => setPassword2(e.target.value)}
                 placeholder="••••••••"
                 disabled={submitting || !token}
+                inverse
                 style={{
-                  width: "100%", padding: "13px 16px", borderRadius: "12px",
                   background: "rgba(255,255,255,0.06)",
                   border: "1px solid rgba(255,255,255,0.12)",
-                  color: "#fff", fontSize: "14px", outline: "none",
+                  color: "#fff",
                 }} />
             </div>
 

@@ -44,3 +44,41 @@ export function detectFirma(...parts: Array<string | undefined | null>): boolean
   if (!text) return false;
   return FIREMNE_MARKERY.some((m) => text.includes(m));
 }
+
+/**
+ * Extrahuje číslo poschodia z kontextového textu.
+ * Príklady: "4. poschodie", "4/8", "posch. 3", "4p", "prízemie", "podkrovie"
+ * Vracia normalizovaný string napr. "4/8", "prízemie", "4"
+ */
+export function extractPoschodie(text: string): string | undefined {
+  const t = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (t.includes("prizemie") || t.includes("prizemne")) return "prízemie";
+  if (t.includes("podkrovie") || t.includes("podkrovne")) return "podkrovie";
+  if (t.includes("suteren") || t.includes("polosuteren")) return "suterén";
+  // "4/8 poschodí", "4. poschodie", "4 poschodie"
+  const m1 = t.match(/(\d+)\s*\/\s*(\d+)\s*poschod/);
+  if (m1) return `${m1[1]}/${m1[2]}`;
+  const m2 = t.match(/(\d+)\s*[\.\s]?\s*p(?:oschodie|oschod|\.)/);
+  if (m2) return m2[1];
+  // "poschodie 4" alebo "p. 4"
+  const m3 = t.match(/poschod[^\d]{0,5}(\d+)/);
+  if (m3) return m3[1];
+  return undefined;
+}
+
+/**
+ * Extrahuje stav nehnuteľnosti z kontextového textu.
+ * Vracia jeden z normalizovaných stavov pre analýzy.
+ */
+export function extractStav(text: string): string | undefined {
+  const t = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (t.includes("novostavba") || t.includes("nova stavba")) return "novostavba";
+  if (t.includes("po rekonstrukcii") || t.includes("kompletna rekonstrukcia") || t.includes("plna rekonstrukcia")) return "po rekonštrukcii";
+  if (t.includes("ciastocna rekonstrukcia") || t.includes("ciastocne zrekon")) return "čiastočná rekonštrukcia";
+  if (t.includes("povodni stav") || t.includes("povodny stav") || t.includes("originalny stav")) return "pôvodný stav";
+  if (t.includes("vyborny stav") || t.includes("perfektny stav") || t.includes("luxusny stav")) return "výborný stav";
+  if (t.includes("dobry stav") || t.includes("zachovaly stav")) return "dobrý stav";
+  if (t.includes("na rekonstrukciu") || t.includes("vyzaduje rekonstrukciu") || t.includes("potrebuje rekonstrukciu")) return "na rekonštrukciu";
+  if (t.includes("developer") || t.includes("developersky")) return "novostavba";
+  return undefined;
+}

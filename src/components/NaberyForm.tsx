@@ -9,6 +9,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { getUserItem } from "@/lib/userStorage";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { saveKlientDokument } from "@/lib/klientDokumenty";
+import { naberInsert, klientUpdate as klientApiUpdate } from "@/lib/klientApi";
 
 const OKRESY: Record<string, string[]> = {
   "Bratislavský kraj": ["Bratislava I","Bratislava II","Bratislava III","Bratislava IV","Bratislava V","Malacky","Pezinok","Senec"],
@@ -153,16 +154,9 @@ interface Props {
   /** Ak nastavený, nový záznam sa uloží ako DODATOK k existujúcemu náberáku.
    *  Originál zostáva nedotknutý — tak vyžaduje model (audit / legalita). */
   parentNaberakId?: string | null;
-  /** Prefill polí z pre-check modalu (NovaNehnutelnostModal) — adresa už bola overená */
-  prefillObec?: string;
-  prefillUlica?: string;
-  prefillSupisneCislo?: string;
-  prefillTyp?: string;
-  prefillLink?: string;
 }
 
-export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNaberakId,
-  prefillObec, prefillUlica, prefillSupisneCislo, prefillLink }: Props) {
+export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNaberakId }: Props) {
   const { user: authUser } = useAuth();
   const uid = authUser?.id || "";
   const [saving, setSaving] = useState(false);
@@ -195,11 +189,11 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
     all.sort((a, b) => b.length - a.length);
     return all.find(x => lok === x.toLowerCase()) || all.find(x => lok.includes(x.toLowerCase())) || "";
   });
-  const [obec, setObec] = useState(() => prefillObec || parseNote([/Obec:\s*(.+)/i, /Mesto:\s*(.+)/i]) || klient.lokalita || "");
+  const [obec, setObec] = useState(() => parseNote([/Obec:\s*(.+)/i, /Mesto:\s*(.+)/i]) || klient.lokalita || "");
   const [castObce, setCastObce] = useState(() => parseNote([/Časť obce:\s*(.+)/i, /Mestská časť:\s*(.+)/i, /MČ:\s*(.+)/i]));
   const [katUzemie, setKatUzemie] = useState(() => parseNote([/Kat(?:astrálne)?\s*územie:\s*(.+)/i, /KÚ:\s*(.+)/i]));
-  const [ulica, setUlica] = useState(() => prefillUlica || parseNote([/Ulica:\s*(.+)/i, /Adresa:\s*(.+)/i]));
-  const [supisneCislo, setSupisneCislo] = useState(() => prefillSupisneCislo || parseNote([/Súpisné\s*č(?:íslo)?\.?:\s*(.+)/i]));
+  const [ulica, setUlica] = useState(() => parseNote([/Ulica:\s*(.+)/i, /Adresa:\s*(.+)/i]));
+  const [supisneCislo, setSupisneCislo] = useState(() => parseNote([/Súpisné\s*č(?:íslo)?\.?:\s*(.+)/i]));
   const [cisloOrientacne, setCisloOrientacne] = useState(() => parseNote([/Orientačné\s*č(?:íslo)?\.?:\s*(.+)/i]));
 
   const [plocha, setPlocha] = useState(() => parseNote([/Plocha:\s*(\d+[\.,]?\d*)/i, /(\d+)\s*m[²2]/i]));
@@ -309,6 +303,105 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
 
   const [podpisData, setPodpisData] = useState<string | null>(null);
   const [gdprConsent, setGdprConsent] = useState(false);
+  const [remoteSignMode, setRemoteSignMode] = useState(false);
+
+  // Finančné kalkulačky
+  const [urok, setUrok] = useState("3.5");
+  type AnalyzaResult = {
+    priemerna_cena_m2: number; odporucana_od: number; odporucana_do: number;
+    hodnotenie: "V rozsahu" | "Mierne vysoká" | "Vysoká" | "Mierne nízka" | "Nízka";
+    odchylka_pct: number; pocet_porovnani: number; zdroj: "monitor" | "benchmark"; komentar: string;
+  };
+  const [analyza, setAnalyza] = useState<AnalyzaResult | null>(null);
+  const [analyzaLoading, setAnalyzaLoading] = useState(false);
+
+  async function triggerAnalyza(cena?: string) {
+    const cenaNow = cena ?? predajnaCena;
+    if (!obec || !plocha) return;
+    setAnalyzaLoading(true);
+    try {
+      const res = await fetch("/api/naber-analyza", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ typ, plocha: Number(plocha), obec, okres, predajnaCena: Number(cenaNow) || undefined }),
+      });
+      if (res.ok) setAnalyza(await res.json());
+    } catch { /* silent */ }
+    setAnalyzaLoading(false);
+  }
+
+  // TASK 11 — Auto-save draft do localStorage (každých 30s) + banner pri návrate
+  const draftLsKey = `naber_draft_${klient.id}`;
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [draftMeta, setDraftMeta] = useState<{ savedAt: string } | null>(null);
+
+  // Detekcia draftu pri mounte
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(draftLsKey);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d?.savedAt) {
+          setDraftMeta({ savedAt: d.savedAt });
+          setShowDraftBanner(true);
+        }
+      }
+    } catch { /* ignore */ }
+  }, [draftLsKey]);
+
+  function loadDraft() {
+    try {
+      const raw = localStorage.getItem(draftLsKey);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.obec !== undefined) setObec(d.obec);
+      if (d.ulica !== undefined) setUlica(d.ulica);
+      if (d.supisneCislo !== undefined) setSupisneCislo(d.supisneCislo);
+      if (d.plocha !== undefined) setPlocha(d.plocha);
+      if (d.pocetIzieb !== undefined) setPocetIzieb(d.pocetIzieb);
+      if (d.predajnaCena !== undefined) setPredajnaCena(d.predajnaCena);
+      if (d.provizia !== undefined) setProvizia(d.provizia);
+      if (d.proviziaTyp !== undefined) setProviziaTyp(d.proviziaTyp);
+      if (d.popis !== undefined) setPopis(d.popis);
+      if (d.makler !== undefined) setMakler(d.makler);
+      if (d.zmluva !== undefined) setZmluva(d.zmluva);
+      if (d.typZmluvy !== undefined) setTypZmluvy(d.typZmluvy);
+      if (d.datumPodpisu !== undefined) setDatumPodpisu(d.datumPodpisu);
+      if (d.zmluvaDo !== undefined) setZmluvaDo(d.zmluvaDo);
+      if (d.kurenie !== undefined) setKurenie(d.kurenie);
+      if (d.mesacnePoplatky !== undefined) setMesacnePoplatky(d.mesacnePoplatky);
+    } catch { /* ignore */ }
+    setShowDraftBanner(false);
+  }
+  function discardDraft() {
+    localStorage.removeItem(draftLsKey);
+    setShowDraftBanner(false);
+    setDraftMeta(null);
+  }
+
+  // Periodický autosave — každých 30s ulož snapshot fields
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tick = () => {
+      // Ukladaj iba ak je niečo už zadané (aby sme nevytvorili draft prázdny formulár)
+      const hasContent = obec.trim() || ulica.trim() || plocha || pocetIzieb || predajnaCena || provizia || popis.trim();
+      if (!hasContent) return;
+      try {
+        const payload = {
+          savedAt: new Date().toISOString(),
+          obec, ulica, supisneCislo, plocha, pocetIzieb, predajnaCena,
+          provizia, proviziaTyp, popis, makler, zmluva, typZmluvy,
+          datumPodpisu, zmluvaDo, kurenie, mesacnePoplatky,
+        };
+        localStorage.setItem(draftLsKey, JSON.stringify(payload));
+      } catch { /* quota exceeded etc. — ignore */ }
+    };
+    const interval = setInterval(tick, 30000);
+    return () => clearInterval(interval);
+  }, [draftLsKey, obec, ulica, supisneCislo, plocha, pocetIzieb, predajnaCena,
+      provizia, proviziaTyp, popis, makler, zmluva, typZmluvy,
+      datumPodpisu, zmluvaDo, kurenie, mesacnePoplatky]);
 
   // LV data + review
   const [lvMajitelia, setLvMajitelia] = useState<Array<{ meno: string; podiel?: string; datum_narodenia?: string }>>([]);
@@ -468,9 +561,17 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
   }
 
   async function handleSubmit() {
-    if (!provizia?.trim()) { setError("Provízia je povinné pole"); return; }
-    if (!podpisData) { setError("Chýba podpis klienta"); return; }
-    if (!gdprConsent) { setError("Súhlas so spracovaním osobných údajov je povinný"); return; }
+    // 0 je platná hodnota provízie — kontrolujeme iba prázdny string / undefined / null
+    const proviziaTrim = (provizia ?? "").toString().trim();
+    if (proviziaTrim === "") { setError("Provízia je povinné pole"); return; }
+    if (!remoteSignMode) {
+      // Klasický mód — vyžaduje sa lokálny podpis a GDPR súhlas tu na zariadení
+      if (!podpisData) { setError("Chýba podpis klienta"); return; }
+      if (!gdprConsent) { setError("Súhlas so spracovaním osobných údajov je povinný"); return; }
+    }
+    // V remote-sign móde sa email klienta zadáva v modáli pri klikutí "📧 Poslať email"
+    // (cez SmsSignButton). Tu žiadny hard-check nepotrebujeme — ak klient.email chýba,
+    // maklér ho ručne zadá v modáli na step 4.
 
     // Kolízna kontrola — či nejaký iný maklér už eviduje rovnakú nehnuteľnosť
     // (rovnaká lokalita + typ + izby v aktívnych inzerátoch). Blokujeme save
@@ -483,43 +584,18 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
         izby: izbyNum || null,
         makler_email: authUser?.email || null,
         makler_meno: makler || null,
-        // Presná adresa — pre silnejšiu kontrolu duplicít na rovnakej ulici/čísle
-        ulica_privatna: ulica || null,
-        supisne_cislo: supisneCislo || null,
       };
-      if ((collisionBody.lokalita && izbyNum) || (collisionBody.ulica_privatna && collisionBody.supisne_cislo)) {
+      if (collisionBody.lokalita && izbyNum) {
         const res = await fetch("/api/kolize/nehnutelnosti", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify(collisionBody),
         });
         const out = await res.json().catch(() => ({}));
-        const all = (out.kolize || []) as Array<{ typ?: string; zavaznost?: string; data?: Record<string, unknown> }>;
-
-        // 1) Presná adresa — najsilnejšia, ponúka prejsť na existujúci náberák
-        const exact = all.filter(k => k.typ === "PRESNA_ADRESA");
-        if (exact.length > 0) {
-          const e = exact[0];
-          const existId = e.data?.existujuca_nehnutelnost_id as string | undefined;
-          const exMakler = (e.data?.makler_a_meno as string) || "iný maklér";
-          const exNazov = (e.data?.nazov as string) || "—";
-          const ok = window.confirm(
-            `⚠️ DUPLICITNÁ ADRESA\n\nNa adrese ${ulica} ${supisneCislo}, ${obec} už evidujeme nehnuteľnosť:\n` +
-            `• ${exNazov}\n• Maklér: ${exMakler}\n\n` +
-            `Stlač OK pre POKRAČOVAŤ v zakladaní novej (asi je to chyba), alebo ZRUŠIŤ — odporúčame namiesto duplikovania ` +
-            `otvoriť existujúcu nehnuteľnosť cez Portfólio.`
-          );
-          if (!ok) {
-            if (existId) console.info("[duplicate] existujuca nehnutelnost ID:", existId);
-            return;
-          }
-        }
-
-        // 2) Soft kolízia (lokalita+typ+izby)
-        const high = all.filter(k => k.typ !== "PRESNA_ADRESA" && k.zavaznost === "high");
+        const high = (out.kolize || []).filter((k: { zavaznost?: string }) => k.zavaznost === "high");
         if (high.length > 0) {
-          const names = high.map(k => (k.data?.makler_a_meno as string) || "iný maklér").join(", ");
+          const names = high.map((k: { data?: { makler_a_meno?: string } }) => k.data?.makler_a_meno || "iný maklér").join(", ");
           const ok = window.confirm(
-            `⚠️ KOLÍZIA\n\nPodobnú nehnuteľnosť (${obec}, ${typ}, ${izbyNum}-izb) už eviduje: ${names}.\n\nNapriek tomu pokračovať v nábere?`
+            `⚠️ KOLÍZIA\n\nRovnakú nehnuteľnosť (${obec}, ${typ}, ${izbyNum}-izb) už eviduje: ${names}.\n\nNapriek tomu pokračovať v nábere?`
           );
           if (!ok) return;
         }
@@ -586,25 +662,30 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
       predajna_cena: predajnaCena ? Number(predajnaCena) : null,
       makler: makler || null, zmluva, typ_zmluvy: zmluva ? typZmluvy : null,
       datum_podpisu: datumPodpisu || null, zmluva_do: zmluvaDo || null,
-      provizia: provizia || null, popis: popis || null, podpis_data: podpisData,
+      provizia: provizia || null, popis: popis || null,
+      // V remote-sign móde podpis aj GDPR vyplní endpoint /api/sign/verify keď klient potvrdí
+      podpis_data: remoteSignMode ? null : podpisData,
       parent_naberak_id: parentNaberakId || null,
-      // GDPR audit trail
-      gdpr_consent: true,
-      gdpr_consent_at: new Date().toISOString(),
-      podpis_meta: {
-        gdpr_version: "v1.0",
-        consent_evidence: true,
-        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        screen: typeof window !== "undefined" ? `${window.screen.width}x${window.screen.height}` : null,
-        // IP doplní /api/naber-pdf alebo iný server-side proces; tu klient-side
-      },
+      gdpr_consent: !remoteSignMode,
+      gdpr_consent_at: remoteSignMode ? null : new Date().toISOString(),
+      podpis_meta: remoteSignMode
+        ? { pending_remote_sign: true, requested_at: new Date().toISOString() }
+        : {
+            gdpr_version: "v1.0",
+            consent_evidence: true,
+            user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            screen: typeof window !== "undefined" ? `${window.screen.width}x${window.screen.height}` : null,
+            // IP doplní /api/naber-pdf alebo iný server-side proces; tu klient-side
+          },
     };
-    const { data, error: dbError } = await supabase.from("naberove_listy").insert(record).select("id").single();
-    if (dbError) { setSaving(false); setError("Chyba pri ukladaní: " + dbError.message); return; }
-    const klientUpdate: Record<string, unknown> = { status: "nabrany" };
-    if (maklerUuid && !klient.makler_id) klientUpdate.makler_id = maklerUuid;
-    await supabase.from("klienti").update(klientUpdate).eq("id", klient.id);
+    if (!authUser?.id) { setSaving(false); setError("Nie si prihlásený"); return; }
+    const insertRes = await naberInsert<{ id: string }>(authUser.id, { ...record, klient_id: klient.id });
+    if (insertRes.error) { setSaving(false); setError("Chyba pri ukladaní: " + insertRes.error.message); return; }
+    const data = (insertRes.data?.[0] as { id: string }) ?? { id: "" };
+    const klientPatch: Record<string, unknown> = { status: "nabrany" };
+    if (maklerUuid && !klient.makler_id) klientPatch.makler_id = maklerUuid;
+    await klientApiUpdate(authUser.id, klient.id, klientPatch);
 
     // Auto-upload Náberového listu ako PDF do Dokumentov klienta
     try {
@@ -635,6 +716,8 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
     }
 
     setSaving(false);
+    // TASK 11 — po úspešnom uložení vyčisti draft
+    try { localStorage.removeItem(draftLsKey); } catch { /* ignore */ }
     onSubmit({ id: data.id });
   }
 
@@ -735,6 +818,31 @@ Odpovedaj stručne po slovensky.`;
 
   return (
     <div style={{ maxWidth: "700px" }} spellCheck autoCorrect="on">
+      {/* Draft banner (TASK 11) */}
+      {showDraftBanner && draftMeta && (
+        <div style={{
+          padding: "12px 16px", marginBottom: "16px", borderRadius: "12px",
+          background: "#FEF3C7", border: "1px solid #FDE68A", color: "#92400E",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+          flexWrap: "wrap",
+        }}>
+          <div style={{ fontSize: "13px", lineHeight: 1.4 }}>
+            📝 Máš rozpracovaný náberák pre tohto klienta z{" "}
+            <strong>{new Date(draftMeta.savedAt).toLocaleString("sk", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</strong>.
+            Chceš pokračovať?
+          </div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button onClick={loadDraft} style={{
+              padding: "6px 14px", borderRadius: "8px", border: "none",
+              background: "#92400E", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer",
+            }}>Pokračovať</button>
+            <button onClick={discardDraft} style={{
+              padding: "6px 14px", borderRadius: "8px", border: "1px solid #92400E",
+              background: "transparent", color: "#92400E", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+            }}>Zahodiť</button>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
         <button onClick={onBack} style={{
@@ -1679,11 +1787,13 @@ Odpovedaj stručne po slovensky.`;
               onChange={e => setPredajnaCena(e.target.value)}
               onBlur={e => {
                 const n = Number(e.target.value);
+                let finalVal = e.target.value;
                 if (n >= 1000) {
-                  // Baťovská: zaokrúhliť nahor na X900
                   const batovska = Math.ceil(n / 1000) * 1000 - 100;
-                  setPredajnaCena(String(batovska));
+                  finalVal = String(batovska);
+                  setPredajnaCena(finalVal);
                 }
+                triggerAnalyza(finalVal);
               }}
               style={inputSt}
             />
@@ -1697,7 +1807,7 @@ Odpovedaj stručne po slovensky.`;
           <div>
             <label style={labelSt}>Provízia <span style={{ color: "#EF4444" }}>*</span></label>
             <input value={provizia} onChange={e => setProvizia(e.target.value)}
-              style={{ ...inputSt, borderColor: !provizia?.trim() ? "#FCA5A5" : "var(--border)" }}
+              style={{ ...inputSt, borderColor: ((provizia ?? "").toString().trim() === "") ? "#FCA5A5" : "var(--border)" }}
               placeholder="napr. 3% alebo 5000€" />
           </div>
           <div>
@@ -1725,6 +1835,19 @@ Odpovedaj stručne po slovensky.`;
           </div>
         )}
       </div>
+
+      {/* Finančné kalkulačky */}
+      {predajnaCena && Number(predajnaCena) > 0 && (
+        <FinancneKalkulacky
+          predajnaCena={Number(predajnaCena)}
+          provizia={provizia ?? ""}
+          urok={urok}
+          setUrok={setUrok}
+          analyza={analyza}
+          analyzaLoading={analyzaLoading}
+          onRefreshAnalyza={() => triggerAnalyza()}
+        />
+      )}
 
       {/* 7b. Ťarchy / právne vady */}
       {lvPravneVady && (
@@ -2033,33 +2156,70 @@ Odpovedaj stručne po slovensky.`;
             ? `Vyššie uvedené informácie potvrdzuje: ${podpisOwners.join(", ")}${zastupca.trim() ? ` (zastupuje: ${zastupca.trim()})` : ""}`
             : "Vyššie uvedené informácie potvrdzuje (podpis klienta):"}
         </div>
-        <SignatureCanvas onSignatureChange={setPodpisData} />
 
-        {/* GDPR explicitný súhlas */}
+        {/* Toggle: Klient nie je prítomný — pošlem mu link na podpis cez email */}
         <label style={{
-          display: "flex", alignItems: "flex-start", gap: "10px",
-          padding: "12px 14px", marginTop: "14px",
-          background: "var(--bg-elevated)",
-          border: gdprConsent ? "1px solid #10B981" : "1px solid var(--border)",
+          display: "flex", alignItems: "center", gap: "10px",
+          padding: "12px 14px", marginBottom: "12px",
+          background: remoteSignMode ? "#EFF6FF" : "var(--bg-elevated)",
+          border: remoteSignMode ? "1px solid #3B82F6" : "1px solid var(--border)",
           borderRadius: "10px", cursor: "pointer",
-          fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
+          fontSize: "13px", color: remoteSignMode ? "#1E40AF" : "var(--text-secondary)",
+          fontWeight: remoteSignMode ? 600 : 400,
         }}>
           <input
             type="checkbox"
-            checked={gdprConsent}
-            onChange={e => setGdprConsent(e.target.checked)}
-            style={{ marginTop: "2px", cursor: "pointer", flexShrink: 0 }}
+            checked={remoteSignMode}
+            onChange={e => setRemoteSignMode(e.target.checked)}
+            style={{ cursor: "pointer", flexShrink: 0 }}
           />
-          <span>
-            Súhlasím so spracovaním mojich osobných údajov spoločnosťou Vianema s. r. o.
-            v zmysle GDPR pre účely sprostredkovania predaja/prenájmu nehnuteľnosti.
-            Plné znenie:{" "}
-            <a href="/gdpr" target="_blank" rel="noopener noreferrer"
-              style={{ color: "var(--accent, #3B82F6)", textDecoration: "underline" }}>
-              Zásady spracovania osobných údajov →
-            </a>
-          </span>
+          <span>📧 Klient nie je tu — pošlem mu link na podpis cez email{klient.email ? ` (${klient.email})` : " (email zadám pri odosielaní)"}</span>
         </label>
+
+        {!remoteSignMode && (
+          <>
+            <SignatureCanvas onSignatureChange={setPodpisData} />
+
+            {/* GDPR explicitný súhlas */}
+            <label style={{
+              display: "flex", alignItems: "flex-start", gap: "10px",
+              padding: "12px 14px", marginTop: "14px",
+              background: "var(--bg-elevated)",
+              border: gdprConsent ? "1px solid #10B981" : "1px solid var(--border)",
+              borderRadius: "10px", cursor: "pointer",
+              fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
+            }}>
+              <input
+                type="checkbox"
+                checked={gdprConsent}
+                onChange={e => setGdprConsent(e.target.checked)}
+                style={{ marginTop: "2px", cursor: "pointer", flexShrink: 0 }}
+              />
+              <span>
+                Súhlasím so spracovaním mojich osobných údajov spoločnosťou Vianema s. r. o.
+                v zmysle GDPR pre účely sprostredkovania predaja/prenájmu nehnuteľnosti.
+                Plné znenie:{" "}
+                <a href="/gdpr" target="_blank" rel="noopener noreferrer"
+                  style={{ color: "var(--accent, #3B82F6)", textDecoration: "underline" }}>
+                  Zásady spracovania osobných údajov →
+                </a>
+              </span>
+            </label>
+          </>
+        )}
+
+        {remoteSignMode && (
+          <div style={{
+            padding: "14px 16px", borderRadius: "10px",
+            background: "var(--bg-elevated)", border: "1px solid var(--border)",
+            fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
+          }}>
+            Náberák uložíme bez podpisu. Po uložení sa otvorí dialóg kde
+            zadáš email klienta (predvyplníme ho z karty ak existuje) a pošle sa mu
+            link + 6-ciferný kód na podpis. GDPR súhlas zaznamenáme v momente jeho
+            potvrdenia.
+          </div>
+        )}
       </div>
 
       {/* Error */}
@@ -2074,13 +2234,217 @@ Odpovedaj stručne po slovensky.`;
 
       {/* Submit */}
       <button onClick={handleSubmit} disabled={saving} style={{
-        width: "100%", padding: "14px", background: saving ? "#9CA3AF" : "#374151",
+        width: "100%", padding: "14px",
+        background: saving ? "#9CA3AF" : remoteSignMode ? "#1d4ed8" : "#374151",
         color: "#fff", border: "none", borderRadius: "12px", fontSize: "15px",
         fontWeight: "700", cursor: saving ? "default" : "pointer",
         marginBottom: "40px",
       }}>
-        {saving ? "Ukladám..." : "Uložiť náberový list"}
+        {saving ? "Ukladám..." : remoteSignMode ? "📧 Uložiť a poslať klientovi link na podpis" : "Uložiť náberový list"}
       </button>
     </div>
+  );
+}
+
+/* ── Finančné kalkulačky ──────────────────────────────────────────────────── */
+type AnalyzaResultExt = {
+  priemerna_cena_m2: number; odporucana_od: number; odporucana_do: number;
+  hodnotenie: "V rozsahu" | "Mierne vysoká" | "Vysoká" | "Mierne nízka" | "Nízka";
+  odchylka_pct: number; pocet_porovnani: number; zdroj: "monitor" | "benchmark"; komentar: string;
+};
+
+function FinancneKalkulacky({
+  predajnaCena, provizia, urok, setUrok, analyza, analyzaLoading, onRefreshAnalyza,
+}: {
+  predajnaCena: number;
+  provizia: string;
+  urok: string;
+  setUrok: (v: string) => void;
+  analyza: AnalyzaResultExt | null;
+  analyzaLoading: boolean;
+  onRefreshAnalyza: () => void;
+}) {
+  // Hypotéka: 80% LTV, nastaviteľný úrok, 30 rokov
+  const P = predajnaCena * 0.8;
+  const r = (parseFloat(urok) || 3.5) / 100 / 12;
+  const n = 360;
+  const M = r > 0 ? Math.round(P * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1)) : 0;
+  const potrebnyPrijem = Math.round(M / 0.40);
+  const vlastneZdroje = Math.round(predajnaCena * 0.20 + predajnaCena * 0.035);
+
+  // Provízia porovnanie
+  const pctSadzby = [3, 4, 5];
+  function proviziaEur(pct: number) { return Math.round(predajnaCena * pct / 100); }
+
+  function isHighlighted(pct: number): boolean {
+    if (!provizia) return false;
+    const pctMatch = provizia.match(/^(\d+(?:[.,]\d+)?)\s*%$/);
+    if (pctMatch) return parseFloat(pctMatch[1].replace(",", ".")) === pct;
+    const numVal = parseFloat(provizia.replace(/\s/g, "").replace(",", "."));
+    if (!isNaN(numVal)) {
+      const impliedPct = Math.round((numVal / predajnaCena) * 100);
+      return impliedPct === pct;
+    }
+    return false;
+  }
+
+  const cardSt: React.CSSProperties = {
+    background: "var(--bg-surface)", borderRadius: "16px",
+    padding: "18px 20px", border: "1px solid var(--border)", marginBottom: "14px",
+  };
+  const labelSt: React.CSSProperties = {
+    fontSize: "11px", fontWeight: "600", color: "var(--text-muted)",
+    textTransform: "uppercase", letterSpacing: "0.04em",
+  };
+
+  function hodnoteniaColor(h: string) {
+    if (h === "V rozsahu") return { bg: "#F0FDF4", color: "#166534" };
+    if (h === "Mierne vysoká") return { bg: "#FEF9C3", color: "#854D0E" };
+    if (h === "Vysoká") return { bg: "#FEF2F2", color: "#991B1B" };
+    if (h === "Mierne nízka") return { bg: "#EFF6FF", color: "#1D4ED8" };
+    return { bg: "#EFF6FF", color: "#1D4ED8" };
+  }
+
+  return (
+    <>
+      {/* Panel 1: Splátka hypotéky */}
+      <div style={cardSt}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+          <div style={{ fontSize: "14px", fontWeight: "700" }}>Splátka hypotéky</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={labelSt}>Úrok</span>
+            <input
+              type="number" step="0.1" min="0.5" max="15"
+              value={urok} onChange={e => setUrok(e.target.value)}
+              style={{
+                width: "64px", padding: "5px 8px", border: "1px solid var(--border)",
+                borderRadius: "8px", fontSize: "13px", background: "var(--bg-elevated)",
+                color: "var(--text-primary)", textAlign: "right",
+              }}
+            />
+            <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>%</span>
+          </div>
+        </div>
+        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "12px" }}>
+          80 % LTV · 30 rokov fixné
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+          {[
+            { label: "Mesačná splátka", value: `${M.toLocaleString("sk-SK")} €` },
+            { label: "Potrebný príjem", value: `${potrebnyPrijem.toLocaleString("sk-SK")} €` },
+            { label: "Vlastné zdroje", value: `${vlastneZdroje.toLocaleString("sk-SK")} €` },
+          ].map(item => (
+            <div key={item.label} style={{
+              background: "var(--bg-elevated)", borderRadius: "10px", padding: "12px",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)" }}>{item.value}</div>
+              <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>{item.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Panel 2: Provízia porovnanie */}
+      <div style={cardSt}>
+        <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "14px" }}>Porovnanie provízií</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {pctSadzby.map(pct => {
+            const hl = isHighlighted(pct);
+            return (
+              <div key={pct} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "10px 14px", borderRadius: "10px",
+                background: hl ? "#374151" : "var(--bg-elevated)",
+                border: hl ? "none" : "1px solid var(--border)",
+              }}>
+                <span style={{ fontSize: "13px", fontWeight: hl ? "700" : "500", color: hl ? "#fff" : "var(--text-primary)" }}>
+                  {pct} %{hl && " ← vaša"}
+                </span>
+                <span style={{ fontSize: "14px", fontWeight: "700", color: hl ? "#fff" : "var(--text-primary)" }}>
+                  {proviziaEur(pct).toLocaleString("sk-SK")} €
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Panel 3: AI Trhová analýza */}
+      <div style={cardSt}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+          <div style={{ fontSize: "14px", fontWeight: "700" }}>Analýza trhu</div>
+          <button
+            onClick={onRefreshAnalyza}
+            disabled={analyzaLoading}
+            style={{
+              padding: "6px 12px", borderRadius: "8px", border: "1px solid var(--border)",
+              background: "var(--bg-elevated)", fontSize: "12px", cursor: "pointer",
+              color: "var(--text-secondary)",
+            }}
+          >
+            {analyzaLoading ? "..." : "Obnoviť"}
+          </button>
+        </div>
+
+        {analyzaLoading && (
+          <div style={{ color: "var(--text-muted)", fontSize: "13px", padding: "8px 0" }}>
+            Načítavam dáta z trhu...
+          </div>
+        )}
+
+        {!analyzaLoading && !analyza && (
+          <div style={{ color: "var(--text-muted)", fontSize: "13px" }}>
+            Analýza sa spustí automaticky po zadaní predajnej ceny.
+          </div>
+        )}
+
+        {!analyzaLoading && analyza && (() => {
+          const hColors = hodnoteniaColor(analyza.hodnotenie);
+          return (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+                <div style={{ background: "var(--bg-elevated)", borderRadius: "10px", padding: "12px" }}>
+                  <div style={labelSt}>Odporúčaná cena</div>
+                  <div style={{ fontSize: "14px", fontWeight: "700", marginTop: "4px" }}>
+                    {analyza.odporucana_od.toLocaleString("sk-SK")} – {analyza.odporucana_do.toLocaleString("sk-SK")} €
+                  </div>
+                </div>
+                <div style={{ background: "var(--bg-elevated)", borderRadius: "10px", padding: "12px" }}>
+                  <div style={labelSt}>Priemer €/m²</div>
+                  <div style={{ fontSize: "14px", fontWeight: "700", marginTop: "4px" }}>
+                    {analyza.priemerna_cena_m2.toLocaleString("sk-SK")} €
+                  </div>
+                </div>
+                <div style={{ background: "var(--bg-elevated)", borderRadius: "10px", padding: "12px" }}>
+                  <div style={labelSt}>Hodnotenie ceny</div>
+                  <div style={{
+                    display: "inline-block", marginTop: "6px",
+                    padding: "3px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
+                    background: hColors.bg, color: hColors.color,
+                  }}>
+                    {analyza.hodnotenie} ({analyza.odchylka_pct > 0 ? "+" : ""}{analyza.odchylka_pct}%)
+                  </div>
+                </div>
+                <div style={{ background: "var(--bg-elevated)", borderRadius: "10px", padding: "12px" }}>
+                  <div style={labelSt}>Porovnaní</div>
+                  <div style={{ fontSize: "14px", fontWeight: "700", marginTop: "4px" }}>
+                    {analyza.pocet_porovnani} {analyza.zdroj === "benchmark" ? "(benchmark)" : "inzerátov"}
+                  </div>
+                </div>
+              </div>
+              {analyza.komentar && (
+                <div style={{
+                  padding: "12px 14px", borderRadius: "10px", background: "var(--bg-elevated)",
+                  fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5, fontStyle: "italic",
+                }}>
+                  {analyza.komentar}
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </div>
+    </>
   );
 }

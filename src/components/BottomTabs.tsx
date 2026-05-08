@@ -7,8 +7,8 @@ import { useEffect, useState, useRef } from "react";
 const tabs = [
   { label: "Prehľad", href: "/", icon: "🏠" },
   { label: "Portfólio", href: "/portfolio", icon: "🏘️" },
-  { label: "Klienti", href: "/klienti", icon: "👥" },
-  { label: "Kalendár", href: "/kalendar", icon: "📅" },
+  { label: "Klienti", href: "/klienti?tab=predavajuci", icon: "👥", matchPrefix: "/klienti" },
+  { label: "Operatíva", href: "/operativa?tab=obhliadky", icon: "📅", matchPrefix: "/operativa" },
   { label: "Viac", href: "/nastavenia", icon: "⋯" },
 ];
 
@@ -63,11 +63,11 @@ export default function BottomTabs() {
       }}
     >
       {tabs.map((t) => {
-        const active =
-          t.href === "/" ? pathname === "/" : pathname.startsWith(t.href);
+        const prefix = (t as { matchPrefix?: string }).matchPrefix || t.href.split("?")[0];
+        const active = t.href === "/" ? pathname === "/" : pathname.startsWith(prefix);
         return (
           <Link
-            key={t.href}
+            key={t.label}
             href={t.href}
             style={{
               display: "flex",

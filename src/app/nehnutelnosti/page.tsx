@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/components/AuthProvider'
+import { inzeratSave } from '@/lib/klientApi'
 
 type Nehnutelnost = {
   id: string
@@ -21,6 +23,7 @@ type Nehnutelnost = {
 }
 
 export default function NehnutelnostiPage() {
+  const { user } = useAuth()
   const [items, setItems] = useState<Nehnutelnost[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -42,14 +45,16 @@ export default function NehnutelnostiPage() {
 
   async function handleSave() {
     if (!form.lokalita) return alert('Lokalita je povinná!')
+    if (!user?.id) return alert('Nie si prihlásený')
     setSaving(true)
-    const { error } = await supabase.from('nehnutelnosti').insert([{
+    const payload = {
       ...form,
       cena: form.cena ? parseFloat(form.cena) : null,
       plocha: form.plocha ? parseFloat(form.plocha) : null,
       izby: form.izby ? parseInt(form.izby) : null,
       poschodie: form.poschodie ? parseInt(form.poschodie) : null,
-    }])
+    }
+    const { error } = await inzeratSave(user.id, payload)
     if (error) alert('Chyba: ' + error.message)
     else {
       setShowModal(false)

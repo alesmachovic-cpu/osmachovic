@@ -6,6 +6,7 @@ import PhoneInput from "@/components/PhoneInput";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { searchStreets } from "@/lib/streets-db";
+import { klientInsert, klientUpdate } from "@/lib/klientApi";
 
 interface DuplicateHit {
   id: string;
@@ -434,6 +435,27 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
   const [telefon, setTelefon] = useState(editKlient?.telefon || initialPhone || "");
   const [meno, setMeno] = useState(editKlient?.meno || "");
   const [email, setEmail] = useState(editKlient?.email || "");
+  // TASK 10: warning ak email už existuje u iného klienta
+  const [emailWarning, setEmailWarning] = useState<string | null>(null);
+
+  async function checkEmailDuplicate(value: string) {
+    const v = value.trim().toLowerCase();
+    if (!v || (editKlient?.email || "").toLowerCase() === v) {
+      setEmailWarning(null);
+      return;
+    }
+    const { data } = await supabase
+      .from("klienti")
+      .select("id, meno")
+      .ilike("email", v)
+      .limit(1);
+    const dup = data?.[0] as { id: string; meno: string } | undefined;
+    if (dup && dup.id !== editKlient?.id) {
+      setEmailWarning(`Tento email už používa klient: ${dup.meno}`);
+    } else {
+      setEmailWarning(null);
+    }
+  }
   const [status, setStatus] = useState(editKlient?.status || "novy_kontakt");
   const [typKlienta, setTypKlienta] = useState<string>(editKlient?.typ || defaultTyp);
   const [typNehnutelnosti, setTypNehnutelnosti] = useState("");
@@ -648,14 +670,26 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
       telefon: normalizePhone(telefon),
       email: email.trim() || null,
       lokalita: lokalitaValue || null,
-      poznamka: ([
-        odkaz.trim() ? `Odkaz: ${odkaz.trim()}` : "",
-        ulica ? `Adresa: ${ulica}${cisloDomu ? ` ${cisloDomu}` : ""}, ${lokalitaInput || lokalitaValue}` : "",
-        typNehnutelnosti ? `Typ nehnuteľnosti: ${typNehnutelnosti}` : "",
-        datumStretnutia ? `Stretnutie: ${datumStretnutia}` : "",
-        !isEdit && dupLevel === "critical" ? `⚠️ DUPLICITA — čaká na schválenie manažérom` : "",
-        poznamka.trim(),
-      ].filter(Boolean).join("\n") || null),
+      poznamka: (() => {
+        // Skladáme adresu len z neprázdnych častí (žiadne "." alebo prázdne stringy)
+        const ulicaT = (ulica || "").trim();
+        const cisloT = (cisloDomu || "").trim();
+        const lokalT = (lokalitaInput || lokalitaValue || "").trim();
+        const adresaParts = [
+          [ulicaT, cisloT].filter(p => p && p !== ".").join(" ").trim(),
+          lokalT && lokalT !== "." ? lokalT : "",
+        ].filter(p => p && p !== ".");
+        const adresaStr = adresaParts.join(", ").trim();
+
+        return [
+          odkaz.trim() ? `Odkaz: ${odkaz.trim()}` : "",
+          adresaStr ? `Adresa: ${adresaStr}` : "",
+          typNehnutelnosti && typNehnutelnosti.trim() ? `Typ nehnuteľnosti: ${typNehnutelnosti}` : "",
+          datumStretnutia ? `Stretnutie: ${datumStretnutia}` : "",
+          !isEdit && dupLevel === "critical" ? `⚠️ DUPLICITA — čaká na schválenie manažérom` : "",
+          poznamka.trim(),
+        ].filter(Boolean).join("\n") || null;
+      })(),
     };
     // Only include status and typ if they are valid (avoid CHECK constraint errors)
     if (!isEdit || status !== editKlient?.status) {
@@ -678,15 +712,22 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     }
     const payload = basePayload;
 
-    // Get makler UUID for this user
-    const maklerUuid = authUser?.id ? await getMaklerUuid(authUser.id) : null;
-    const insertPayload = !isEdit && maklerUuid ? { ...payload, makler_id: maklerUuid } : payload;
-
     console.log("[NewKlientModal] isEdit:", isEdit, "id:", editKlient?.id, "payload:", JSON.stringify(payload));
 
+    if (!authUser?.id) {
+      setSaving(false);
+      setSaveError("Nie si prihlásený — relogni sa.");
+      return;
+    }
+
+    // makler_id sa odvodí z user.id v API endpointe (anti-impersonation),
+    // takže ho z payload odstránime — zabráni nezamýšľaným zmenám vlastníctva.
+    const cleanPayload = { ...payload };
+    delete (cleanPayload as Record<string, unknown>).makler_id;
+
     const result = isEdit
-      ? await supabase.from("klienti").update(payload).eq("id", editKlient!.id).select()
-      : await supabase.from("klienti").insert(insertPayload).select();
+      ? await klientUpdate(authUser.id, editKlient!.id, cleanPayload)
+      : await klientInsert(authUser.id, cleanPayload);
 
     const { error, data: resultData } = result;
     console.log("[NewKlientModal] result:", JSON.stringify({ error, count: resultData?.length, data: resultData?.[0] }));
@@ -757,9 +798,9 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
           });
           const json = await res.json().catch(() => null);
           const newEventId = json?.event?.id;
-          const targetId = isEdit ? editKlient?.id : resultData?.[0]?.id;
-          if (newEventId && targetId) {
-            await supabase.from("klienti").update({ calendar_event_id: newEventId }).eq("id", targetId);
+          const targetId = (isEdit ? editKlient?.id : (resultData?.[0] as { id?: string } | undefined)?.id) as string | undefined;
+          if (newEventId && targetId && authUser?.id) {
+            await klientUpdate(authUser.id, targetId, { calendar_event_id: newEventId });
           }
         }
       } catch { /* silent */ }
@@ -781,7 +822,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     if (status === "dohodnuty_naber") {
       const hasLv = isEdit ? !!(editKlient?.lv_data && Object.keys(editKlient.lv_data).length > 0) : false;
       if (!hasLv) {
-        const klientId = isEdit ? editKlient?.id : resultData?.[0]?.id;
+        const klientId = (isEdit ? editKlient?.id : (resultData?.[0] as { id?: string } | undefined)?.id) as string | undefined;
         const klientMeno = meno.trim();
         if (klientId) onLvPrompt?.({ id: klientId, meno: klientMeno });
       }
@@ -916,7 +957,22 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
             <div>
               <div style={labelSt}>Email</div>
-              <input style={inputSt} placeholder="email@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+              <input
+                style={inputSt}
+                placeholder="email@example.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                onBlur={e => checkEmailDuplicate(e.target.value)}
+              />
+              {emailWarning && (
+                <div style={{
+                  marginTop: "6px", padding: "6px 10px", borderRadius: "6px",
+                  background: "#FEF3C7", border: "1px solid #FDE68A", color: "#92400E",
+                  fontSize: "11px", lineHeight: 1.4,
+                }}>
+                  ⚠️ {emailWarning}
+                </div>
+              )}
             </div>
             <div>
               <div style={labelSt}>Dátum narodenia</div>

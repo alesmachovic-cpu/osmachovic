@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/components/AuthProvider";
 
 type Faktura = {
   id: string;
@@ -21,14 +22,16 @@ type Zaznam = {
 };
 
 export default function UctovnyPrehladPage() {
+  const { user } = useAuth();
   const [faktury, setFaktury] = useState<Faktura[]>([]);
   const [prehlad, setPrehlad] = useState<Zaznam[]>([]);
   const [rok, setRok] = useState(new Date().getFullYear());
 
   useEffect(() => {
-    fetch("/api/faktury").then((r) => r.json()).then(setFaktury);
+    if (!user?.id) return;
+    fetch(`/api/faktury?user_id=${user.id}`).then((r) => r.json()).then((d) => setFaktury(Array.isArray(d) ? d : []));
     fetch("/api/prehlad").then((r) => r.json()).then(setPrehlad);
-  }, []);
+  }, [user?.id]);
 
   const yearStr = String(rok);
   const fY = faktury.filter((f) => f.datum_vystavenia.startsWith(yearStr));

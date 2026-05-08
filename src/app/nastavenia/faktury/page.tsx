@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { getUserItem, setUserItem } from "@/lib/userStorage";
+import { getUserItem } from "@/lib/userStorage";
 
 export type DodavatelSettings = {
   nazov: string;
@@ -43,20 +43,47 @@ export const DEFAULT_DODAVATEL: DodavatelSettings = {
   vystavil: "",
 };
 
-export const STORAGE_KEY = "faktury_dodavatel";
+const STORAGE_KEY = "faktury_dodavatel"; // legacy localStorage key (auto-migrated 1×)
 
-/** Per-user loader: každý makler má vlastné fakturačné údaje */
-export function loadDodavatel(userId?: string): DodavatelSettings {
-  if (typeof window === "undefined") return DEFAULT_DODAVATEL;
+/**
+ * Načíta dodávateľské údaje pre maklera z DB.
+ * Pri prvom načítaní auto-migruje legacy údaje z localStorage do DB
+ * (jednorazovo — po úspešnom uložení sa localStorage záznam zmaže).
+ */
+export async function fetchDodavatel(userId: string): Promise<DodavatelSettings> {
+  // 1) skús DB
   try {
-    const raw = userId
-      ? getUserItem(userId, STORAGE_KEY)
-      : localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_DODAVATEL;
-    return { ...DEFAULT_DODAVATEL, ...JSON.parse(raw) };
-  } catch {
-    return DEFAULT_DODAVATEL;
+    const r = await fetch(`/api/dodavatel?user_id=${encodeURIComponent(userId)}`);
+    if (r.ok) {
+      const data = await r.json();
+      if (data) return { ...DEFAULT_DODAVATEL, ...data };
+    }
+  } catch { /* sieťová chyba — fallback na default */ }
+
+  // 2) legacy migrácia: ak je niečo v localStorage, uložím do DB a vyčistím
+  if (typeof window !== "undefined") {
+    const raw = getUserItem(userId, STORAGE_KEY);
+    if (raw) {
+      try {
+        const parsed = { ...DEFAULT_DODAVATEL, ...JSON.parse(raw) };
+        await saveDodavatel(userId, parsed);
+        // legacy kľúče: per-user a global ("ales" fallback)
+        try { localStorage.removeItem(`${STORAGE_KEY}__${userId}`); } catch {}
+        try { if (userId === "ales") localStorage.removeItem(STORAGE_KEY); } catch {}
+        return parsed;
+      } catch { /* zlá JSON — ignoruj */ }
+    }
   }
+
+  return DEFAULT_DODAVATEL;
+}
+
+export async function saveDodavatel(userId: string, s: DodavatelSettings): Promise<void> {
+  await fetch(`/api/dodavatel`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, ...s }),
+  });
 }
 
 const inputSt: React.CSSProperties = {
@@ -79,14 +106,18 @@ export default function NastaveniaFakturyPage() {
   const { user } = useAuth();
   const [s, setS] = useState<DodavatelSettings>(DEFAULT_DODAVATEL);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (user?.id) setS(loadDodavatel(user.id));
+    if (!user?.id) return;
+    fetchDodavatel(user.id).then(setS);
   }, [user?.id]);
 
-  function save() {
+  async function save() {
     if (!user?.id) return;
-    setUserItem(user.id, STORAGE_KEY, JSON.stringify(s));
+    setSaving(true);
+    await saveDodavatel(user.id, s);
+    setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -151,8 +182,8 @@ export default function NastaveniaFakturyPage() {
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "24px" }}>
           {saved && <span style={{ color: "var(--success)", fontSize: "13px", fontWeight: 600, alignSelf: "center" }}>✓ Uložené</span>}
-          <button onClick={save} style={{ background: "#374151", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 20px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
-            Uložiť nastavenia
+          <button onClick={save} disabled={saving} style={{ background: "#374151", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 20px", fontSize: "14px", fontWeight: 600, cursor: "pointer", opacity: saving ? 0.5 : 1 }}>
+            {saving ? "Ukladám…" : "Uložiť nastavenia"}
           </button>
         </div>
       </div>

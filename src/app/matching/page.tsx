@@ -104,6 +104,16 @@ export default function MatchingPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [minScore, setMinScore] = useState(30);
   const [expanded, setExpanded] = useState<number | null>(null);
+  // Pre-filter na konkrétnu objednávku/klienta cez ?objednavka=ID alebo ?klient=ID
+  const [focusObjednavkaId, setFocusObjednavkaId] = useState<string | null>(null);
+  const [focusKlientId, setFocusKlientId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    setFocusObjednavkaId(sp.get("objednavka"));
+    setFocusKlientId(sp.get("klient"));
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -133,7 +143,15 @@ export default function MatchingPage() {
     load();
   }, []);
 
-  const filtered = matches.filter(m => m.score >= minScore);
+  const filtered = matches.filter(m => {
+    if (m.score < minScore) return false;
+    if (focusObjednavkaId && m.objednavka?.id !== focusObjednavkaId) return false;
+    if (focusKlientId && m.klient.id !== focusKlientId) return false;
+    return true;
+  });
+  const focusKlientName = focusObjednavkaId
+    ? klienti.find(k => matches.find(m => m.objednavka?.id === focusObjednavkaId && m.klient.id === k.id))?.meno
+    : (focusKlientId ? klienti.find(k => k.id === focusKlientId)?.meno : null);
 
   function scoreColor(s: number) {
     if (s >= 80) return { color: "#065F46", bg: "#D1FAE5", ring: "#10B981" };
@@ -159,6 +177,31 @@ export default function MatchingPage() {
           Automatické párovanie kupujúcich s nehnuteľnosťami
         </p>
       </div>
+
+      {(focusObjednavkaId || focusKlientId) && (
+        <div style={{
+          marginBottom: "16px", padding: "10px 14px", background: "#EFF6FF",
+          border: "1px solid #BFDBFE", borderRadius: "10px",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
+        }}>
+          <span style={{ fontSize: "13px", color: "#1D4ED8" }}>
+            🔎 Filtrované na: <strong>{focusKlientName || "konkrétnu objednávku"}</strong>
+          </span>
+          <button onClick={() => {
+            setFocusObjednavkaId(null);
+            setFocusKlientId(null);
+            if (typeof window !== "undefined") {
+              window.history.replaceState(null, "", "/matching");
+            }
+          }} style={{
+            padding: "5px 12px", fontSize: "12px", fontWeight: "600",
+            background: "#fff", color: "#1D4ED8", border: "1px solid #BFDBFE",
+            borderRadius: "8px", cursor: "pointer",
+          }}>
+            Zrušiť filter
+          </button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="matching-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "16px" }}>

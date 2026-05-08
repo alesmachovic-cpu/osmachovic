@@ -98,6 +98,22 @@ export default function AuthCallback() {
         }
 
         localStorage.setItem("crm_user", matched.id);
+
+        // Vystav HMAC session cookie SYNCHRONOUSLY pred reloadom,
+        // inak prvý load po Google OAuth má prázdny cookie → guard endpointy
+        // 401 → user vidí "Google nepripojený" a musí prihlásiť znova.
+        setStatus("Vystavujem session...");
+        try {
+          await fetch("/api/auth/session-bootstrap", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ user_id: matched.id }),
+          });
+        } catch (e) {
+          console.warn("[callback] session-bootstrap error:", e);
+        }
+
         setStatus("Hotovo! Presmerovávam...");
         setTimeout(() => { window.location.href = "/"; }, 200);
       } catch (e) {

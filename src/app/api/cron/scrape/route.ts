@@ -6,9 +6,13 @@ import {
   PORTALS_NO_SCRAPINGBEE,
   fetchPage,
   fetchNehnDetailInfo,
+  fetchRealitySkIsAgency,
   isBazosListingFirma,
   sendPushForNewListings,
+  recordInAppNotifications,
+  notifyKupujuciMatches,
 } from "@/lib/monitor";
+import { classify, toLegacyDbEnum, type ClassifierResult, type ClassifierDbContext } from "@/lib/monitor/classifier";
 import type { ScrapedInzerat, MonitorFilter, ScrapeResult } from "@/lib/monitor";
 
 export const runtime = "nodejs";
@@ -86,11 +90,11 @@ function matchesFilter(listing: ScrapedInzerat, filter: MonitorFilter): boolean 
   // Zámerne tvrdé: "iny" (napr. garáž, sklad, pozemok) sa NEbude matchovať ak user chce byt.
   if (filter.typ && listing.typ && listing.typ !== filter.typ) return false;
 
-  // Predaj vs prenájom — bazos.sk niekedy prepúšťa prenájmy do /predaj/ listu.
-  // Ak URL alebo názov obsahuje "prenajom"/"prenájom"/"podnajom" → vyradíme.
-  const textLow = ((listing.url || "") + " " + (listing.nazov || "")).toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (/\bprena?jom|podna?jom|na\s+prenaj/i.test(textLow)) return false;
+  // Predaj vs prenájom — portály niekedy prepúšťajú prenájmy do /predaj/ listov.
+  // Kontrolujeme URL + názov + popis (popis obsahuje "prenájom" aj keď URL nie).
+  const textLow = ((listing.url || "") + " " + (listing.nazov || "") + " " + (listing.popis || ""))
+    .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (/\bprena?jom\b|\bpodna?jom\b|\bnajom\b|na[-_]prenaj/i.test(textLow)) return false;
 
   // Cena — ak máme cena_od/do, vyžadujeme aby listing cena bola v rozsahu.
   // Ak listing nemá cenu (undefined), nechávame ju ako potenciálne relevantnú (nechytí všetko).
@@ -195,6 +199,19 @@ export async function GET(request: Request) {
             await sendPushForNewListings(newItems);
           } catch (e) {
             console.warn("[scrape] push failed:", e);
+          }
+          // In-app notifikácie pre bell ikonu v navbare
+          try {
+            await recordInAppNotifications(newItems);
+          } catch (e) {
+            console.warn("[scrape] in-app notif failed:", e);
+          }
+          // TASK 13 — porovnaj nové inzeráty s aktívnymi objednávkami kupujúcich
+          // a urob "match" notifikáciu pre toho ktorý daného kupujúceho spravuje.
+          try {
+            await notifyKupujuciMatches(newItems);
+          } catch (e) {
+            console.warn("[scrape] kupujuci-match notif failed:", e);
           }
         }
       }
@@ -348,46 +365,227 @@ async function processFilter(
       );
     }
 
+    // 2d. Reality.sk enrichment — pre listings kde predajca_typ je undefined (neznámy),
+    //     stiahni detail stránku a skontroluj prítomnosť linky /realitna-kancelaria/.
+    //     Ak link existuje → firma. Ak nie → sukromny.
+    //     Len nové listings (nie v DB) — existujúce majú predajca_typ už uložený.
+    const realityNewListings = allListings.filter((l) => l.portal === "reality.sk" && !l.predajca_typ);
+    if (realityNewListings.length > 0) {
+      const realityExternalIds = realityNewListings.map((l) => l.external_id);
+      const { data: realityExisting } = await sb
+        .from("monitor_inzeraty")
+        .select("external_id, predajca_typ")
+        .eq("portal", "reality.sk")
+        .in("external_id", realityExternalIds);
+      const realityExistingSet = new Set((realityExisting || []).map((r) => r.external_id as string));
+      const realityNeedsEnrich = realityNewListings.filter((l) => !realityExistingSet.has(l.external_id));
+
+      await Promise.all(
+        realityNeedsEnrich.map(async (listing) => {
+          try {
+            const isAgency = await fetchRealitySkIsAgency(listing.url);
+            listing.predajca_typ = isAgency ? "firma" : "sukromny";
+          } catch { /* fail-safe: keep undefined → classifier rozhodne */ }
+        })
+      );
+    }
+
+    // 2e. CLASSIFIER v2 — multi-signal scoring (sukromny/rk/unknown + confidence + signals[]).
+    //     Ide cez ClassifierDbContext: phone/name counts za 30 dní + listed_on_n_portals
+    //     + in_rk_directory (manuálny override z minulosti). Klasifikácia rešpektuje
+    //     existujúci predajca_typ_override — ten má prednosť pred algoritmom.
+    const classifierResults = new Map<string, ClassifierResult>();
+    if (allListings.length > 0) {
+      // Batch fetch phone counts za 30 dni
+      const phones = Array.from(new Set(allListings.map(l => l.predajca_telefon).filter(Boolean) as string[]));
+      const names = Array.from(new Set(allListings.map(l => l.predajca_meno).filter(Boolean) as string[]));
+      const ago30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+
+      const phoneCountMap = new Map<string, number>();
+      const nameCountMap = new Map<string, number>();
+      const overrideByExternalId = new Map<string, string>();
+
+      if (phones.length > 0) {
+        const { data: phoneRows } = await sb
+          .from("monitor_inzeraty")
+          .select("predajca_telefon")
+          .in("predajca_telefon", phones)
+          .gte("last_seen_at", ago30)
+          .eq("is_active", true);
+        (phoneRows || []).forEach((r: { predajca_telefon: string | null }) => {
+          if (r.predajca_telefon) phoneCountMap.set(r.predajca_telefon, (phoneCountMap.get(r.predajca_telefon) || 0) + 1);
+        });
+      }
+      if (names.length > 0) {
+        const { data: nameRows } = await sb
+          .from("monitor_inzeraty")
+          .select("predajca_meno")
+          .in("predajca_meno", names)
+          .gte("last_seen_at", ago30)
+          .eq("is_active", true);
+        (nameRows || []).forEach((r: { predajca_meno: string | null }) => {
+          if (r.predajca_meno) nameCountMap.set(r.predajca_meno, (nameCountMap.get(r.predajca_meno) || 0) + 1);
+        });
+      }
+
+      // Načítaj override-y a klasifikácie z minulosti (per portal+external_id)
+      // Defensive: ak migrácia 041 ešte nebola spustená, predajca_typ_override stĺpec
+      // ani rk_directory tabuľka nemusia existovať — všetky chyby ignorujeme.
+      const externalIds = allListings.map(l => l.external_id);
+      if (externalIds.length > 0) {
+        try {
+          const { data: existingClass, error } = await sb
+            .from("monitor_inzeraty")
+            .select("portal, external_id, predajca_typ_override, listed_on_n_portals")
+            .in("external_id", externalIds);
+          if (!error) {
+            (existingClass || []).forEach((r: { portal: string; external_id: string; predajca_typ_override: string | null; listed_on_n_portals: number | null }) => {
+              const key = `${r.portal}:${r.external_id}`;
+              if (r.predajca_typ_override) overrideByExternalId.set(key, r.predajca_typ_override);
+            });
+          }
+        } catch { /* migrácia 041 nie je aplikovaná — preskočíme override */ }
+      }
+
+      // RK directory — telefóny/mená/domény ktoré už sú potvrdené ako RK
+      let rkPhones = new Set<string>();
+      let rkNames = new Set<string>();
+      let rkDomains = new Set<string>();
+      try {
+        const { data: rkDir, error } = await sb
+          .from("rk_directory")
+          .select("telefon, email_domain, meno")
+          .eq("typ", "rk");
+        if (!error && rkDir) {
+          rkPhones = new Set(rkDir.map((r: { telefon: string | null }) => r.telefon).filter(Boolean) as string[]);
+          rkNames = new Set(rkDir.map((r: { meno: string | null }) => r.meno).filter(Boolean) as string[]);
+          rkDomains = new Set(rkDir.map((r: { email_domain: string | null }) => r.email_domain).filter(Boolean) as string[]);
+        }
+      } catch { /* tabuľka rk_directory nie je vytvorená — bez problému */ }
+
+      // Klasifikuj každý listing
+      for (const listing of allListings) {
+        const key = `${listing.portal}:${listing.external_id}`;
+        const override = overrideByExternalId.get(key);
+
+        // Ak existuje manuálny override, použijeme ho s plnou confidence — bez ďalšieho výpočtu
+        if (override === "rk" || override === "sukromny") {
+          classifierResults.set(key, {
+            predajca_typ: override as "rk" | "sukromny",
+            confidence: 1.0,
+            raw_score: 99,
+            signals: [{ id: "manual_override", side: override === "rk" ? "rk" : "sukromny", weight: 99, reason: "Manuálny override maklérom" }],
+            method: "v2",
+          });
+          listing.predajca_typ = toLegacyDbEnum(override as "rk" | "sukromny") as typeof listing.predajca_typ;
+          continue;
+        }
+
+        // Inak — spočítaj signály
+        const inDirectory =
+          (listing.predajca_telefon ? rkPhones.has(listing.predajca_telefon) : false) ||
+          (listing.predajca_meno ? rkNames.has(listing.predajca_meno) : false) ||
+          [...rkDomains].some(d => (listing.popis || "").toLowerCase().includes(d));
+
+        const ctx: ClassifierDbContext = {
+          phone_count_30d: listing.predajca_telefon ? phoneCountMap.get(listing.predajca_telefon) || 0 : 0,
+          name_count_30d: listing.predajca_meno ? nameCountMap.get(listing.predajca_meno) || 0 : 0,
+          listed_on_n_portals: 1, // TODO: prepojiť po canonical_id dedup (Etapa F)
+          in_rk_directory: inDirectory,
+        };
+
+        const result = classify({
+          portal: listing.portal,
+          nazov: listing.nazov,
+          popis: listing.popis,
+          predajca_meno: listing.predajca_meno,
+          predajca_telefon: listing.predajca_telefon,
+          lokalita: listing.lokalita,
+          raw_data: listing.raw_data,
+          db: ctx,
+        });
+        classifierResults.set(key, result);
+
+        // Ak classifier dal vysoké confidence "rk" alebo "sukromny" → prepíš parser-default.
+        // "unknown" → ponecháme parser-default (môže byť presnejší pri špecifických portáloch).
+        if (result.predajca_typ === "rk") {
+          listing.predajca_typ = "firma";
+        } else if (result.predajca_typ === "sukromny") {
+          listing.predajca_typ = "sukromny";
+        }
+      }
+    }
+
     // Post-parse filter — portály v search URL čiastočne rešpektujú filter kritéria
     // (cena/lokalita/typ), ale nie všetky a nie spoľahlivo. Aplikujeme striktný
     // post-filter lokality, typu, ceny, plochy, izieb + vyradíme prenájmy.
-    // DODATOČNE: Monitor slúži VÝLUČNE na súkromnú inzerciu. Firma listings
-    // sa vôbec neukladajú (RK analýza je samostatná feature).
+    // RK (firma) sa odhodí len ak má filter `len_sukromni=true` (default).
+    // Ak je `len_sukromni=false` → ukladáme aj RK pre analýzy cien.
     const filteredListings = allListings
-      .filter((l) => l.predajca_typ !== "firma")
+      .filter((l) => !filter.len_sukromni || l.predajca_typ !== "firma")
       .filter((l) => matchesFilter(l, filter));
     totalFound = filteredListings.length;
 
-    // 3. Upsert do DB — PARALELNE (chunky po 20 aby sme neukatiovali Supabase)
-    const upsertRows = filteredListings.map((listing) => ({
-      portal: listing.portal,
-      external_id: listing.external_id,
-      url: listing.url,
-      nazov: listing.nazov,
-      typ: listing.typ,
-      lokalita: listing.lokalita,
-      cena: listing.cena,
-      mena: listing.mena || "EUR",
-      plocha: listing.plocha,
-      izby: listing.izby,
-      popis: listing.popis,
-      foto_url: listing.foto_url,
-      predajca_meno: listing.predajca_meno,
-      predajca_telefon: listing.predajca_telefon,
-      predajca_typ: listing.predajca_typ,
-      raw_data: listing.raw_data || {},
-      last_seen_at: new Date().toISOString(),
-      is_active: true,
-    }));
+    // 3. Upsert do DB — PARALELNE (chunky po 20 aby sme neukatiovali Supabase).
+    //    Defensive: stĺpce predajca_typ_signals (mig 041) môžu chýbať. Ak prvý
+    //    upsert zlyhá s chybou na chýbajúci stĺpec, zopakujeme ho bez nich.
+    const buildUpsertRow = (listing: typeof filteredListings[number], includeV2: boolean) => {
+      const cKey = `${listing.portal}:${listing.external_id}`;
+      const cls = classifierResults.get(cKey);
+      const base = {
+        portal: listing.portal,
+        external_id: listing.external_id,
+        url: listing.url,
+        nazov: listing.nazov,
+        typ: listing.typ,
+        lokalita: listing.lokalita,
+        cena: listing.cena,
+        mena: listing.mena || "EUR",
+        plocha: listing.plocha,
+        izby: listing.izby,
+        popis: listing.popis,
+        foto_url: listing.foto_url,
+        predajca_meno: listing.predajca_meno,
+        predajca_telefon: listing.predajca_telefon,
+        predajca_typ: listing.predajca_typ,
+        predajca_typ_confidence: cls?.confidence ?? null,
+        predajca_typ_method: cls?.method === "v2" ? (cls.signals.length > 0 ? "rule_v2" : null) : null,
+        poschodie: listing.poschodie ?? null,
+        stav: listing.stav ?? null,
+        raw_data: listing.raw_data || {},
+        last_seen_at: new Date().toISOString(),
+        is_active: true,
+      };
+      if (includeV2 && cls) {
+        return {
+          ...base,
+          predajca_typ_signals: { signals: cls.signals, raw_score: cls.raw_score, predajca_typ: cls.predajca_typ },
+        };
+      }
+      return base;
+    };
+    const upsertRows = filteredListings.map((l) => buildUpsertRow(l, true));
 
     if (upsertRows.length > 0) {
-      const { data, error } = await sb
+      let { data, error } = await sb
         .from("monitor_inzeraty")
         .upsert(upsertRows, {
           onConflict: "portal,external_id",
           ignoreDuplicates: false,
         })
         .select("id, portal, external_id, first_seen_at, last_seen_at");
+
+      // Fallback: ak migrácia 041 ešte nie je aplikovaná → retry bez v2 stĺpcov
+      if (error && /predajca_typ_signals/i.test(error.message)) {
+        console.warn("[scrape] mig 041 not applied — retrying upsert without predajca_typ_signals");
+        const fallbackRows = filteredListings.map((l) => buildUpsertRow(l, false));
+        const retry = await sb
+          .from("monitor_inzeraty")
+          .upsert(fallbackRows, { onConflict: "portal,external_id", ignoreDuplicates: false })
+          .select("id, portal, external_id, first_seen_at, last_seen_at");
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) {
         console.error("[scrape] batch upsert error:", error);
@@ -401,8 +599,11 @@ async function processFilter(
             new Date(row.first_seen_at).getTime() > Date.now() - 60000;
           if (isNew) {
             newCount++;
-            // Monitor ukladá len súkromné, takže všetky newItems idú do push.
-            newItems.push({ ...listing, db_id: row.id });
+            // Notifikácia (push/email) ide len o súkromných predajcov — RK
+            // sa zbierajú výhradne pre analýzy cien, žiadne notifikácie.
+            if (listing.predajca_typ !== "firma") {
+              newItems.push({ ...listing, db_id: row.id });
+            }
           } else {
             updatedCount++;
           }
