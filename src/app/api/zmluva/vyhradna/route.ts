@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
+// readFileSync with "binary" is required for PizZip to handle UTF-8 Slovak chars correctly
 import path from "path";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
@@ -152,8 +153,8 @@ export async function POST(req: NextRequest) {
     }
 
     const templatePath = path.join(process.cwd(), "public/templates/vyhradna-zmluva-template.docx");
-    const templateBuf = readFileSync(templatePath);
-    const zip = new PizZip(templateBuf);
+    const templateContent = readFileSync(templatePath, "binary");
+    const zip = new PizZip(templateContent);
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
