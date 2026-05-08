@@ -269,6 +269,14 @@ const WORKFLOW_STEPS = [
   { key: "predany", label: "Predaný", icon: "✅", statuses: ["uzavrety"] },
 ];
 
+const DEAL_STEPS = [
+  { key: "obhliadky", label: "Obhliadky" },
+  { key: "rezervacia", label: "Rezervácia" },
+  { key: "podpis_kz", label: "Podpis KZ" },
+  { key: "vklad", label: "Vklad" },
+  { key: "ukoncenie", label: "Ukončenie" },
+];
+
 export default function KlientDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -290,6 +298,7 @@ export default function KlientDetailPage() {
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
   const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia" | "interakcie" | "obchod">("timeline");
   const [obchodyCount, setObchodyCount] = useState(0);
+  const [obchodStatus, setObchodStatus] = useState<string | null>(null);
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
@@ -420,10 +429,14 @@ export default function KlientDetailPage() {
     setObjednavky(objednavkyRes.data ?? []);
     setInzeraty(inzeratyRes.data ?? []);
 
-    // Počet obchodov pre zobrazenie tabulátora
+    // Počet obchodov + status prvého obchodu pre pipeline
     fetch(`/api/obchody?klient_id=${id}`, { credentials: "include" })
       .then(r => r.ok ? r.json() : { obchody: [] })
-      .then(d => setObchodyCount((d.obchody ?? []).length))
+      .then(d => {
+        const list = d.obchody ?? [];
+        setObchodyCount(list.length);
+        setObchodStatus(list[0]?.status ?? null);
+      })
       .catch(() => {});
 
     // Zostavenie timeline
@@ -754,14 +767,13 @@ export default function KlientDetailPage() {
   // kupujuci predáva nič, iba kupuje. Nábery, LV a vlastné inzeráty sa ho
   // netýkajú; relevantnejšie tým je sekcia Objednávky (čo hľadá).
   const isCistyKupujuci = klient.typ === "kupujuci";
-  const showObchodTab = obchodyCount > 0 ||
-    ["nabrany", "dohodnuty_naber", "uzavrety", "aktivny"].includes(klient.status);
+  const showObchodTab = obchodyCount > 0 || activeTab === "obchod";
   const tabs = [
     { key: "timeline", label: "Aktivita", count: timeline.length },
     ...(isCistyKupujuci ? [] : [{ key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length }]),
     { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
     { key: "objednavky", label: "Objednávky", count: objednavky.length },
-    ...(showObchodTab ? [{ key: "obchod", label: "Obchod", count: obchodyCount }] : []),
+    ...(showObchodTab ? [{ key: "obchod", label: "Rezervácia / Obchod", count: obchodyCount }] : []),
     { key: "interakcie", label: "Interakcie", count: 0 },
     { key: "dokumenty", label: "Dokumenty", count: 0 },
     { key: "historia", label: "História", count: 0 },
@@ -1013,26 +1025,32 @@ export default function KlientDetailPage() {
               </a>
             )}
             {(() => {
-              // Adresy z nehnuteľností klienta (ulica + číslo + obec). Ak nie sú,
-              // padneme na klient.lokalita. Ak má klient viac nehnuteľností na
-              // rôznych adresách, ukážeme všetky oddelené pomlčkami.
               const adresyZnehn: string[] = [];
+              // LV má prednosť — obsahuje správny názov ulice (nie obec kód z náberáku)
+              const lvD = klient.lv_data as Record<string, unknown> | null | undefined;
+              if (lvD?.ulica) {
+                const ul = String(lvD.ulica).trim();
+                const sup = lvD.supisne_cislo ? String(lvD.supisne_cislo).trim() : "";
+                const ob = lvD.obec ? String(lvD.obec).trim() : "";
+                const lvAdresa = [`${ul}${sup ? ` ${sup}` : ""}`, ob].filter(Boolean).join(" · ");
+                if (lvAdresa) adresyZnehn.push(lvAdresa);
+              }
               for (const inz of inzeraty) {
                 const rec = inz as Record<string, unknown>;
                 const ulica = String(rec.ulica_privatna || rec.ulica || "").trim();
                 const obec = String(rec.obec || rec.lokalita || "").trim();
-                if (ulica) adresyZnehn.push(obec ? `${ulica} · ${obec}` : ulica);
+                if (ulica && !adresyZnehn.some(a => a.toLowerCase().includes(ulica.toLowerCase()))) {
+                  adresyZnehn.push(obec ? `${ulica} · ${obec}` : ulica);
+                }
               }
               for (const nab of nabery) {
                 const rec = nab as Record<string, unknown>;
                 const ulica = String(rec.ulica || "").trim();
                 const cislo = String(rec.cislo_orientacne || "").trim();
                 const obec = String(rec.obec || "").trim();
-                if (ulica) {
+                if (ulica && !adresyZnehn.some(a => a.toLowerCase().includes(ulica.toLowerCase()))) {
                   const full = [`${ulica}${cislo ? ` ${cislo}` : ""}`, obec].filter(Boolean).join(" · ");
-                  if (!adresyZnehn.some(a => a.toLowerCase().includes(ulica.toLowerCase()))) {
-                    adresyZnehn.push(full);
-                  }
+                  adresyZnehn.push(full);
                 }
               }
               const unique = Array.from(new Set(adresyZnehn));
@@ -1173,45 +1191,74 @@ export default function KlientDetailPage() {
           ...cardSt, marginBottom: "20px", padding: "16px 20px",
         }}>
           <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Pipeline predávajúceho
+            Pipeline
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0" }}>
+          {/* Scrollovateľná pipeline */}
+          <div style={{
+            overflowX: "auto", overflowY: "visible",
+            paddingBottom: "6px",
+            scrollbarWidth: "thin",
+            scrollbarColor: "#374151 var(--border)",
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", minWidth: "max-content", gap: "0", paddingBottom: "2px" }}>
             {WORKFLOW_STEPS.map((ws, i) => {
               const isCompleted = i < workflowStep;
               const isCurrent = i === workflowStep;
-              const dotColor = isCompleted || isCurrent ? "#374151" : "var(--border)";
+              const STEP_STATUS = ["novy_kontakt", "dohodnuty_naber", null, null, "uzavrety"] as (string | null)[];
+              const targetStatus = STEP_STATUS[i];
+              const isClickable = isOwner && targetStatus !== null && i !== workflowStep;
               return (
-                <div key={ws.key} style={{ display: "flex", alignItems: "center", flex: 1 }}>
-                  <div style={{
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", flex: 1,
-                  }}>
+                <div key={ws.key} style={{ display: "flex", alignItems: "center" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", width: "80px" }}>
+                    {/* Outer halo pre current krok */}
                     <div style={{
-                      width: "24px", height: "24px", borderRadius: "50%",
-                      background: isCompleted || isCurrent ? "#374151" : "var(--bg-elevated)",
-                      color: isCompleted || isCurrent ? "#fff" : "var(--text-muted)",
+                      width: isCurrent ? "56px" : "48px",
+                      height: isCurrent ? "56px" : "48px",
+                      borderRadius: "50%",
+                      background: isCurrent ? "rgba(55,65,81,0.08)" : "transparent",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "11px", fontWeight: "700",
-                      border: `1px solid ${dotColor}`,
                       transition: "all 0.2s",
-                      boxShadow: isCurrent ? "0 0 0 3px rgba(29,29,31,0.08)" : "none",
                     }}>
-                      {isCompleted ? "✓" : i + 1}
+                      <div
+                        onClick={isClickable ? () => handleStatusChange(targetStatus!) : undefined}
+                        title={isClickable ? (i < workflowStep ? `Vrátiť na: ${ws.label}` : `Posunúť na: ${ws.label}`) : undefined}
+                        style={{
+                          width: "40px", height: "40px", borderRadius: "50%",
+                          background: isCompleted || isCurrent ? "#374151" : "var(--bg-elevated)",
+                          color: isCompleted || isCurrent ? "#fff" : "var(--text-muted)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: isCompleted ? "16px" : "14px", fontWeight: "700",
+                          border: isCompleted || isCurrent ? "none" : "1.5px solid var(--border)",
+                          transition: "all 0.2s",
+                          cursor: isClickable ? "pointer" : "default",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {isCompleted ? "✓" : i + 1}
+                      </div>
                     </div>
-                    <span style={{
-                      fontSize: "11px", fontWeight: isCurrent ? "600" : "500",
-                      color: isCurrent ? "var(--text-primary)" : "var(--text-muted)",
-                    }}>{ws.label}</span>
+                    <span
+                      onClick={isClickable ? () => handleStatusChange(targetStatus!) : undefined}
+                      style={{
+                        fontSize: "11px", fontWeight: isCurrent ? "700" : "500",
+                        color: isCurrent ? "var(--text-primary)" : "var(--text-muted)",
+                        textAlign: "center", lineHeight: "1.3",
+                        cursor: isClickable ? "pointer" : "default",
+                        whiteSpace: "nowrap",
+                      }}
+                    >{ws.label}</span>
                   </div>
                   {i < WORKFLOW_STEPS.length - 1 && (
                     <div style={{
-                      height: "1px", flex: "0 0 100%", maxWidth: "48px",
+                      height: "1.5px", width: "32px", flexShrink: 0,
                       background: isCompleted ? "#374151" : "var(--border)",
-                      marginBottom: "20px",
+                      marginBottom: "28px", borderRadius: "1px",
                     }} />
                   )}
                 </div>
               );
             })}
+            </div>
           </div>
           {/* Akčné tlačidlo podľa kroku */}
           {workflowStep === 0 && (
@@ -1241,6 +1288,78 @@ export default function KlientDetailPage() {
               }}>📰 Vytvoriť inzerát</button>
             )
           )}
+          {/* Postup obchodu — priamo pod hlavnou pipeline, klikateľné kroky */}
+          {workflowStep >= 3 && (() => {
+            const dealSubStep = obchodyCount === 0 ? 0
+              : obchodStatus === "v_procese" ? 1
+              : obchodStatus === "pred_podpisom_kz" ? 2
+              : obchodStatus === "podpisane" ? 3
+              : obchodStatus === "vklad" ? 4
+              : obchodStatus === "ukoncene" ? 5
+              : 1;
+            const dealActions = [
+              () => setShowObhliadkaModal(true),
+              () => setActiveTab("obchod"),
+              () => setActiveTab("obchod"),
+              () => setActiveTab("obchod"),
+              () => setActiveTab("obchod"),
+            ];
+            return (
+              <div style={{ marginTop: "12px" }}>
+                <div style={{ overflowX: "auto", overflowY: "visible", paddingBottom: "4px", scrollbarWidth: "thin", scrollbarColor: "#374151 var(--border)" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", minWidth: "max-content", gap: "0" }}>
+                    {DEAL_STEPS.map((ds, i) => {
+                      const isCompleted = i < dealSubStep;
+                      const isCurrent = i === dealSubStep && dealSubStep < DEAL_STEPS.length;
+                      const isDone = dealSubStep >= DEAL_STEPS.length;
+                      const action = dealActions[i];
+                      return (
+                        <div key={ds.key} style={{ display: "flex", alignItems: "center" }}>
+                          <div
+                            onClick={action}
+                            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", width: "68px", cursor: "pointer" }}
+                          >
+                            <div style={{
+                              width: isCurrent ? "44px" : "36px",
+                              height: isCurrent ? "44px" : "36px",
+                              borderRadius: "50%",
+                              background: isCurrent ? "rgba(55,65,81,0.08)" : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              transition: "all 0.2s",
+                            }}>
+                              <div style={{
+                                width: "28px", height: "28px", borderRadius: "50%",
+                                background: isCompleted || isDone ? "#374151" : isCurrent ? "#374151" : "var(--bg-elevated)",
+                                color: isCompleted || isCurrent || isDone ? "#fff" : "var(--text-muted)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "11px", fontWeight: "700",
+                                border: isCompleted || isCurrent || isDone ? "none" : "1.5px solid var(--border)",
+                                transition: "all 0.2s",
+                              }}>
+                                {isCompleted || isDone ? "✓" : i + 1}
+                              </div>
+                            </div>
+                            <span style={{
+                              fontSize: "10px", fontWeight: isCurrent ? "700" : "500",
+                              color: isCurrent ? "var(--text-primary)" : "var(--text-muted)",
+                              textAlign: "center", lineHeight: "1.3", whiteSpace: "nowrap",
+                            }}>{ds.label}</span>
+                          </div>
+                          {i < DEAL_STEPS.length - 1 && (
+                            <div style={{
+                              height: "1.5px", width: "24px", flexShrink: 0,
+                              background: isCompleted || isDone ? "#374151" : "var(--border)",
+                              marginBottom: "22px", borderRadius: "1px",
+                            }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           {klient.datum_naberu && (
             <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
               📅 Termín náberu: {new Date(klient.datum_naberu).toLocaleString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
@@ -2432,6 +2551,11 @@ export default function KlientDetailPage() {
         </div>
       )}
 
+      {/* Obchod / Rezervácia */}
+      {activeTab === "obchod" && (
+        <ObchodTab klient={klient} userId={user?.id ?? ""} />
+      )}
+
       {/* Interakcie — call/email/meeting log */}
       {activeTab === "interakcie" && (
         <div style={cardSt}>
@@ -2442,10 +2566,6 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {/* Obchod — lifecycle tracking */}
-      {activeTab === "obchod" && (
-        <ObchodTab klient={klient} userId={user?.id ?? ""} />
-      )}
 
       {/* História — audit log z klienti_history */}
       {activeTab === "historia" && (
