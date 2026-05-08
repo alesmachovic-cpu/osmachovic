@@ -1,5 +1,43 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+function valueToSlovakWords(val: string): string {
+  if (!val) return "";
+  const pct = val.match(/^(\d+(?:[.,]\d+)?)\s*%$/);
+  if (pct) {
+    const n = parseFloat(pct[1].replace(",", "."));
+    const w = ["nula","jedno","dve","tri","štyri","päť","šesť","sedem","osem","deväť",
+      "desať","jedenásť","dvanásť","trinásť","štrnásť","pätnásť","šestnásť",
+      "sedemnásť","osemnásť","devätnásť"];
+    if (Number.isInteger(n) && n >= 0 && n < 20) return w[n] + " percent";
+    return val;
+  }
+  const parsed = parseFloat(val.replace(/\s/g, "").replace(",", "."));
+  if (!isNaN(parsed) && parsed === Math.floor(parsed) && parsed > 0) {
+    const n = Math.floor(parsed);
+    const ones = ["","jeden","dva","tri","štyri","päť","šesť","sedem","osem","deväť",
+      "desať","jedenásť","dvanásť","trinásť","štrnásť","pätnásť","šestnásť",
+      "sedemnásť","osemnásť","devätnásť"];
+    const tens = ["","","dvadsať","tridsať","štyridsat","päťdesiat",
+      "šesťdesiat","sedemdesiat","osemdesiat","deväťdesiat"];
+    const h = ["","sto","dvesto","tristo","štyri sto","päťsto","šesťsto","sedemsto","osemsto","deväťsto"];
+    function b(x: number): string {
+      if (x < 20) return ones[x];
+      if (x < 100) return tens[Math.floor(x/10)] + (x%10 ? ones[x%10] : "");
+      return h[Math.floor(x/100)] + (x%100 ? b(x%100) : "");
+    }
+    let result = "";
+    if (n < 1000) result = b(n);
+    else if (n < 2000) result = "tisíc" + (n%1000 ? b(n%1000) : "");
+    else if (n < 1000000) result = b(Math.floor(n/1000)) + "tisíc" + (n%1000 ? b(n%1000) : "");
+    else {
+      const m = Math.floor(n/1000000), r = n%1000000;
+      result = (m===1 ? "milión" : b(m) + (m<5 ? " milióny" : " miliónov")) + (r ? " " + b(r) : "");
+    }
+    return result + " eur";
+  }
+  return "";
+}
 
 interface Owner {
   meno: string;
@@ -14,7 +52,7 @@ interface Props {
   naberId?: string;
   // Pre-fill dáta z LV a náberáku
   prefill: {
-    owners: Array<{ meno?: string; datum_nar?: string; kontakt?: string }>;
+    owners: Array<{ meno?: string; datum_nar?: string; bytom?: string; kontakt?: string }>;
     obec: string;
     provizia: string;
     predajnaCena: string;
@@ -37,18 +75,25 @@ export default function VyhradnaZmluvaModal({ klientId, naberId, prefill, onClos
   const ownerCount = Math.max(1, prefill.owners.filter(o => o.meno).length);
 
   const [owners, setOwners] = useState<Owner[]>(() =>
-    [0, 1, 2].map(i => ({
+    Array.from({ length: Math.max(ownerCount, 1) }, (_, i) => ({
       meno: prefill.owners[i]?.meno ?? "",
       datum_nar: prefill.owners[i]?.datum_nar ?? "",
       rodne_cislo: "",
-      bytom: "",
+      bytom: prefill.owners[i]?.bytom ?? "",
       kontakt: prefill.owners[i]?.kontakt ?? "",
     }))
   );
 
   const [provizia, setProvizia] = useState(prefill.provizia);
-  const [proviziaText, setProviziaText] = useState("");
+  const [proviziaText, setProviziaText] = useState(() => valueToSlovakWords(prefill.provizia));
+  const [proviziaTextManual, setProviziaTextManual] = useState(false);
   const [mesiacov, setMesiacov] = useState("6");
+
+  useEffect(() => {
+    if (!proviziaTextManual) {
+      setProviziaText(valueToSlovakWords(provizia));
+    }
+  }, [provizia, proviziaTextManual]);
   const [znizenieDni, setZnizenieDni] = useState("30");
   const [znizenieCena, setZnizenieCena] = useState("");
   const [dodatocnaProvizia, setDodatocnaProvizia] = useState("");
@@ -108,7 +153,7 @@ export default function VyhradnaZmluvaModal({ klientId, naberId, prefill, onClos
     }
   }
 
-  const activeOwners = owners.slice(0, ownerCount);
+  const activeOwners = owners;
 
   return (
     <div style={{
@@ -176,8 +221,8 @@ export default function VyhradnaZmluvaModal({ klientId, naberId, prefill, onClos
               <input style={inputSt} value={provizia} onChange={e => setProvizia(e.target.value)} placeholder="napr. 3% alebo 5000" />
             </div>
             <div style={{ gridColumn: "1/-1" }}>
-              <label style={labelSt}>Provízia slovom</label>
-              <input style={inputSt} value={proviziaText} onChange={e => setProviziaText(e.target.value)} placeholder="napr. tri percentá z kúpnej ceny" />
+              <label style={labelSt}>Provízia slovom <span style={{ fontWeight: 400, textTransform: "none", color: "var(--text-muted)", fontSize: "10px" }}>(auto)</span></label>
+              <input style={inputSt} value={proviziaText} onChange={e => { setProviziaText(e.target.value); setProviziaTextManual(true); }} placeholder="napr. tri percentá z kúpnej ceny" />
             </div>
             <div>
               <label style={labelSt}>Zníženie ceny po X dňoch</label>

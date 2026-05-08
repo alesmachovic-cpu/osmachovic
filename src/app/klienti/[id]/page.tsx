@@ -2831,7 +2831,7 @@ export default function KlientDetailPage() {
       {/* Modal: Výhradná zmluva */}
       {showVyhradnaModal && klient && (() => {
         const lv = (klient.lv_data ?? {}) as Record<string, unknown>;
-        const maj = (lv.majitelia as Array<{ meno?: string; podiel?: string; datum_narodenia?: string }> | undefined) ?? [];
+        const maj = (lv.majitelia as Array<{ meno?: string; podiel?: string; datum_narodenia?: string; adresa?: string }> | undefined) ?? [];
         const naber = (nabery.find(n => (n as Record<string, unknown>).id === showVyhradnaModal) ?? nabery[0]) as Record<string, unknown> | undefined;
         return (
           <VyhradnaZmluvaModal
@@ -2842,9 +2842,10 @@ export default function KlientDetailPage() {
                 ? maj.map((m, i) => ({
                     meno: m.meno,
                     datum_nar: m.datum_narodenia,
+                    bytom: m.adresa,
                     kontakt: i === 0 ? `${klient.email ?? ""}, ${klient.telefon ?? ""}`.replace(/^, |, $/, "") : undefined,
                   }))
-                : [{ meno: klient.meno, datum_nar: undefined, kontakt: `${klient.email ?? ""}, ${klient.telefon ?? ""}`.replace(/^, |, $/, "") }],
+                : [{ meno: klient.meno, datum_nar: undefined, bytom: undefined, kontakt: `${klient.email ?? ""}, ${klient.telefon ?? ""}`.replace(/^, |, $/, "") }],
               obec: String(lv.obec ?? naber?.obec ?? ""),
               provizia: String(naber?.provizia ?? (klient as unknown as Record<string, unknown>).proviziaeur ?? ""),
               predajnaCena: String(naber?.predajna_cena ?? ""),
