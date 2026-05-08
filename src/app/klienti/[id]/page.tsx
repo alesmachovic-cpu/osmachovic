@@ -15,6 +15,7 @@ import { createCalendarEvent, notifyCalendarFail } from "@/lib/calendar";
 import { klientUpdate } from "@/lib/klientApi";
 import SmsSignButton from "@/components/SmsSignButton";
 import ClientInteractionsTab from "@/components/ClientInteractionsTab";
+import ObchodTab from "@/components/Obchod/ObchodTab";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
@@ -287,7 +288,8 @@ export default function KlientDetailPage() {
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
-  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia" | "interakcie">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia" | "interakcie" | "obchod">("timeline");
+  const [obchodyCount, setObchodyCount] = useState(0);
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
@@ -417,6 +419,12 @@ export default function KlientDetailPage() {
     setNabery(naberyRes.data ?? []);
     setObjednavky(objednavkyRes.data ?? []);
     setInzeraty(inzeratyRes.data ?? []);
+
+    // Počet obchodov pre zobrazenie tabulátora
+    fetch(`/api/obchody?klient_id=${id}`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : { obchody: [] })
+      .then(d => setObchodyCount((d.obchody ?? []).length))
+      .catch(() => {});
 
     // Zostavenie timeline
     const events: TimelineEvent[] = [];
@@ -746,11 +754,14 @@ export default function KlientDetailPage() {
   // kupujuci predáva nič, iba kupuje. Nábery, LV a vlastné inzeráty sa ho
   // netýkajú; relevantnejšie tým je sekcia Objednávky (čo hľadá).
   const isCistyKupujuci = klient.typ === "kupujuci";
+  const showObchodTab = obchodyCount > 0 ||
+    ["nabrany", "dohodnuty_naber", "uzavrety", "aktivny"].includes(klient.status);
   const tabs = [
     { key: "timeline", label: "Aktivita", count: timeline.length },
     ...(isCistyKupujuci ? [] : [{ key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length }]),
     { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
     { key: "objednavky", label: "Objednávky", count: objednavky.length },
+    ...(showObchodTab ? [{ key: "obchod", label: "Obchod", count: obchodyCount }] : []),
     { key: "interakcie", label: "Interakcie", count: 0 },
     { key: "dokumenty", label: "Dokumenty", count: 0 },
     { key: "historia", label: "História", count: 0 },
@@ -2429,6 +2440,11 @@ export default function KlientDetailPage() {
           </div>
           <ClientInteractionsTab klientId={klient.id} userId={user?.id ?? ""} />
         </div>
+      )}
+
+      {/* Obchod — lifecycle tracking */}
+      {activeTab === "obchod" && (
+        <ObchodTab klient={klient} userId={user?.id ?? ""} />
       )}
 
       {/* História — audit log z klienti_history */}
