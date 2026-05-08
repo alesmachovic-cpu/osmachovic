@@ -1191,7 +1191,7 @@ export default function KlientDetailPage() {
           ...cardSt, marginBottom: "20px", padding: "16px 20px",
         }}>
           <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Pipeline
+            Pipeline predávajúceho
           </div>
           {/* Scrollovateľná pipeline */}
           <div style={{
