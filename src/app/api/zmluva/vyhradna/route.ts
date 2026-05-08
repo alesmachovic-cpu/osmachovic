@@ -163,7 +163,10 @@ export async function POST(req: NextRequest) {
     doc.render(data);
 
     const buf = doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" });
-    const filename = `Vyhradna_zmluva_${(klient.meno as string ?? "klient").replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.docx`;
+    const safeName = (klient.meno as string ?? "klient")
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-zA-Z0-9_-]/g, "_");
+    const filename = `Vyhradna_zmluva_${safeName}_${new Date().toISOString().slice(0, 10)}.docx`;
 
     return new NextResponse(buf as unknown as BodyInit, {
       headers: {
