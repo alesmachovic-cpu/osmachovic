@@ -128,7 +128,7 @@ export default function VyhradnaZmluvaModal({ klientId, naberId, prefill, onClos
         {activeOwners.map((o, i) => (
           <div key={i} style={{ marginBottom: "20px", padding: "14px", background: "var(--bg-elevated)", borderRadius: "10px" }}>
             <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "10px", textTransform: "uppercase" }}>
-              Záujemca {ownerCount > 1 ? i + 1 : ""}
+              Predávajúci {ownerCount > 1 ? i + 1 : ""}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
               <div style={{ gridColumn: "1/-1" }}>

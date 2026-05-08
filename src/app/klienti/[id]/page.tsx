@@ -2839,7 +2839,11 @@ export default function KlientDetailPage() {
             naberId={showVyhradnaModal}
             prefill={{
               owners: maj.length > 0
-                ? maj.map(m => ({ meno: m.meno, datum_nar: m.datum_narodenia, kontakt: undefined }))
+                ? maj.map((m, i) => ({
+                    meno: m.meno,
+                    datum_nar: m.datum_narodenia,
+                    kontakt: i === 0 ? `${klient.email ?? ""}, ${klient.telefon ?? ""}`.replace(/^, |, $/, "") : undefined,
+                  }))
                 : [{ meno: klient.meno, datum_nar: undefined, kontakt: `${klient.email ?? ""}, ${klient.telefon ?? ""}`.replace(/^, |, $/, "") }],
               obec: String(lv.obec ?? naber?.obec ?? ""),
               provizia: String(naber?.provizia ?? (klient as unknown as Record<string, unknown>).proviziaeur ?? ""),
