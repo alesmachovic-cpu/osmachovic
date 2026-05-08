@@ -1310,6 +1310,13 @@ export default function KlientDetailPage() {
               }}>📰 Vytvoriť inzerát</button>
             )
           )}
+          {nabery.length > 0 && workflowStep >= 2 && (
+            <button onClick={() => setShowVyhradnaModal(nabery[0].id as string)} style={{
+              marginTop: "10px", width: "100%", padding: "11px", background: "transparent",
+              color: "var(--text-primary)", border: "1px solid var(--border)",
+              borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            }}>📄 Výhradná zmluva</button>
+          )}
           {klient.datum_naberu && (
             <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
               📅 Termín náberu: {new Date(klient.datum_naberu).toLocaleString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
