@@ -311,6 +311,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
     priemerna_cena_m2: number; odporucana_od: number; odporucana_do: number;
     hodnotenie: "V rozsahu" | "Mierne vysoká" | "Vysoká" | "Mierne nízka" | "Nízka";
     odchylka_pct: number; pocet_porovnani: number; zdroj: "monitor" | "benchmark"; komentar: string;
+    porovnania?: { nazov: string; url: string | null; cena: number; plocha: number; eurM2: number }[];
   };
   const [analyza, setAnalyza] = useState<AnalyzaResult | null>(null);
   const [analyzaLoading, setAnalyzaLoading] = useState(false);
@@ -1846,6 +1847,7 @@ Odpovedaj stručne po slovensky.`;
           analyza={analyza}
           analyzaLoading={analyzaLoading}
           onRefreshAnalyza={() => triggerAnalyza()}
+          onProviziaChange={setProvizia}
         />
       )}
 
@@ -2251,10 +2253,11 @@ type AnalyzaResultExt = {
   priemerna_cena_m2: number; odporucana_od: number; odporucana_do: number;
   hodnotenie: "V rozsahu" | "Mierne vysoká" | "Vysoká" | "Mierne nízka" | "Nízka";
   odchylka_pct: number; pocet_porovnani: number; zdroj: "monitor" | "benchmark"; komentar: string;
+  porovnania?: { nazov: string; url: string | null; cena: number; plocha: number; eurM2: number }[];
 };
 
 function FinancneKalkulacky({
-  predajnaCena, provizia, urok, setUrok, analyza, analyzaLoading, onRefreshAnalyza,
+  predajnaCena, provizia, urok, setUrok, analyza, analyzaLoading, onRefreshAnalyza, onProviziaChange,
 }: {
   predajnaCena: number;
   provizia: string;
@@ -2263,6 +2266,7 @@ function FinancneKalkulacky({
   analyza: AnalyzaResultExt | null;
   analyzaLoading: boolean;
   onRefreshAnalyza: () => void;
+  onProviziaChange: (v: string) => void;
 }) {
   // Hypotéka: 80% LTV, nastaviteľný úrok, 30 rokov
   const P = predajnaCena * 0.8;
@@ -2305,72 +2309,42 @@ function FinancneKalkulacky({
     return { bg: "#EFF6FF", color: "#1D4ED8" };
   }
 
+  const [showInzeraty, setShowInzeraty] = useState(false);
+
   return (
     <>
-      {/* Panel 1: Splátka hypotéky */}
+      {/* Panel 1: Porovnanie provízií */}
       <div style={cardSt}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-          <div style={{ fontSize: "14px", fontWeight: "700" }}>Splátka hypotéky</div>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={labelSt}>Úrok</span>
-            <input
-              type="number" step="0.1" min="0.5" max="15"
-              value={urok} onChange={e => setUrok(e.target.value)}
-              style={{
-                width: "64px", padding: "5px 8px", border: "1px solid var(--border)",
-                borderRadius: "8px", fontSize: "13px", background: "var(--bg-elevated)",
-                color: "var(--text-primary)", textAlign: "right",
-              }}
-            />
-            <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>%</span>
-          </div>
-        </div>
-        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "12px" }}>
-          80 % LTV · 30 rokov fixné
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
-          {[
-            { label: "Mesačná splátka", value: `${M.toLocaleString("sk-SK")} €` },
-            { label: "Potrebný príjem", value: `${potrebnyPrijem.toLocaleString("sk-SK")} €` },
-            { label: "Vlastné zdroje", value: `${vlastneZdroje.toLocaleString("sk-SK")} €` },
-          ].map(item => (
-            <div key={item.label} style={{
-              background: "var(--bg-elevated)", borderRadius: "10px", padding: "12px",
-              textAlign: "center",
-            }}>
-              <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)" }}>{item.value}</div>
-              <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>{item.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Panel 2: Provízia porovnanie */}
-      <div style={cardSt}>
-        <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "14px" }}>Porovnanie provízií</div>
+        <div style={{ fontSize: "14px", fontWeight: "700", marginBottom: "4px" }}>Porovnanie provízií</div>
+        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "12px" }}>Klikni na sadzbu — nastaví sa do políčka Provízia</div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           {pctSadzby.map(pct => {
             const hl = isHighlighted(pct);
             return (
-              <div key={pct} style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                padding: "10px 14px", borderRadius: "10px",
-                background: hl ? "#374151" : "var(--bg-elevated)",
-                border: hl ? "none" : "1px solid var(--border)",
-              }}>
+              <button
+                key={pct}
+                onClick={() => onProviziaChange(`${pct}%`)}
+                style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "10px 14px", borderRadius: "10px", cursor: "pointer",
+                  background: hl ? "#374151" : "var(--bg-elevated)",
+                  border: hl ? "2px solid #374151" : "1px solid var(--border)",
+                  width: "100%", textAlign: "left",
+                }}
+              >
                 <span style={{ fontSize: "13px", fontWeight: hl ? "700" : "500", color: hl ? "#fff" : "var(--text-primary)" }}>
-                  {pct} %{hl && " ← vaša"}
+                  {pct} %{hl ? " ← vaša" : ""}
                 </span>
                 <span style={{ fontSize: "14px", fontWeight: "700", color: hl ? "#fff" : "var(--text-primary)" }}>
                   {proviziaEur(pct).toLocaleString("sk-SK")} €
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
 
-      {/* Panel 3: AI Trhová analýza */}
+      {/* Panel 2: AI Trhová analýza */}
       <div style={cardSt}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
           <div style={{ fontSize: "14px", fontWeight: "700" }}>Analýza trhu</div>
@@ -2426,13 +2400,48 @@ function FinancneKalkulacky({
                     {analyza.hodnotenie} ({analyza.odchylka_pct > 0 ? "+" : ""}{analyza.odchylka_pct}%)
                   </div>
                 </div>
-                <div style={{ background: "var(--bg-elevated)", borderRadius: "10px", padding: "12px" }}>
+                <button
+                  onClick={() => setShowInzeraty(v => !v)}
+                  style={{
+                    background: "var(--bg-elevated)", borderRadius: "10px", padding: "12px",
+                    border: "1px solid var(--border)", cursor: "pointer", textAlign: "left",
+                  }}
+                >
                   <div style={labelSt}>Porovnaní</div>
-                  <div style={{ fontSize: "14px", fontWeight: "700", marginTop: "4px" }}>
-                    {analyza.pocet_porovnani} {analyza.zdroj === "benchmark" ? "(benchmark)" : "inzerátov"}
+                  <div style={{ fontSize: "14px", fontWeight: "700", marginTop: "4px", color: "var(--text-primary)" }}>
+                    {analyza.pocet_porovnani} {analyza.zdroj === "benchmark" ? "(benchmark)" : "inzerátov"} {analyza.pocet_porovnani > 0 ? (showInzeraty ? "▲" : "▼") : ""}
                   </div>
-                </div>
+                </button>
               </div>
+
+              {showInzeraty && analyza.porovnania && analyza.porovnania.length > 0 && (
+                <div style={{ marginBottom: "12px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {analyza.porovnania.map((p, i) => (
+                    <div key={i} style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "8px 12px", borderRadius: "8px", background: "var(--bg-elevated)",
+                      gap: "8px",
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {p.url ? (
+                          <a href={p.url} target="_blank" rel="noopener noreferrer" style={{
+                            fontSize: "12px", color: "var(--text-link, #60A5FA)", textDecoration: "none",
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block",
+                          }}>
+                            {p.nazov || p.url}
+                          </a>
+                        ) : (
+                          <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{p.nazov}</span>
+                        )}
+                      </div>
+                      <div style={{ whiteSpace: "nowrap", fontSize: "12px", color: "var(--text-secondary)", flexShrink: 0 }}>
+                        {p.cena.toLocaleString("sk-SK")} € · {p.plocha} m² · {p.eurM2.toLocaleString("sk-SK")} €/m²
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {analyza.komentar && (
                 <div style={{
                   padding: "12px 14px", borderRadius: "10px", background: "var(--bg-elevated)",
@@ -2444,6 +2453,44 @@ function FinancneKalkulacky({
             </>
           );
         })()}
+      </div>
+
+      {/* Panel 3: Splátka hypotéky */}
+      <div style={cardSt}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+          <div style={{ fontSize: "14px", fontWeight: "700" }}>Splátka hypotéky</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={labelSt}>Úrok</span>
+            <input
+              type="number" step="0.1" min="0.5" max="15"
+              value={urok} onChange={e => setUrok(e.target.value)}
+              style={{
+                width: "64px", padding: "5px 8px", border: "1px solid var(--border)",
+                borderRadius: "8px", fontSize: "13px", background: "var(--bg-elevated)",
+                color: "var(--text-primary)", textAlign: "right",
+              }}
+            />
+            <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>%</span>
+          </div>
+        </div>
+        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "12px" }}>
+          80 % LTV · 30 rokov fixné
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+          {[
+            { label: "Mesačná splátka", value: `${M.toLocaleString("sk-SK")} €` },
+            { label: "Potrebný príjem", value: `${potrebnyPrijem.toLocaleString("sk-SK")} €` },
+            { label: "Vlastné zdroje", value: `${vlastneZdroje.toLocaleString("sk-SK")} €` },
+          ].map(item => (
+            <div key={item.label} style={{
+              background: "var(--bg-elevated)", borderRadius: "10px", padding: "12px",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)" }}>{item.value}</div>
+              <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>{item.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );

@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
   const [monitorResult, naseDResult] = await Promise.all([
     supabase
       .from("monitor_inzeraty")
-      .select("cena, plocha")
+      .select("cena, plocha, url, nazov, lokalita")
       .ilike("lokalita", `%${obec}%`)
       .eq("typ_nehnutelnosti", typ)
       .not("cena", "is", null)
@@ -111,7 +111,9 @@ export async function POST(req: NextRequest) {
       .limit(20),
   ]);
 
-  const monitorItems = (monitorResult.data ?? []).map((r: { cena: number; plocha: number }) => ({ cena: r.cena, plocha: r.plocha }));
+  type MonitorRow = { cena: number; plocha: number; url?: string; nazov?: string; lokalita?: string };
+  const monitorRows = (monitorResult.data ?? []) as MonitorRow[];
+  const monitorItems = monitorRows.map(r => ({ cena: r.cena, plocha: r.plocha }));
   const naseItems = (naseDResult.data ?? []).map((r: { predajna_cena: number; plocha: number }) => ({ cena: r.predajna_cena, plocha: r.plocha }));
   const allItems = [...monitorItems, ...naseItems];
 
@@ -150,6 +152,17 @@ export async function POST(req: NextRequest) {
 
   const komentar = await callGemini(aiPrompt) || await callGPT(aiPrompt) || "";
 
+  const porovnania = monitorRows
+    .filter(r => r.plocha > 0)
+    .map(r => ({
+      nazov: r.nazov || r.lokalita || obec,
+      url: r.url || null,
+      cena: r.cena,
+      plocha: r.plocha,
+      eurM2: Math.round(r.cena / r.plocha),
+    }))
+    .slice(0, 15);
+
   return NextResponse.json({
     priemerna_cena_m2: priemer,
     odporucana_od,
@@ -159,5 +172,6 @@ export async function POST(req: NextRequest) {
     pocet_porovnani: cenyM2.length,
     zdroj,
     komentar,
+    porovnania,
   });
 }
