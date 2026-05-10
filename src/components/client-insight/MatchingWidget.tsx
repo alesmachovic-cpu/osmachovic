@@ -152,7 +152,6 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
 }) {
   const router = useRouter();
   const { data, loading } = useZhodyPreObjednavku(objednavkaId, 3);
-  const [selectedMatch, setSelectedMatch] = useState<ZhodaItem | null>(null);
 
   const top3 = (data ?? []).slice(0, 3);
 
@@ -186,25 +185,22 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
         const badge = scoreBadge(m.score);
         const isMonitor = n.source === "monitor";
         const summary = [n.lokalita || n.okres, n.cena ? `${Math.round(n.cena / 1000)}k €` : null, n.plocha ? `${n.plocha}m²` : null].filter(Boolean).join(" · ");
+        const rowHref = isMonitor && n.url ? n.url : (!isMonitor && pred?.id ? `/klienti/${pred.id}` : null);
 
         return (
           <div key={n.id} style={{ borderBottom: i < top3.length - 1 ? "1px solid var(--border)" : "none" }}>
-            <div onClick={() => setSelectedMatch(selectedMatch?.nehnutelnost.id === n.id ? null : m)}
-              style={{ display: "flex", alignItems: "flex-start", gap: "8px", padding: "10px 14px", cursor: "pointer" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+            <div
+              onClick={() => rowHref && window.open(rowHref, "_blank")}
+              style={{ display: "flex", alignItems: "flex-start", gap: "8px", padding: "10px 14px", cursor: rowHref ? "pointer" : "default" }}
+              onMouseEnter={e => { if (rowHref) e.currentTarget.style.background = "var(--bg-elevated)"; }}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
               <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", background: badge.bg, color: badge.fg, flexShrink: 0, marginTop: "1px" }}>
                 {m.score}%
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                {isMonitor && n.url ? (
-                  <a href={n.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                    style={{ fontSize: "12px", fontWeight: 600, color: "#60a5fa", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", textDecoration: "none" }}>
-                    {summary || "Nehnuteľnosť"}
-                  </a>
-                ) : (
-                  <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary || "Nehnuteľnosť"}</div>
-                )}
+                <div style={{ fontSize: "12px", fontWeight: 600, color: rowHref ? "#60a5fa" : "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {summary || "Nehnuteľnosť"}
+                </div>
                 <div style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", gap: "4px", alignItems: "center" }}>
                   {isMonitor && n.portal && (
                     <span style={{ fontSize: "9px", padding: "1px 4px", background: "#1e3a5f", color: "#93c5fd", borderRadius: "3px", flexShrink: 0 }}>{n.portal}</span>
@@ -212,39 +208,21 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
                   <span>{pred?.meno ?? "—"}</span>
                 </div>
               </div>
-              {pred?.telefon && (
-                <a href={`tel:${pred.telefon}`} onClick={e => e.stopPropagation()}
-                  style={{ fontSize: "11px", padding: "3px 6px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "5px", textDecoration: "none", color: "var(--text-primary)", flexShrink: 0 }}>
-                  📞
-                </a>
-              )}
-            </div>
-            {selectedMatch?.nehnutelnost.id === n.id && (
-              <div style={{ padding: "10px 14px", background: "var(--bg-elevated)", borderTop: "1px solid var(--border)" }}>
-                {pred?.telefon && <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginBottom: "4px" }}>📞 {pred.telefon}</div>}
-                {n.cena && <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginBottom: "6px" }}>💰 {Number(n.cena).toLocaleString("sk")} €</div>}
-                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                  {onPlanovatObhliadku && pred && pred.id && (
-                    <button onClick={() => { onPlanovatObhliadku(pred.id, pred.meno, pred.telefon); setSelectedMatch(null); }}
-                      style={{ fontSize: "11px", padding: "5px 10px", background: "#374151", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}>
-                      📅 Naplánovať obhliadku
-                    </button>
-                  )}
-                  {!isMonitor && pred && pred.id && (
-                    <button onClick={() => router.push(`/klienti/${pred.id}`)}
-                      style={{ fontSize: "11px", padding: "5px 10px", background: "var(--bg-surface)", color: "#60a5fa", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer" }}>
-                      Karta →
-                    </button>
-                  )}
-                  {isMonitor && n.url && (
-                    <a href={n.url} target="_blank" rel="noopener noreferrer"
-                      style={{ fontSize: "11px", padding: "5px 10px", background: "var(--bg-surface)", color: "#60a5fa", border: "1px solid var(--border)", borderRadius: "6px", textDecoration: "none" }}>
-                      Inzerát →
-                    </a>
-                  )}
-                </div>
+              <div style={{ display: "flex", gap: "4px", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                {onPlanovatObhliadku && pred?.id && (
+                  <button onClick={() => onPlanovatObhliadku(pred.id, pred.meno, pred.telefon)}
+                    style={{ fontSize: "11px", padding: "3px 6px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "5px", cursor: "pointer", color: "var(--text-primary)" }}>
+                    📅
+                  </button>
+                )}
+                {pred?.telefon && (
+                  <a href={`tel:${pred.telefon}`}
+                    style={{ fontSize: "11px", padding: "3px 6px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "5px", textDecoration: "none", color: "var(--text-primary)" }}>
+                    📞
+                  </a>
+                )}
               </div>
-            )}
+            </div>
           </div>
         );
       })}
