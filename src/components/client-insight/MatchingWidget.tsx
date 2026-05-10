@@ -197,7 +197,14 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
                 {m.score}%
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary || "Nehnuteľnosť"}</div>
+                {isMonitor && n.url ? (
+                  <a href={n.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                    style={{ fontSize: "12px", fontWeight: 600, color: "#60a5fa", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", textDecoration: "none" }}>
+                    {summary || "Nehnuteľnosť"}
+                  </a>
+                ) : (
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary || "Nehnuteľnosť"}</div>
+                )}
                 <div style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", gap: "4px", alignItems: "center" }}>
                   {isMonitor && n.portal && (
                     <span style={{ fontSize: "9px", padding: "1px 4px", background: "#1e3a5f", color: "#93c5fd", borderRadius: "3px", flexShrink: 0 }}>{n.portal}</span>
