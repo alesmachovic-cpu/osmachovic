@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { STATUS_LABELS } from "@/lib/database.types";
-import type { Klient } from "@/lib/database.types";
+import type { Klient, KlientStatus } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import SlaTimer from "@/components/SlaTimer";
 import KlientHistoryTab from "@/components/KlientHistoryTab";
@@ -451,7 +451,7 @@ export default function KlientDetailPage() {
     const hasAktivnyInzerat = (inzeratyRes.data ?? []).some(n => (n as Record<string, unknown>).status === "aktivny");
     if (klientRes.data?.status === "nabrany" && hasAktivnyInzerat && user?.id) {
       klientUpdate(user.id, id, { status: "inzerovany" });
-      setKlient(k => k ? ({ ...k, status: "inzerovany" }) as Klient : k);
+      setKlient(k => k ? { ...k, status: "inzerovany" as KlientStatus } : k);
       fetch("/api/klient-udalosti", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ klient_id: id, typ: "status_zmena", popis: "Nabraný → Inzerovaný", autor: user.id }),
