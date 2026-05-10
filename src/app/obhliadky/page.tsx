@@ -29,19 +29,30 @@ const STAV_CONFIG: Record<Obhliadka["stav"], { label: string; bg: string; color:
   zrusena:   { label: "Zrušená",   bg: "#F9FAFB", color: "#9CA3AF" },
 };
 
-const LS_KEY = "os-machovic-obhliadky";
-
-function loadObhliadky(): Obhliadka[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEY) || "[]");
-  } catch {
-    return [];
-  }
+function stavToStatus(stav: Obhliadka["stav"]): string {
+  return stav === "dokoncena" ? "prebehla" : stav;
 }
 
-function saveObhliadky(data: Obhliadka[]) {
-  localStorage.setItem(LS_KEY, JSON.stringify(data));
+function fromApi(r: Record<string, unknown>): Obhliadka {
+  const dt = new Date(r.datum as string);
+  const status = String(r.status || "planovana");
+  return {
+    id: r.id as string,
+    klientId: (r.kupujuci_klient_id as string | null) ?? null,
+    klientMeno: (r.kupujuci_meno as string) || "—",
+    datum: dt.toISOString().slice(0, 10),
+    cas: dt.toISOString().slice(11, 16),
+    adresa: (r.miesto as string) || "",
+    poznamka: (r.poznamka as string) || "",
+    stav: (["prebehla", "obhliadka_zaujem", "obhliadka_bez_zaujmu"].includes(status)
+      ? "dokoncena" : status === "zrusena" ? "zrusena" : "planovana") as Obhliadka["stav"],
+  };
+}
+
+async function fetchObhliadky(): Promise<Obhliadka[]> {
+  const r = await fetch("/api/obhliadky");
+  const d = await r.json();
+  return ((d.obhliadky ?? []) as Record<string, unknown>[]).map(fromApi);
 }
 
 export default function ObhliadkyPage() {
@@ -66,63 +77,54 @@ export default function ObhliadkyPage() {
   const [editing, setEditing] = useState<Obhliadka | null>(null);
 
   useEffect(() => {
-    setItems(loadObhliadky());
-    // Načítaj klientov pre autocomplete
-    supabase
-      .from("klienti")
-      .select("id, meno, telefon")
-      .order("meno", { ascending: true })
-      .then(({ data }) => {
-        if (data) setKlientiList(data as KlientOption[]);
-      });
+    fetchObhliadky().then(setItems);
+    supabase.from("klienti").select("id, meno, telefon").order("meno", { ascending: true })
+      .then(({ data }) => { if (data) setKlientiList(data as KlientOption[]); });
   }, []);
 
-  function persist(next: Obhliadka[]) {
-    setItems(next);
-    saveObhliadky(next);
-  }
-
-  function handleAdd() {
+  async function handleAdd() {
     if (!klientMeno.trim() || !datum || !cas || !adresa.trim()) return;
-    const nova: Obhliadka = {
-      id: crypto.randomUUID(),
-      klientId,
-      klientMeno: klientMeno.trim(),
-      datum,
-      cas,
-      adresa: adresa.trim(),
-      poznamka: poznamka.trim(),
-      stav: "planovana",
-    };
-    persist([nova, ...items]);
-    setKlientMeno("");
-    setKlientId(null);
-    setKlientQuery("");
-    setDatum("");
-    setCas("");
-    setAdresa("");
-    setPoznamka("");
-    setShowForm(false);
+    const datumIso = new Date(`${datum}T${cas}`).toISOString();
+    await fetch("/api/obhliadky", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        datum: datumIso, miesto: adresa.trim(),
+        kupujuci_meno: klientMeno.trim(), kupujuci_klient_id: klientId || null,
+        poznamka: poznamka.trim() || null, status: "planovana",
+      }),
+    });
+    setKlientMeno(""); setKlientId(null); setKlientQuery(""); setDatum(""); setCas(""); setAdresa(""); setPoznamka(""); setShowForm(false);
+    fetchObhliadky().then(setItems);
   }
 
-  function handleSaveEdit(updated: Obhliadka) {
-    persist(items.map(o => o.id === updated.id ? updated : o));
+  async function handleSaveEdit(updated: Obhliadka) {
+    const datumIso = new Date(`${updated.datum}T${updated.cas}`).toISOString();
+    await fetch("/api/obhliadky", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: updated.id, datum: datumIso, miesto: updated.adresa,
+        kupujuci_meno: updated.klientMeno, kupujuci_klient_id: updated.klientId || null,
+        poznamka: updated.poznamka, status: stavToStatus(updated.stav),
+      }),
+    });
     setEditing(null);
+    fetchObhliadky().then(setItems);
   }
 
-  function cycleStav(id: string) {
+  async function cycleStav(id: string) {
     const order: Obhliadka["stav"][] = ["planovana", "dokoncena", "zrusena"];
-    persist(
-      items.map(o => {
-        if (o.id !== id) return o;
-        const idx = order.indexOf(o.stav);
-        return { ...o, stav: order[(idx + 1) % order.length] };
-      })
-    );
+    const cur = items.find(o => o.id === id);
+    const nextStav = order[(order.indexOf(cur?.stav ?? "planovana") + 1) % order.length];
+    setItems(prev => prev.map(o => o.id === id ? { ...o, stav: nextStav } : o));
+    await fetch("/api/obhliadky", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status: stavToStatus(nextStav) }),
+    });
   }
 
-  function handleDelete(id: string) {
-    persist(items.filter(o => o.id !== id));
+  async function handleDelete(id: string) {
+    setItems(prev => prev.filter(o => o.id !== id));
+    await fetch(`/api/obhliadky?id=${id}`, { method: "DELETE" });
   }
 
   const sorted = [...items].sort((a, b) => {
