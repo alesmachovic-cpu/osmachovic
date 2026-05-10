@@ -310,6 +310,7 @@ export default function KlientDetailPage() {
   const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
+  const [detailObj, setDetailObj] = useState<Record<string, unknown> | null>(null);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
   const [obhliadkaPrefill, setObhliadkaPrefill] = useState<{ datum: string; miesto: string } | null>(null);
   // Pamätáme si, či sa Obhliadka modal otvoril z datetime pickeru (tlačidlo "Späť")
@@ -1871,15 +1872,18 @@ export default function KlientDetailPage() {
       </div>
 
       {/* Štatistiky klienta — kliknuteľné, presmerujú na príslušný tab */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px",
-      }} className="cards-grid">
-        {([
-          { label: "Nábery", value: nabery.length, tab: "nehnutelnosti" as const },
+      {(() => {
+        const statsItems = [
+          ...(!isCistyKupujuci ? [{ label: "Nábery", value: nabery.length, tab: "nehnutelnosti" as const }] : []),
           { label: "Objednávky", value: objednavky.length, tab: "objednavky" as const },
-          { label: "Inzeráty", value: inzeraty.length, tab: "nehnutelnosti" as const },
+          ...(!isCistyKupujuci ? [{ label: "Inzeráty", value: inzeraty.length, tab: "nehnutelnosti" as const }] : []),
           { label: "Obhliadky", value: obhliadky.length, tab: "obhliadky" as const },
-        ]).map(s => (
+        ];
+        return (
+      <div style={{
+        display: "grid", gridTemplateColumns: `repeat(${statsItems.length}, 1fr)`, gap: "10px", marginBottom: "20px",
+      }} className="cards-grid">
+        {statsItems.map(s => (
           <button key={s.label} onClick={() => {
             setActiveTab(s.tab);
             // Scroll k tabom
@@ -1901,6 +1905,8 @@ export default function KlientDetailPage() {
           </button>
         ))}
       </div>
+        );
+      })()}
 
       {/* Info-strip pre čistého kupujúceho — zhrnie "čo hľadá" z najnovšej
           objednávky (lokality, druh, cena_do, izby z poziadavky). Bez kliknutia
@@ -2479,10 +2485,10 @@ export default function KlientDetailPage() {
               {objednavky.map((o: Record<string, unknown>) => {
                 const isPodpisana = !!o.podpis;
                 return (
-                  <div key={o.id as string} style={{
+                  <div key={o.id as string} onClick={() => setDetailObj(o)} style={{
                     display: "flex", alignItems: "center", gap: "14px",
                     padding: "14px 16px", borderRadius: "10px", background: "var(--bg-elevated)",
-                    border: "1px solid var(--border)",
+                    border: "1px solid var(--border)", cursor: "pointer",
                   }}>
                     <div style={{
                       width: "40px", height: "40px", borderRadius: "10px",
@@ -2536,6 +2542,76 @@ export default function KlientDetailPage() {
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {detailObj && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          onClick={() => setDetailObj(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: "100%", maxWidth: "520px", background: "var(--bg-surface)", borderRadius: "16px 16px 0 0",
+            padding: "24px 24px 32px", maxHeight: "80vh", overflowY: "auto",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
+              <div>
+                <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-primary)" }}>
+                  📋 {String(detailObj.druh || "Objednávka")}
+                </div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
+                  {detailObj.created_at ? new Date(detailObj.created_at as string).toLocaleDateString("sk", { day: "numeric", month: "long", year: "numeric" }) : ""}
+                </div>
+              </div>
+              <button onClick={() => setDetailObj(null)} style={{ background: "none", border: "none", fontSize: "20px", cursor: "pointer", color: "var(--text-muted)", lineHeight: 1 }}>×</button>
+            </div>
+            {(() => {
+              const lok = (detailObj.lokalita || {}) as Record<string, unknown>;
+              const poziad = (detailObj.poziadavky || {}) as Record<string, unknown>;
+              const rows: [string, string][] = [];
+              const druhRaw = detailObj.druh as string | string[] | null;
+              const druhArr = Array.isArray(druhRaw) ? druhRaw : String(druhRaw || "").split(/[,/]/).map((s: string) => s.trim()).filter(Boolean);
+              if (druhArr.length) rows.push(["Typ", druhArr.join(", ")]);
+              const lokArr: string[] = [];
+              if ((lok.kraje as string[] | undefined)?.length) lokArr.push((lok.kraje as string[]).join(", "));
+              if ((lok.okresy as string[] | undefined)?.length) lokArr.push((lok.okresy as string[]).join(", "));
+              if (lok.obec) lokArr.push(String(lok.obec));
+              if (lokArr.length) rows.push(["Lokalita", lokArr.join(" / ")]);
+              if (poziad.pocet_izieb) rows.push(["Izby", String(poziad.pocet_izieb)]);
+              if (detailObj.cena_od || detailObj.cena_do) {
+                const c = detailObj.cena_od && detailObj.cena_do
+                  ? `${Number(detailObj.cena_od).toLocaleString("sk")} – ${Number(detailObj.cena_do).toLocaleString("sk")} €`
+                  : detailObj.cena_do ? `max. ${Number(detailObj.cena_do).toLocaleString("sk")} €` : `od ${Number(detailObj.cena_od).toLocaleString("sk")} €`;
+                rows.push(["Cena", c]);
+              }
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
+                  {rows.map(([label, val]) => (
+                    <div key={label} style={{ display: "flex", gap: "8px" }}>
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)", width: "80px", flexShrink: 0 }}>{label}</span>
+                      <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: 500 }}>{val}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <span style={{ fontSize: "12px", color: "var(--text-muted)", width: "80px", flexShrink: 0 }}>Podpis</span>
+                    <span style={{ fontSize: "13px", color: detailObj.podpis ? "#16a34a" : "#b45309", fontWeight: 500 }}>
+                      {detailObj.podpis ? "✓ Podpísaná" : "Čaká na podpis"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <a href={`/api/objednavka-pdf?id=${String(detailObj.id)}`} target="_blank" rel="noopener noreferrer"
+                style={{ padding: "9px 18px", background: "#374151", color: "#fff", borderRadius: "8px", fontSize: "13px", fontWeight: 600, textDecoration: "none" }}>
+                ⬇ Stiahnuť PDF
+              </a>
+              {!detailObj.podpis && (
+                <button onClick={(e) => { e.stopPropagation(); setDetailObj(null); }}
+                  style={{ padding: "9px 18px", background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                  Zatvoriť
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
