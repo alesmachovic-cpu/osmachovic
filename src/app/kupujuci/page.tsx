@@ -11,6 +11,9 @@ import Stepper from "@/components/Stepper";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { makeInitials } from "@/lib/initials";
+import { MatchChip } from "@/components/matching/MatchChip";
+import { ZhodyDrawer } from "@/components/matching/ZhodyDrawer";
+import { useMatchingSummary } from "@/hooks/useMatching";
 
 type Step = "zoznam" | "klient" | "formular" | "hotovo";
 
@@ -49,6 +52,7 @@ function KupujuciInner() {
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"objednavky" | "klienti">("objednavky");
   const [filterMakler, setFilterMakler] = useState<string>("mine");
@@ -80,13 +84,25 @@ function KupujuciInner() {
 
   async function loadData() {
     setLoading(true);
-    const uuid = user?.id ? await getMaklerUuid(user.id) : null;
-    setMyMaklerUuid(uuid);
-    const klientiRes = await supabase.from("klienti").select("*").order("created_at", { ascending: false });
-    setKlienti(klientiRes.data ?? []);
-    const objRes = await supabase.from("objednavky").select("*").order("created_at", { ascending: false });
-    setObjednavky(objRes.data ?? []);
-    setLoading(false);
+    setLoadError(false);
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000));
+    try {
+      const uuid = user?.id ? await Promise.race([getMaklerUuid(user.id), timeout]) : null;
+      setMyMaklerUuid(uuid as string | null);
+      const [klientiRes, objRes] = await Promise.race([
+        Promise.all([
+          supabase.from("klienti").select("*").order("created_at", { ascending: false }),
+          supabase.from("objednavky").select("*").order("created_at", { ascending: false }),
+        ]),
+        timeout,
+      ]) as [typeof klientiRes, typeof objRes];
+      setKlienti((klientiRes as { data: Klient[] | null }).data ?? []);
+      setObjednavky((objRes as { data: Record<string, unknown>[] | null }).data ?? []);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Len kupujúci a oboje — nie predávajúci
@@ -107,6 +123,10 @@ function KupujuciInner() {
 
   // Klienti ktorí UŽ majú objednávku — pre disabled state v krokovom výbere
   const objKlientIds = new Set(objednavky.map(o => o.klient_id as string));
+
+  // Matching
+  const [drawerObjId, setDrawerObjId] = useState<string | null>(null);
+  const { data: matchingSummary } = useMatchingSummary(objednavky.map(o => o.id as string));
 
   const cardSt: React.CSSProperties = {
     background: "var(--bg-surface)", border: "1px solid var(--border)",
@@ -182,6 +202,16 @@ function KupujuciInner() {
         </div>
 
         {loading && <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Načítavam...</div>}
+        {!loading && loadError && (
+          <div style={{ padding: "60px", textAlign: "center" }}>
+            <div style={{ fontSize: "32px", marginBottom: "12px" }}>⚠️</div>
+            <div style={{ fontSize: "15px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "8px" }}>Nepodarilo sa načítať dáta</div>
+            <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "20px" }}>Skontroluj pripojenie a skús znova.</div>
+            <button onClick={loadData} style={{ padding: "8px 20px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}>
+              Skúsiť znova
+            </button>
+          </div>
+        )}
 
         {/* TAB: Objednávky */}
         {!loading && tab === "objednavky" && (
@@ -301,20 +331,22 @@ function KupujuciInner() {
                               Karta
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              e.preventDefault();
-                              router.push(`/matching?objednavka=${obj.id}`);
-                            }}
-                            style={{
-                              padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
-                              background: "#F3F4F6", color: "#374151", border: "none", cursor: "pointer",
-                            }}
-                          >
-                            Hľadať zhody →
-                          </button>
+                          {matchingSummary?.[obj.id as string] ? (
+                            <MatchChip
+                              totalMatches={matchingSummary[obj.id as string].totalMatches}
+                              topScore={matchingSummary[obj.id as string].topScore}
+                              daysSinceCreated={matchingSummary[obj.id as string].daysSinceCreated}
+                              onClick={() => setDrawerObjId(obj.id as string)}
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); router.push(`/nastroje?tab=matching&objednavka=${obj.id}`); }}
+                              style={{ padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "#F3F4F6", color: "#374151", border: "none", cursor: "pointer" }}
+                            >
+                              🎯 Zhody →
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -388,6 +420,7 @@ function KupujuciInner() {
         )}
 
         {modal && <NewKlientModal open defaultTyp="kupujuci" showTypKlienta onClose={() => setModal(false)} onSaved={() => { loadData(); setModal(false); }} />}
+        {drawerObjId && <ZhodyDrawer objednavkaId={drawerObjId} onClose={() => setDrawerObjId(null)} />}
       </div>
     );
   }
