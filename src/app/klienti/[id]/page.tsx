@@ -947,7 +947,8 @@ export default function KlientDetailPage() {
   const objednavkaIdForPanel = prvaObj?.id as string | null ?? null;
   const cenaDo = prvaObj?.cena_do as number | null ?? null;
   const cenaOd = prvaObj?.cena_od as number | null ?? null;
-  const showInsightPanel = !!nehnutelnostIdForPanel || !!objednavkaIdForPanel;
+  const showInsightPanel = !!nehnutelnostIdForPanel || !!objednavkaIdForPanel
+    || klient.typ === "kupujuci" || klient.typ === "oboje";
 
   return (
     <div style={{ maxWidth: "1280px" }}>

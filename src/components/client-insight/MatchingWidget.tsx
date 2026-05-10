@@ -244,10 +244,14 @@ export function MatchingWidget({ klientTyp, nehnutelnostId, objednavkaId, klient
   if (isBuyer || isBuyerFallback) {
     return <BuyerWidget objednavkaId={objednavkaId!} onPlanovatObhliadku={onPlanovatObhliadku} klientId={klientId} />;
   }
+  const isKupujuci = klientTyp === "kupujuci" || klientTyp === "oboje";
   return (
     <div style={{ padding: "16px 14px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
       🎯 Matching<br />
-      <span style={{ fontSize: "11px" }}>Pridajte inzerát alebo objednávku pre zobrazenie zhôd.</span>
+      <button onClick={() => window.location.href = isKupujuci ? `/kupujuci?klient_id=${klientId}` : `/naber?klient_id=${klientId}`}
+        style={{ marginTop: "6px", fontSize: "11px", color: "#60a5fa", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+        {isKupujuci ? "Vytvoriť objednávku →" : "Pridať inzerát →"}
+      </button>
     </div>
   );
 }
