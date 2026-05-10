@@ -263,23 +263,34 @@ function NaberPageContent() {
           if (user?.id) await naberUpdate(user.id, data.id, { datum_naberu: datum });
         }
 
-        await fetch("/api/google/calendar", {
-          method: "POST",
+        // Ak klient má event z datum-pickeru, updatuj ho s bohatšími dátami.
+        // Inak vytvor nový. Zabraňuje duplikátom pri LV analýze alebo pri zmene mena.
+        const existingEventId = selectedKlient.calendar_event_id;
+        const calBody = {
+          userId: user.id,
+          summary: `Náber — ${selectedKlient.meno}`,
+          start: datum,
+          description: [
+            naberAdresa && `Adresa: ${naberAdresa}`,
+            selectedKlient.telefon && `Tel: ${selectedKlient.telefon}`,
+            naberData?.typ_nehnutelnosti && `Typ: ${naberData.typ_nehnutelnosti}`,
+            naberData?.plocha && `Plocha: ${naberData.plocha} m²`,
+            naberData?.predajna_cena && `Cena: ${Number(naberData.predajna_cena).toLocaleString("sk")} €`,
+          ].filter(Boolean).join("\n"),
+          location: naberAdresa,
+          ...(existingEventId ? { eventId: existingEventId } : {}),
+        };
+        const calRes = await fetch("/api/google/calendar", {
+          method: existingEventId ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: user.id,
-            summary: `Náber — ${selectedKlient.meno}`,
-            start: datum,
-            description: [
-              naberAdresa && `Adresa: ${naberAdresa}`,
-              selectedKlient.telefon && `Tel: ${selectedKlient.telefon}`,
-              naberData?.typ_nehnutelnosti && `Typ: ${naberData.typ_nehnutelnosti}`,
-              naberData?.plocha && `Plocha: ${naberData.plocha} m²`,
-              naberData?.predajna_cena && `Cena: ${Number(naberData.predajna_cena).toLocaleString("sk")} €`,
-            ].filter(Boolean).join("\n"),
-            location: naberAdresa,
-          }),
+          body: JSON.stringify(calBody),
         });
+        if (calRes.ok && !existingEventId) {
+          const calData = await calRes.json();
+          if (calData.event?.id) {
+            await klientUpdate(user.id, selectedKlient.id, { calendar_event_id: calData.event.id });
+          }
+        }
         setCalendarSynced(true);
       } catch { /* kalendár zlyhá ticho */ }
     }
