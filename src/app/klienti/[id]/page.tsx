@@ -941,7 +941,7 @@ export default function KlientDetailPage() {
   // Dáta pre ClientInsightPanel
   const prvaNehn = inzeraty[0] as Record<string, unknown> | undefined;
   const prvyNab = nabery[0] as Record<string, unknown> | undefined;
-  const nehnutelnostIdForPanel = (prvaNehn?.id ?? prvyNab?.id) as string | null ?? null;
+  const nehnutelnostIdForPanel = prvaNehn?.id as string | null ?? null;
   const predajnaCenaForPanel = (prvyNab?.predajna_cena ?? prvaNehn?.cena) as number | null ?? null;
   const prvaObj = objednavky[0] as Record<string, unknown> | undefined;
   const objednavkaIdForPanel = prvaObj?.id as string | null ?? null;
