@@ -14,6 +14,9 @@ import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type Kli
 import { createCalendarEvent, notifyCalendarFail } from "@/lib/calendar";
 import { klientUpdate } from "@/lib/klientApi";
 import SmsSignButton from "@/components/SmsSignButton";
+import { NajlepsieZhodyPanel } from "@/components/matching/NajlepsieZhodyPanel";
+import { HypotekaMiniCalc } from "@/components/calc/HypotekaMiniCalc";
+import { ProviziaMiniCalc } from "@/components/calc/ProviziaMiniCalc";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
@@ -229,7 +232,8 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
 // Typy pre timeline
 interface TimelineEvent {
   id: string;
-  type: "status_change" | "naber" | "objednavka" | "inzerat" | "poznamka" | "system";
+  type: "status_change" | "naber" | "objednavka" | "inzerat" | "poznamka" | "system" | "obhliadka" | "nehnutelnost" | "dokument" | "udalost";
+  deletable?: boolean;
   title: string;
   detail?: string;
   date: string;
@@ -267,6 +271,18 @@ const WORKFLOW_STEPS = [
   { key: "predany", label: "Predaný", icon: "✅", statuses: ["uzavrety"] },
 ];
 
+const COMBINED_STEPS = [
+  { key: "kontakt",    label: "Kontakt" },
+  { key: "dohodnuty",  label: "Dohodnutý" },
+  { key: "nabrany",    label: "Nabraný" },
+  { key: "inzerovany", label: "Inzerovaný" },
+  { key: "obhliadky",  label: "Obhliadky" },
+  { key: "rezervacia", label: "Rezervácia" },
+  { key: "podpis_kz",  label: "Podpis KZ" },
+  { key: "vklad",      label: "Vklad" },
+  { key: "predany",    label: "Predaný" },
+];
+
 export default function KlientDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -283,6 +299,11 @@ export default function KlientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [editModal, setEditModal] = useState(false);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
+  const [timelineFilter, setTimelineFilter] = useState<string>("all");
+  const [quickAddTyp, setQuickAddTyp] = useState<"hovor" | "poznamka" | "stretnutie" | "email" | null>(null);
+  const [quickAddText, setQuickAddText] = useState("");
+  const [quickAddDatum, setQuickAddDatum] = useState("");
+  const [quickAddSaving, setQuickAddSaving] = useState(false);
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
@@ -405,17 +426,34 @@ export default function KlientDetailPage() {
     setLoading(true);
 
     // Paralelné načítanie
-    const [klientRes, naberyRes, objednavkyRes, inzeratyRes] = await Promise.all([
+    const [klientRes, naberyRes, objednavkyRes, inzeratyRes, obhliadkyRes, docs, udalostiRes] = await Promise.all([
       supabase.from("klienti").select("*").eq("id", id).single(),
       supabase.from("naberove_listy").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
       supabase.from("objednavky").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
       supabase.from("nehnutelnosti").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
+      supabase.from("obhliadky")
+        .select("id, datum, status, miesto, kupujuci_meno, kupujuci_klient_id")
+        .or(`predavajuci_klient_id.eq.${id},kupujuci_klient_id.eq.${id}`)
+        .order("datum", { ascending: false }),
+      listKlientDokumenty(id),
+      supabase.from("klient_udalosti").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
     ]);
 
     if (klientRes.data) setKlient(klientRes.data);
     setNabery(naberyRes.data ?? []);
     setObjednavky(objednavkyRes.data ?? []);
     setInzeraty(inzeratyRes.data ?? []);
+
+    // Auto-prechod: nabrany + aktivny inzerat → inzerovany
+    const hasAktivnyInzerat = (inzeratyRes.data ?? []).some(n => (n as Record<string, unknown>).status === "aktivny");
+    if (klientRes.data?.status === "nabrany" && hasAktivnyInzerat && user?.id) {
+      klientUpdate(user.id, id, { status: "inzerovany" });
+      setKlient(k => k ? { ...k, status: "inzerovany" } : k);
+      fetch("/api/klient-udalosti", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ klient_id: id, typ: "status_zmena", popis: "Nabraný → Inzerovaný", autor: user.id }),
+      }).catch(() => {});
+    }
 
     // Zostavenie timeline
     const events: TimelineEvent[] = [];
@@ -463,10 +501,119 @@ export default function KlientDetailPage() {
       });
     });
 
+    // Nehnuteľnosti
+    (inzeratyRes.data ?? []).forEach((n: Record<string, unknown>) => {
+      const nStatus = String(n.status || "koncept");
+      const nAddr = String(n.obec || n.ulica || "bez adresy");
+      const nTitle = nStatus === "aktivny"
+        ? `Inzerát aktivovaný — ${nAddr}`
+        : nStatus === "predany"
+          ? `Inzerát predaný — ${nAddr}`
+          : `Inzerát vytvorený (koncept) — ${nAddr}`;
+      events.push({
+        id: `neh-${n.id}`,
+        type: "nehnutelnost",
+        title: nTitle,
+        detail: n.plocha ? `${n.plocha} m²` : undefined,
+        date: n.created_at as string,
+        icon: nStatus === "aktivny" ? "📰" : "🏡",
+        color: nStatus === "aktivny" ? "#10B981" : "#6B7280",
+      });
+    });
+
+    // Obhliadky — event vytvorenia (AT#16: druhý event príde z klient_udalosti)
+    (obhliadkyRes.data ?? []).forEach((o: Record<string, unknown>) => {
+      const datumLabel = o.datum
+        ? new Date(o.datum as string).toLocaleDateString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })
+        : "—";
+      events.push({
+        id: `obl-${o.id}`,
+        type: "obhliadka",
+        title: `Obhliadka vytvorená${o.kupujuci_meno ? ` — ${o.kupujuci_meno}` : ""}`,
+        detail: `${datumLabel}${o.miesto ? ` · ${o.miesto}` : ""}`,
+        date: (o.created_at || o.datum) as string,
+        icon: "🔑",
+        color: "#F59E0B",
+      });
+    });
+
+    // Dokumenty
+    docs.forEach((d: KlientDokument) => {
+      if (!d.created_at) return;
+      events.push({
+        id: `doc-${d.id}`,
+        type: "dokument",
+        title: `Dokument: ${d.name || d.type || "—"}`,
+        detail: undefined,
+        date: d.created_at,
+        icon: "📄",
+        color: "#6B7280",
+      });
+    });
+
+    // Manuálne udalosti (hovory, poznámky, stretnutia...)
+    const TYP_ICONS: Record<string, string> = {
+      hovor: "📞", poznamka: "📝", stretnutie: "📅", email: "✉️", status_zmena: "🔄", ine: "💬",
+    };
+    const TYP_COLORS: Record<string, string> = {
+      hovor: "#059669", poznamka: "#6B7280", stretnutie: "#8B5CF6", email: "#0891B2", status_zmena: "#F59E0B", ine: "#6B7280",
+    };
+    const TYP_LABELS_U: Record<string, string> = {
+      hovor: "Hovor", poznamka: "Poznámka", stretnutie: "Stretnutie", email: "Email", status_zmena: "Zmena statusu", ine: "Záznam",
+    };
+    (udalostiRes.data ?? []).forEach((u: Record<string, unknown>) => {
+      const uTyp = u.typ as string;
+      const uPopis = String(u.popis || "");
+      // Obhliadka-related klient_udalosti → 🔑 ikona
+      const isObhliadkaLog = uTyp === "ine" && uPopis.startsWith("Obhliadka");
+      events.push({
+        id: `ud-${u.id}`,
+        type: "udalost",
+        title: `${TYP_LABELS_U[uTyp] || "Záznam"}${u.autor ? ` · ${u.autor}` : ""}`,
+        detail: uPopis,
+        date: u.created_at as string,
+        icon: isObhliadkaLog ? "🔑" : (TYP_ICONS[uTyp] || "💬"),
+        color: isObhliadkaLog ? "#F59E0B" : (TYP_COLORS[uTyp] || "#6B7280"),
+        deletable: true,
+      });
+    });
+
     // Sort by date desc
     events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setTimeline(events);
     setLoading(false);
+  }
+
+  async function quickSaveUdalost() {
+    if (!quickAddTyp || !quickAddText.trim() || !klient) return;
+    setQuickAddSaving(true);
+    try {
+      const popis = (quickAddTyp === "stretnutie" && quickAddDatum)
+        ? `${new Date(quickAddDatum).toLocaleString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} · ${quickAddText.trim()}`
+        : quickAddText.trim();
+      const res = await fetch("/api/klient-udalosti", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ klient_id: klient.id, typ: quickAddTyp, popis, autor: user?.id || null }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert("Chyba pri ukladaní záznamu: " + (err.error || res.status));
+        return;
+      }
+      setQuickAddText("");
+      setQuickAddTyp(null);
+      setQuickAddDatum("");
+      await loadAll();
+    } finally {
+      setQuickAddSaving(false);
+    }
+  }
+
+  async function deleteUdalost(eventId: string) {
+    const realId = eventId.replace(/^ud-/, "");
+    await fetch(`/api/klient-udalosti?id=${realId}`, { method: "DELETE" });
+    await loadAll();
   }
 
   if (loading) {
@@ -521,7 +668,20 @@ export default function KlientDetailPage() {
       return;
     }
     // Pre ostatné statusy — len update
+    const oldStatus = klient.status;
     if (user?.id) await klientUpdate(user.id, klient.id, { status: newStatus });
+    // Log zmeny statusu do timeline
+    try {
+      await fetch("/api/klient-udalosti", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          klient_id: klient.id,
+          typ: "status_zmena",
+          popis: `${STATUS_LABELS[oldStatus as keyof typeof STATUS_LABELS] || oldStatus} → ${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS] || newStatus}`,
+          autor: user?.id || null,
+        }),
+      });
+    } catch { /* neblokuj hlavnú akciu */ }
     loadAll();
   }
 
@@ -605,6 +765,27 @@ export default function KlientDetailPage() {
       setShowObhliadkaModal(true);
     }
 
+    // Log dohodnuty_naber / volat_neskor do timeline
+    if (!isGeneric && pendingStatus && naberDatum) {
+      try {
+        const datumLabel = new Date(naberDatum).toLocaleDateString("sk", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+        const popis = isNaber
+          ? `Dohodnutý náber: ${datumLabel}${naberMiesto ? ` · ${naberMiesto}` : ""}${naberUlica.trim() ? ` · ${naberUlica.trim()} ${naberCislo.trim()}` : ""}`
+          : `Naplánované volanie: ${datumLabel}`;
+        await fetch("/api/klient-udalosti", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ klient_id: klient.id, typ: "status_zmena", popis, autor: user?.id || null }),
+        });
+        // AT#17: log aj prechod statusu
+        const oldLabel = STATUS_LABELS[klient.status as keyof typeof STATUS_LABELS] || klient.status;
+        const newLabel = STATUS_LABELS[pendingStatus as keyof typeof STATUS_LABELS] || pendingStatus;
+        await fetch("/api/klient-udalosti", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ klient_id: klient.id, typ: "status_zmena", popis: `${oldLabel} → ${newLabel}`, autor: user?.id || null }),
+        });
+      } catch { /* neblokuj */ }
+    }
+
     // Po dohodnutom nábere: ak klient nemá LV, ukáž prompt
     if (isNaber && !klient.lv_data) {
       setShowLVPrompt(true);
@@ -621,7 +802,7 @@ export default function KlientDetailPage() {
   function getWorkflowStep(): number {
     if (!klient) return 0;
     if (klient.status === "uzavrety") return 4;
-    if (inzeraty.length > 0) return 3;
+    if (inzeraty.length > 0 || klient.status === "inzerovany") return 3;
     if (klient.status === "nabrany" || nabery.length > 0) return 2;
     if (klient.status === "dohodnuty_naber") return 1;
     return 0;
@@ -1156,50 +1337,91 @@ export default function KlientDetailPage() {
 
       {/* Workflow progress */}
       {(klient.typ === "predavajuci" || klient.typ === "oboje" || klient.typ === "prenajimatel") && (
-        <div style={{
-          ...cardSt, marginBottom: "20px", padding: "16px 20px",
-        }}>
-          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "16px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Pipeline predávajúceho
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0" }}>
-            {WORKFLOW_STEPS.map((ws, i) => {
-              const isCompleted = i < workflowStep;
-              const isCurrent = i === workflowStep;
-              const dotColor = isCompleted || isCurrent ? "#374151" : "var(--border)";
-              return (
-                <div key={ws.key} style={{ display: "flex", alignItems: "center", flex: 1 }}>
-                  <div style={{
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", flex: 1,
-                  }}>
-                    <div style={{
-                      width: "24px", height: "24px", borderRadius: "50%",
-                      background: isCompleted || isCurrent ? "#374151" : "var(--bg-elevated)",
-                      color: isCompleted || isCurrent ? "#fff" : "var(--text-muted)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "11px", fontWeight: "700",
-                      border: `1px solid ${dotColor}`,
-                      transition: "all 0.2s",
-                      boxShadow: isCurrent ? "0 0 0 3px rgba(29,29,31,0.08)" : "none",
-                    }}>
-                      {isCompleted ? "✓" : i + 1}
-                    </div>
-                    <span style={{
-                      fontSize: "11px", fontWeight: isCurrent ? "600" : "500",
-                      color: isCurrent ? "var(--text-primary)" : "var(--text-muted)",
-                    }}>{ws.label}</span>
-                  </div>
-                  {i < WORKFLOW_STEPS.length - 1 && (
-                    <div style={{
-                      height: "1px", flex: "0 0 100%", maxWidth: "48px",
-                      background: isCompleted ? "#374151" : "var(--border)",
-                      marginBottom: "20px",
-                    }} />
-                  )}
+          {/* 9 krokov v jednom riadku */}
+          {(() => {
+            const STEP_HANDLERS: ((() => void) | null)[] = [
+              isOwner ? () => handleStatusChange("novy_kontakt") : null,
+              isOwner ? () => handleStatusChange("dohodnuty_naber") : null,
+              null,
+              null,
+              () => setShowObhliadkaModal(true),
+              null,
+              null,
+              null,
+              isOwner ? () => handleStatusChange("uzavrety") : null,
+            ];
+            return (
+              <div style={{ overflowX: "auto", overflowY: "visible", paddingBottom: "6px", scrollbarWidth: "thin", scrollbarColor: "#374151 var(--border)" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", minWidth: "max-content", gap: "0", paddingBottom: "2px" }}>
+                  {COMBINED_STEPS.map((step, i) => {
+                    let isCompleted: boolean;
+                    let isCurrent: boolean;
+                    if (i <= 3) {
+                      isCompleted = workflowStep > i;
+                      isCurrent = workflowStep === i;
+                    } else if (i === 8) {
+                      isCompleted = false;
+                      isCurrent = workflowStep >= 4;
+                    } else {
+                      isCompleted = false;
+                      isCurrent = workflowStep === 3 && i === 4;
+                    }
+                    const handler = STEP_HANDLERS[i];
+                    const isClickable = handler !== null && !isCurrent;
+                    return (
+                      <div key={step.key} style={{ display: "flex", alignItems: "center" }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", width: "80px" }}>
+                          <div style={{
+                            width: isCurrent ? "56px" : "48px",
+                            height: isCurrent ? "56px" : "48px",
+                            borderRadius: "50%",
+                            background: isCurrent ? "rgba(55,65,81,0.08)" : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            transition: "all 0.2s",
+                          }}>
+                            <div
+                              onClick={isClickable ? handler! : undefined}
+                              style={{
+                                width: "40px", height: "40px", borderRadius: "50%",
+                                background: isCompleted || isCurrent ? "#374151" : "var(--bg-elevated)",
+                                color: isCompleted || isCurrent ? "#fff" : "var(--text-muted)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: isCompleted ? "16px" : "14px", fontWeight: "700",
+                                border: isCompleted || isCurrent ? "none" : "1.5px solid var(--border)",
+                                transition: "all 0.2s",
+                                cursor: isClickable ? "pointer" : "default",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {isCompleted ? "✓" : i + 1}
+                            </div>
+                          </div>
+                          <span onClick={isClickable ? handler! : undefined} style={{
+                            fontSize: "11px", fontWeight: isCurrent ? "700" : "500",
+                            color: isCurrent ? "var(--text-primary)" : "var(--text-muted)",
+                            textAlign: "center", lineHeight: "1.3",
+                            cursor: isClickable ? "pointer" : "default",
+                            whiteSpace: "nowrap",
+                          }}>{step.label}</span>
+                        </div>
+                        {i < COMBINED_STEPS.length - 1 && (
+                          <div style={{
+                            height: "1.5px", width: "32px", flexShrink: 0,
+                            background: isCompleted ? "#374151" : "var(--border)",
+                            marginBottom: "28px", borderRadius: "1px",
+                          }} />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })()}
           {/* Akčné tlačidlo podľa kroku */}
           {workflowStep === 0 && (
             <button onClick={() => handleStatusChange("dohodnuty_naber")} style={{
@@ -1213,8 +1435,6 @@ export default function KlientDetailPage() {
               border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
             }}>📝 Vyplniť náberový list</button>
           )}
-          {/* Krok 2 = Nabraný. Ale ak ešte nie je vyplnený žiadny náberový list,
-              maklér nemôže preskočiť k inzerátu — najprv treba vyplniť náberák. */}
           {workflowStep === 2 && (
             nabery.length === 0 ? (
               <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
@@ -1227,6 +1447,12 @@ export default function KlientDetailPage() {
                 border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
               }}>📰 Vytvoriť inzerát</button>
             )
+          )}
+          {workflowStep === 3 && (
+            <button onClick={() => setShowObhliadkaModal(true)} style={{
+              marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
+              border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+            }}>📅 Pridať obhliadku</button>
           )}
           {klient.datum_naberu && (
             <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
@@ -1773,66 +1999,210 @@ export default function KlientDetailPage() {
       {/* Tab obsah */}
       {activeTab === "timeline" && (
         <div style={cardSt}>
-          <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "20px" }}>
+          <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
             📅 Časová os
           </div>
+
+          {/* Quick-add bar */}
+          <div style={{ marginBottom: "20px", background: "var(--bg-elevated)", borderRadius: "12px", border: "1px solid var(--border)", overflow: "hidden" }}>
+            <div style={{ display: "flex", borderBottom: quickAddTyp ? "1px solid var(--border)" : "none" }}>
+              {([
+                { typ: "hovor", label: "📞 Hovor" },
+                { typ: "poznamka", label: "📝 Poznámka" },
+                { typ: "stretnutie", label: "📅 Stretnutie" },
+                { typ: "email", label: "✉️ Email" },
+              ] as const).map(b => (
+                <button key={b.typ} onClick={() => setQuickAddTyp(quickAddTyp === b.typ ? null : b.typ)} style={{
+                  flex: 1, padding: "10px 8px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "600",
+                  background: quickAddTyp === b.typ ? "var(--bg-surface)" : "transparent",
+                  color: quickAddTyp === b.typ ? "var(--text-primary)" : "var(--text-muted)",
+                  borderRight: "1px solid var(--border)", transition: "all 0.15s",
+                }}>{b.label}</button>
+              ))}
+            </div>
+            {quickAddTyp && (
+              <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                {quickAddTyp === "stretnutie" && (
+                  <input
+                    type="datetime-local"
+                    value={quickAddDatum}
+                    onChange={e => setQuickAddDatum(e.target.value)}
+                    style={{
+                      padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--border)",
+                      background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px", outline: "none",
+                    }}
+                  />
+                )}
+                <div style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                  <textarea
+                    value={quickAddText}
+                    onChange={e => setQuickAddText(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) quickSaveUdalost(); }}
+                    placeholder={
+                      quickAddTyp === "hovor" ? "Čo si dohodol..." :
+                      quickAddTyp === "poznamka" ? "Poznámka..." :
+                      quickAddTyp === "stretnutie" ? "Čo, kde..." :
+                      "Čo si poslal..."
+                    }
+                    rows={2}
+                    autoFocus
+                    style={{
+                      flex: 1, padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)",
+                      background: "var(--bg-surface)", color: "var(--text-primary)", fontSize: "13px",
+                      resize: "none", fontFamily: "inherit", outline: "none",
+                    }}
+                  />
+                  <button onClick={quickSaveUdalost} disabled={!quickAddText.trim() || quickAddSaving} style={{
+                    padding: "8px 16px", background: "#374151", color: "#fff", border: "none",
+                    borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+                    opacity: !quickAddText.trim() || quickAddSaving ? 0.5 : 1, whiteSpace: "nowrap",
+                  }}>
+                    {quickAddSaving ? "..." : "Uložiť"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Filter chips */}
+          {timeline.length > 0 && (
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "20px" }}>
+              {[
+                { key: "all", label: "Všetko" },
+                { key: "udalost", label: "💬 Záznamy" },
+                { key: "obhliadka", label: "🔑 Obhliadky" },
+                { key: "naber", label: "📝 Nábery" },
+                { key: "nehnutelnost", label: "🏡 Nehnuteľnosti" },
+                { key: "objednavka", label: "📋 Objednávky" },
+                { key: "dokument", label: "📄 Dokumenty" },
+              ].map(f => (
+                <button key={f.key} onClick={() => setTimelineFilter(f.key)} style={{
+                  padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
+                  cursor: "pointer", border: "1px solid var(--border)",
+                  background: timelineFilter === f.key ? "var(--text-primary)" : "var(--bg-elevated)",
+                  color: timelineFilter === f.key ? "var(--bg-surface)" : "var(--text-muted)",
+                  transition: "all 0.15s",
+                }}>{f.label}</button>
+              ))}
+            </div>
+          )}
+
           {timeline.length === 0 ? (
-            <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
-              Žiadna aktivita
+            <div style={{ padding: "40px", textAlign: "center" }}>
+              <div style={{ fontSize: "32px", marginBottom: "12px" }}>📋</div>
+              <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px" }}>
+                Zatiaľ žiadna aktivita
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px" }}>
+                Začni pridaním náberového listu alebo objednávky.
+              </div>
+              <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
+                padding: "8px 20px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+              }}>+ Náberový list</button>
             </div>
           ) : (
-            <div style={{ position: "relative" }}>
-              {/* Vertikálna čiara */}
-              <div style={{
-                position: "absolute", left: "19px", top: "8px", bottom: "8px",
-                width: "2px", background: "var(--border)",
-              }} />
-              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                {timeline.map(ev => {
-                  const isClickable = ev.type === "naber" || ev.type === "objednavka";
-                  return (
-                    <div key={ev.id}
-                      onClick={() => {
-                        if (ev.type === "naber") setActiveTab("nehnutelnosti");
-                        else if (ev.type === "objednavka") setActiveTab("objednavky");
-                      }}
-                      style={{
-                        display: "flex", gap: "16px", position: "relative",
-                        cursor: isClickable ? "pointer" : "default",
-                        padding: "8px", margin: "-8px", borderRadius: "10px",
-                        transition: "background 0.15s",
-                      }}
-                      onMouseEnter={e => { if (isClickable) e.currentTarget.style.background = "var(--bg-hover)"; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-                    >
+            (() => {
+              const filtered = timelineFilter === "all"
+                ? timeline
+                : timeline.filter(ev => ev.type === timelineFilter);
+
+              if (filtered.length === 0) {
+                return (
+                  <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
+                    Žiadne záznamy pre tento filter.
+                  </div>
+                );
+              }
+
+              // Skupiny podľa mesiaca
+              const groups: { label: string; events: typeof filtered }[] = [];
+              let lastLabel = "";
+              for (const ev of filtered) {
+                const raw = new Date(ev.date).toLocaleDateString("sk", { month: "long", year: "numeric" });
+                const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+                if (label !== lastLabel) {
+                  groups.push({ label, events: [] });
+                  lastLabel = label;
+                }
+                groups[groups.length - 1].events.push(ev);
+              }
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                  {groups.map(group => (
+                    <div key={group.label}>
                       <div style={{
-                        width: "40px", height: "40px", borderRadius: "50%",
-                        background: `${ev.color}15`, border: `2px solid ${ev.color}`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "16px", flexShrink: 0, zIndex: 1,
-                      }}>{ev.icon}</div>
-                      <div style={{ flex: 1, paddingTop: "4px" }}>
-                        <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
-                          {ev.title}
-                          {isClickable && <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: "500" }}>Zobraziť →</span>}
-                        </div>
-                        {ev.detail && (
-                          <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
-                            {ev.detail}
-                          </div>
-                        )}
-                        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
-                          {new Date(ev.date).toLocaleDateString("sk", {
-                            day: "numeric", month: "long", year: "numeric",
-                            hour: "2-digit", minute: "2-digit",
+                        fontSize: "11px", fontWeight: "700", color: "var(--text-muted)",
+                        textTransform: "uppercase", letterSpacing: "0.08em",
+                        marginBottom: "12px", paddingBottom: "8px",
+                        borderBottom: "1px solid var(--border)",
+                      }}>
+                        {group.label}
+                      </div>
+                      <div style={{ position: "relative" }}>
+                        <div style={{
+                          position: "absolute", left: "19px", top: "8px", bottom: "8px",
+                          width: "2px", background: "var(--border)",
+                        }} />
+                        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                          {group.events.map(ev => {
+                            const isClickable = ev.type === "naber" || ev.type === "objednavka" || ev.type === "obhliadka" || ev.type === "nehnutelnost";
+                            return (
+                              <div key={ev.id}
+                                onClick={() => {
+                                  if (ev.type === "naber" || ev.type === "nehnutelnost") setActiveTab("nehnutelnosti");
+                                  else if (ev.type === "objednavka") setActiveTab("objednavky");
+                                  else if (ev.type === "obhliadka") setActiveTab("obhliadky");
+                                }}
+                                style={{
+                                  display: "flex", gap: "16px", position: "relative",
+                                  cursor: isClickable ? "pointer" : "default",
+                                  padding: "8px", margin: "-8px", borderRadius: "10px",
+                                  transition: "background 0.15s",
+                                }}
+                                onMouseEnter={e => { if (isClickable) e.currentTarget.style.background = "var(--bg-hover)"; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                              >
+                                <div style={{
+                                  width: "40px", height: "40px", borderRadius: "50%",
+                                  background: `${ev.color}15`, border: `2px solid ${ev.color}`,
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  fontSize: "16px", flexShrink: 0, zIndex: 1,
+                                }}>{ev.icon}</div>
+                                <div style={{ flex: 1, paddingTop: "4px" }}>
+                                  <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                                    {ev.title}
+                                    {isClickable && <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: "500" }}>Zobraziť →</span>}
+                                    {ev.deletable && (
+                                      <button
+                                        onClick={e => { e.stopPropagation(); if (confirm("Zmazať tento záznam?")) deleteUdalost(ev.id); }}
+                                        style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: "12px", color: "var(--text-muted)", padding: "0 4px", opacity: 0.5 }}
+                                      >✕</button>
+                                    )}
+                                  </div>
+                                  {ev.detail && (
+                                    <div style={{ fontSize: "13px", color: "var(--text-primary)", marginTop: "4px", lineHeight: "1.5", whiteSpace: "pre-wrap" }}>
+                                      {ev.detail}
+                                    </div>
+                                  )}
+                                  <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+                                    {new Date(ev.date).toLocaleDateString("sk", {
+                                      day: "numeric", month: "long", year: "numeric",
+                                      hour: "2-digit", minute: "2-digit",
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            );
                           })}
                         </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                  ))}
+                </div>
+              );
+            })()
           )}
         </div>
       )}
@@ -1947,12 +2317,58 @@ export default function KlientDetailPage() {
                           onSigned={() => loadAll()}
                         />
                       )}
+                      {/* Archivovať — dostupné všetkým ak nie je už archivovaná */}
+                      {inzId && card.status !== "archivovany" && (
+                        <button onClick={async () => {
+                          if (!confirm("Archivovať túto nehnuteľnosť?")) return;
+                          await fetch(`/api/nehnutelnosti?id=${inzId}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ user_id: user?.id, status: "archivovany" }),
+                          });
+                          await loadAll();
+                        }} style={{ padding: "6px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", cursor: "pointer" }}>
+                          📦 Archivovať
+                        </button>
+                      )}
+                      {/* Obnoviť z archívu */}
+                      {inzId && card.status === "archivovany" && (
+                        <button onClick={async () => {
+                          await fetch(`/api/nehnutelnosti?id=${inzId}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ user_id: user?.id, status: "koncept" }),
+                          });
+                          await loadAll();
+                        }} style={{ padding: "6px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", cursor: "pointer" }}>
+                          ↩️ Obnoviť
+                        </button>
+                      )}
+                      {/* Zmazať — len admin */}
+                      {inzId && isAdmin && (
+                        <button onClick={async () => {
+                          if (!confirm("Natrvalo zmazať túto nehnuteľnosť? Táto akcia sa nedá vrátiť.")) return;
+                          await fetch(`/api/nehnutelnosti?id=${inzId}`, {
+                            method: "DELETE",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ user_id: user?.id }),
+                          });
+                          await loadAll();
+                        }} style={{ padding: "6px 12px", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "#991B1B", cursor: "pointer" }}>
+                          🗑 Zmazať
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
           )}
+          {(klient.typ === "predavajuci" || klient.typ === "oboje") && nabery.length > 0 && (() => {
+            const nb = nabery[0] as Record<string, unknown>;
+            const cena = nb.predajna_cena as number | null;
+            return cena ? <ProviziaMiniCalc cena={cena} /> : null;
+          })()}
         </div>
       )}
 
@@ -2014,10 +2430,14 @@ export default function KlientDetailPage() {
                           ✍️ Podpísať
                         </button>
                       )}
-                      {(["planovana","prebehla","obhliadka_zaujem","obhliadka_bez_zaujmu","zrusena"] as const).filter(s => s !== status).map(s => (
+                      {(["prebehla","obhliadka_zaujem","obhliadka_bez_zaujmu","zrusena"] as const).filter(s => s !== status).map(s => (
                         <button key={s} onClick={async () => {
                           await fetch("/api/obhliadky", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: o.id, status: s }) });
-                          const r = await fetch(`/api/obhliadky?klient_id=${id}`); const d = await r.json(); setObhliadky(d.obhliadky || []);
+                          // Log do timeline
+                          const stavLabel: Record<string, string> = { prebehla: "prebehla", obhliadka_zaujem: "so záujmom", obhliadka_bez_zaujmu: "bez záujmu", zrusena: "zrušená" };
+                          const datumLbl = new Date(o.datum as string).toLocaleDateString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+                          try { await fetch("/api/klient-udalosti", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ klient_id: id, typ: "ine", popis: `Obhliadka ${stavLabel[s] || s} — ${String(o.kupujuci_meno || "—")} · ${datumLbl}` }) }); } catch {}
+                          const r = await fetch(`/api/obhliadky?klient_id=${id}`); const d = await r.json(); setObhliadky(d.obhliadky || []); await loadAll();
                         }}
                           style={{ padding: "5px 10px", background: "var(--bg-surface)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", fontWeight: "500", cursor: "pointer" }}>
                           → {statusCfg[s]?.label}
@@ -2093,6 +2513,22 @@ export default function KlientDetailPage() {
               })}
             </div>
           )}
+
+          {/* Kalkulačka + matching pre kupujúceho */}
+          {(klient.typ === "kupujuci" || klient.typ === "oboje") && objednavky.length > 0 && (() => {
+            const firstObj = objednavky[0] as Record<string, unknown>;
+            const cenaDo = firstObj.cena_do as number | null;
+            const objId = firstObj.id as string;
+            return (
+              <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                {cenaDo && <HypotekaMiniCalc cena={cenaDo} />}
+                <NajlepsieZhodyPanel
+                  objednavkaId={objId}
+                  onPlanovatObhliadku={() => setShowObhliadkaModal(true)}
+                />
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2736,7 +3172,17 @@ function ObhliadkaModal({
   const [nehnId, setNehnId] = useState<string>(() => String((inzeraty[0] as Record<string, unknown> | undefined)?.id || ""));
   const [datum, setDatum] = useState<string>(() => {
     if (prefill?.datum) return prefill.datum;
-    const d = new Date(); d.setHours(d.getHours() + 1, 0, 0, 0);
+    const now = new Date();
+    const d = new Date(now);
+    // Ak pred 14:00 → dnes 17:00, inak → zajtra 17:00 (preskočí víkend)
+    if (now.getHours() < 14) {
+      d.setHours(17, 0, 0, 0);
+    } else {
+      d.setDate(d.getDate() + 1);
+      if (d.getDay() === 6) d.setDate(d.getDate() + 2); // sobota → pondelok
+      if (d.getDay() === 0) d.setDate(d.getDate() + 1); // nedeľa → pondelok
+      d.setHours(17, 0, 0, 0);
+    }
     return d.toISOString().slice(0, 16);
   });
   // Adresa: predvyplnené z prefill, alebo z aktuálnej nehnuteľnosti, alebo prázdne (manual)
@@ -2845,6 +3291,24 @@ function ObhliadkaModal({
         setSaving(false);
         return;
       }
+      // Log do timeline klienta
+      try {
+        const linkedNehn = inzeraty.find(i => String((i as Record<string,unknown>).id) === nehnId) as Record<string,unknown> | undefined;
+        const nehnLabel = linkedNehn
+          ? [String(linkedNehn.typ_nehnutelnosti || ""), String(linkedNehn.lokalita || linkedNehn.ulica_privatna || "")].filter(Boolean).join(" · ")
+          : "";
+        const datumLabel = new Date(datum).toLocaleDateString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+        const popis = [
+          `Obhliadka naplánovaná: ${datumLabel}`,
+          nehnLabel && `Nehnuteľnosť: ${nehnLabel}`,
+          !isCurrentBuyer && kupMeno.trim() && `Kupujúci: ${kupMeno.trim()}`,
+          !isCurrentBuyer && kupTel.trim() && `Tel: ${kupTel.trim()}`,
+        ].filter(Boolean).join(" · ");
+        await fetch("/api/klient-udalosti", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ klient_id: klient.id, typ: "ine", popis }),
+        });
+      } catch { /* neblokuj */ }
       onCreated();
     } catch (e) {
       setError(String(e).slice(0, 200));
@@ -2875,9 +3339,14 @@ function ObhliadkaModal({
               background: "var(--bg-elevated)", border: "1px solid var(--border)",
               color: "var(--text-primary)", fontSize: "14px",
             }}>
-              {inzeraty.map(i => (
-                <option key={String(i.id)} value={String(i.id)}>{String(i.nazov || i.id)}</option>
-              ))}
+              {inzeraty.map(i => {
+                const r = i as Record<string, unknown>;
+                const typ = String(r.typ_nehnutelnosti || r.druh || "Nehnuteľnosť");
+                const adresa = String(r.ulica_privatna || r.lokalita || r.obec || "");
+                const cena = r.predajna_cena ? `${Number(r.predajna_cena).toLocaleString("sk")} €` : "";
+                const label = [typ, adresa, cena].filter(Boolean).join(" · ") || String(r.nazov || r.id);
+                return <option key={String(r.id)} value={String(r.id)}>{label}</option>;
+              })}
             </select>
           </div>
         )}
@@ -2885,8 +3354,37 @@ function ObhliadkaModal({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>Dátum a čas *</label>
-            <input type="datetime-local" value={datum} onChange={e => setDatum(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px" }} />
+            {(() => {
+              const mkAt17 = (offset: number) => {
+                const d = new Date();
+                d.setDate(d.getDate() + offset);
+                if (d.getDay() === 6) d.setDate(d.getDate() + 2);
+                if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+                d.setHours(17, 0, 0, 0);
+                return d.toISOString().slice(0, 16);
+              };
+              const chips = [
+                { label: "Dnes 17:00", val: mkAt17(0) },
+                { label: "Zajtra 17:00", val: mkAt17(1) },
+                { label: "Po 17:00", val: (() => { const d = new Date(); const diff = (8 - d.getDay()) % 7 || 7; d.setDate(d.getDate() + diff); d.setHours(17, 0, 0, 0); return d.toISOString().slice(0, 16); })() },
+              ];
+              return (
+                <>
+                  <div style={{ display: "flex", gap: "4px", marginBottom: "6px", flexWrap: "wrap" }}>
+                    {chips.map(c => (
+                      <button key={c.label} type="button" onClick={() => setDatum(c.val)} style={{
+                        padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", cursor: "pointer",
+                        background: datum === c.val ? "#374151" : "var(--bg-surface)",
+                        color: datum === c.val ? "#fff" : "var(--text-muted)",
+                        border: "1px solid var(--border)",
+                      }}>{c.label}</button>
+                    ))}
+                  </div>
+                  <input type="datetime-local" value={datum} onChange={e => setDatum(e.target.value)}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px" }} />
+                </>
+              );
+            })()}
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>Miesto stretnutia</label>

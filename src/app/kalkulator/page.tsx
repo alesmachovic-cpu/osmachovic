@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
 function calcSplatka(istina: number, rocnyUrok: number, roky: number) {
   if (!istina || !roky) return 0;
@@ -23,15 +24,16 @@ const LABEL: React.CSSProperties = {
   marginBottom: "5px", display: "block",
 };
 
-export default function KalkulatorPage() {
-  // Hypotéka
-  const [cenaBytu, setCenaBytu] = useState("200000");
-  const [vlastneZdroje, setVlastneZdroje] = useState("40000");
-  const [urok, setUrok] = useState("4.5");
-  const [roky, setRoky] = useState("30");
+function KalkulatorInner() {
+  const sp = useSearchParams();
+  // Hypotéka — pre-fill z URL params (z HypotekaMiniCalc deep-link)
+  const [cenaBytu, setCenaBytu] = useState(sp.get("cena") || "200000");
+  const [vlastneZdroje, setVlastneZdroje] = useState(sp.get("vlastne") || "40000");
+  const [urok, setUrok] = useState(sp.get("urok") || "4.5");
+  const [roky, setRoky] = useState(sp.get("doba") || "30");
 
   // Provízia
-  const [predajnaCena, setPredajnaCena] = useState("200000");
+  const [predajnaCena, setPredajnaCena] = useState(sp.get("cena") || "200000");
   const [proviziaPercento, setProviziaPercento] = useState("3");
   const [naklady, setNaklady] = useState("500");
 
@@ -171,5 +173,13 @@ export default function KalkulatorPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function KalkulatorPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Načítavam...</div>}>
+      <KalkulatorInner />
+    </Suspense>
   );
 }

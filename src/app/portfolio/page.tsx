@@ -7,6 +7,8 @@ import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import PricingEstimateModal from "@/components/PricingEstimateModal";
 import PropertyStoryModal from "@/components/PropertyStoryModal";
+import { ZaujemcoviaChip } from "@/components/matching/ZaujemcoviaChip";
+import { ZaujemcoviaDrawer } from "@/components/matching/ZaujemcoviaDrawer";
 
 /* ── Typy podľa skutočnej DB schémy ── */
 interface DBNehnutelnost {
@@ -102,6 +104,7 @@ export default function Portfolio() {
   const [singleAnalyzing, setSingleAnalyzing] = useState<Record<string, boolean>>({});
   const [statusMenuFor, setStatusMenuFor] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
+  const [zaujemcoviaDrawerFor, setZaujemcoviaDrawerFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.id) getMaklerUuid(user.id).then(uuid => setMyMaklerUuid(uuid ?? null));
@@ -178,7 +181,7 @@ export default function Portfolio() {
     try {
       const res = await fetch("/api/inzerat/save", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ editId: itemId, payload: { status: newStatus } }),
+        body: JSON.stringify({ editId: itemId, payload: { status: newStatus }, user_id: user?.id }),
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -191,6 +194,25 @@ export default function Portfolio() {
       alert("⚠️ Chyba: " + (e as Error).message);
     } finally {
       setStatusUpdating(prev => ({ ...prev, [itemId]: false }));
+    }
+  }
+
+  async function deleteNehnutelnost(itemId: string) {
+    if (!confirm("Natrvalo zmazať túto nehnuteľnosť? Táto akcia sa nedá vrátiť.")) return;
+    setStatusMenuFor(null);
+    try {
+      const res = await fetch(`/api/nehnutelnosti?id=${itemId}`, {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: user?.id }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert("⚠️ Mazanie zlyhalo: " + (out.error || `HTTP ${res.status}`));
+        return;
+      }
+      setItems(prev => prev.filter(it => it.id !== itemId));
+    } catch (e) {
+      alert("⚠️ Chyba: " + (e as Error).message);
     }
   }
 
@@ -464,6 +486,20 @@ export default function Portfolio() {
                             {label}
                           </button>
                         ))}
+                        {isAdmin && (
+                          <>
+                            <div style={{ height: "1px", background: "var(--border)", margin: "4px 0" }} />
+                            <button onClick={() => deleteNehnutelnost(n.id)} style={{
+                              display: "block", width: "100%", padding: "9px 14px", textAlign: "left",
+                              fontSize: "12px", fontWeight: "500", color: "#DC2626",
+                              background: "transparent", border: "none", cursor: "pointer",
+                            }}
+                              onMouseEnter={e => (e.currentTarget.style.background = "#FEE2E2")}
+                              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                              🗑 Zmazať
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -471,9 +507,20 @@ export default function Portfolio() {
 
                 {/* Content */}
                 <div style={{ padding: "16px" }}>
-                  <div style={{ fontSize: "20px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "4px" }}>
+                  <div style={{ fontSize: "20px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "2px" }}>
                     {formatCena(n.cena)}
                   </div>
+                  {n.cena && (() => {
+                    const istina = n.cena * 0.9;
+                    const r = 4.5 / 100 / 12;
+                    const nM = 30 * 12;
+                    const splatka = Math.round((istina * r * Math.pow(1 + r, nM)) / (Math.pow(1 + r, nM) - 1));
+                    return (
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>
+                        ~{splatka.toLocaleString("sk")} €/mes · 90% hypotéka, 4,5%, 30r
+                      </div>
+                    );
+                  })()}
                   <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", marginBottom: "4px", lineHeight: 1.3 }}>
                     {n.nazov || `${typLabel(n.typ || n.typ_nehnutelnosti || "")}${n.lokalita ? ` — ${n.lokalita}` : ""}`}
                   </div>
@@ -517,6 +564,10 @@ export default function Portfolio() {
                     }} title="AI vygeneruje copy pre inzerát">
                       ✨ AI popis
                     </button>
+                    <ZaujemcoviaChip
+                      nehnutelnostId={n.id}
+                      onClick={() => setZaujemcoviaDrawerFor(n.id)}
+                    />
                   </div>
 
                   {/* Analysis section */}
@@ -803,6 +854,18 @@ export default function Portfolio() {
           }]}
         />
       )}
+
+      {/* Záujemcovia drawer */}
+      {zaujemcoviaDrawerFor && (() => {
+        const n = filtered.find(x => x.id === zaujemcoviaDrawerFor);
+        return (
+          <ZaujemcoviaDrawer
+            nehnutelnostId={zaujemcoviaDrawerFor}
+            nehnutelnostNazov={n?.nazov || undefined}
+            onClose={() => setZaujemcoviaDrawerFor(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
