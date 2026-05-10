@@ -17,6 +17,7 @@ import SmsSignButton from "@/components/SmsSignButton";
 import { NajlepsieZhodyPanel } from "@/components/matching/NajlepsieZhodyPanel";
 import { HypotekaMiniCalc } from "@/components/calc/HypotekaMiniCalc";
 import { ProviziaMiniCalc } from "@/components/calc/ProviziaMiniCalc";
+import { ClientInsightPanel } from "@/components/client-insight/ClientInsightPanel";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
@@ -313,6 +314,7 @@ export default function KlientDetailPage() {
   const [detailObj, setDetailObj] = useState<Record<string, unknown> | null>(null);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
   const [obhliadkaPrefill, setObhliadkaPrefill] = useState<{ datum: string; miesto: string } | null>(null);
+  const [insightKupujuciPrefill, setInsightKupujuciPrefill] = useState<{ klientId: string; meno: string; tel?: string | null } | null>(null);
   // Pamätáme si, či sa Obhliadka modal otvoril z datetime pickeru (tlačidlo "Späť")
   const [obhliadkaCameFromPicker, setObhliadkaCameFromPicker] = useState(false);
   // Dokumenty UI state — accordion zbaľovanie, filter typu, otvorený "Presunúť" menu
@@ -936,8 +938,21 @@ export default function KlientDetailPage() {
     { key: "historia", label: "CRM Log", count: 0 },
   ];
 
+  // Dáta pre ClientInsightPanel
+  const prvaNehn = inzeraty[0] as Record<string, unknown> | undefined;
+  const prvyNab = nabery[0] as Record<string, unknown> | undefined;
+  const nehnutelnostIdForPanel = (prvaNehn?.id ?? prvyNab?.id) as string | null ?? null;
+  const predajnaCenaForPanel = (prvyNab?.predajna_cena ?? prvaNehn?.cena) as number | null ?? null;
+  const prvaObj = objednavky[0] as Record<string, unknown> | undefined;
+  const objednavkaIdForPanel = prvaObj?.id as string | null ?? null;
+  const cenaDo = prvaObj?.cena_do as number | null ?? null;
+  const cenaOd = prvaObj?.cena_od as number | null ?? null;
+  const showInsightPanel = !!nehnutelnostIdForPanel || !!objednavkaIdForPanel;
+
   return (
-    <div style={{ maxWidth: "1050px" }}>
+    <div style={{ maxWidth: "1280px" }}>
+      <div style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
       {/* Header */}
       {/* Breadcrumb navigácia */}
       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "16px", fontSize: "13px" }}>
@@ -2970,22 +2985,26 @@ export default function KlientDetailPage() {
           inzeraty={inzeraty}
           myMaklerUuid={myMaklerUuid}
           prefill={obhliadkaPrefill}
+          initialKupujuci={insightKupujuciPrefill}
           onBack={obhliadkaCameFromPicker ? () => {
             // Späť do datetime pickeru "Nová udalosť"
             setShowObhliadkaModal(false);
             setObhliadkaPrefill(null);
             setObhliadkaCameFromPicker(false);
+            setInsightKupujuciPrefill(null);
             setShowDatePicker(true);
           } : undefined}
           onClose={() => {
             setShowObhliadkaModal(false);
             setObhliadkaPrefill(null);
             setObhliadkaCameFromPicker(false);
+            setInsightKupujuciPrefill(null);
           }}
           onCreated={async () => {
             setShowObhliadkaModal(false);
             setObhliadkaPrefill(null);
             setObhliadkaCameFromPicker(false);
+            setInsightKupujuciPrefill(null);
             const r = await fetch(`/api/obhliadky?klient_id=${id}`);
             const d = await r.json();
             setObhliadky(d.obhliadky || []);
@@ -3236,18 +3255,39 @@ export default function KlientDetailPage() {
         />
       )}
 
+      </div>{/* END left col */}
+
+      {showInsightPanel && (
+        <div style={{ width: "300px", flexShrink: 0 }}>
+          <ClientInsightPanel
+            klient={{ id: klient.id, typ: klient.typ ?? "predavajuci" }}
+            nehnutelnostId={nehnutelnostIdForPanel}
+            objednavkaId={objednavkaIdForPanel}
+            predajnaCena={predajnaCenaForPanel}
+            cenaDo={cenaDo}
+            cenaOd={cenaOd}
+            onPlanovatObhliadku={(matchKlientId, matchMeno, matchTel) => {
+              setInsightKupujuciPrefill({ klientId: matchKlientId, meno: matchMeno, tel: matchTel });
+              setShowObhliadkaModal(true);
+            }}
+          />
+        </div>
+      )}
+
+      </div>{/* END flex row */}
     </div>
   );
 }
 
 /* ── Modal: Nová obhliadka ─────────────────────────────────────────── */
 function ObhliadkaModal({
-  klient, inzeraty, myMaklerUuid, prefill, onClose, onCreated, onBack,
+  klient, inzeraty, myMaklerUuid, prefill, initialKupujuci, onClose, onCreated, onBack,
 }: {
   klient: { id: string; meno: string; typ?: string };
   inzeraty: Record<string, unknown>[];
   myMaklerUuid: string | null;
   prefill?: { datum: string; miesto: string } | null;
+  initialKupujuci?: { klientId: string; meno: string; tel?: string | null } | null;
   onClose: () => void;
   onCreated: () => void;
   onBack?: () => void;
@@ -3281,11 +3321,11 @@ function ObhliadkaModal({
   });
   const [miestoMode, setMiestoMode] = useState<"adresa" | "manual">(prefill?.miesto ? "manual" : "adresa");
   const [miesto, setMiesto] = useState(prefill?.miesto || "");
-  const [kupMeno, setKupMeno] = useState("");
-  const [kupTel, setKupTel] = useState("");
+  const [kupMeno, setKupMeno] = useState(initialKupujuci?.meno ?? "");
+  const [kupTel, setKupTel] = useState(initialKupujuci?.tel ?? "");
   const [kupEmail, setKupEmail] = useState("");
-  const [kupKlientId, setKupKlientId] = useState<string | null>(null);
-  const [kupQuery, setKupQuery] = useState("");
+  const [kupKlientId, setKupKlientId] = useState<string | null>(initialKupujuci?.klientId ?? null);
+  const [kupQuery, setKupQuery] = useState(initialKupujuci?.meno ?? "");
   const [kupOptions, setKupOptions] = useState<{ id: string; meno: string; telefon?: string | null; email?: string | null }[]>([]);
   const [showKupDropdown, setShowKupDropdown] = useState(false);
   const [poznamka, setPoznamka] = useState("");
