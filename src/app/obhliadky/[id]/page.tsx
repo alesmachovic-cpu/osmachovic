@@ -201,27 +201,33 @@ export default function ObhliadkaDetailPage() {
           prostredníctvom tejto realitnej kancelárie.
         </div>
 
-        {/* GDPR — explicitný súhlas pred podpisom */}
+        {/* GDPR — explicitný súhlas pred podpisom. Veľký marginBottom zabraňuje
+            accidentálnemu unchecknutiu pri kreslení podpisu na mobile. */}
         {!isPodpisana && (
           <label style={{
             display: "flex", alignItems: "flex-start", gap: "10px",
             padding: "12px 14px", background: "var(--bg-elevated)",
             border: gdprConsent ? "1px solid #10B981" : "1px solid var(--border)",
-            borderRadius: "10px", marginBottom: "16px", cursor: "pointer",
+            borderRadius: "10px", marginBottom: "32px", cursor: "pointer",
             fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
+            pointerEvents: gdprConsent ? "none" : "auto",
+            opacity: gdprConsent ? 0.85 : 1,
           }}>
             <input
               type="checkbox"
               checked={gdprConsent}
               onChange={e => setGdprConsent(e.target.checked)}
-              style={{ marginTop: "2px", cursor: "pointer", flexShrink: 0 }}
+              readOnly={gdprConsent}
+              style={{ marginTop: "2px", cursor: gdprConsent ? "default" : "pointer", flexShrink: 0 }}
             />
             <span>
+              {gdprConsent && <strong style={{ color: "#065F46" }}>✓ Súhlas udelený · </strong>}
               Súhlasím so spracovaním mojich osobných údajov spoločnosťou Vianema s. r. o.
               v zmysle GDPR pre účely evidencie obhliadok. Plné znenie zásad spracovania
               nájdete v dokumente{" "}
               <a href="/gdpr" target="_blank" rel="noopener noreferrer"
-                style={{ color: "var(--accent, #3B82F6)", textDecoration: "underline" }}>
+                onClick={e => e.stopPropagation()}
+                style={{ color: "var(--accent, #3B82F6)", textDecoration: "underline", pointerEvents: "auto" }}>
                 Zásady spracovania osobných údajov →
               </a>
             </span>

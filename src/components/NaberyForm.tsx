@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { KRAJE } from "@/lib/database.types";
 import type { Klient, TypInzercie } from "@/lib/database.types";
@@ -324,12 +324,21 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
       const res = await fetch("/api/naber-analyza", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ typ, plocha: Number(plocha), obec, okres, predajnaCena: Number(cenaNow) || undefined }),
+        body: JSON.stringify({ typ, plocha: Number(plocha), obec, okres, predajnaCena: Number(cenaNow) || undefined, klientId: klient.id }),
       });
       if (res.ok) setAnalyza(await res.json());
     } catch { /* silent */ }
     setAnalyzaLoading(false);
   }
+
+  const autoAnalyzaFired = useRef(false);
+  useEffect(() => {
+    if (!autoAnalyzaFired.current && obec && plocha) {
+      autoAnalyzaFired.current = true;
+      triggerAnalyza();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [obec, plocha]);
 
   // TASK 11 — Auto-save draft do localStorage (každých 30s) + banner pri návrate
   const draftLsKey = `naber_draft_${klient.id}`;
@@ -687,6 +696,14 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
     const klientPatch: Record<string, unknown> = { status: "nabrany" };
     if (maklerUuid && !klient.makler_id) klientPatch.makler_id = maklerUuid;
     await klientApiUpdate(authUser.id, klient.id, klientPatch);
+    // Log do timeline
+    try {
+      await supabase.from("klient_udalosti").insert({
+        klient_id: klient.id, typ: "status_zmena",
+        popis: "Dohodnutý náber → Nabraný · Náberový list odovzdaný",
+        autor: authUser.id,
+      });
+    } catch { /* neblokuj */ }
 
     // Auto-upload Náberového listu ako PDF do Dokumentov klienta
     try {
@@ -1094,7 +1111,19 @@ Odpovedaj stručne po slovensky.`;
             <label style={labelSt}>Stav bytu</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "6px" }}>
               {STAV_OPTIONS.map(o => (
-                <button type="button" key={o.value} onClick={() => setStav(o.value)} style={{
+                <button type="button" key={o.value} onClick={() => {
+                  const autoFillStavy = ["kompletna_rekonstrukcia", "novostavba"];
+                  if (autoFillStavy.includes(o.value)) {
+                    setKrytina("nove");
+                    setRozvodyMenene(true);
+                    setPlastyOkna(true);
+                  } else if (autoFillStavy.includes(stav)) {
+                    setKrytina("");
+                    setRozvodyMenene(false);
+                    setPlastyOkna(false);
+                  }
+                  setStav(o.value);
+                }} style={{
                   padding: "10px 16px", borderRadius: "20px", fontSize: "13px", fontWeight: "600",
                   border: stav === o.value ? "2px solid #374151" : "1px solid var(--border)",
                   background: stav === o.value ? "#374151" : "var(--bg-elevated)",
@@ -1382,7 +1411,19 @@ Odpovedaj stručne po slovensky.`;
             <label style={labelSt}>Stav</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "6px" }}>
               {STAV_OPTIONS.map(o => (
-                <button type="button" key={o.value} onClick={() => setStav(o.value)} style={{
+                <button type="button" key={o.value} onClick={() => {
+                  const autoFillStavy = ["kompletna_rekonstrukcia", "novostavba"];
+                  if (autoFillStavy.includes(o.value)) {
+                    setKrytina("nove");
+                    setRozvodyMenene(true);
+                    setPlastyOkna(true);
+                  } else if (autoFillStavy.includes(stav)) {
+                    setKrytina("");
+                    setRozvodyMenene(false);
+                    setPlastyOkna(false);
+                  }
+                  setStav(o.value);
+                }} style={{
                   padding: "10px 16px", borderRadius: "20px", fontSize: "13px", fontWeight: "600",
                   border: stav === o.value ? "2px solid #374151" : "1px solid var(--border)",
                   background: stav === o.value ? "#374151" : "var(--bg-elevated)",
@@ -2178,39 +2219,37 @@ Odpovedaj stručne po slovensky.`;
           <span>📧 Klient nie je tu — pošlem mu link na podpis cez email{klient.email ? ` (${klient.email})` : " (email zadám pri odosielaní)"}</span>
         </label>
 
-        {!remoteSignMode && (
-          <>
-            <SignatureCanvas onSignatureChange={setPodpisData} />
+        <div style={{ display: remoteSignMode ? "none" : "block" }}>
+          {/* GDPR explicitný súhlas — pred canvasom, aby kreslenie podpisu nespôsobilo accidentálny uncheck */}
+          <label style={{
+            display: "flex", alignItems: "flex-start", gap: "10px",
+            padding: "12px 14px", marginBottom: "14px",
+            background: "var(--bg-elevated)",
+            border: gdprConsent ? "1px solid #10B981" : "1px solid var(--border)",
+            borderRadius: "10px", cursor: "pointer",
+            fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
+          }}>
+            <input
+              type="checkbox"
+              checked={gdprConsent}
+              onChange={e => setGdprConsent(e.target.checked)}
+              style={{ marginTop: "2px", cursor: "pointer", flexShrink: 0 }}
+            />
+            <span>
+              Súhlasím so spracovaním mojich osobných údajov spoločnosťou Vianema s. r. o.
+              v zmysle GDPR pre účely sprostredkovania predaja/prenájmu nehnuteľnosti.
+              Plné znenie:{" "}
+              <a href="/gdpr" target="_blank" rel="noopener noreferrer"
+                style={{ color: "var(--accent, #3B82F6)", textDecoration: "underline" }}>
+                Zásady spracovania osobných údajov →
+              </a>
+            </span>
+          </label>
 
-            {/* GDPR explicitný súhlas */}
-            <label style={{
-              display: "flex", alignItems: "flex-start", gap: "10px",
-              padding: "12px 14px", marginTop: "14px",
-              background: "var(--bg-elevated)",
-              border: gdprConsent ? "1px solid #10B981" : "1px solid var(--border)",
-              borderRadius: "10px", cursor: "pointer",
-              fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5,
-            }}>
-              <input
-                type="checkbox"
-                checked={gdprConsent}
-                onChange={e => setGdprConsent(e.target.checked)}
-                style={{ marginTop: "2px", cursor: "pointer", flexShrink: 0 }}
-              />
-              <span>
-                Súhlasím so spracovaním mojich osobných údajov spoločnosťou Vianema s. r. o.
-                v zmysle GDPR pre účely sprostredkovania predaja/prenájmu nehnuteľnosti.
-                Plné znenie:{" "}
-                <a href="/gdpr" target="_blank" rel="noopener noreferrer"
-                  style={{ color: "var(--accent, #3B82F6)", textDecoration: "underline" }}>
-                  Zásady spracovania osobných údajov →
-                </a>
-              </span>
-            </label>
-          </>
-        )}
+          <SignatureCanvas onSignatureChange={setPodpisData} />
+        </div>
 
-        {remoteSignMode && (
+        <div style={{ display: !remoteSignMode ? "none" : "block" }}>
           <div style={{
             padding: "14px 16px", borderRadius: "10px",
             background: "var(--bg-elevated)", border: "1px solid var(--border)",
@@ -2221,7 +2260,7 @@ Odpovedaj stručne po slovensky.`;
             link + 6-ciferný kód na podpis. GDPR súhlas zaznamenáme v momente jeho
             potvrdenia.
           </div>
-        )}
+        </div>
       </div>
 
       {/* Error */}
@@ -2424,11 +2463,16 @@ function FinancneKalkulacky({
                     }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {p.url ? (
-                          <a href={p.url} target="_blank" rel="noopener noreferrer" style={{
-                            fontSize: "12px", color: "var(--text-link, #60A5FA)", textDecoration: "none",
-                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block",
-                          }}>
-                            {p.nazov || p.url}
+                          <a
+                            href={p.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontSize: "12px", color: "var(--text-link, #60A5FA)", textDecoration: "none",
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block",
+                            }}
+                          >
+                            {p.nazov}
                           </a>
                         ) : (
                           <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{p.nazov}</span>

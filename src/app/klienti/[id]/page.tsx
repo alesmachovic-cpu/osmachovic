@@ -932,7 +932,7 @@ export default function KlientDetailPage() {
     { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
     { key: "objednavky", label: "Objednávky", count: objednavky.length },
     { key: "dokumenty", label: "Dokumenty", count: 0 },
-    { key: "historia", label: "História", count: 0 },
+    { key: "historia", label: "CRM Log", count: 0 },
   ];
 
   return (
@@ -2458,7 +2458,14 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
               📋 Objednávky
             </div>
-            <button onClick={() => router.push("/kupujuci")} style={{
+            <button onClick={() => {
+              const firstNehn = inzeraty[0] as Record<string, unknown> | undefined;
+              if ((klient.typ === "predavajuci" || klient.typ === "oboje") && firstNehn?.id) {
+                router.push(`/nastroje?tab=matching&nehnutelnost=${firstNehn.id}`);
+              } else {
+                router.push("/kupujuci");
+              }
+            }} style={{
               padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
             }}>+ Nová objednávka</button>
@@ -2855,11 +2862,14 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {/* História — audit log z klienti_history */}
+      {/* CRM Log — audit log z klienti_history (makler transfery, SLA eventy) */}
       {activeTab === "historia" && (
         <div style={cardSt}>
-          <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
-            História klienta
+          <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "6px" }}>
+            CRM Log
+          </div>
+          <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px" }}>
+            Systémové eventy: prevody medzi maklérmi, SLA upozornenia, pool management.
           </div>
           <KlientHistoryTab klientId={klient.id} />
         </div>
