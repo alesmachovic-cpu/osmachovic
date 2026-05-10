@@ -36,6 +36,9 @@ export type ZhodaItem = {
     lokalita: string | null;
     okres: string | null;
     nazov?: string | null;
+    source?: "internal" | "monitor";
+    portal?: string | null;
+    url?: string | null;
     predavajuci?: { id: string; meno: string; telefon: string | null };
   };
   score: number;

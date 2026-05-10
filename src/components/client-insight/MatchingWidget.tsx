@@ -184,6 +184,7 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
         const n = m.nehnutelnost;
         const pred = n.predavajuci;
         const badge = scoreBadge(m.score);
+        const isMonitor = n.source === "monitor";
         const summary = [n.lokalita || n.okres, n.cena ? `${Math.round(n.cena / 1000)}k €` : null, n.plocha ? `${n.plocha}m²` : null].filter(Boolean).join(" · ");
 
         return (
@@ -197,7 +198,12 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{summary || "Nehnuteľnosť"}</div>
-                <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{pred?.meno ?? "—"}</div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", gap: "4px", alignItems: "center" }}>
+                  {isMonitor && n.portal && (
+                    <span style={{ fontSize: "9px", padding: "1px 4px", background: "#1e3a5f", color: "#93c5fd", borderRadius: "3px", flexShrink: 0 }}>{n.portal}</span>
+                  )}
+                  <span>{pred?.meno ?? "—"}</span>
+                </div>
               </div>
               {pred?.telefon && (
                 <a href={`tel:${pred.telefon}`} onClick={e => e.stopPropagation()}
@@ -211,17 +217,23 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
                 {pred?.telefon && <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginBottom: "4px" }}>📞 {pred.telefon}</div>}
                 {n.cena && <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginBottom: "6px" }}>💰 {Number(n.cena).toLocaleString("sk")} €</div>}
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                  {onPlanovatObhliadku && pred && (
+                  {onPlanovatObhliadku && pred && pred.id && (
                     <button onClick={() => { onPlanovatObhliadku(pred.id, pred.meno, pred.telefon); setSelectedMatch(null); }}
                       style={{ fontSize: "11px", padding: "5px 10px", background: "#374151", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}>
                       📅 Naplánovať obhliadku
                     </button>
                   )}
-                  {pred && (
+                  {!isMonitor && pred && pred.id && (
                     <button onClick={() => router.push(`/klienti/${pred.id}`)}
                       style={{ fontSize: "11px", padding: "5px 10px", background: "var(--bg-surface)", color: "#60a5fa", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer" }}>
                       Karta →
                     </button>
+                  )}
+                  {isMonitor && n.url && (
+                    <a href={n.url} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: "11px", padding: "5px 10px", background: "var(--bg-surface)", color: "#60a5fa", border: "1px solid var(--border)", borderRadius: "6px", textDecoration: "none" }}>
+                      Inzerát →
+                    </a>
                   )}
                 </div>
               </div>
