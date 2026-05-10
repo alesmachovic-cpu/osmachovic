@@ -3284,9 +3284,22 @@ function ObhliadkaModal({
   const [kupMeno, setKupMeno] = useState("");
   const [kupTel, setKupTel] = useState("");
   const [kupEmail, setKupEmail] = useState("");
+  const [kupKlientId, setKupKlientId] = useState<string | null>(null);
+  const [kupQuery, setKupQuery] = useState("");
+  const [kupOptions, setKupOptions] = useState<{ id: string; meno: string; telefon?: string | null; email?: string | null }[]>([]);
+  const [showKupDropdown, setShowKupDropdown] = useState(false);
   const [poznamka, setPoznamka] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (kupQuery.length < 2) { setKupOptions([]); return; }
+    let cancelled = false;
+    supabase.from("klienti").select("id, meno, telefon, email")
+      .ilike("meno", `%${kupQuery}%`).limit(8)
+      .then(({ data }) => { if (!cancelled) setKupOptions(data ?? []); });
+    return () => { cancelled = true; };
+  }, [kupQuery]);
 
   async function save() {
     if (!datum) { setError("Dátum je povinný"); return; }
@@ -3295,7 +3308,7 @@ function ObhliadkaModal({
     try {
       const body: Record<string, unknown> = {
         predavajuci_klient_id: isCurrentBuyer ? null : klient.id,
-        kupujuci_klient_id: isCurrentBuyer ? klient.id : null,
+        kupujuci_klient_id: isCurrentBuyer ? klient.id : (kupKlientId || null),
         nehnutelnost_id: nehnId || null,
         kupujuci_meno: isCurrentBuyer ? klient.meno : kupMeno.trim() || null,
         kupujuci_telefon: kupTel.trim() || null,
@@ -3509,9 +3522,37 @@ function ObhliadkaModal({
         {!isCurrentBuyer && (
           <>
             <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: "14px 0 10px" }}>Kupujúci</div>
-            <div style={{ marginBottom: "10px" }}>
-              <input value={kupMeno} onChange={e => setKupMeno(e.target.value)} placeholder="Meno a priezvisko *"
-                style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px" }} />
+            <div style={{ position: "relative", marginBottom: "10px" }}>
+              <input
+                value={kupQuery || kupMeno}
+                onChange={e => {
+                  setKupQuery(e.target.value);
+                  setKupMeno(e.target.value);
+                  setKupKlientId(null);
+                  setShowKupDropdown(true);
+                }}
+                onFocus={() => setShowKupDropdown(true)}
+                onBlur={() => setTimeout(() => setShowKupDropdown(false), 150)}
+                placeholder="Meno a priezvisko *"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: "8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-primary)", fontSize: "14px", boxSizing: "border-box" }}
+              />
+              {showKupDropdown && kupOptions.length > 0 && (
+                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", zIndex: 20, boxShadow: "0 4px 12px rgba(0,0,0,0.15)", marginTop: "2px" }}>
+                  {kupOptions.map(k => (
+                    <div key={k.id} onMouseDown={() => {
+                      setKupMeno(k.meno);
+                      setKupQuery(k.meno);
+                      setKupTel(k.telefon || "");
+                      setKupEmail(k.email || "");
+                      setKupKlientId(k.id);
+                      setShowKupDropdown(false);
+                    }} style={{ padding: "10px 14px", cursor: "pointer", fontSize: "13px", color: "var(--text-primary)", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ fontWeight: 600 }}>{k.meno}</div>
+                      {k.telefon && <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{k.telefon}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
               <input value={kupTel} onChange={e => setKupTel(e.target.value)} placeholder="Telefón"
