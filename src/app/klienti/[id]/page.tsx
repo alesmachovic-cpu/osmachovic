@@ -805,7 +805,7 @@ export default function KlientDetailPage() {
   function getWorkflowStep(): number {
     if (!klient) return 0;
     if (klient.status === "uzavrety") return 4;
-    if (inzeraty.length > 0 || klient.status === "inzerovany") return 3;
+    if (inzeraty.length > 0 || (klient.status as string) === "inzerovany") return 3;
     if (klient.status === "nabrany" || nabery.length > 0) return 2;
     if (klient.status === "dohodnuty_naber") return 1;
     return 0;
