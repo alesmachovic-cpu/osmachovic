@@ -451,7 +451,7 @@ export default function KlientDetailPage() {
     const hasAktivnyInzerat = (inzeratyRes.data ?? []).some(n => (n as Record<string, unknown>).status === "aktivny");
     if (klientRes.data?.status === "nabrany" && hasAktivnyInzerat && user?.id) {
       klientUpdate(user.id, id, { status: "inzerovany" });
-      setKlient(k => k ? { ...k, status: "inzerovany" } : k);
+      setKlient(k => k ? ({ ...k, status: "inzerovany" }) as Klient : k);
       fetch("/api/klient-udalosti", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ klient_id: id, typ: "status_zmena", popis: "Nabraný → Inzerovaný", autor: user.id }),
