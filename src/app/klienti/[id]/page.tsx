@@ -401,7 +401,7 @@ export default function KlientDetailPage() {
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
   const isAdmin = user?.id === "ales";
-  const isOwner = isAdmin || (myMaklerUuid && klient?.makler_id === myMaklerUuid);
+  const isOwner = isAdmin || (myMaklerUuid && (klient?.makler_id === myMaklerUuid || klient?.spolupracujuci_makler_id === myMaklerUuid));
 
   useEffect(() => {
     if (id) loadAll();
