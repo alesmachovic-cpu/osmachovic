@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
 import {
   DndContext, useDraggable, useDroppable, type DragEndEvent,
   PointerSensor, useSensor, useSensors,
@@ -18,7 +17,6 @@ import UrlAnalyzeModal from "@/components/UrlAnalyzeModal";
 import PricingEstimateModal from "@/components/PricingEstimateModal";
 import { useAuth } from "@/components/AuthProvider";
 import { getUserItem, setUserItem } from "@/lib/userStorage";
-import { getMaklerUuid } from "@/lib/maklerMap";
 
 interface ActivityItem {
   id: string;
@@ -502,63 +500,44 @@ export default function Dashboard() {
   }, []);
 
   async function loadDashboard() {
+    if (!user?.id) return;
     setLoadingActivity(true);
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const yearStart = new Date(now.getFullYear(), 0, 1).toISOString();
-    const isAdmin = user?.id === "ales";
-    const maklerUuid = user?.id ? await getMaklerUuid(user.id) : null;
+    try {
+      const res = await fetch(`/api/dashboard?user_id=${encodeURIComponent(user.id)}`);
+      if (!res.ok) throw new Error(`dashboard fetch failed: ${res.status}`);
+      const d = await res.json();
 
-    // Helper: add makler filter for non-admin users
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const kq = (q: any) => isAdmin || !maklerUuid ? q : q.eq("makler_id", maklerUuid);
-    // nehnutelnosti uses makler_id (UUID), not makler (text)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const nq = (q: any) => isAdmin || !maklerUuid ? q : q.eq("makler_id", maklerUuid);
+      const mesacnyObrat = (d.monthlyK ?? []).reduce((sum: number, k: { proviziaeur?: number }) => sum + (k.proviziaeur || 0), 0);
+      const rocnyObrat = (d.yearlyK ?? []).reduce((sum: number, k: { proviziaeur?: number }) => sum + (k.proviziaeur || 0), 0);
 
-    const [{ count: kCount }, { count: nCount }, { data: recentK }, { data: recentN }, { data: monthlyK }, { data: yearlyK }, { count: naberyCount }, { count: zmluvyCount }, { count: naberyTotal }, { count: inzeratyCount }, { count: predaneCount }, { count: objednavkyCount }] = await Promise.all([
-      kq(supabase.from("klienti")).select("*", { count: "exact", head: true }),
-      nq(supabase.from("nehnutelnosti")).select("*", { count: "exact", head: true }),
-      kq(supabase.from("klienti")).select("id,meno,status,created_at").order("created_at", { ascending: false }).limit(5),
-      nq(supabase.from("nehnutelnosti")).select("id,nazov,cena,created_at").order("created_at", { ascending: false }).limit(5),
-      kq(supabase.from("klienti")).select("proviziaeur").gte("created_at", monthStart),
-      kq(supabase.from("klienti")).select("proviziaeur").gte("created_at", yearStart),
-      supabase.from("naberove_listy").select("*", { count: "exact", head: true }).gte("created_at", monthStart),
-      supabase.from("naberove_listy").select("*", { count: "exact", head: true }).gte("created_at", monthStart).eq("zmluva", true),
-      supabase.from("naberove_listy").select("*", { count: "exact", head: true }),
-      nq(supabase.from("nehnutelnosti")).select("*", { count: "exact", head: true }).neq("stav", "predane"),
-      nq(supabase.from("nehnutelnosti")).select("*", { count: "exact", head: true }).eq("stav", "predane"),
-      supabase.from("objednavky").select("*", { count: "exact", head: true }),
-    ]);
+      setStats({
+        klienti: d.kCount ?? 0, nehnutelnosti: d.nCount ?? 0,
+        mesacnyObrat, rocnyObrat,
+        zmluvy: d.zmluvyCount ?? 0, nabery: d.naberyCount ?? 0,
+        naberyTotal: d.naberyTotal ?? 0, inzeraty: d.inzeratyCount ?? 0,
+        predane: d.predaneCount ?? 0, objednavky: d.objednavkyCount ?? 0,
+      });
 
-    const mesacnyObrat = (monthlyK ?? []).reduce((sum: number, k: { proviziaeur?: number }) => sum + (k.proviziaeur || 0), 0);
-    const rocnyObrat = (yearlyK ?? []).reduce((sum: number, k: { proviziaeur?: number }) => sum + (k.proviziaeur || 0), 0);
-    const zmluvy = zmluvyCount ?? 0;
-    const nabery = naberyCount ?? 0;
-
-    setStats({
-      klienti: kCount ?? 0, nehnutelnosti: nCount ?? 0,
-      mesacnyObrat, rocnyObrat, zmluvy, nabery,
-      naberyTotal: naberyTotal ?? 0, inzeraty: inzeratyCount ?? 0,
-      predane: predaneCount ?? 0, objednavky: objednavkyCount ?? 0,
-    });
-
-    const items: ActivityItem[] = [
-      ...(recentK ?? []).map((k: { id: string; meno: string; status: string; created_at: string }) => ({
-        id: k.id, type: "klient" as const,
-        title: k.meno,
-        sub: `${k.status ? (STATUS_LABELS[k.status as keyof typeof STATUS_LABELS] ?? k.status) : "—"} · ${new Date(k.created_at).toLocaleDateString("sk")}`,
-      })),
-      ...(recentN ?? []).map((n: { id: string; nazov: string; cena: number; created_at: string }) => ({
-        id: n.id, type: "nehnutelnost" as const,
-        title: n.nazov || "Nehnuteľnosť",
-        sub: `${n.cena != null ? n.cena.toLocaleString("sk") + " €" : "—"} · ${new Date(n.created_at).toLocaleDateString("sk")}`,
-      })),
-    ].slice(0, 6);
-    setActivity(items);
-    setLoadingActivity(false);
+      const items: ActivityItem[] = [
+        ...(d.recentK ?? []).map((k: { id: string; meno: string; status: string; created_at: string }) => ({
+          id: k.id, type: "klient" as const,
+          title: k.meno,
+          sub: `${k.status ? (STATUS_LABELS[k.status as keyof typeof STATUS_LABELS] ?? k.status) : "—"} · ${new Date(k.created_at).toLocaleDateString("sk")}`,
+        })),
+        ...(d.recentN ?? []).map((n: { id: string; nazov: string; cena: number; created_at: string }) => ({
+          id: n.id, type: "nehnutelnost" as const,
+          title: n.nazov || "Nehnuteľnosť",
+          sub: `${n.cena != null ? n.cena.toLocaleString("sk") + " €" : "—"} · ${new Date(n.created_at).toLocaleDateString("sk")}`,
+        })),
+      ].slice(0, 6);
+      setActivity(items);
+    } catch (err) {
+      console.error("[dashboard] loadDashboard error:", err);
+    } finally {
+      setLoadingActivity(false);
+    }
   }
-  useEffect(() => { loadDashboard(); }, []);
+  useEffect(() => { loadDashboard(); }, [user?.id]);
 
   // Auto-check phone
   useEffect(() => {
@@ -567,16 +546,22 @@ export default function Dashboard() {
     if (digits.length < 6) { setFound(null); setChecked(false); return; }
     debounceRef.current = setTimeout(async () => {
       setChecking(true);
-      const last9 = digits.slice(-9);
-      const { data } = await supabase.from("klienti").select("*").ilike("telefon", `%${last9}%`).limit(1).maybeSingle();
-      setChecking(false);
-      setChecked(true);
-      if (data) {
-        setFound(data);
-      } else {
-        setFound("none");
-        setModalPhone(phone.trim().replace(/[\s\-\(\)]/g, "").replace(/^00/, "+"));
-        setModal(true);
+      try {
+        const res = await fetch(`/api/klienti?telefon=${encodeURIComponent(digits)}`);
+        const body = res.ok ? await res.json() : {};
+        const data = body.klient as Klient | null;
+        setChecked(true);
+        if (data) {
+          setFound(data);
+        } else {
+          setFound("none");
+          setModalPhone(phone.trim().replace(/[\s\-\(\)]/g, "").replace(/^00/, "+"));
+          setModal(true);
+        }
+      } catch {
+        setChecked(false);
+      } finally {
+        setChecking(false);
       }
     }, 600);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
@@ -652,7 +637,9 @@ export default function Dashboard() {
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
 
       {/* Google link banner — zobrazuje sa len ak user nemá login_email */}
-      <LinkGoogleBanner />
+      <Suspense fallback={null}>
+        <LinkGoogleBanner />
+      </Suspense>
 
       {/* Auto-detect kandidátov obhliadok z Google kalendára */}
       <ObhliadkyKandidatiBanner />

@@ -5,8 +5,16 @@ import { getUserScope, canEditRecord } from "@/lib/scope";
 export const runtime = "nodejs";
 
 // GET /api/klienti — vráti všetkých klientov (service_role, obchádza RLS)
-export async function GET() {
+// Query params: ?telefon=X → hľadá klienta s daným číslom (ilike, limit 1)
+export async function GET(req: NextRequest) {
   const sb = getSupabaseAdmin();
+  const telefon = new URL(req.url).searchParams.get("telefon");
+  if (telefon) {
+    const last9 = telefon.replace(/\D/g, "").slice(-9);
+    const { data, error } = await sb.from("klienti").select("*").ilike("telefon", `%${last9}%`).limit(1).maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ klient: data });
+  }
   const { data, error } = await sb.from("klienti").select("*").order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
