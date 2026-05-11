@@ -203,7 +203,7 @@ function KlientiContent() {
   useEffect(() => {
     fetchKlienti();
     // Load makleri list for all users (for filter dropdown)
-    supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
+    fetch("/api/makleri?aktivny=true").then(r => r.json()).then(data => setMakleri(data ?? []));
   }, []);
 
   // Auto-open edit modal from query param (?edit=ID)

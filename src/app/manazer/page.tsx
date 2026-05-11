@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import SlaPoruseni from "@/components/SlaPoruseni";
 
@@ -43,19 +42,27 @@ export default function ManazerPage() {
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
     const [
-      { data: klienti }, { data: nehnutelnosti }, { data: nabery },
-      { data: objednavky }, { data: users }, { data: makleri },
-      { data: history }, slaRes,
+      klientiData, nehnutelnostiData, naberyData,
+      objednavkyData, usersData, makleriData,
+      historyData, slaRes,
     ] = await Promise.all([
-      supabase.from("klienti").select("id, makler_id, created_at, status, proviziaeur"),
-      supabase.from("nehnutelnosti").select("id, makler, created_at, cena"),
-      supabase.from("naberove_listy").select("id, makler_id, created_at"),
-      supabase.from("objednavky").select("id, created_at"),
-      supabase.from("users").select("id, name, role, email"),
-      supabase.from("makleri").select("id, email, meno"),
-      supabase.from("klienti_history").select("from_makler_id, action, created_at").gte("created_at", ninetyDaysAgo),
+      fetch("/api/klienti").then(r => r.json()),
+      fetch("/api/nehnutelnosti").then(r => r.json()),
+      fetch("/api/nabery").then(r => r.json()),
+      fetch("/api/objednavky").then(r => r.json()),
+      fetch("/api/users").then(r => r.json()),
+      fetch("/api/makleri").then(r => r.json()),
+      fetch(`/api/klienti-history?from=${ninetyDaysAgo}`).then(r => r.json()),
       fetch("/api/manazer/sla").then(r => r.json()).catch(() => ({ critical: [] })),
     ]);
+
+    const klienti = klientiData ?? [];
+    const nehnutelnosti = nehnutelnostiData ?? [];
+    const nabery = naberyData ?? [];
+    const objednavky = objednavkyData ?? [];
+    const users = usersData.users ?? [];
+    const makleri = makleriData ?? [];
+    const history = historyData ?? [];
 
     const kl = klienti ?? [];
     const nh = nehnutelnosti ?? [];

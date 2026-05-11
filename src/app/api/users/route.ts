@@ -19,7 +19,7 @@ export async function GET() {
   try {
     const sb = getSupabaseAdmin();
     const { data, error } = await sb.from("users")
-      .select("id, name, initials, role, email, login_email, created_at")
+      .select("id, name, initials, role, email, login_email, pobocka_id, notification_prefs, vzorove_inzeraty, created_at")
       .order("created_at");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ users: data || [] });
@@ -58,7 +58,7 @@ export async function PATCH(request: Request) {
 
     const body = await request.json();
     const updates: Record<string, unknown> = {};
-    const allowedFields = ["name", "initials", "role", "email", "login_email", "password"];
+    const allowedFields = ["name", "initials", "role", "email", "login_email", "password", "notification_prefs", "vzorove_inzeraty", "pobocka_id"];
     for (const key of allowedFields) {
       if (key in body) updates[key] = body[key] ?? null;
     }

@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 
 interface Uloha {
   id: string;
@@ -35,31 +34,39 @@ export default function UlohyPage() {
   const [newDeadline, setNewDeadline] = useState("");
   const [filter, setFilter] = useState<"all" | "open" | "done">("open");
 
-  async function fetch() {
+  async function fetchUlohy() {
     setLoading(true);
-    const { data } = await supabase.from("ulohy").select("*").order("created_at", { ascending: false });
+    const data = await window.fetch("/api/ulohy").then(r => r.json());
     setUlohy(data ?? []);
     setLoading(false);
   }
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { fetchUlohy(); }, []);
 
   async function addUloha(nazov?: string, priorita?: string) {
     const n = nazov ?? newNazov.trim();
     if (!n) return;
-    await supabase.from("ulohy").insert({ nazov: n, priorita: (priorita ?? newPriorita) as "vysoka" | "stredna" | "nizka", deadline: newDeadline || null });
+    await window.fetch("/api/ulohy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nazov: n, priorita: (priorita ?? newPriorita) as "vysoka" | "stredna" | "nizka", deadline: newDeadline || null }),
+    });
     setNewNazov("");
     setNewDeadline("");
-    fetch();
+    fetchUlohy();
   }
 
   async function toggleHotovo(id: string, hotovo: boolean) {
-    await supabase.from("ulohy").update({ hotovo: !hotovo }).eq("id", id);
+    await window.fetch(`/api/ulohy?id=${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hotovo: !hotovo }),
+    });
     setUlohy(prev => prev.map(u => u.id === id ? { ...u, hotovo: !hotovo } : u));
   }
 
   async function deleteUloha(id: string) {
-    await supabase.from("ulohy").delete().eq("id", id);
+    await window.fetch(`/api/ulohy?id=${id}`, { method: "DELETE" });
     setUlohy(prev => prev.filter(u => u.id !== id));
   }
 

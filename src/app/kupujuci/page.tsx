@@ -61,7 +61,7 @@ function KupujuciInner() {
 
   useEffect(() => {
     loadData();
-    supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
+    fetch("/api/makleri?aktivny=true").then(r => r.json()).then(data => setMakleri(data ?? []));
   }, []);
 
   // Ak prišiel cez ?klient_id=X (z karty klienta — "+ Pridať preferencie"),

@@ -83,8 +83,8 @@ async function callGPT(prompt: string): Promise<string | null> {
 }
 
 export async function POST(req: NextRequest) {
-  const { typ, plocha, obec, okres, predajnaCena } = await req.json() as {
-    typ: string; plocha: number; obec: string; okres: string; predajnaCena?: number;
+  const { typ, plocha, obec, okres, predajnaCena, klientId } = await req.json() as {
+    typ: string; plocha: number; obec: string; okres: string; predajnaCena?: number; klientId?: string;
   };
 
   if (!obec || !plocha) {
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       .limit(50),
     supabase
       .from("naberove_listy")
-      .select("predajna_cena, plocha")
+      .select("predajna_cena, plocha, klient_id")
       .ilike("obec", `%${obec}%`)
       .eq("typ_nehnutelnosti", typ)
       .not("predajna_cena", "is", null)
@@ -112,9 +112,11 @@ export async function POST(req: NextRequest) {
   ]);
 
   type MonitorRow = { cena: number; plocha: number; url?: string; nazov?: string; lokalita?: string };
+  type NaseRow = { predajna_cena: number; plocha: number; klient_id?: string | null };
   const monitorRows = (monitorResult.data ?? []) as MonitorRow[];
+  const naseRows = (naseDResult.data ?? []) as NaseRow[];
   const monitorItems = monitorRows.map(r => ({ cena: r.cena, plocha: r.plocha }));
-  const naseItems = (naseDResult.data ?? []).map((r: { predajna_cena: number; plocha: number }) => ({ cena: r.predajna_cena, plocha: r.plocha }));
+  const naseItems = naseRows.map(r => ({ cena: r.predajna_cena, plocha: r.plocha }));
   const allItems = [...monitorItems, ...naseItems];
 
   const cenyM2 = allItems
@@ -152,7 +154,7 @@ export async function POST(req: NextRequest) {
 
   const komentar = await callGemini(aiPrompt) || await callGPT(aiPrompt) || "";
 
-  const porovnania = monitorRows
+  const monitorPorovnania = monitorRows
     .filter(r => r.plocha > 0)
     .map(r => ({
       nazov: r.nazov || r.lokalita || obec,
@@ -160,8 +162,31 @@ export async function POST(req: NextRequest) {
       cena: r.cena,
       plocha: r.plocha,
       eurM2: Math.round(r.cena / r.plocha),
-    }))
-    .slice(0, 15);
+    }));
+
+  const nasePorovnania = naseRows
+    .filter(r => r.plocha > 0)
+    .map(r => ({
+      nazov: `${obec} (interný)`,
+      url: r.klient_id ? `/klienti/${r.klient_id}` : null,
+      cena: r.predajna_cena,
+      plocha: r.plocha,
+      eurM2: Math.round(r.predajna_cena / r.plocha),
+    }));
+
+  const porovnania = [...monitorPorovnania, ...nasePorovnania].slice(0, 15);
+
+  // Uložiť analýzu — fire and forget, nesmie blokovať response
+  void supabase.from("analyzy_trhu").insert({
+    klient_id: klientId ?? null,
+    obec, typ_nehnutelnosti: typ, plocha,
+    predajna_cena: predajnaCena ?? null,
+    priemerna_cena_m2: priemer,
+    odporucana_od, odporucana_do,
+    hodnotenie, odchylka_pct,
+    pocet_porovnani: cenyM2.length,
+    zdroj, komentar,
+  });
 
   return NextResponse.json({
     priemerna_cena_m2: priemer,

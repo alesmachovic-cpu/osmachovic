@@ -1,6 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-const getSb = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
+const getSb = () => getSupabaseAdmin();
 export async function POST(req: NextRequest) {
   try {
     const { telefon, email, klient_id } = await req.json();

@@ -1,3 +1,5 @@
+import { RK_BRANDS, RK_GENERIC_PATTERNS } from "./rk-brands";
+
 /* ── Klasifikátor predajcu (sukromny | rk | unknown) — v2 ──
  *
  * Pôvodný klasifikátor mal len 2 naivné pravidlá:
@@ -78,6 +80,12 @@ const CONFIDENCE_DECISION_THRESHOLD = 0.55;
 function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
 }
+
+const FREE_EMAIL_DOMAINS = new Set([
+  "gmail.com", "zoznam.sk", "azet.sk", "centrum.sk", "pobox.sk",
+  "outlook.com", "hotmail.com", "yahoo.com", "icloud.com", "protonmail.com",
+  "atlas.sk", "post.sk", "mail.ru", "inbox.sk",
+]);
 
 /* ────────────────── PRAVIDLÁ ────────────────── */
 
@@ -385,6 +393,41 @@ export function classify(input: ClassifierInput): ClassifierResult {
       weight: 0.3,
       reason: `Marketingová RK fráza: „${softPhrase}"`,
       evidence: softPhrase,
+    });
+  }
+
+  // B7. Známa RK značka v názve alebo popise.
+  const brandText = (nazov + " " + popis).toLowerCase();
+  let knownBrand: string | null = null;
+  for (const brand of RK_BRANDS) {
+    if (brandText.includes(brand.toLowerCase())) { knownBrand = brand; break; }
+  }
+  if (!knownBrand) {
+    for (const re of RK_GENERIC_PATTERNS) {
+      const m = brandText.match(re);
+      if (m) { knownBrand = m[0].slice(0, 40); break; }
+    }
+  }
+  if (knownBrand) {
+    signals.push({
+      id: "rk_known_brand",
+      side: "rk",
+      weight: 0.90,
+      reason: `Známa RK značka / pattern: „${knownBrand}"`,
+      evidence: knownBrand,
+    });
+  }
+
+  // B8. Firemný email — doména nie je freemail, ale nie je ani v KNOWN_RK_DOMAINS.
+  // (KNOWN_RK_DOMAINS je silnejší signál — A2 vyššie. Toto zachytí neznáme RK domény.)
+  const emailDomainB8 = extractEmailDomain(haystack);
+  if (emailDomainB8 && !FREE_EMAIL_DOMAINS.has(emailDomainB8) && !KNOWN_RK_DOMAINS.includes(emailDomainB8)) {
+    signals.push({
+      id: "rk_business_email",
+      side: "rk",
+      weight: 0.85,
+      reason: `Firemná e-mailová doména: ${emailDomainB8}`,
+      evidence: emailDomainB8,
     });
   }
 

@@ -628,6 +628,23 @@ export async function POST(req: NextRequest) {
     return `statický odhad pre ${extracted.lokalita || "SR"} (málo dát z monitora)`;
   })();
 
+  // Uložiť do monitor_inzeraty — fire and forget
+  if (extracted.cena && extracted.lokalita) {
+    const supabase = getSupabaseAdmin();
+    void supabase.from("monitor_inzeraty").upsert({
+      url,
+      nazov: extracted.nazov || extracted.lokalita,
+      lokalita: extracted.lokalita,
+      cena: extracted.cena,
+      plocha: extracted.plocha || null,
+      typ_nehnutelnosti: extracted.typ_nehnutelnosti || null,
+      izby: extracted.izby || null,
+      predajca_typ: "manualny",
+      first_seen_at: new Date().toISOString(),
+      last_seen_at: new Date().toISOString(),
+    }, { onConflict: "url", ignoreDuplicates: false });
+  }
+
   return NextResponse.json({
     url,
     extracted,

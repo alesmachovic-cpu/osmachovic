@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
 
 interface LogEntry {
   id: string;
@@ -21,23 +20,18 @@ export default function LogPage() {
 
   async function loadLogs() {
     setLoading(true);
-    const tables = ["klienti", "naberove_listy", "objednavky", "nehnutelnosti"];
-    const entries: LogEntry[] = [];
-
-    for (const table of tables) {
-      try {
-        const { count } = await supabase.from(table).select("*", { count: "exact", head: true });
-        entries.push({
-          id: table,
-          table,
-          action: "Celkový počet záznamov",
-          count: count ?? 0,
-          time: new Date().toLocaleString("sk"),
-        });
-      } catch { /* skip */ }
-    }
-
-    setLogs(entries);
+    try {
+      const counts = await fetch("/api/logy").then(r => r.json());
+      const tables = ["klienti", "naberove_listy", "objednavky", "nehnutelnosti"];
+      const entries: LogEntry[] = tables.map(table => ({
+        id: table,
+        table,
+        action: "Celkový počet záznamov",
+        count: counts[table] ?? 0,
+        time: new Date().toLocaleString("sk"),
+      }));
+      setLogs(entries);
+    } catch { /* skip */ }
     setLoading(false);
   }
 

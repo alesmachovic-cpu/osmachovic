@@ -73,7 +73,7 @@ export default function VolniKlientiPage() {
 
   useEffect(() => {
     if (user?.id) getMaklerUuid(user.id).then(setMyMaklerUuid);
-    supabase.from("makleri").select("id, meno").order("meno").then(({ data }) => setMakleri(data || []));
+    fetch("/api/makleri").then(r => r.json()).then(data => setMakleri(data || []));
   }, [user?.id]);
 
   const load = useCallback(async () => {

@@ -5,6 +5,19 @@ import { getUserScope, canEditRecord, canEditNaber } from "@/lib/scope";
 export const runtime = "nodejs";
 
 /**
+ * GET /api/nabery — list naberove_listy
+ */
+export async function GET(req: NextRequest) {
+  const sb = getSupabaseAdmin();
+  const klientId = req.nextUrl.searchParams.get("klient_id");
+  let query = sb.from("naberove_listy").select("id, makler_id, created_at, klient_id, makler, podpis_data").order("created_at", { ascending: false });
+  if (klientId) query = query.eq("klient_id", klientId);
+  const { data, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data ?? []);
+}
+
+/**
  * POST /api/nabery
  * Body: { user_id, klient_id, ...naber_fields }
  *

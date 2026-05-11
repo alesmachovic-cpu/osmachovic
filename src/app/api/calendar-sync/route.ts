@@ -26,12 +26,8 @@ export async function POST(req: NextRequest) {
     // Fallback — uložíme do logy tabuľky ako pending calendar event
     console.log("[calendar-sync] Žiadny Google token, ukladám ako pending event");
 
-    // Import supabase dynamically to avoid client-side import
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-    );
+    const { getSupabaseAdmin } = await import("@/lib/supabase-admin");
+    const supabase = getSupabaseAdmin();
 
     await supabase.from("logy").insert({
       typ: "calendar_pending",

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 
 interface TeamMember {
@@ -32,21 +31,23 @@ export default function TimPage() {
   async function fetchTeam() {
     setLoading(true);
 
-    const [{ data: users }, { data: klienti }, { data: nabery }, { data: nehnutelnosti }] = await Promise.all([
-      supabase.from("users").select("id, name, email, role"),
-      supabase.from("klienti").select("id, makler_id"),
-      supabase.from("naberove_listy").select("id, makler_id"),
-      supabase.from("nehnutelnosti").select("id, makler"),
+    const [usersData, klienti, nabery, nehnutelnosti] = await Promise.all([
+      fetch("/api/users").then(r => r.json()),
+      fetch("/api/klienti").then(r => r.json()),
+      fetch("/api/nabery").then(r => r.json()),
+      fetch("/api/nehnutelnosti").then(r => r.json()),
     ]);
 
-    const teamMembers: TeamMember[] = (users ?? []).map((u) => ({
+    const users = usersData.users ?? [];
+
+    const teamMembers: TeamMember[] = (users ?? []).map((u: { id: string; name: string; email: string; role: string }) => ({
       id: u.id,
       name: u.name,
       email: u.email,
       role: u.role || "makler",
-      klientCount: (klienti ?? []).filter((k) => k.makler_id === u.id).length,
-      naberCount: (nabery ?? []).filter((n) => n.makler_id === u.id).length,
-      nehnutelnostCount: (nehnutelnosti ?? []).filter((n) => n.makler === u.id).length,
+      klientCount: (klienti ?? []).filter((k: { makler_id: string }) => k.makler_id === u.id).length,
+      naberCount: (nabery ?? []).filter((n: { makler_id: string }) => n.makler_id === u.id).length,
+      nehnutelnostCount: (nehnutelnosti ?? []).filter((n: { makler: string }) => n.makler === u.id).length,
     }));
 
     setMembers(teamMembers);
@@ -57,13 +58,20 @@ export default function TimPage() {
     if (!formName.trim() || !formEmail.trim()) return;
     setSaving(true);
 
-    const { error } = await supabase.from("users").insert({
-      name: formName.trim(),
-      email: formEmail.trim(),
-      role: "makler",
+    const res = await fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: formName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
+        name: formName.trim(),
+        initials: formName.trim().split(" ").map((w: string) => w[0] || "").join("").toUpperCase().slice(0, 2),
+        email: formEmail.trim(),
+        role: "makler",
+        password: "",
+      }),
     });
 
-    if (!error) {
+    if (res.ok) {
       setFormName("");
       setFormEmail("");
       setFormPhone("");

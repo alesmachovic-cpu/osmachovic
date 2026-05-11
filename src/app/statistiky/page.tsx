@@ -3,7 +3,6 @@
 import { Suspense, useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { supabase } from "@/lib/supabase";
 import { STATUS_LABELS } from "@/lib/database.types";
 
 /* ─────────────────────────── Typy ─────────────────────────── */
@@ -669,15 +668,15 @@ function StatistikyInner() {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      supabase.from("nehnutelnosti").select("id, nazov, typ_nehnutelnosti, stav_inzeratu, cena, plocha, lokalita, created_at, updated_at, makler_id, makler_email, makler, provizia_hodnota"),
-      supabase.from("klienti").select("id, status, created_at, makler_id"),
-      supabase.from("users").select("id, name, role, email, pobocka_id"),
-      supabase.from("pobocky").select("id, nazov, mesto").order("nazov"),
+      fetch("/api/nehnutelnosti").then(r => r.json()),
+      fetch("/api/klienti").then(r => r.json()),
+      fetch("/api/users").then(r => r.json()),
+      fetch("/api/pobocky").then(r => r.json()),
     ]).then(([nh, kl, us, po]) => {
-      setNehnutelnosti((nh.data ?? []) as Nehnutelnost[]);
-      setKlienti((kl.data ?? []) as Klient[]);
-      setUsers((us.data ?? []) as User[]);
-      setPobocky((po.data ?? []) as Pobocka[]);
+      setNehnutelnosti((nh ?? []) as Nehnutelnost[]);
+      setKlienti((kl ?? []) as Klient[]);
+      setUsers(((us.users ?? us) ?? []) as User[]);
+      setPobocky((po ?? []) as Pobocka[]);
       setLoading(false);
     });
   }, []);

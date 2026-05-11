@@ -9,7 +9,6 @@ import { ALL_FEATURES, loadFeatureToggles, saveFeatureToggles } from "@/lib/feat
 import type { FeatureId, FeatureToggles } from "@/lib/featureToggles";
 import { getUserItem, setUserItem } from "@/lib/userStorage";
 import { detectPushState, enableBrowserPush, type PushState } from "@/lib/pushClient";
-import { supabase } from "@/lib/supabase";
 
 type NotifPrefs = { monitor: boolean; odklik: boolean; lv: boolean; naklady: boolean };
 const DEFAULT_NOTIF_PREFS: NotifPrefs = { monitor: true, odklik: true, lv: true, naklady: true };
@@ -82,17 +81,20 @@ export default function NastaveniaPage() {
   useEffect(() => {
     setPushState(detectPushState());
     if (!uid) return;
-    supabase.from("users").select("notification_prefs").eq("id", uid).single()
-      .then(({ data }) => {
-        const prefs = data?.notification_prefs as Partial<NotifPrefs> | undefined;
-        if (prefs) setNotifPrefs({ ...DEFAULT_NOTIF_PREFS, ...prefs });
-      });
+    fetch("/api/users").then(r => r.json()).then(({ users }) => {
+      const userData = (users ?? []).find((u: { id: string; notification_prefs?: Partial<NotifPrefs> }) => u.id === uid);
+      if (userData?.notification_prefs) setNotifPrefs({ ...DEFAULT_NOTIF_PREFS, ...userData.notification_prefs });
+    });
   }, [uid]);
 
   const handleToggleNotif = async (key: keyof NotifPrefs) => {
     const next = { ...notifPrefs, [key]: !notifPrefs[key] };
     setNotifPrefs(next);
-    await supabase.from("users").update({ notification_prefs: next }).eq("id", uid);
+    await fetch(`/api/users?id=${encodeURIComponent(uid)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notification_prefs: next }),
+    });
     setNotifSaved(true);
     setTimeout(() => setNotifSaved(false), 2000);
   };
@@ -128,18 +130,18 @@ export default function NastaveniaPage() {
       }
 
       // Load vzorové inzeráty z DB (cross-device). Fallback na localStorage pre legacy.
-      supabase.from("users").select("vzorove_inzeraty").eq("id", uid).single()
-        .then(({ data }) => {
-          const dbVal = data?.vzorove_inzeraty;
-          if (Array.isArray(dbVal) && dbVal.length > 0) {
-            // Padding na 3 slots
-            setVzorLinks([dbVal[0] || "", dbVal[1] || "", dbVal[2] || ""]);
-          } else {
-            // Migrácia z localStorage pri prvej návšteve po deploy
-            const vi = getUserItem(uid, "vzorove_inzeraty");
-            if (vi) setVzorLinks(JSON.parse(vi));
-          }
-        });
+      fetch("/api/users").then(r => r.json()).then(({ users }) => {
+        const userData = (users ?? []).find((u: { id: string; vzorove_inzeraty?: string[] }) => u.id === uid);
+        const dbVal = userData?.vzorove_inzeraty;
+        if (Array.isArray(dbVal) && dbVal.length > 0) {
+          // Padding na 3 slots
+          setVzorLinks([dbVal[0] || "", dbVal[1] || "", dbVal[2] || ""]);
+        } else {
+          // Migrácia z localStorage pri prvej návšteve po deploy
+          const vi = getUserItem(uid, "vzorove_inzeraty");
+          if (vi) setVzorLinks(JSON.parse(vi));
+        }
+      });
 
       // Load company info (admin only, from Supabase)
       if (isAdmin) {
@@ -206,7 +208,11 @@ export default function NastaveniaPage() {
     if (!uid) return;
     // Filter out empty slots pred uložením do DB
     const nonEmpty = vzorLinks.filter((l) => l && l.trim());
-    await supabase.from("users").update({ vzorove_inzeraty: nonEmpty }).eq("id", uid);
+    await fetch(`/api/users?id=${encodeURIComponent(uid)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vzorove_inzeraty: nonEmpty }),
+    });
     // Zachovaj aj localStorage pre spätnú kompatibilitu
     setUserItem(uid, "vzorove_inzeraty", JSON.stringify(vzorLinks));
     setVzorSaved(true);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { sendPushToAll } from "@/lib/monitor";
 
 // Spustí sa denne cez Vercel cron (vercel.json).
@@ -13,7 +13,8 @@ export async function GET() {
   const monthStart = `${yyyy}-${mm}-01`;
   const nextMonth = new Date(yyyy, today.getMonth() + 1, 1).toISOString().slice(0, 10);
 
-  const { data: pravidelne, error } = await supabase
+  const sb = getSupabaseAdmin();
+  const { data: pravidelne, error } = await sb
     .from("pravidelne_naklady")
     .select("*")
     .eq("aktivny", true);
@@ -31,7 +32,7 @@ export async function GET() {
     if (diffDays > 2 || diffDays < 0) continue;
 
     // Skontroluj či už existuje pre tento mesiac
-    const { data: existing } = await supabase
+    const { data: existing } = await sb
       .from("prehlad_zaznamy")
       .select("id")
       .eq("popis", p.nazov)
@@ -41,7 +42,7 @@ export async function GET() {
 
     if (existing && existing.length > 0) continue;
 
-    await supabase.from("prehlad_zaznamy").insert({
+    await sb.from("prehlad_zaznamy").insert({
       typ: "vydaj",
       datum: splatnost.toISOString().slice(0, 10),
       popis: p.nazov,

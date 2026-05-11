@@ -96,7 +96,7 @@ function NaberPageContent() {
 
   useEffect(() => {
     loadKlienti();
-    supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
+    fetch("/api/makleri?aktivny=true").then(r => r.json()).then(data => setMakleri(data ?? []));
   }, []);
 
   async function loadKlienti() {

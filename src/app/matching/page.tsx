@@ -9,8 +9,9 @@ interface Objednavka {
   klient_id: string;
   druh: string | null;
   poziadavky: Record<string, unknown> | null;
-  lokalita: string[] | null;
+  lokalita: { kraje?: string[]; okresy?: string[] } | string[] | null;
   cena_do: number | null;
+  cena_od: number | null;
 }
 
 interface Match {
@@ -51,8 +52,13 @@ function calcMatch(k: Klient, n: Nehnutelnost, objednavky: Objednavka[]): { scor
     }
   }
 
-  // Lokalita z objednávky (array) alebo z klienta (string)
-  const objLokality = obj?.lokalita ?? [];
+  // Lokalita z objednávky (môže byť {kraje,okresy} alebo string[]) alebo z klienta
+  const rawLok = obj?.lokalita;
+  const objLokality: string[] = Array.isArray(rawLok)
+    ? rawLok
+    : rawLok
+      ? [...(rawLok.kraje ?? []), ...(rawLok.okresy ?? [])]
+      : [];
   if (objLokality.length > 0 && n.lokalita) {
     const nLow = n.lokalita.toLowerCase();
     const match = objLokality.some(lok => {
@@ -121,7 +127,7 @@ export default function MatchingPage() {
       const [{ data: k }, { data: n }, { data: o }] = await Promise.all([
         supabase.from("klienti").select("*").in("typ", ["kupujuci", "oboje"]),
         supabase.from("nehnutelnosti").select("*"),
-        supabase.from("objednavky").select("id, klient_id, druh, poziadavky, lokalita, cena_do"),
+        supabase.from("objednavky").select("id, klient_id, druh, poziadavky, lokalita, cena_od, cena_do"),
       ]);
       const ks = k ?? [];
       const ns = n ?? [];
@@ -359,9 +365,11 @@ export default function MatchingPage() {
                         {m.klient.lokalita && <div>📍 {m.klient.lokalita}</div>}
                         {m.klient.rozpocet_max && <div>💰 max {fmtCena(m.klient.rozpocet_max)}</div>}
                         {m.objednavka?.druh && <div>🏠 Hľadá: {m.objednavka.druh}</div>}
-                        {m.objednavka?.lokalita && m.objednavka.lokalita.length > 0 && (
-                          <div>📍 Lokality: {m.objednavka.lokalita.join(", ")}</div>
-                        )}
+                        {m.objednavka?.lokalita && (() => {
+                          const raw = m.objednavka.lokalita;
+                          const loks = Array.isArray(raw) ? raw : [...(raw.kraje ?? []), ...(raw.okresy ?? [])];
+                          return loks.length > 0 ? <div>📍 Lokality: {loks.join(", ")}</div> : null;
+                        })()}
                         {m.objednavka?.cena_do && <div>💰 Max: {fmtCena(m.objednavka.cena_do)}</div>}
                       </div>
                     </div>

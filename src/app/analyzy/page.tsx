@@ -1,6 +1,5 @@
 "use client";
 import { Suspense, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import type { Klient, Nehnutelnost } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
 
@@ -37,22 +36,13 @@ function AnalyzyInner() {
 
   useEffect(() => {
     Promise.all([
-      supabase.from("klienti").select("*").order("created_at", { ascending: false }),
-      supabase.from("nehnutelnosti").select("*").order("created_at", { ascending: false }),
+      fetch("/api/klienti").then(r => r.json()),
+      fetch("/api/nehnutelnosti").then(r => r.json()),
       // Najnovšie sentiments — vyber najnovší dátum, posledných 50 segmentov
-      supabase.from("market_sentiments")
-        .select("lokalita, typ, izby, active_count, median_eur_per_m2, median_dom, demand_index, price_change_30d_pct, sentiment_date")
-        .order("sentiment_date", { ascending: false })
-        .order("demand_index", { ascending: false })
-        .limit(50),
+      fetch("/api/market-sentiments?limit=50").then(r => r.json()),
       // Posledných 20 detegovaných predajov
-      supabase.from("monitor_inzeraty_disappearances")
-        .select("id, disappeared_on, estimated_sale_price, total_days_on_market, estimated_discount_pct, monitor_inzeraty(lokalita, typ, izby, nazov)")
-        .eq("classification", "likely_sold")
-        .gte("confidence_score", 0.6)
-        .order("disappeared_on", { ascending: false })
-        .limit(20),
-    ]).then(([{ data: k }, { data: n }, { data: s }, { data: d }]) => {
+      fetch("/api/monitor/disappearances?limit=20").then(r => r.json()),
+    ]).then(([k, n, s, d]) => {
       setKlienti(k ?? []);
       setNehnutelnosti(n ?? []);
       // Filter na najnovší dátum

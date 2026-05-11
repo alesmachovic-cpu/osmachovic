@@ -69,8 +69,8 @@ export default function AuthCallback() {
 
         // Normálny Google login: nájdi usera podľa emailu
         setStatus("Hľadám účet...");
-        const { data: usersList } = await supabase.from("users").select("*");
-        const accs = usersList ?? [];
+        const usersRes = await fetch("/api/users").then(r => r.json());
+        const accs = usersRes.users ?? [];
         const matched = accs.find((a) => {
           const gEmail = gmailEmail.toLowerCase();
           return (

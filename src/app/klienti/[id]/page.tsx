@@ -405,7 +405,7 @@ export default function KlientDetailPage() {
 
   useEffect(() => {
     if (id) loadAll();
-    if (isAdmin) supabase.from("makleri").select("id, meno").eq("aktivny", true).then(r => setMakleri(r.data ?? []));
+    if (isAdmin) fetch("/api/makleri?aktivny=true").then(r => r.json()).then(data => setMakleri(data ?? []));
     if (user?.id) getMaklerUuid(user.id).then(setMyMaklerUuid);
   }, [id]);
 

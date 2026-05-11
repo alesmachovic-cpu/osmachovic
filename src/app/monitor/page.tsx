@@ -22,7 +22,7 @@ interface Inzerat {
   foto_url: string;
   predajca_meno: string;
   predajca_telefon: string;
-  predajca_typ: string;
+  predajca_typ: string | null;
   first_seen_at: string;
   last_seen_at: string;
   is_active: boolean;
@@ -30,6 +30,7 @@ interface Inzerat {
   listed_on_n_portals?: number;
   predajca_typ_confidence?: number;
   predajca_typ_method?: string;
+  predajca_typ_signals?: { signals: Array<{ id: string; side: string; weight: number; reason: string; evidence?: string }>; raw_score?: number; predajca_typ?: string } | null;
   canonical_id?: string | null;
 }
 
@@ -194,8 +195,10 @@ function MonitorContent() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [lenSukromni, setLenSukromni] = useState(true);  // Default: zobraz len súkromných
+  const [zahrnNeJasne, setZahrnNeJasne] = useState(false);
   const [onlyToday, setOnlyToday] = useState(false);
   const [onlyMotivated, setOnlyMotivated] = useState(false);
+  const [overridingId, setOverridingId] = useState<string | null>(null);
   const [hideDuplicates, setHideDuplicates] = useState(true); // Default: skry dupy z viacerých portálov
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -287,12 +290,43 @@ function MonitorContent() {
   const today = new Date().toISOString().split("T")[0];
   const noveDnes = inzeraty.filter(i => i.first_seen_at?.startsWith(today)).length;
   const sukromniCount = inzeraty.filter(i => i.predajca_typ === "sukromny").length;
+  const nejasneCount = inzeraty.filter(i => !i.predajca_typ).length;
   const motivovaniCount = inzeraty.filter(i => (i.motivation_score ?? 0) >= 30).length;
   const aktivneFiltre = filtre.filter(f => f.is_active).length;
 
+  async function handleOverride(inzeratId: string, typ: "rk" | "sukromny") {
+    setOverridingId(inzeratId);
+    try {
+      const res = await fetch("/api/monitor/classify-override", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ inzerat_id: inzeratId, typ }),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        setInzeraty(prev => prev.map(x => x.id === inzeratId
+          ? { ...x, predajca_typ: typ === "rk" ? "firma" : "sukromny", predajca_typ_confidence: 1 }
+          : x
+        ));
+        showToast(d.message || "Override zaznamenaný");
+      } else {
+        showToast(d.error || "Chyba pri override", "error");
+      }
+    } catch {
+      showToast("Chyba pri override", "error");
+    } finally {
+      setOverridingId(null);
+    }
+  }
+
   const filtered = inzeraty
     .filter(i => {
-      if (lenSukromni && i.predajca_typ !== "sukromny") return false;
+      if (lenSukromni) {
+        const isSukromny = i.predajca_typ === "sukromny";
+        const isNejasne = !i.predajca_typ;
+        if (!isSukromny && !(zahrnNeJasne && isNejasne)) return false;
+      }
       if (onlyToday && !(i.first_seen_at || "").startsWith(today)) return false;
       if (onlyMotivated && (i.motivation_score ?? 0) < 30) return false;
       if (hideDuplicates && i.canonical_id) return false; // skry duplikáty (canonical_id ≠ null = sekundárny)
@@ -420,6 +454,29 @@ function MonitorContent() {
     }
   };
 
+  const [reclassifying, setReclassifying] = useState(false);
+  const runReclassify = async () => {
+    if (!confirm("Re-klasifikovať všetky aktívne inzeráty cez AI classifier v2? Môže trvať 1–2 minúty.")) return;
+    setReclassifying(true);
+    try {
+      const res = await fetch("/api/monitor/reclassify-all", {
+        method: "POST",
+        credentials: "include",
+      });
+      const d = await res.json();
+      if (res.ok) {
+        showToast(`Hotovo: ${d.updated} preklasifikovaných, ${d.skipped} preskočených (override)`);
+        await loadInzeraty();
+      } else {
+        showToast(d.error || "Chyba pri re-klasifikácii", "error");
+      }
+    } catch {
+      showToast("Chyba pri re-klasifikácii", "error");
+    } finally {
+      setReclassifying(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "120px 0" }}>
@@ -457,27 +514,50 @@ function MonitorContent() {
             Sledovanie nových inzerátov na slovenských portáloch
           </p>
         </div>
-        <button
-          onClick={runScrape}
-          disabled={scraping || aktivneFiltre === 0}
-          style={{
-            ...S.btnPrimary,
-            opacity: (scraping || aktivneFiltre === 0) ? 0.4 : 1,
-            cursor: (scraping || aktivneFiltre === 0) ? "not-allowed" : "pointer",
-            display: "flex", alignItems: "center", gap: "8px",
-          }}
-        >
-          {scraping ? (
-            <>
-              <span style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
-              Scrapujem...
-            </>
-          ) : aktivneFiltre === 0 ? "Pridaj filter" : "Spustiť scrape"}
-        </button>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          {isSuperAdmin && (
+            <button
+              onClick={runReclassify}
+              disabled={reclassifying}
+              style={{
+                ...S.btnSecondary,
+                opacity: reclassifying ? 0.4 : 1,
+                cursor: reclassifying ? "not-allowed" : "pointer",
+                display: "flex", alignItems: "center", gap: "6px",
+                fontSize: "12px",
+              }}
+              title="Re-klasifikovať všetky inzeráty cez classifier v2"
+            >
+              {reclassifying ? (
+                <>
+                  <span style={{ width: "12px", height: "12px", border: "2px solid var(--border)", borderTopColor: "var(--text-primary)", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+                  Klasifikujem...
+                </>
+              ) : "🤖 Re-klasifikovať"}
+            </button>
+          )}
+          <button
+            onClick={runScrape}
+            disabled={scraping || aktivneFiltre === 0}
+            style={{
+              ...S.btnPrimary,
+              opacity: (scraping || aktivneFiltre === 0) ? 0.4 : 1,
+              cursor: (scraping || aktivneFiltre === 0) ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", gap: "8px",
+            }}
+          >
+            {scraping ? (
+              <>
+                <span style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
+                Scrapujem...
+              </>
+            ) : aktivneFiltre === 0 ? "Pridaj filter" : "Spustiť scrape"}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px", marginBottom: "24px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "12px", marginBottom: "24px" }}>
         {[
           {
             label: "Celkom inzerátov", value: total, color: "var(--text-primary)",
@@ -490,9 +570,14 @@ function MonitorContent() {
             active: tab === "inzeraty" && onlyToday,
           },
           {
-            label: "Súkromní", value: sukromniCount, color: sukromniCount > 0 ? "var(--warning)" : "var(--text-primary)",
-            onClick: () => { setTab("inzeraty"); setLenSukromni(true); setOnlyMotivated(false); },
-            active: tab === "inzeraty" && lenSukromni && !onlyMotivated,
+            label: "👤 Súkromní", value: sukromniCount, color: sukromniCount > 0 ? "var(--warning)" : "var(--text-primary)",
+            onClick: () => { setTab("inzeraty"); setLenSukromni(true); setZahrnNeJasne(false); setOnlyMotivated(false); },
+            active: tab === "inzeraty" && lenSukromni && !onlyMotivated && !zahrnNeJasne,
+          },
+          {
+            label: "🤔 Nejasné", value: nejasneCount, color: nejasneCount > 0 ? "#7c3aed" : "var(--text-muted)",
+            onClick: () => { setTab("inzeraty"); setLenSukromni(true); setZahrnNeJasne(true); setOnlyMotivated(false); },
+            active: tab === "inzeraty" && lenSukromni && zahrnNeJasne,
           },
           {
             label: "🔥 Motivovaní", value: motivovaniCount, color: motivovaniCount > 0 ? "#dc2626" : "var(--text-primary)",
@@ -569,7 +654,7 @@ function MonitorContent() {
               {SORT_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
             <button
-              onClick={() => setLenSukromni(!lenSukromni)}
+              onClick={() => { setLenSukromni(!lenSukromni); if (lenSukromni) setZahrnNeJasne(false); }}
               style={{
                 ...S.btnSecondary,
                 background: lenSukromni ? "var(--warning-light)" : "var(--bg-base)",
@@ -580,6 +665,20 @@ function MonitorContent() {
             >
               👤 Len súkromní
             </button>
+            {lenSukromni && (
+              <button
+                onClick={() => setZahrnNeJasne(!zahrnNeJasne)}
+                style={{
+                  ...S.btnSecondary,
+                  background: zahrnNeJasne ? "#f3e8ff" : "var(--bg-base)",
+                  color: zahrnNeJasne ? "#7c3aed" : "var(--text-secondary)",
+                  borderColor: zahrnNeJasne ? "#a78bfa" : "var(--border-subtle)",
+                  fontSize: "12px",
+                }}
+              >
+                🤔 + Nejasné ({nejasneCount})
+              </button>
+            )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", gap: "12px", flexWrap: "wrap" }}>
@@ -695,8 +794,27 @@ function MonitorContent() {
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
                       <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{timeAgo(i.first_seen_at)}</span>
                       {i.predajca_typ === "sukromny" && (
-                        <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--warning)", background: "var(--warning-light)", padding: "2px 8px", borderRadius: "6px" }}>
+                        <span
+                          style={{ fontSize: "11px", fontWeight: 600, color: "var(--warning)", background: "var(--warning-light)", padding: "2px 8px", borderRadius: "6px" }}
+                          title={i.predajca_typ_signals?.signals?.map(s => s.reason).join(" · ")}
+                        >
                           👤 Súkromný
+                          {typeof i.predajca_typ_confidence === "number" && i.predajca_typ_confidence < 0.85 && (
+                            <span style={{
+                              marginLeft: "4px",
+                              background: i.predajca_typ_confidence < 0.5 ? "#fef08a" : "#e5e7eb",
+                              color: i.predajca_typ_confidence < 0.5 ? "#854d0e" : "#4b5563",
+                              borderRadius: "4px", padding: "0 4px", fontSize: "10px",
+                            }}>?{Math.round(i.predajca_typ_confidence * 100)}%</span>
+                          )}
+                        </span>
+                      )}
+                      {!i.predajca_typ && (
+                        <span
+                          style={{ fontSize: "11px", fontWeight: 600, color: "#7c3aed", background: "#f3e8ff", padding: "2px 8px", borderRadius: "6px" }}
+                          title={i.predajca_typ_signals?.signals?.map(s => s.reason).join(" · ") || "Klasifikátor si nebol istý"}
+                        >
+                          🤔 Nejasné
                         </span>
                       )}
                       {(i.motivation_score ?? 0) >= 60 && (
@@ -729,6 +847,38 @@ function MonitorContent() {
                       }} title="Pre-call brief — čo povedať predajcovi pred zavolaním">
                         📞 Brief
                       </button>
+                      {i.predajca_typ !== "firma" && (
+                        <button
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleOverride(i.id, "rk"); }}
+                          disabled={overridingId === i.id}
+                          style={{
+                            fontSize: "11px", fontWeight: 600, color: "#1e3a8a",
+                            background: "#dbeafe", border: "none",
+                            padding: "3px 8px", borderRadius: "6px",
+                            cursor: overridingId === i.id ? "default" : "pointer",
+                            opacity: overridingId === i.id ? 0.5 : 1,
+                          }}
+                          title="Toto je realitná kancelária"
+                        >
+                          🏢 RK
+                        </button>
+                      )}
+                      {i.predajca_typ !== "sukromny" && (
+                        <button
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleOverride(i.id, "sukromny"); }}
+                          disabled={overridingId === i.id}
+                          style={{
+                            fontSize: "11px", fontWeight: 600, color: "#92400e",
+                            background: "#fef3c7", border: "none",
+                            padding: "3px 8px", borderRadius: "6px",
+                            cursor: overridingId === i.id ? "default" : "pointer",
+                            opacity: overridingId === i.id ? 0.5 : 1,
+                          }}
+                          title="Toto je súkromný predajca"
+                        >
+                          👤 Súkromný
+                        </button>
+                      )}
                       <button onClick={(e) => {
                         e.preventDefault(); e.stopPropagation();
                         router.push(`/analyzy?analyze=${encodeURIComponent(i.url)}`);

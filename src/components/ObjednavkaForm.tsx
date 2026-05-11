@@ -187,9 +187,14 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
       const data = await r.json();
       resultId = data.id;
     } else {
-      const { data, error } = await supabase.from("objednavky").insert(payload).select("id").single();
-      if (error) { alert("Chyba: " + error.message); setSaving(false); return; }
-      resultId = data.id;
+      const r = await fetch("/api/objednavky", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { alert("Chyba: " + (d.error || r.statusText)); setSaving(false); return; }
+      resultId = d.id;
       if (klient.typ === "predavajuci" && user?.id) {
         await klientUpdate(user.id, klient.id, { typ: "oboje" });
       }

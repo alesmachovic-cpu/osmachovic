@@ -111,7 +111,7 @@ export default function Portfolio() {
   }, [user?.id]);
 
   useEffect(() => {
-    supabase.from("makleri").select("id, meno, email").then(({ data }) => {
+    fetch("/api/makleri").then(r => r.json()).then(data => {
       if (data) setMakleriList(data as { meno: string; email: string; id: string }[]);
     });
   }, []);

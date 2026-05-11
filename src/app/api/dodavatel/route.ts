@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const FIELDS = [
   "nazov", "adresa", "ico", "dic", "ic_dph",
@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get("user_id");
   if (!userId) return NextResponse.json({ error: "user_id required" }, { status: 400 });
 
-  const { data, error } = await supabase
+  const sb = getSupabaseAdmin();
+  const { data, error } = await sb
     .from("makler_dodavatel")
     .select("*")
     .eq("user_id", userId)
@@ -33,8 +34,9 @@ export async function PUT(req: NextRequest) {
   const userId = body?.user_id;
   if (!userId) return NextResponse.json({ error: "user_id required" }, { status: 400 });
 
+  const sb = getSupabaseAdmin();
   const payload = { user_id: userId, ...pickFields(body) };
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from("makler_dodavatel")
     .upsert(payload, { onConflict: "user_id" })
     .select()

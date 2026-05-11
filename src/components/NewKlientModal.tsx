@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import PhoneInput from "@/components/PhoneInput";
 import { useAuth } from "@/components/AuthProvider";
@@ -427,6 +428,7 @@ function getLastDigits(phone: string, count: number): string {
 
 export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLvPrompt, initialPhone, showTypKlienta = false, defaultTyp = "predavajuci", editKlient }: Props) {
   const { user: authUser } = useAuth();
+  const router = useRouter();
   const isEdit = !!editKlient;
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
   useEffect(() => {
@@ -618,6 +620,25 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     setUlicaSuggestions(mapped);
     setShowUlicaSuggestions(mapped.length > 0);
   }, [ulica, lokalitaValue]);
+
+  // Lokalita — existujúci klienti s rovnakou oblasťou
+  const [lokalitaKlienti, setLokalitaKlienti] = useState<{ id: string; meno: string; telefon?: string; status?: string }[]>([]);
+  const [lokalitaKlientConfirm, setLokalitaKlientConfirm] = useState<{ id: string; meno: string } | null>(null);
+  const lokalitaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (lokalitaDebounceRef.current) clearTimeout(lokalitaDebounceRef.current);
+    const input = lokalitaInput.trim();
+    if (input.length < 2) { setLokalitaKlienti([]); return; }
+    lokalitaDebounceRef.current = setTimeout(async () => {
+      const { data } = await supabase.from("klienti")
+        .select("id,meno,telefon,status")
+        .ilike("lokalita", `%${input}%`)
+        .limit(3);
+      setLokalitaKlienti(data ?? []);
+    }, 400);
+    return () => { if (lokalitaDebounceRef.current) clearTimeout(lokalitaDebounceRef.current); };
+  }, [lokalitaInput]);
 
   if (open === false) return null;
 
@@ -825,6 +846,16 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
         const klientId = (isEdit ? editKlient?.id : (resultData?.[0] as { id?: string } | undefined)?.id) as string | undefined;
         const klientMeno = meno.trim();
         if (klientId) onLvPrompt?.({ id: klientId, meno: klientMeno });
+      }
+    }
+    // Log internej poznámky do timeline pri vytvorení nového klienta
+    if (!isEdit && poznamka.trim()) {
+      const newKlientId = (resultData?.[0] as { id?: string } | undefined)?.id;
+      if (newKlientId) {
+        fetch("/api/klient-udalosti", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ klient_id: newKlientId, typ: "poznamka", popis: poznamka.trim(), autor: authUser?.id || null }),
+        }).catch(() => {});
       }
     }
     onCreated?.();
@@ -1066,24 +1097,52 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
                 Mestská časť alebo obec — ulicu vyplníš nižšie
               </div>
             )}
-            {showSuggestions && suggestions.length > 0 && (
+            {showSuggestions && (suggestions.length > 0 || lokalitaKlienti.length > 0) && (
               <div style={{
                 position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
                 background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "10px",
                 boxShadow: "0 8px 24px rgba(0,0,0,0.12)", marginTop: "4px", overflow: "hidden",
               }}>
-                {suggestions.map((s, i) => (
-                  <div key={i} onMouseDown={e => { e.preventDefault(); selectLokalita(s); }} style={{
-                    padding: "10px 14px", fontSize: "13px", cursor: "pointer",
-                    borderBottom: i < suggestions.length - 1 ? "1px solid var(--border)" : "none",
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                  }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                    <span style={{ color: "var(--text-primary)", fontWeight: "500" }}>{s.display}</span>
-                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{s.lokalita}</span>
-                  </div>
-                ))}
+                {suggestions.length > 0 && (
+                  <>
+                    {lokalitaKlienti.length > 0 && (
+                      <div style={{ padding: "6px 14px 4px", fontSize: "10px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--border)" }}>
+                        Mestá / Obce
+                      </div>
+                    )}
+                    {suggestions.map((s, i) => (
+                      <div key={i} onMouseDown={e => { e.preventDefault(); selectLokalita(s); }} style={{
+                        padding: "10px 14px", fontSize: "13px", cursor: "pointer",
+                        borderBottom: i < suggestions.length - 1 ? "1px solid var(--border)" : "none",
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                      }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                        <span style={{ color: "var(--text-primary)", fontWeight: "500" }}>{s.display}</span>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{s.lokalita}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {lokalitaKlienti.length > 0 && (
+                  <>
+                    <div style={{ padding: "6px 14px 4px", fontSize: "10px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", borderTop: suggestions.length > 0 ? "1px solid var(--border)" : "none" }}>
+                      Existujúci klienti
+                    </div>
+                    {lokalitaKlienti.map((k, i) => (
+                      <div key={k.id} onMouseDown={e => { e.preventDefault(); setLokalitaKlientConfirm(k); setShowSuggestions(false); }} style={{
+                        padding: "10px 14px", fontSize: "13px", cursor: "pointer",
+                        borderBottom: i < lokalitaKlienti.length - 1 ? "1px solid var(--border)" : "none",
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                      }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                        <span style={{ color: "var(--text-primary)", fontWeight: "500" }}>{k.meno}</span>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>{k.telefon || k.status || ""}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             )}
             {showNotFound && (
@@ -1174,6 +1233,33 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
         {saveError && (
           <div style={{ marginTop: "16px", padding: "10px 14px", background: "#FEE2E2", borderRadius: "8px", fontSize: "13px", color: "#991B1B", fontWeight: "500" }}>
             ❌ {saveError}
+          </div>
+        )}
+
+        {/* Confirm — existujúci klient z lokalita autocomplete */}
+        {lokalitaKlientConfirm && (
+          <div style={{
+            marginTop: "16px", padding: "16px", background: "#EFF6FF",
+            border: "1px solid #3B82F6", borderRadius: "12px",
+          }}>
+            <div style={{ fontSize: "14px", fontWeight: "600", color: "#1E40AF", marginBottom: "6px" }}>
+              Existujúci klient: {lokalitaKlientConfirm.meno}
+            </div>
+            <div style={{ fontSize: "13px", color: "#3B82F6", marginBottom: "12px" }}>
+              Tento klient už existuje v databáze. Chceš otvoriť jeho kartu?
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => { router.push(`/klienti/${lokalitaKlientConfirm.id}`); onClose(); }}
+                style={{ padding: "8px 16px", background: "#3B82F6", color: "#fff", border: "none", borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}>
+                Otvoriť kartu
+              </button>
+              <button
+                onClick={() => setLokalitaKlientConfirm(null)}
+                style={{ padding: "8px 16px", background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", cursor: "pointer" }}>
+                Pokračovať bez neho
+              </button>
+            </div>
           </div>
         )}
 

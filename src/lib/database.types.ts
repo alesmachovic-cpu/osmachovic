@@ -2,7 +2,7 @@
 
 export type TypNehnutelnosti = string; // Dynamic - all Vianema categories
 export type StavNehnutelnosti = "novostavba" | "rekonstruovana" | "povodny_stav";
-export type KlientStatus = "novy" | "novy_kontakt" | "aktivny" | "dohodnuty_naber" | "nabrany" | "pasivny" | "volat_neskor" | "nedovolal" | "nechce_rk" | "uz_predal" | "realitna_kancelaria" | "uzavrety" | "caka_na_schvalenie";
+export type KlientStatus = "novy" | "novy_kontakt" | "aktivny" | "dohodnuty_naber" | "nabrany" | "inzerovany" | "pasivny" | "volat_neskor" | "nedovolal" | "nechce_rk" | "uz_predal" | "realitna_kancelaria" | "uzavrety" | "caka_na_schvalenie";
 
 export type TypInzercie = "inkognito" | "online_web" | "online" | "vyhradne";
 
@@ -100,6 +100,7 @@ export const STATUS_LABELS: Record<KlientStatus, string> = {
   aktivny: "Aktívny",
   dohodnuty_naber: "Dohodnutý náber",
   nabrany: "Nabraný",
+  inzerovany: "Inzerovaný",
   pasivny: "Pasívny",
   volat_neskor: "Volať neskôr",
   nedovolal: "Nedovolal",

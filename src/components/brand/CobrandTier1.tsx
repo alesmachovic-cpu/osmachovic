@@ -27,23 +27,20 @@ export function PoweredByAMGD({ size = "md", className = "" }: PoweredByAMGDProp
 
   return (
     <div
-      className={`inline-flex items-center ${gap} opacity-60 ${className}`}
+      className={className}
       aria-label="Powered by AMGD"
+      style={{ display: "inline-flex", alignItems: "center", gap: isSmall ? "6px" : "10px", opacity: 0.6 }}
     >
-      <span
-        className={`${labelSize} tracking-[0.12em]`}
-        style={{ color: "currentColor" }}
-      >
+      <span style={{ fontSize: isSmall ? "7px" : "9px", letterSpacing: "0.12em", color: "currentColor" }}>
         POWERED BY
       </span>
-      <span
-        className={`${markSize} font-medium`}
-        style={{
-          color: "currentColor",
-          letterSpacing: "-0.02em",
-          fontFamily: "Inter, system-ui, -apple-system, sans-serif",
-        }}
-      >
+      <span style={{
+        fontSize: isSmall ? "9px" : "11px",
+        fontWeight: 500,
+        color: "currentColor",
+        letterSpacing: "-0.02em",
+        fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+      }}>
         AMGD
       </span>
     </div>
@@ -81,16 +78,21 @@ export function VianemaBranded({
   const isVertical = orientation === "vertical";
   return (
     <div
-      className={`flex ${
-        isVertical
-          ? "flex-col items-center gap-6"
-          : "flex-row items-center justify-between w-full"
-      } ${className}`}
+      className={className}
+      style={{
+        display: "flex",
+        flexDirection: isVertical ? "column" : "row",
+        alignItems: "center",
+        justifyContent: isVertical ? undefined : "space-between",
+        width: isVertical ? undefined : "100%",
+        gap: isVertical ? "24px" : undefined,
+      }}
     >
-      <div className="flex flex-col items-center">
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
         <span
-          className="text-[32px] font-medium"
           style={{
+            fontSize: "32px",
+            fontWeight: 500,
             letterSpacing: "-0.03em",
             color: "currentColor",
             lineHeight: 1,
@@ -100,9 +102,11 @@ export function VianemaBranded({
           VIANEMA
         </span>
         <span
-          className="text-[9px] mt-1 opacity-55"
           style={{
-            letterSpacing: "0.4em",
+            fontSize: "9px",
+            marginTop: "4px",
+            opacity: 0.55,
+            letterSpacing: "0.25em",
             color: "currentColor",
             fontFamily: "Inter, system-ui, -apple-system, sans-serif",
           }}
