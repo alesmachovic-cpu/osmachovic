@@ -192,7 +192,8 @@ function KlientiContent() {
     setMyMaklerUuid(uuid);
 
     // Everyone loads ALL clients — filtering is done client-side
-    const { data } = await supabase.from("klienti").select("*").order("created_at", { ascending: false });
+    const res = await fetch("/api/klienti");
+    const data = res.ok ? await res.json() : [];
     setKlienti((data as Klient[]) ?? []);
     setLoading(false);
   }

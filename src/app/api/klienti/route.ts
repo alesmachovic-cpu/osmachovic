@@ -4,6 +4,14 @@ import { getUserScope, canEditRecord } from "@/lib/scope";
 
 export const runtime = "nodejs";
 
+// GET /api/klienti — vráti všetkých klientov (service_role, obchádza RLS)
+export async function GET() {
+  const sb = getSupabaseAdmin();
+  const { data, error } = await sb.from("klienti").select("*").order("created_at", { ascending: false });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data ?? []);
+}
+
 /**
  * POST /api/klienti
  * Body: { user_id, ...klient_fields }

@@ -53,8 +53,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const [checking, setChecking] = useState(true);
 
   async function loadAccounts() {
-    const { data } = await supabase.from("users").select("*").order("created_at");
-    return (data ?? []) as User[];
+    const res = await fetch("/api/users").catch(() => null);
+    if (!res?.ok) return [] as User[];
+    const body = await res.json().catch(() => ({}));
+    return (body.users ?? []) as User[];
   }
 
   // Helper: priradí Supabase session email k našemu `users` whitelist záznamu
