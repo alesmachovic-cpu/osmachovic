@@ -233,13 +233,17 @@ export async function GET(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const { data: obj, error } = await sb
     .from("objednavky")
-    .select("*, klient:klienti!klient_id(meno, telefon, email)")
+    .select("*")
     .eq("id", id)
     .single();
 
   if (error || !obj) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const klient = (obj.klient as Record<string, unknown> | null) ?? {};
+  let klient: Record<string, unknown> = {};
+  if (obj.klient_id) {
+    const { data: k } = await sb.from("klienti").select("meno,telefon,email").eq("id", obj.klient_id).single();
+    if (k) klient = k as Record<string, unknown>;
+  }
   const pdfBuffer = generateObjednavkaPdf(obj as Record<string, unknown>, klient);
 
   return new NextResponse(new Uint8Array(pdfBuffer), {
