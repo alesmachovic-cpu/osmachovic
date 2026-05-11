@@ -24,7 +24,7 @@ interface ActivityItem {
   sub: string;
 }
 
-type TileKey = "overenie" | "vyhladavanie" | "ciele" | "prehlad" | "aktivita" | "kalendar" | "pipeline" | "urlanalyza" | "kalkulator";
+type TileKey = "overenie" | "vyhladavanie" | "ciele" | "prehlad" | "aktivita" | "kalendar" | "pipeline" | "urlanalyza" | "kalkulator" | "nastroje";
 
 interface TileConfig {
   key: TileKey;
@@ -42,6 +42,7 @@ const ALL_TILES: TileConfig[] = [
   { key: "aktivita", label: "Posledná aktivita", icon: "⏱" },
   { key: "urlanalyza", label: "Analýza URL", icon: "🔍" },
   { key: "kalkulator", label: "Cenová kalkulačka", icon: "💰" },
+  { key: "nastroje", label: "Kalkulátor & Matching", icon: "🧮" },
 ];
 
 const DEFAULT_TILES: TileKey[] = ["overenie", "vyhladavanie", "ciele", "prehlad", "urlanalyza", "kalkulator", "kalendar", "pipeline", "aktivita"];
@@ -49,7 +50,7 @@ const DEFAULT_TILES: TileKey[] = ["overenie", "vyhladavanie", "ciele", "prehlad"
 /** Šírka tile-ov v 12-col gride: 4 = 1/3, 6 = 1/2, 12 = celá šírka. */
 const DEFAULT_TILE_WIDTHS: Record<TileKey, number> = {
   overenie: 6, vyhladavanie: 6, ciele: 6, prehlad: 6,
-  urlanalyza: 6, kalkulator: 6,
+  urlanalyza: 6, kalkulator: 6, nastroje: 6,
   kalendar: 12, pipeline: 12, aktivita: 12,
 };
 /** Cyklus veľkostí pri klikaní na resize tlačidlo. */
@@ -612,6 +613,25 @@ export default function Dashboard() {
               }}>
                 💰 Otvoriť kalkulačku
               </button>
+            </>)}
+            {key === "nastroje" && (<>
+              <Link href="/nastroje?tab=kalkulator" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px", display: "block", textDecoration: "none" }}>Kalkulátor & Matching →</Link>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px" }}>
+                Cenový kalkulátor · Matching kupujúcich · Nástroje
+              </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <Link href="/nastroje?tab=kalkulator" style={{
+                  padding: "9px 16px", borderRadius: "10px",
+                  background: "var(--text-primary)", color: "var(--bg-base)",
+                  fontSize: "13px", fontWeight: 700, textDecoration: "none", display: "inline-block",
+                }}>🧮 Kalkulátor</Link>
+                <Link href="/matching" style={{
+                  padding: "9px 16px", borderRadius: "10px",
+                  background: "var(--bg-elevated)", color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
+                  fontSize: "13px", fontWeight: 600, textDecoration: "none", display: "inline-block",
+                }}>🔍 Matching</Link>
+              </div>
             </>)}
             {key === "aktivita" && (<>
               <Link href="/klienti" style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px", display: "block", textDecoration: "none" }}>Posledná aktivita →</Link>
