@@ -16,9 +16,18 @@ export default function Error({
       <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary, #111)", margin: "0 0 8px" }}>
         Nastala chyba
       </h2>
-      <p style={{ fontSize: "13px", color: "var(--text-muted, #6B7280)", margin: "0 0 24px", maxWidth: "360px" }}>
+      <p style={{ fontSize: "13px", color: "var(--text-muted, #6B7280)", margin: "0 0 8px", maxWidth: "360px" }}>
         {error.message || "Neočakávaná chyba pri načítaní stránky."}
       </p>
+      {error.stack && (
+        <pre style={{
+          fontSize: "10px", color: "#6B7280", background: "#F3F4F6", borderRadius: "8px",
+          padding: "10px 12px", maxWidth: "480px", overflowX: "auto", textAlign: "left",
+          margin: "0 0 20px", whiteSpace: "pre-wrap", wordBreak: "break-all",
+        }}>
+          {error.stack.split("\n").slice(0, 8).join("\n")}
+        </pre>
+      )}
       <button
         onClick={reset}
         style={{
