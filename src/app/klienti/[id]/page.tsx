@@ -405,7 +405,7 @@ export default function KlientDetailPage() {
 
   useEffect(() => {
     if (id) loadAll();
-    if (isAdmin) fetch("/api/makleri?aktivny=true").then(r => r.json()).then(data => setMakleri(data ?? []));
+    if (isAdmin) fetch("/api/makleri?aktivny=true").then(r => r.json()).then(data => setMakleri(Array.isArray(data) ? data : []));
     if (user?.id) getMaklerUuid(user.id).then(setMyMaklerUuid);
   }, [id]);
 

@@ -112,7 +112,7 @@ export default function Portfolio() {
 
   useEffect(() => {
     fetch("/api/makleri").then(r => r.json()).then(data => {
-      if (data) setMakleriList(data as { meno: string; email: string; id: string }[]);
+      if (Array.isArray(data)) setMakleriList(data as { meno: string; email: string; id: string }[]);
     });
   }, []);
 

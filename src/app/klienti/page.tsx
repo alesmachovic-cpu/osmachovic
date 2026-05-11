@@ -204,7 +204,7 @@ function KlientiContent() {
   useEffect(() => {
     fetchKlienti();
     // Load makleri list for all users (for filter dropdown)
-    fetch("/api/makleri?aktivny=true").then(r => r.json()).then(data => setMakleri(data ?? []));
+    fetch("/api/makleri?aktivny=true").then(r => r.json()).then(data => setMakleri(Array.isArray(data) ? data : []));
   }, []);
 
   // Auto-open edit modal from query param (?edit=ID)

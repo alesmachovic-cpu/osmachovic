@@ -61,7 +61,7 @@ export default function ManazerPage() {
     const nabery = naberyData ?? [];
     const objednavky = objednavkyData ?? [];
     const users = usersData.users ?? [];
-    const makleri = makleriData ?? [];
+    const makleri = Array.isArray(makleriData) ? makleriData : [];
     const history = historyData ?? [];
 
     const kl = klienti ?? [];
