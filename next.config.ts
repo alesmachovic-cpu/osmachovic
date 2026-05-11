@@ -14,7 +14,7 @@ import type { NextConfig } from "next";
  */
 const cspDirectives = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.vercel-analytics.com https://*.vercel-insights.com",
+  "script-src 'self' 'unsafe-inline' https://*.vercel-analytics.com https://*.vercel-insights.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
@@ -42,6 +42,8 @@ const securityHeaders = [
   { key: "Content-Security-Policy", value: cspDirectives },
   // Cross-Origin Opener Policy — izoluje window context (Spectre mitigation)
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  // Zabrán indexovaniu crawlermi a AI botmi
+  { key: "X-Robots-Tag", value: "noindex, nofollow, nosnippet, noarchive" },
 ];
 
 const nextConfig: NextConfig = {

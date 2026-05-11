@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { encryptToken, decryptToken } from "@/lib/crypto";
 
 const supabaseAdmin = () =>
   createClient(
@@ -81,16 +82,17 @@ export async function getValidAccessToken(userId: string): Promise<string | null
 
   if (!data?.google_refresh_token) return null;
 
+  const refreshToken = decryptToken(data.google_refresh_token);
   const now = Math.floor(Date.now() / 1000);
   // If token expires in less than 5 minutes, refresh
   if (!data.google_access_token || (data.google_token_expires_at && data.google_token_expires_at < now + 300)) {
     try {
-      const refreshed = await refreshAccessToken(data.google_refresh_token);
+      const refreshed = await refreshAccessToken(refreshToken);
       const expiresAt = now + refreshed.expires_in;
       await sb
         .from("users")
         .update({
-          google_access_token: refreshed.access_token,
+          google_access_token: encryptToken(refreshed.access_token),
           google_token_expires_at: expiresAt,
         })
         .eq("id", userId);
@@ -100,7 +102,7 @@ export async function getValidAccessToken(userId: string): Promise<string | null
     }
   }
 
-  return data.google_access_token;
+  return decryptToken(data.google_access_token);
 }
 
 export async function saveTokens(
@@ -111,12 +113,12 @@ export async function saveTokens(
   const sb = supabaseAdmin();
   const expiresAt = Math.floor(Date.now() / 1000) + tokens.expires_in;
   const update: Record<string, unknown> = {
-    google_access_token: tokens.access_token,
+    google_access_token: encryptToken(tokens.access_token),
     google_token_expires_at: expiresAt,
     google_email: googleEmail,
   };
   if (tokens.refresh_token) {
-    update.google_refresh_token = tokens.refresh_token;
+    update.google_refresh_token = encryptToken(tokens.refresh_token);
   }
   await sb.from("users").update(update).eq("id", userId);
 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
+import { CreateUserSchema } from "@/lib/schemas";
+import { validatePasswordStrength } from "@/lib/auth/password";
 
 export const runtime = "nodejs";
 
@@ -32,10 +35,13 @@ export async function POST(request: Request) {
     if (auth.error) return auth.error;
     if (!isSuperAdmin(auth.user.role)) return NextResponse.json({ error: "Len admin môže vytvárať účty" }, { status: 403 });
 
-    const body = await request.json();
+    const rawBody = await request.json();
+    const parsed = CreateUserSchema.safeParse(rawBody);
+    if (!parsed.success) return NextResponse.json({ error: "Neplatné dáta", details: parsed.error.flatten() }, { status: 400 });
+    const body = parsed.data;
     const sb = getSupabaseAdmin();
     const { error } = await sb.from("users").insert({
-      id: body.id,
+      id: body.id || rawBody.id,
       name: body.name,
       initials: body.initials,
       role: body.role,
@@ -44,6 +50,7 @@ export async function POST(request: Request) {
       password: body.password || "",
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await logAudit({ action: "user.create", actor_id: auth.user.id, actor_name: auth.user.name, target_id: body.id, target_type: "user", target_name: body.name, ip_address: (request as NextRequest).headers.get("x-forwarded-for") || undefined });
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
@@ -62,6 +69,10 @@ export async function PATCH(request: Request) {
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     const body = await request.json();
+    if (body.password) {
+      const pwCheck = validatePasswordStrength(body.password);
+      if (!pwCheck.valid) return NextResponse.json({ error: pwCheck.message }, { status: 400 });
+    }
     const updates: Record<string, unknown> = {};
     const allowedFields = ["name", "initials", "role", "email", "login_email", "password", "notification_prefs", "vzorove_inzeraty", "pobocka_id", "nav_prefs"];
     for (const key of allowedFields) {
@@ -71,6 +82,7 @@ export async function PATCH(request: Request) {
     const sb = getSupabaseAdmin();
     const { error } = await sb.from("users").update(updates).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await logAudit({ action: "user.update", actor_id: auth.user.id, actor_name: auth.user.name, target_id: id, target_type: "user", ip_address: (request as NextRequest).headers.get("x-forwarded-for") || undefined });
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
@@ -91,6 +103,7 @@ export async function DELETE(request: Request) {
     const sb = getSupabaseAdmin();
     const { error } = await sb.from("users").delete().eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await logAudit({ action: "user.delete", actor_id: auth.user.id, actor_name: auth.user.name, target_id: id, target_type: "user", ip_address: (request as NextRequest).headers.get("x-forwarded-for") || undefined });
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -138,5 +139,6 @@ export async function DELETE(req: NextRequest) {
 
   const { error } = await sb.from("klienti").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({ action: "klient.delete", actor_id: userId, target_id: id, target_type: "klient", ip_address: req.headers.get("x-forwarded-for") || undefined });
   return NextResponse.json({ ok: true });
 }

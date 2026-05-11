@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -36,5 +37,13 @@ export async function POST(req: NextRequest) {
   }).eq("id", body.id).select("id, anonymized_at").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // GDPR: odstráň dokumenty klienta a citlivé OTP záznamy
+  await Promise.all([
+    sb.from("klient_dokumenty").delete().eq("klient_id", body.id),
+    sb.from("podpis_otps").delete().eq("klient_id", body.id),
+  ]);
+
+  await logAudit({ action: "klient.gdpr_erase", actor_id: auth.user.id, actor_name: auth.user.name, target_id: body.id, target_type: "klient", ip_address: req.headers.get("x-forwarded-for") || undefined });
   return NextResponse.json({ ok: true, klient: data });
 }
