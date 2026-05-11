@@ -56,3 +56,6 @@ next-env.d.ts
 * 4
 
 .env*.local
+
+# Claude Code worktrees
+.claude/worktrees/

@@ -3284,7 +3284,7 @@ export default function KlientDetailPage() {
       </div>{/* END left col */}
 
       {showInsightPanel && wideLayout && (
-        <div style={{ width: "300px", flexShrink: 0 }}>
+        <div style={{ width: "300px", flexShrink: 0, position: "sticky", top: "24px", alignSelf: "flex-start" }}>
           <ClientInsightPanel
             klient={{ id: klient.id, typ: klient.typ ?? "predavajuci" }}
             nehnutelnostId={nehnutelnostIdForPanel}
