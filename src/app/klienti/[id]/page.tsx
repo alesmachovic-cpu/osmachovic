@@ -317,6 +317,13 @@ export default function KlientDetailPage() {
   const [insightKupujuciPrefill, setInsightKupujuciPrefill] = useState<{ klientId: string; meno: string; tel?: string | null } | null>(null);
   // Pamätáme si, či sa Obhliadka modal otvoril z datetime pickeru (tlačidlo "Späť")
   const [obhliadkaCameFromPicker, setObhliadkaCameFromPicker] = useState(false);
+  const [wideLayout, setWideLayout] = useState(false);
+  useEffect(() => {
+    const check = () => setWideLayout(window.innerWidth >= 1024);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   // Dokumenty UI state — accordion zbaľovanie, filter typu, otvorený "Presunúť" menu
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [docTypeFilter, setDocTypeFilter] = useState<string>("");
@@ -952,7 +959,7 @@ export default function KlientDetailPage() {
 
   return (
     <div style={{ maxWidth: "1280px" }}>
-      <div style={{ display: "flex", gap: "24px", alignItems: "flex-start" }}>
+      <div style={wideLayout ? { display: "flex", gap: "24px", alignItems: "flex-start" } : { display: "block" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
       {/* Header */}
       {/* Breadcrumb navigácia */}
@@ -1996,6 +2003,24 @@ export default function KlientDetailPage() {
           </div>
         );
       })()}
+
+      {/* Mobile insight panel — accordion pred tabmi */}
+      {showInsightPanel && !wideLayout && (
+        <div style={{ marginBottom: "16px" }}>
+          <ClientInsightPanel
+            klient={{ id: klient.id, typ: klient.typ ?? "predavajuci" }}
+            nehnutelnostId={nehnutelnostIdForPanel}
+            objednavkaId={objednavkaIdForPanel}
+            predajnaCena={predajnaCenaForPanel}
+            cenaDo={cenaDo}
+            cenaOd={cenaOd}
+            onPlanovatObhliadku={(matchKlientId, matchMeno, matchTel) => {
+              setInsightKupujuciPrefill({ klientId: matchKlientId, meno: matchMeno, tel: matchTel });
+              setShowObhliadkaModal(true);
+            }}
+          />
+        </div>
+      )}
 
       {/* Taby */}
       <div data-tabs-anchor style={{
@@ -3258,7 +3283,7 @@ export default function KlientDetailPage() {
 
       </div>{/* END left col */}
 
-      {showInsightPanel && (
+      {showInsightPanel && wideLayout && (
         <div style={{ width: "300px", flexShrink: 0 }}>
           <ClientInsightPanel
             klient={{ id: klient.id, typ: klient.typ ?? "predavajuci" }}
