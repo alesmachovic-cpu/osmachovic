@@ -66,17 +66,46 @@ async function verifyPassword(plain: string, stored: string | null | undefined):
   return plain === stored;
 }
 
+async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return true; // Turnstile nie je nakonfigurované — skip
+  try {
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret, response: token, remoteip: ip }),
+    });
+    const data = await res.json() as { success: boolean };
+    return data.success === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const identifier = String(body.identifier || "").trim().toLowerCase();
     const password = String(body.password || "");
+    const turnstileToken = String(body.turnstileToken || "");
 
     if (!identifier) {
       return NextResponse.json({ error: "Zadaj meno alebo email" }, { status: 400 });
     }
 
     const ip = getClientIp(request);
+
+    // Cloudflare Turnstile — overenie iba ak je SECRET_KEY nastavený
+    if (process.env.TURNSTILE_SECRET_KEY) {
+      if (!turnstileToken) {
+        return NextResponse.json({ error: "Chýba Turnstile token" }, { status: 400 });
+      }
+      const ok = await verifyTurnstile(turnstileToken, ip);
+      if (!ok) {
+        return NextResponse.json({ error: "Overenie Turnstile zlyhalo. Obnovte stránku a skúste znova." }, { status: 403 });
+      }
+    }
+
     const sb = getSupabaseAdmin();
 
     // Rate limit

@@ -1,10 +1,20 @@
 "use client";
 
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { VianemaBranded, PoweredByAMGD } from "@/components/brand";
 import PasswordInput from "@/components/PasswordInput";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (el: HTMLElement, opts: Record<string, unknown>) => string;
+      reset: (id: string) => void;
+      remove: (id: string) => void;
+    };
+  }
+}
 
 interface User {
   id: string;
@@ -20,7 +30,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   accounts: User[];
-  login: (userId: string, password: string) => Promise<string | null>;
+  login: (userId: string, password: string, turnstileToken?: string) => Promise<string | null>;
   loginWithGoogle: () => Promise<void>;
   linkGoogleToCurrent: () => Promise<void>;
   logout: () => void;
@@ -178,7 +188,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     setAccounts(accs);
   }
 
-  async function login(identifier: string, password: string): Promise<string | null> {
+  async function login(identifier: string, password: string, turnstileToken?: string): Promise<string | null> {
     if (!identifier.trim()) return "Zadaj meno alebo email";
 
     // Cez server API — bcrypt hashovanie + rate limit + audit + HMAC session cookie
@@ -188,7 +198,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         headers: { "Content-Type": "application/json" },
         // credentials: "include" — server set-cookie pre crm_session sa uchová
         credentials: "include",
-        body: JSON.stringify({ identifier: identifier.trim(), password }),
+        body: JSON.stringify({ identifier: identifier.trim(), password, turnstileToken }),
       });
       const body = await res.json();
       if (!res.ok) return body.error || "Prihlásenie zlyhalo";
@@ -406,20 +416,68 @@ function SlovakiaMap() {
   );
 }
 
-function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts: User[]; onLogin: (id: string, pw: string) => Promise<string | null>; onGoogleLogin: () => Promise<void> }) {
+function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts: User[]; onLogin: (id: string, pw: string, token?: string) => Promise<string | null>; onGoogleLogin: () => Promise<void> }) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+
+  useEffect(() => {
+    if (!turnstileSiteKey || !turnstileRef.current) return;
+    const scriptId = "cf-turnstile-script";
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement("script");
+      script.id = scriptId;
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+    function tryRender() {
+      if (window.turnstile && turnstileRef.current && !widgetIdRef.current) {
+        widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
+          sitekey: turnstileSiteKey,
+          callback: (token: string) => setTurnstileToken(token),
+          "expired-callback": () => setTurnstileToken(null),
+          "error-callback": () => setTurnstileToken(null),
+          theme: "dark",
+          size: "normal",
+        });
+      }
+    }
+    const poll = setInterval(tryRender, 200);
+    tryRender();
+    return () => {
+      clearInterval(poll);
+      if (widgetIdRef.current && window.turnstile) {
+        window.turnstile.remove(widgetIdRef.current);
+        widgetIdRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnstileSiteKey]);
 
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (!identifier.trim()) { setError("Zadaj meno alebo email"); return; }
+    if (turnstileSiteKey && !turnstileToken) { setError("Dokončite overenie (Turnstile)"); return; }
     setSubmitting(true);
     setError("");
-    const err = await onLogin(identifier, password);
-    if (err) { setError(err); setSubmitting(false); }
+    const err = await onLogin(identifier, password, turnstileToken ?? undefined);
+    if (err) {
+      setError(err);
+      setSubmitting(false);
+      if (widgetIdRef.current && window.turnstile) {
+        window.turnstile.reset(widgetIdRef.current);
+        setTurnstileToken(null);
+      }
+    }
   }
 
   async function handleGoogle() {
@@ -513,15 +571,21 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
             </div>
           )}
 
+          {turnstileSiteKey && (
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <div ref={turnstileRef} />
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={submitting || !identifier.trim()}
+            disabled={submitting || !identifier.trim() || (!!turnstileSiteKey && !turnstileToken)}
             style={{
               width: "100%", padding: "14px 16px", borderRadius: "12px",
               background: "#fff", color: "#111827",
               border: "none", fontSize: "14px", fontWeight: 700,
-              cursor: (submitting || !identifier.trim()) ? "default" : "pointer",
-              opacity: (submitting || !identifier.trim()) ? 0.5 : 1,
+              cursor: (submitting || !identifier.trim() || (!!turnstileSiteKey && !turnstileToken)) ? "default" : "pointer",
+              opacity: (submitting || !identifier.trim() || (!!turnstileSiteKey && !turnstileToken)) ? 0.5 : 1,
               transition: "all 0.15s",
               marginTop: "4px",
               display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
