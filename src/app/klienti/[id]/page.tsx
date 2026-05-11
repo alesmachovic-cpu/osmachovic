@@ -975,13 +975,13 @@ export default function KlientDetailPage() {
         <span style={{ color: "var(--text-primary)", fontWeight: "600" }}>{klient.meno}</span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "24px", flexWrap: "wrap" }}>
         <button onClick={() => router.push(backHref)} style={{
           width: "36px", height: "36px", borderRadius: "50%", border: "1px solid var(--border)",
           background: "var(--bg-surface)", cursor: "pointer", fontSize: "16px", color: "var(--text-muted)",
-          display: "flex", alignItems: "center", justifyContent: "center",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
         }}>←</button>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: "160px" }}>
           <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>
             Karta klienta
           </h1>
