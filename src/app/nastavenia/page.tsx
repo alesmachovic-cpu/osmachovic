@@ -6,6 +6,7 @@ import type { User } from "@/components/AuthProvider";
 import PhoneInput from "@/components/PhoneInput";
 import PasswordInput from "@/components/PasswordInput";
 import { ALL_FEATURES, loadFeatureToggles, saveFeatureToggles } from "@/lib/featureToggles";
+import { mainNavBase, operativaNav, systemNav } from "@/lib/navItems";
 import type { FeatureId, FeatureToggles } from "@/lib/featureToggles";
 import { getUserItem, setUserItem } from "@/lib/userStorage";
 import { detectPushState, enableBrowserPush, type PushState } from "@/lib/pushClient";
@@ -74,6 +75,8 @@ export default function NastaveniaPage() {
   const [pushState, setPushState] = useState<PushState>("unknown");
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(DEFAULT_NOTIF_PREFS);
   const [notifSaved, setNotifSaved] = useState(false);
+  const [navPrefs, setNavPrefs] = useState<string[]>([]);
+  const [navPrefsSaved, setNavPrefsSaved] = useState(false);
 
   const uid = authUser?.id || "";
 
@@ -82,10 +85,25 @@ export default function NastaveniaPage() {
     setPushState(detectPushState());
     if (!uid) return;
     fetch("/api/users").then(r => r.json()).then(({ users }) => {
-      const userData = (users ?? []).find((u: { id: string; notification_prefs?: Partial<NotifPrefs> }) => u.id === uid);
+      const userData = (users ?? []).find((u: { id: string; notification_prefs?: Partial<NotifPrefs>; nav_prefs?: string[] }) => u.id === uid);
       if (userData?.notification_prefs) setNotifPrefs({ ...DEFAULT_NOTIF_PREFS, ...userData.notification_prefs });
+      if (Array.isArray(userData?.nav_prefs)) setNavPrefs(userData.nav_prefs);
     });
   }, [uid]);
+
+  const handleToggleNav = async (href: string) => {
+    const next = navPrefs.includes(href)
+      ? navPrefs.filter(h => h !== href)
+      : [...navPrefs, href];
+    setNavPrefs(next);
+    await fetch(`/api/users?id=${encodeURIComponent(uid)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nav_prefs: next }),
+    });
+    setNavPrefsSaved(true);
+    setTimeout(() => setNavPrefsSaved(false), 2000);
+  };
 
   const handleToggleNotif = async (key: keyof NotifPrefs) => {
     const next = { ...notifPrefs, [key]: !notifPrefs[key] };
@@ -274,6 +292,7 @@ export default function NastaveniaPage() {
     { id: "inzercia", label: "AI Inzercia", icon: "✍️" },
     { id: "ciele", label: "Ciele a kalkulácie", icon: "🎯" },
     { id: "integracie", label: "Integrácie", icon: "🔗" },
+    { id: "menu", label: "Menu", icon: "☰" },
     { id: "faktury", label: "Faktúry", icon: "🧾", href: "/nastavenia/faktury" },
     ...(isAdmin ? [
       { id: "spolocnost", label: "Spoločnosť", icon: "🏢" },
@@ -731,6 +750,65 @@ export default function NastaveniaPage() {
                 Prihlásiť sa cez Google
               </button>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ Prispôsobenie menu ═══ */}
+      {activeCategory === "menu" && (
+        <div style={cardSt}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
+            <div style={{
+              width: "36px", height: "36px", borderRadius: "50%",
+              background: "linear-gradient(135deg, #374151, #6B7280)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "18px", color: "#fff",
+            }}>☰</div>
+            <div>
+              <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)" }}>Prispôsobenie menu</div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>Vyber čo chceš vidieť v ľavom menu</div>
+            </div>
+          </div>
+
+          {[
+            { label: "HLAVNÉ", items: mainNavBase },
+            { label: "ADMINISTRATÍVA", items: operativaNav },
+            { label: "SYSTÉM", items: systemNav },
+          ].map(section => (
+            <div key={section.label} style={{ marginBottom: "20px" }}>
+              <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", letterSpacing: "0.03em", marginBottom: "8px" }}>
+                {section.label}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {section.items.map(item => {
+                  const visible = !navPrefs.includes(item.href);
+                  return (
+                    <label key={item.href} style={{
+                      display: "flex", alignItems: "center", gap: "12px",
+                      padding: "10px 14px", borderRadius: "10px",
+                      border: "1px solid var(--border)",
+                      background: visible ? "var(--bg-elevated)" : "var(--bg-surface)",
+                      cursor: "pointer", transition: "all 0.15s",
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={visible}
+                        onChange={() => handleToggleNav(item.href)}
+                        style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#374151" }}
+                      />
+                      <span style={{ fontSize: "14px" }}>{item.icon}</span>
+                      <span style={{ fontSize: "13px", fontWeight: "500", color: visible ? "var(--text-primary)" : "var(--text-muted)" }}>
+                        {item.label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {navPrefsSaved && (
+            <div style={{ fontSize: "12px", color: "#059669", fontWeight: "500" }}>✓ Uložené</div>
           )}
         </div>
       )}

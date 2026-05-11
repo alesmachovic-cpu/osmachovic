@@ -435,28 +435,32 @@ export default function KlientDetailPage() {
   async function loadAll() {
     setLoading(true);
 
-    // Paralelné načítanie
-    const [klientRes, naberyRes, objednavkyRes, inzeratyRes, obhliadkyRes, docs, udalostiRes] = await Promise.all([
-      supabase.from("klienti").select("*").eq("id", id).single(),
-      supabase.from("naberove_listy").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
-      supabase.from("objednavky").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
-      supabase.from("nehnutelnosti").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
-      supabase.from("obhliadky")
-        .select("id, datum, status, miesto, kupujuci_meno, kupujuci_klient_id")
-        .or(`predavajuci_klient_id.eq.${id},kupujuci_klient_id.eq.${id}`)
-        .order("datum", { ascending: false }),
+    // Paralelné načítanie cez API routes (service_role, RLS-safe)
+    const [klientJson, naberyData, objednavkyData, inzeratyData, obhliadkyJson, docs, udalostiData] = await Promise.all([
+      fetch(`/api/klienti?id=${id}`).then(r => r.json()),
+      fetch(`/api/nabery?klient_id=${id}`).then(r => r.json()),
+      fetch(`/api/objednavky?klient_id=${id}`).then(r => r.json()),
+      fetch(`/api/nehnutelnosti?klient_id=${id}`).then(r => r.json()),
+      fetch(`/api/obhliadky?klient_id=${id}`).then(r => r.json()),
       listKlientDokumenty(id),
-      supabase.from("klient_udalosti").select("*").eq("klient_id", id).order("created_at", { ascending: false }),
+      fetch(`/api/klient-udalosti?klient_id=${id}`).then(r => r.json()),
     ]);
 
-    if (klientRes.data) setKlient(klientRes.data);
-    setNabery(naberyRes.data ?? []);
-    setObjednavky(objednavkyRes.data ?? []);
-    setInzeraty(inzeratyRes.data ?? []);
+    const klientData = klientJson?.klient ?? null;
+    const naberyArr = Array.isArray(naberyData) ? naberyData : [];
+    const objednavkyArr = Array.isArray(objednavkyData) ? objednavkyData : [];
+    const inzeratyArr = Array.isArray(inzeratyData) ? inzeratyData : [];
+    const obhliadkyArr = Array.isArray(obhliadkyJson?.obhliadky) ? obhliadkyJson.obhliadky : [];
+    const udalostiArr = Array.isArray(udalostiData) ? udalostiData : [];
+
+    if (klientData) setKlient(klientData);
+    setNabery(naberyArr);
+    setObjednavky(objednavkyArr);
+    setInzeraty(inzeratyArr);
 
     // Auto-prechod: nabrany + aktivny inzerat → inzerovany
-    const hasAktivnyInzerat = (inzeratyRes.data ?? []).some(n => (n as Record<string, unknown>).status === "aktivny");
-    if (klientRes.data?.status === "nabrany" && hasAktivnyInzerat && user?.id) {
+    const hasAktivnyInzerat = inzeratyArr.some(n => (n as Record<string, unknown>).status === "aktivny");
+    if (klientData?.status === "nabrany" && hasAktivnyInzerat && user?.id) {
       klientUpdate(user.id, id, { status: "inzerovany" });
       setKlient(k => k ? { ...k, status: "inzerovany" as KlientStatus } : k);
       fetch("/api/klient-udalosti", {
@@ -469,20 +473,20 @@ export default function KlientDetailPage() {
     const events: TimelineEvent[] = [];
 
     // Klient vytvorený
-    if (klientRes.data) {
+    if (klientData) {
       events.push({
         id: "created",
         type: "system",
         title: "Klient vytvorený",
-        detail: `Typ: ${TYP_LABELS[klientRes.data.typ] || klientRes.data.typ}`,
-        date: klientRes.data.created_at,
+        detail: `Typ: ${TYP_LABELS[klientData.typ] || klientData.typ}`,
+        date: klientData.created_at,
         icon: "👤",
         color: "#3B82F6",
       });
     }
 
     // Nábery
-    (naberyRes.data ?? []).forEach((n: Record<string, unknown>) => {
+    naberyArr.forEach((n: Record<string, unknown>) => {
       events.push({
         id: `naber-${n.id}`,
         type: "naber",
@@ -499,7 +503,7 @@ export default function KlientDetailPage() {
     });
 
     // Objednávky
-    (objednavkyRes.data ?? []).forEach((o: Record<string, unknown>) => {
+    objednavkyArr.forEach((o: Record<string, unknown>) => {
       events.push({
         id: `obj-${o.id}`,
         type: "objednavka",
@@ -512,7 +516,7 @@ export default function KlientDetailPage() {
     });
 
     // Nehnuteľnosti
-    (inzeratyRes.data ?? []).forEach((n: Record<string, unknown>) => {
+    inzeratyArr.forEach((n: Record<string, unknown>) => {
       const nStatus = String(n.status || "koncept");
       const nAddr = String(n.obec || n.ulica || "bez adresy");
       const nTitle = nStatus === "aktivny"
@@ -532,7 +536,7 @@ export default function KlientDetailPage() {
     });
 
     // Obhliadky — event vytvorenia (AT#16: druhý event príde z klient_udalosti)
-    (obhliadkyRes.data ?? []).forEach((o: Record<string, unknown>) => {
+    obhliadkyArr.forEach((o: Record<string, unknown>) => {
       const datumLabel = o.datum
         ? new Date(o.datum as string).toLocaleDateString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })
         : "—";
@@ -571,7 +575,7 @@ export default function KlientDetailPage() {
     const TYP_LABELS_U: Record<string, string> = {
       hovor: "Hovor", poznamka: "Poznámka", stretnutie: "Stretnutie", email: "Email", status_zmena: "Zmena statusu", ine: "Záznam",
     };
-    (udalostiRes.data ?? []).forEach((u: Record<string, unknown>) => {
+    udalostiArr.forEach((u: Record<string, unknown>) => {
       const uTyp = u.typ as string;
       const uPopis = String(u.popis || "");
       // Obhliadka-related klient_udalosti → 🔑 ikona
@@ -3361,9 +3365,8 @@ function ObhliadkaModal({
   useEffect(() => {
     if (kupQuery.length < 2) { setKupOptions([]); return; }
     let cancelled = false;
-    supabase.from("klienti").select("id, meno, telefon, email")
-      .ilike("meno", `%${kupQuery}%`).limit(8)
-      .then(({ data }) => { if (!cancelled) setKupOptions(data ?? []); });
+    fetch(`/api/klienti?q=${encodeURIComponent(kupQuery)}`).then(r => r.json())
+      .then(data => { if (!cancelled) setKupOptions(Array.isArray(data) ? data : []); });
     return () => { cancelled = true; };
   }, [kupQuery]);
 

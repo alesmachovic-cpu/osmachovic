@@ -89,15 +89,15 @@ function KupujuciInner() {
     try {
       const uuid = user?.id ? await Promise.race([getMaklerUuid(user.id), timeout]) : null;
       setMyMaklerUuid(uuid as string | null);
-      const [klientiRes, objRes] = await Promise.race([
+      const [klientiData, objData] = await Promise.race([
         Promise.all([
-          supabase.from("klienti").select("*").order("created_at", { ascending: false }),
-          supabase.from("objednavky").select("*").order("created_at", { ascending: false }),
+          fetch("/api/klienti").then(r => r.json()),
+          fetch("/api/objednavky").then(r => r.json()),
         ]),
         timeout,
-      ]) as [typeof klientiRes, typeof objRes];
-      setKlienti((klientiRes as { data: Klient[] | null }).data ?? []);
-      setObjednavky((objRes as { data: Record<string, unknown>[] | null }).data ?? []);
+      ]) as [Klient[], Record<string, unknown>[]];
+      setKlienti(Array.isArray(klientiData) ? klientiData : []);
+      setObjednavky(Array.isArray(objData) ? objData : []);
     } catch {
       setLoadError(true);
     } finally {

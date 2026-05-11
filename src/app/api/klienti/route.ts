@@ -4,16 +4,32 @@ import { getUserScope, canEditRecord } from "@/lib/scope";
 
 export const runtime = "nodejs";
 
-// GET /api/klienti — vráti všetkých klientov (service_role, obchádza RLS)
-// Query params: ?telefon=X → hľadá klienta s daným číslom (ilike, limit 1)
+// GET /api/klienti
+//   ?id=X       → single klient by UUID
+//   ?telefon=X  → search by phone (ilike, limit 1)
+//   ?q=X        → search by meno (ilike, limit 8)
+//   (nič)       → všetci
 export async function GET(req: NextRequest) {
   const sb = getSupabaseAdmin();
-  const telefon = new URL(req.url).searchParams.get("telefon");
+  const params = new URL(req.url).searchParams;
+  const id = params.get("id");
+  const telefon = params.get("telefon");
+  const q = params.get("q");
+  if (id) {
+    const { data, error } = await sb.from("klienti").select("*").eq("id", id).maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ klient: data });
+  }
   if (telefon) {
     const last9 = telefon.replace(/\D/g, "").slice(-9);
     const { data, error } = await sb.from("klienti").select("*").ilike("telefon", `%${last9}%`).limit(1).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ klient: data });
+  }
+  if (q) {
+    const { data, error } = await sb.from("klienti").select("id, meno, telefon, email").ilike("meno", `%${q}%`).limit(8);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data ?? []);
   }
   const { data, error } = await sb.from("klienti").select("*").order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

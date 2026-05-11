@@ -120,8 +120,15 @@ export default function Portfolio() {
 
   async function loadItems() {
     setLoading(true);
-    const { data } = await supabase.from("nehnutelnosti").select("*").order(sort, { ascending: sortDir === "asc" });
-    setItems((data as DBNehnutelnost[]) ?? []);
+    const data = await fetch("/api/nehnutelnosti").then(r => r.json());
+    const all = (Array.isArray(data) ? data : []) as DBNehnutelnost[];
+    all.sort((a, b) => {
+      const av = a[sort] ?? "";
+      const bv = b[sort] ?? "";
+      const cmp = String(av).localeCompare(String(bv), "sk");
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    setItems(all);
     setLoading(false);
   }
 

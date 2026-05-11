@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
+
+export const runtime = "nodejs";
 
 export async function GET() {
   const sb = getSupabaseAdmin();
@@ -12,6 +15,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+  if (!isSuperAdmin(auth.user.role)) return NextResponse.json({ error: "Len admin môže meniť provízne nastavenia" }, { status: 403 });
+
   const body = await req.json();
   if (!body.meno) return NextResponse.json({ error: "meno required" }, { status: 400 });
   const { data, error } = await getSupabaseAdmin().from("makler_provizie_pct").insert({
@@ -23,6 +30,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+  if (!isSuperAdmin(auth.user.role)) return NextResponse.json({ error: "Len admin môže meniť provízne nastavenia" }, { status: 403 });
+
   const body = await req.json();
   const { id, ...rest } = body;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -33,6 +44,10 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+  if (!isSuperAdmin(auth.user.role)) return NextResponse.json({ error: "Len admin môže meniť provízne nastavenia" }, { status: 403 });
+
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });

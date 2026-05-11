@@ -51,18 +51,12 @@ export default function ObhliadkaDetailPage() {
         setObhliadka(found);
         setEmailOverride(found.kupujuci_email || "");
         if (found.nehnutelnost_id) {
-          const r = await fetch(`/api/inzerat/save`, { method: "GET" }).catch(() => null);
-          if (!r) {
-            // Fallback: priamy supabase fetch
-            const { supabase } = await import("@/lib/supabase");
-            const nr = await supabase.from("nehnutelnosti").select("*").eq("id", found.nehnutelnost_id).maybeSingle();
-            if (nr.data) setNehnutelnost(nr.data as Record<string, unknown>);
-          }
+          const nr = await fetch(`/api/nehnutelnosti?id=${found.nehnutelnost_id}`).then(r => r.json()).catch(() => null);
+          if (nr?.nehnutelnost) setNehnutelnost(nr.nehnutelnost as Record<string, unknown>);
         }
         if (found.predavajuci_klient_id) {
-          const { supabase } = await import("@/lib/supabase");
-          const kr = await supabase.from("klienti").select("*").eq("id", found.predavajuci_klient_id).maybeSingle();
-          if (kr.data) setPredKlient(kr.data as Record<string, unknown>);
+          const kr = await fetch(`/api/klienti?id=${found.predavajuci_klient_id}`).then(r => r.json()).catch(() => null);
+          if (kr?.klient) setPredKlient(kr.klient as Record<string, unknown>);
         }
       } else {
         setError("Obhliadka nenájdená");

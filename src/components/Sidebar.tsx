@@ -8,6 +8,8 @@ import { PoweredByAMGD } from "@/components/brand";
 import { isFeatureEnabled } from "@/lib/featureToggles";
 import { supabase } from "@/lib/supabase";
 import { useGoogleConnected } from "@/lib/useGoogleConnected";
+import { mainNavBase, operativaNav, systemNav, devNav } from "@/lib/navItems";
+import type { NavItem } from "@/lib/navItems";
 
 const ROUTE_FEATURE_MAP: Record<string, string> = {
   "/": "dashboard",
@@ -20,50 +22,7 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
   "/nastavenia": "nastavenia",
 };
 
-// TASK 1 — Konsolidované menu (14 → 8 hlavných položiek)
-// Každá zlúčená položka rieši taby v cieľovej stránke.
-const mainNavBase = [
-  { label: "Prehľad",                 href: "/",                         icon: "📊" },
-  { label: "Portfólio",               href: "/portfolio",                icon: "🏠" },
-  { label: "Klienti",                 href: "/klienti?tab=predavajuci",  icon: "👥", matchPrefix: "/klienti" },
-  { label: "Náberový list",           href: "/naber",                    icon: "📝" },
-  { label: "Monitor & Analýza",       href: "/monitor?tab=scraping",     icon: "📡", matchPrefix: "/monitor" },
-  { label: "Kalkulátor & Matching",   href: "/nastroje?tab=kalkulator",  icon: "🧮", matchPrefix: "/nastroje" },
-  { label: "Štatistiky",              href: "/statistiky",               icon: "📉" },
-  { label: "Operatíva",               href: "/operativa?tab=obhliadky",  icon: "📋", matchPrefix: "/operativa" },
-];
-
 const toolsNav: NavItem[] = []; // zrušená sekcia — všetko v hlavnom menu
-
-const operativaNav = [
-  // Operatíva → Obhliadky/Náklady/Kalendár sú v /operativa taboch.
-  // Tu necháme finančno-administratívne nástroje ktoré nie sú v hlavnom menu.
-  { label: "Produkcia",          href: "/produkcia",            icon: "📦" },
-  { label: "Vyťaženosť tímu",    href: "/vytazenost",           icon: "👷" },
-  { label: "Provízie",           href: "/potvrdenie-provizii",  icon: "✅" },
-  { label: "Odberatelia",        href: "/odberatelia",          icon: "🏷️" },
-  { label: "Faktúry",            href: "/faktury",              icon: "🧾" },
-  { label: "Prehľad financií",   href: "/prehlad-financii",     icon: "💶" },
-  { label: "Provízie maklérov",  href: "/provizie-maklerov",    icon: "💼" },
-  { label: "Účtovný prehľad",    href: "/uctovny-prehlad",      icon: "📊" },
-  { label: "Pravidelné náklady", href: "/pravidelne-naklady",   icon: "🔁" },
-];
-
-const systemNav = [
-  { label: "Gmail",           href: "/gmail",      icon: "✉️" },
-  { label: "Kalendár",        href: "/kalendar",   icon: "📅" },
-  { label: "Google Disk",     href: "/disk",       icon: "💾" },
-  { label: "Upozornenia",     href: "/upozornenia", icon: "🔔" },
-  { label: "Tím",             href: "/tim",        icon: "👥" },
-  { label: "Manažér",         href: "/manazer",    icon: "📊" },
-  { label: "Klientská zóna",  href: "/klientska-zona", icon: "🌐" },
-  { label: "Plán systému",    href: "/plan",       icon: "🗺️" },
-  { label: "Nastavenia",      href: "/nastavenia", icon: "⚙️" },
-  { label: "Notifikácie",     href: "/notifikacie", icon: "🔕", badge: 2 },
-  { label: "System Log",      href: "/log",        icon: "📋" },
-];
-
-type NavItem = { label: string; href: string; icon: string; badge?: number; matchPrefix?: string };
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
@@ -108,6 +67,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [counts, setCounts] = useState<{ portfolio?: number; klienti?: number; kupujuci?: number }>({});
+  const [devOpen, setDevOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -137,15 +97,10 @@ export default function Sidebar() {
 
   const filterNav = (items: NavItem[]) =>
     user ? items.filter(item => {
-      // "Inzerát" v sidebar vidí iba admin (Aleš). Ostatní makléri inzerát
-      // nevytvárajú — dostanú ho z Portfolia až keď admin vytvorí.
       if (item.href === "/inzerat" && user.id !== "ales") return false;
-      // "Matching" v menu vidí iba super_admin / majitel / manazer.
-      // Maklér používa matching len kontextovo cez tlačidlo "Hľadať zhody"
-      // z karty objednávky v /kupujuci (?objednavka=ID).
-      if (item.href === "/matching") {
-        const elevated = user.role === "super_admin" || user.role === "majitel" || user.role === "manazer";
-        if (!elevated && user.id !== "ales") return false;
+      if (user.id !== "ales") {
+        const hidden = user.nav_prefs ?? [];
+        if (hidden.includes(item.href)) return false;
       }
       const feat = ROUTE_FEATURE_MAP[item.href];
       return !feat || isFeatureEnabled(user.id, feat);
@@ -197,6 +152,23 @@ export default function Sidebar() {
         {filterNav(operativaNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
         <SectionLabel label="SYSTÉM" />
         {filterNav(systemNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
+        {user?.id === "ales" && (
+          <>
+            <button onClick={() => setDevOpen(o => !o)} style={{
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "16px 12px 4px", background: "transparent", border: "none", cursor: "pointer",
+              fontSize: "11px", fontWeight: "600", color: "var(--text-muted)", letterSpacing: "0.02em",
+            }}>
+              <span>DEV</span>
+              <span style={{ fontSize: "9px", opacity: 0.6 }}>{devOpen ? "▲" : "▼"}</span>
+            </button>
+            {devOpen && devNav.map(item => {
+              const prefix = item.matchPrefix || item.href.split("?")[0];
+              const active = pathname.startsWith(prefix);
+              return <NavLink key={item.href} item={item} active={active} />;
+            })}
+          </>
+        )}
       </nav>
 
       {/* User */}

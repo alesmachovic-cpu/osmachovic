@@ -78,8 +78,8 @@ export default function ObhliadkyPage() {
 
   useEffect(() => {
     fetchObhliadky().then(setItems);
-    supabase.from("klienti").select("id, meno, telefon").order("meno", { ascending: true })
-      .then(({ data }) => { if (data) setKlientiList(data as KlientOption[]); });
+    fetch("/api/klienti").then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setKlientiList(data as KlientOption[]); });
   }, []);
 
   async function handleAdd() {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -12,13 +13,13 @@ export const runtime = "nodejs";
  *   telefon, email, lokalita, poznamka, lv_data → NULL
  *   anonymized_at → now()
  *
- * Naberáky a obhliadky tohto klienta zostávajú evidované (právny základ:
- * oprávnený záujem realitnej kancelárie + zákon o účtovníctve), ale stratia
- * priamu identifikovateľnosť cez klient_id.
- *
- * Operácia je nevratná.
+ * Operácia je nevratná — vyžaduje admin.
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+  if (!isSuperAdmin(auth.user.role)) return NextResponse.json({ error: "Anonymizáciu môže spustiť len admin" }, { status: 403 });
+
   let body: { id?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
   if (!body.id) return NextResponse.json({ error: "id required" }, { status: 400 });

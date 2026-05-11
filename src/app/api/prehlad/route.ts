@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser } from "@/lib/auth/requireUser";
+
+export const runtime = "nodejs";
 
 export async function GET() {
   const sb = getSupabaseAdmin();
@@ -12,6 +15,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const body = await req.json();
   const payload = {
     typ: body.typ,
@@ -28,14 +34,17 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const body = await req.json();
   const { id, ...rest } = body;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-  const { data, error } = await getSupabaseAdmin().from("prehlad_zaznamy").update(rest).eq("id", id).select().single();
+  const sb = getSupabaseAdmin();
+  const { data, error } = await sb.from("prehlad_zaznamy").update(rest).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  // sync s faktúrou
   if (rest.zaplatene !== undefined && data?.faktura_id) {
-    await getSupabaseAdmin().from("faktury").update({
+    await sb.from("faktury").update({
       zaplatene: rest.zaplatene,
       datum_uhrady: rest.zaplatene ? new Date().toISOString().slice(0, 10) : null,
     }).eq("id", data.faktura_id);
@@ -44,6 +53,9 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { encryptDocString, decryptDocString, isEncrypted } from "@/lib/cryptoDocs";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -20,7 +21,6 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Decrypt each doc — ak je zašifrovaný, odšifruj; inak ponechaj (legacy).
   const decrypted = (data || []).map((d: Record<string, unknown>) => {
     const out: Record<string, unknown> = { ...d };
     try {
@@ -42,9 +42,11 @@ export async function GET(req: NextRequest) {
 /**
  * POST /api/klient-dokumenty
  * Body: { klient_id, name, type?, size?, source?, mime?, text_content?, data_base64? }
- * data_base64 aj text_content sa pred uložením zašifrujú AES-256-GCM.
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -57,7 +59,6 @@ export async function POST(req: NextRequest) {
 
   const sb = getSupabaseAdmin();
 
-  // Duplicita check (rovnaký name + size pre toho istého klienta)
   try {
     const { data: existing } = await sb
       .from("klient_dokumenty")
@@ -69,7 +70,6 @@ export async function POST(req: NextRequest) {
     if (existing?.id) return NextResponse.json({ id: existing.id });
   } catch { /* ignore */ }
 
-  // Encrypt dáta
   const payload: Record<string, unknown> = {
     klient_id,
     nehnutelnost_id: body.nehnutelnost_id || null,
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     mime: body.mime,
   };
 
-  const MAX_BASE64_BYTES = 5 * 1024 * 1024; // 5MB limit
+  const MAX_BASE64_BYTES = 5 * 1024 * 1024;
   if (body.data_base64) {
     const b64 = body.data_base64 as string;
     if (b64.length <= MAX_BASE64_BYTES) {
@@ -110,9 +110,12 @@ export async function POST(req: NextRequest) {
 
 /**
  * PATCH /api/klient-dokumenty
- * Body: { id, nehnutelnost_id? } — presun dokumentu do inej zložky (alebo null=Všeobecné)
+ * Body: { id, nehnutelnost_id? }
  */
 export async function PATCH(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
   const id = body.id as string;
@@ -129,6 +132,9 @@ export async function PATCH(req: NextRequest) {
  * DELETE /api/klient-dokumenty?id=X
  */
 export async function DELETE(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const sb = getSupabaseAdmin();

@@ -31,8 +31,8 @@ function InzeratPageContent() {
   async function checkPipeline() {
     // Edit mode — načítaj existujúci inzerát z nehnutelnosti
     if (editId) {
-      const r = await supabase.from("nehnutelnosti").select("*").eq("id", editId).single();
-      if (r.data) setNaberData(r.data);
+      const r = await fetch(`/api/nehnutelnosti?id=${editId}`).then(res => res.json());
+      if (r.nehnutelnost) setNaberData(r.nehnutelnost);
       setHasNaber(true);
       setChecking(false);
       return;
@@ -47,24 +47,26 @@ function InzeratPageContent() {
     }
 
     // Over či klient má náber
-    const [naberRes, klientRes] = await Promise.all([
-      supabase.from("naberove_listy").select("*").eq("klient_id", klientId).order("created_at", { ascending: false }).limit(1),
-      supabase.from("klienti").select("meno, typ").eq("id", klientId).single(),
+    const [naberArr, klientJson] = await Promise.all([
+      fetch(`/api/nabery?klient_id=${klientId}`).then(r => r.json()),
+      fetch(`/api/klienti?id=${klientId}`).then(r => r.json()),
     ]);
+    const nabery = Array.isArray(naberArr) ? naberArr : [];
+    const klientData = klientJson?.klient ?? null;
 
-    if (klientRes.data) setKlientName(klientRes.data.meno);
+    if (klientData) setKlientName(klientData.meno);
 
-    if (naberRes.data && naberRes.data.length > 0) {
+    if (nabery.length > 0) {
       // Zapoj klient.typ do prefillu — InzeratForm ho použije ako default kategoria:
       //   - "predavajuci" / "oboje" → na-predaj
       //   - "prenajimatel" → na-najom
-      const klientTyp = klientRes.data?.typ || null;
+      const klientTyp = klientData?.typ || null;
       const derivedKategoria = klientTyp === "prenajimatel" ? "na-prenajom"
         : (klientTyp === "predavajuci" || klientTyp === "oboje") ? "na-predaj"
         : null;
       const merged = derivedKategoria
-        ? { ...naberRes.data[0], _klient_typ_transakcie: derivedKategoria }
-        : naberRes.data[0];
+        ? { ...nabery[0], _klient_typ_transakcie: derivedKategoria }
+        : nabery[0];
       setHasNaber(true);
       setNaberData(merged);
     }

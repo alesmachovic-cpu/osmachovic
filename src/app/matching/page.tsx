@@ -124,14 +124,14 @@ export default function MatchingPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [{ data: k }, { data: n }, { data: o }] = await Promise.all([
-        supabase.from("klienti").select("*").in("typ", ["kupujuci", "oboje"]),
-        supabase.from("nehnutelnosti").select("*"),
-        supabase.from("objednavky").select("id, klient_id, druh, poziadavky, lokalita, cena_od, cena_do"),
+      const [kData, nData, oData] = await Promise.all([
+        fetch("/api/klienti").then(r => r.json()),
+        fetch("/api/nehnutelnosti").then(r => r.json()),
+        fetch("/api/objednavky").then(r => r.json()),
       ]);
-      const ks = k ?? [];
-      const ns = n ?? [];
-      const obs = (o ?? []) as Objednavka[];
+      const ks = (Array.isArray(kData) ? kData : []).filter((k: { typ: string }) => k.typ === "kupujuci" || k.typ === "oboje");
+      const ns = Array.isArray(nData) ? nData : [];
+      const obs = (Array.isArray(oData) ? oData : []) as Objednavka[];
       setKlienti(ks);
       setNehnutelnosti(ns);
 

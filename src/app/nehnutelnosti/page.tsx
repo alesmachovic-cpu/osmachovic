@@ -36,8 +36,8 @@ export default function NehnutelnostiPage() {
   })
 
   async function fetchItems() {
-    const { data } = await supabase.from('nehnutelnosti').select('*').order('created_at', { ascending: false })
-    setItems(data || [])
+    const data = await fetch('/api/nehnutelnosti').then(r => r.json())
+    setItems(Array.isArray(data) ? data : [])
     setLoading(false)
   }
 

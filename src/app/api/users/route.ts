@@ -1,26 +1,23 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
-/**
- * /api/users — CRUD pre users tabuľku cez admin client (obchádza RLS).
- *
- * Prečo: po zapnutí RLS na users tabuľke môže anon key iba SELECT.
- * Všetky write operácie musia ísť cez tento endpoint.
- *
- * Security: každá mutation by mala overiť kto ju volá (audit log v migrácii 012).
- * Pre teraz: admin operácie (addAccount, deleteAccount) by mal robiť iba Aleš.
- * Frontend si to samo gateuje cez isAdmin check.
- */
-
-// GET /api/users — list (rovnaké ako priame SELECT cez anon, ale pre konzistenciu)
-export async function GET() {
+// GET — dva módy podľa cookie:
+//   - autentifikovaný (má crm_session) → plné dáta (potrebuje AuthProvider + nastavenia)
+//   - neautentifikovaný → len id, name, initials (pre login screen — výber účtu)
+export async function GET(req: NextRequest) {
   try {
     const sb = getSupabaseAdmin();
-    const { data, error } = await sb.from("users")
-      .select("id, name, initials, role, email, login_email, pobocka_id, notification_prefs, vzorove_inzeraty, created_at")
-      .order("created_at");
+    const auth = await requireUser(req);
+    const authed = auth.error === null;
+
+    const select = authed
+      ? "id, name, initials, role, email, login_email, pobocka_id, notification_prefs, vzorove_inzeraty, nav_prefs, created_at"
+      : "id, name, initials";
+
+    const { data, error } = await sb.from("users").select(select).order("created_at");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ users: data || [] });
   } catch (e) {
@@ -28,9 +25,13 @@ export async function GET() {
   }
 }
 
-// POST /api/users — vytvor nového usera (iba admin)
+// POST — len admin
 export async function POST(request: Request) {
   try {
+    const auth = await requireUser(request as NextRequest);
+    if (auth.error) return auth.error;
+    if (!isSuperAdmin(auth.user.role)) return NextResponse.json({ error: "Len admin môže vytvárať účty" }, { status: 403 });
+
     const body = await request.json();
     const sb = getSupabaseAdmin();
     const { error } = await sb.from("users").insert({
@@ -49,16 +50,20 @@ export async function POST(request: Request) {
   }
 }
 
-// PATCH /api/users?id=xxx — update usera
+// PATCH — len admin
 export async function PATCH(request: Request) {
   try {
+    const auth = await requireUser(request as NextRequest);
+    if (auth.error) return auth.error;
+    if (!isSuperAdmin(auth.user.role)) return NextResponse.json({ error: "Len admin môže upravovať účty" }, { status: 403 });
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     const body = await request.json();
     const updates: Record<string, unknown> = {};
-    const allowedFields = ["name", "initials", "role", "email", "login_email", "password", "notification_prefs", "vzorove_inzeraty", "pobocka_id"];
+    const allowedFields = ["name", "initials", "role", "email", "login_email", "password", "notification_prefs", "vzorove_inzeraty", "pobocka_id", "nav_prefs"];
     for (const key of allowedFields) {
       if (key in body) updates[key] = body[key] ?? null;
     }
@@ -72,9 +77,13 @@ export async function PATCH(request: Request) {
   }
 }
 
-// DELETE /api/users?id=xxx — iba admin
+// DELETE — len admin
 export async function DELETE(request: Request) {
   try {
+    const auth = await requireUser(request as NextRequest);
+    if (auth.error) return auth.error;
+    if (!isSuperAdmin(auth.user.role)) return NextResponse.json({ error: "Len admin môže mazať účty" }, { status: 403 });
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });

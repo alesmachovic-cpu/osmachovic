@@ -105,8 +105,8 @@ function NaberPageContent() {
     const uuid = user?.id ? await getMaklerUuid(user.id) : null;
     setMyMaklerUuid(uuid);
     // Load all clients - filtering by makler is done client-side
-    const { data } = await supabase.from("klienti").select("*").order("created_at", { ascending: false });
-    setKlienti(data ?? []);
+    const data = await fetch("/api/klienti").then(r => r.json());
+    setKlienti(Array.isArray(data) ? data : []);
 
     // Ak prišiel klient_id z URL, preskočí rovno na typ (alebo formulár ak LV má typ)
     if (preselectedKlientId && data) {

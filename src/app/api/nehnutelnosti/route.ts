@@ -6,6 +6,28 @@ export const runtime = "nodejs";
 
 const VALID_STATUSES = ["aktivny", "koncept", "predany", "archivovany", "pripravujeme"] as const;
 
+/**
+ * GET /api/nehnutelnosti
+ *   ?id=<uuid>        → single záznam
+ *   ?klient_id=<uuid> → všetky pre klienta
+ *   (nič)             → všetky (pre portfolio, matching)
+ */
+export async function GET(req: NextRequest) {
+  const sb = getSupabaseAdmin();
+  const id = req.nextUrl.searchParams.get("id");
+  const klientId = req.nextUrl.searchParams.get("klient_id");
+  if (id) {
+    const { data, error } = await sb.from("nehnutelnosti").select("*").eq("id", id).maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ nehnutelnost: data });
+  }
+  let q = sb.from("nehnutelnosti").select("*").order("created_at", { ascending: false });
+  if (klientId) q = q.eq("klient_id", klientId);
+  const { data, error } = await q;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data ?? []);
+}
+
 /** PATCH /api/nehnutelnosti?id=<uuid>  body: { user_id, status } */
 export async function PATCH(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
@@ -18,16 +40,16 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "neplatný status" }, { status: 400 });
   }
 
+  if (!user_id) return NextResponse.json({ error: "Vyžaduje prihlásenie" }, { status: 401 });
+
   const sb = getSupabaseAdmin();
 
   // Ownership check: buď admin/majitel, alebo vlastník záznamu
-  if (user_id) {
-    const scope = await getUserScope(user_id);
-    if (scope && !scope.isAdmin) {
-      const { data: rec } = await sb.from("nehnutelnosti").select("makler_id").eq("id", id).single();
-      if (rec && rec.makler_id && rec.makler_id !== scope.makler_id) {
-        return NextResponse.json({ error: "Nemáš právo meniť túto nehnuteľnosť" }, { status: 403 });
-      }
+  const scope = await getUserScope(user_id);
+  if (scope && !scope.isAdmin) {
+    const { data: rec } = await sb.from("nehnutelnosti").select("makler_id").eq("id", id).single();
+    if (rec && rec.makler_id && rec.makler_id !== scope.makler_id) {
+      return NextResponse.json({ error: "Nemáš právo meniť túto nehnuteľnosť" }, { status: 403 });
     }
   }
 
@@ -44,12 +66,11 @@ export async function DELETE(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const { user_id } = body as { user_id?: string };
 
-  if (user_id) {
-    const scope = await getUserScope(user_id);
-    if (scope && !scope.isAdmin) {
-      return NextResponse.json({ error: "Mazanie nehnuteľností je len pre admina" }, { status: 403 });
-    }
-  }
+  if (!user_id) return NextResponse.json({ error: "Vyžaduje prihlásenie" }, { status: 401 });
+
+  const scope = await getUserScope(user_id);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  if (!scope.isAdmin) return NextResponse.json({ error: "Mazanie nehnuteľností je len pre admina" }, { status: 403 });
 
   const sb = getSupabaseAdmin();
   const { error } = await sb.from("nehnutelnosti").delete().eq("id", id);

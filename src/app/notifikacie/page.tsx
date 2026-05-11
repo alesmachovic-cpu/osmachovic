@@ -33,11 +33,14 @@ export default function NotifikaciePage() {
     const notifications: Notif[] = [];
 
     // 1. Matching zhody — kupujúci vs nehnuteľnosti
-    const [{ data: kupujuci }, { data: nehnutelnosti }, { data: objednavky }] = await Promise.all([
-      supabase.from("klienti").select("id,meno,rozpocet_max,lokalita").eq("typ", "kupujuci").limit(50),
-      supabase.from("nehnutelnosti").select("id,nazov,typ,cena,lokalita,created_at").neq("stav", "predane").limit(50),
-      supabase.from("objednavky").select("id,klient_id,druh,cena_do,lokalita,created_at").limit(50),
+    const [kData, nData, oData] = await Promise.all([
+      fetch("/api/klienti").then(r => r.json()),
+      fetch("/api/nehnutelnosti").then(r => r.json()),
+      fetch("/api/objednavky").then(r => r.json()),
     ]);
+    const kupujuci = (Array.isArray(kData) ? kData : []).filter((k: { typ: string }) => k.typ === "kupujuci").slice(0, 50);
+    const nehnutelnosti = (Array.isArray(nData) ? nData : []).filter((n: { stav?: string }) => n.stav !== "predane").slice(0, 50);
+    const objednavky = (Array.isArray(oData) ? oData : []).slice(0, 50);
 
     // Generuj match notifikácie
     (objednavky ?? []).forEach(obj => {
