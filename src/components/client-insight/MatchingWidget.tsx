@@ -38,7 +38,6 @@ function SellerWidget({ nehnutelnostId, onPlanovatObhliadku, klientId }: {
 }) {
   const router = useRouter();
   const { data, loading } = useZaujemcoviaPreNehnutelnost(nehnutelnostId);
-  const [selectedMatch, setSelectedMatch] = useState<ZaujemcaItem | null>(null);
 
   const top3 = (data ?? []).slice(0, 3);
   const totalCount = (data ?? []).length;
@@ -83,50 +82,37 @@ function SellerWidget({ nehnutelnostId, onPlanovatObhliadku, klientId }: {
         const cenaDo = o.cena_do ? `${Math.round(o.cena_do / 1000)}k €` : null;
         const summary = [druhArr[0], lokArr[0], cenaDo].filter(Boolean).join(" · ");
 
+        const rowHref = kup?.id ? `/klienti/${kup.id}` : null;
+
         return (
           <div key={o.id} style={{ borderBottom: i < top3.length - 1 ? "1px solid var(--border)" : "none" }}>
-            <div onClick={() => setSelectedMatch(selectedMatch?.objednavka.id === o.id ? null : m)}
-              style={{ display: "flex", alignItems: "flex-start", gap: "8px", padding: "10px 14px", cursor: "pointer" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+            <div
+              onClick={() => rowHref && window.open(rowHref, "_blank")}
+              style={{ display: "flex", alignItems: "flex-start", gap: "8px", padding: "10px 14px", cursor: rowHref ? "pointer" : "default" }}
+              onMouseEnter={e => { if (rowHref) e.currentTarget.style.background = "var(--bg-elevated)"; }}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
               <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", background: badge.bg, color: badge.fg, flexShrink: 0, marginTop: "1px" }}>
                 {m.score}%
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{meno}</div>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: rowHref ? "#60a5fa" : "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{meno}</div>
                 <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{summary || "—"}</div>
               </div>
-              {tel && (
-                <a href={`tel:${tel}`} onClick={e => e.stopPropagation()}
-                  style={{ fontSize: "11px", padding: "3px 6px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "5px", textDecoration: "none", color: "var(--text-primary)", flexShrink: 0 }}>
-                  📞
-                </a>
-              )}
-            </div>
-            {selectedMatch?.objednavka.id === o.id && (
-              <div style={{ padding: "10px 14px", background: "var(--bg-elevated)", borderTop: "1px solid var(--border)" }}>
-                {tel && <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginBottom: "4px" }}>📞 {tel}</div>}
-                {o.cena_od && o.cena_do && (
-                  <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginBottom: "6px" }}>
-                    💰 {Number(o.cena_od).toLocaleString("sk")} – {Number(o.cena_do).toLocaleString("sk")} €
-                  </div>
+              <div style={{ display: "flex", gap: "4px", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                {onPlanovatObhliadku && kup && (
+                  <button onClick={() => onPlanovatObhliadku(kup.id, kup.meno, kup.telefon)}
+                    style={{ fontSize: "11px", padding: "3px 6px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "5px", cursor: "pointer", color: "var(--text-primary)" }}>
+                    📅
+                  </button>
                 )}
-                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                  {onPlanovatObhliadku && kup && (
-                    <button onClick={() => { onPlanovatObhliadku(kup.id, kup.meno, kup.telefon); setSelectedMatch(null); }}
-                      style={{ fontSize: "11px", padding: "5px 10px", background: "#374151", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}>
-                      📅 Naplánovať obhliadku
-                    </button>
-                  )}
-                  {kup && (
-                    <button onClick={() => router.push(`/klienti/${kup.id}`)}
-                      style={{ fontSize: "11px", padding: "5px 10px", background: "var(--bg-surface)", color: "#60a5fa", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer" }}>
-                      Karta →
-                    </button>
-                  )}
-                </div>
+                {tel && (
+                  <a href={`tel:${tel}`}
+                    style={{ fontSize: "11px", padding: "3px 6px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "5px", textDecoration: "none", color: "var(--text-primary)" }}>
+                    📞
+                  </a>
+                )}
               </div>
-            )}
+            </div>
           </div>
         );
       })}
