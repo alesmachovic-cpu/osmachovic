@@ -67,52 +67,26 @@ export default function AuthCallback() {
           return;
         }
 
-        // Normálny Google login: nájdi usera podľa emailu
+        // Normálny Google login: nájdi usera podľa emailu (server-side, bezpečné)
         setStatus("Hľadám účet...");
-        const usersRes = await fetch("/api/users").then(r => r.json());
-        const accs = usersRes.users ?? [];
-        const matched = accs.find((a) => {
-          const gEmail = gmailEmail.toLowerCase();
-          return (
-            (a.login_email || "").toLowerCase() === gEmail ||
-            (a.email || "").toLowerCase() === gEmail
-          );
+        const matchRes = await fetch("/api/auth/google/match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email: gmailEmail }),
         });
 
-        if (!matched) {
+        if (!matchRes.ok) {
           setError(`Google účet ${gmailEmail} nie je povolený. Požiadaj admina o prístup.`);
           await supabase.auth.signOut();
           setTimeout(() => { window.location.href = "/"; }, 4000);
           return;
         }
 
-        // Auto-naviaž login_email ak prvýkrát (cez API)
-        if (!matched.login_email) {
-          try {
-            await fetch(`/api/users?id=${encodeURIComponent(matched.id)}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ login_email: gmailEmail }),
-            });
-          } catch (e) { console.warn("[callback] auto-link error:", e); }
-        }
+        const { user: matched } = await matchRes.json();
+        // session cookie je už nastavený z /api/auth/google/match odpovede
 
         localStorage.setItem("crm_user", matched.id);
-
-        // Vystav HMAC session cookie SYNCHRONOUSLY pred reloadom,
-        // inak prvý load po Google OAuth má prázdny cookie → guard endpointy
-        // 401 → user vidí "Google nepripojený" a musí prihlásiť znova.
-        setStatus("Vystavujem session...");
-        try {
-          await fetch("/api/auth/session-bootstrap", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ user_id: matched.id }),
-          });
-        } catch (e) {
-          console.warn("[callback] session-bootstrap error:", e);
-        }
 
         setStatus("Hotovo! Presmerovávam...");
         setTimeout(() => { window.location.href = "/"; }, 200);
