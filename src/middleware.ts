@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+const ALLOWED_HOSTS = ["vianema.amgd.sk", "test.amgd.sk", "localhost:3000", "localhost:3001"];
+
 export function middleware(request: NextRequest) {
+  // Blokuj Vercel preview URL (funny-stonebraker-*.vercel.app atď.)
+  const host = request.headers.get("host") || "";
+  if (!ALLOWED_HOSTS.some(h => host.includes(h))) {
+    return new NextResponse("Access denied", { status: 403 });
+  }
+
   // Nonce-based CSP je zámerně vynechané — keď je nonce prítomný, prehliadač
   // ignoruje 'unsafe-inline', čo blokuje Next.js bootstrap inline scripty
   // a React sa nehydratuje. Použiváme 'unsafe-inline' bez nonce.
