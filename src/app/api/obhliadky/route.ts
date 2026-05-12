@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -208,24 +209,24 @@ export async function POST(req: NextRequest) {
  *   – pri zápise podpis_data sa server-side dopĺňa IP do podpis_meta.ip
  */
 export async function PATCH(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
   const id = body.id as string;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
+  const userId = auth.user.id;
 
-  // Ownership: ak caller pošle user_id, overíme. Bez user_id povoľujeme
-  // (legacy clients) — UI sa postupne migruje.
-  if (body.user_id) {
-    const scope = await getUserScope(String(body.user_id));
-    if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
-    const { data: existing } = await sb.from("obhliadky").select("makler_id").eq("id", id).single();
-    if (!existing) return NextResponse.json({ error: "Obhliadka nenájdená" }, { status: 404 });
-    const ok = await canEditRecord(scope, existing.makler_id);
-    if (!ok) return NextResponse.json({ error: "Nemáš oprávnenie editovať túto obhliadku" }, { status: 403 });
-    if (!scope.isAdmin && body.makler_id) delete body.makler_id; // anti-impersonation
-  }
+  const scope = await getUserScope(userId);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const { data: existing } = await sb.from("obhliadky").select("makler_id").eq("id", id).single();
+  if (!existing) return NextResponse.json({ error: "Obhliadka nenájdená" }, { status: 404 });
+  const ok = await canEditRecord(scope, existing.makler_id);
+  if (!ok) return NextResponse.json({ error: "Nemáš oprávnenie editovať túto obhliadku" }, { status: 403 });
+  if (!scope.isAdmin && body.makler_id) delete body.makler_id; // anti-impersonation
 
   const allowed = [
     "status","miesto","poznamka","datum",
@@ -259,19 +260,20 @@ export async function PATCH(req: NextRequest) {
  * DELETE /api/obhliadky?id=X&user_id=Y
  */
 export async function DELETE(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const id = req.nextUrl.searchParams.get("id");
-  const userId = req.nextUrl.searchParams.get("user_id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const sb = getSupabaseAdmin();
+  const userId = auth.user.id;
 
-  if (userId) {
-    const scope = await getUserScope(userId);
-    if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
-    const { data: existing } = await sb.from("obhliadky").select("makler_id").eq("id", id).single();
-    if (!existing) return NextResponse.json({ error: "Obhliadka nenájdená" }, { status: 404 });
-    const ok = await canEditRecord(scope, existing.makler_id);
-    if (!ok) return NextResponse.json({ error: "Nemáš oprávnenie zmazať túto obhliadku" }, { status: 403 });
-  }
+  const scope = await getUserScope(userId);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const { data: existing } = await sb.from("obhliadky").select("makler_id").eq("id", id).single();
+  if (!existing) return NextResponse.json({ error: "Obhliadka nenájdená" }, { status: 404 });
+  const ok = await canEditRecord(scope, existing.makler_id);
+  if (!ok) return NextResponse.json({ error: "Nemáš oprávnenie zmazať túto obhliadku" }, { status: 403 });
 
   const { error } = await sb.from("obhliadky").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

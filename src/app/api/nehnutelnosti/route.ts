@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope } from "@/lib/scope";
 import { logAudit } from "@/lib/audit";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -29,24 +30,25 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data ?? []);
 }
 
-/** PATCH /api/nehnutelnosti?id=<uuid>  body: { user_id, status } */
+/** PATCH /api/nehnutelnosti?id=<uuid>  body: { status } */
 export async function PATCH(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const body = await req.json();
-  const { user_id, status } = body as { user_id?: string; status?: string };
+  const { status } = body as { status?: string };
 
   if (!status || !VALID_STATUSES.includes(status as typeof VALID_STATUSES[number])) {
     return NextResponse.json({ error: "neplatný status" }, { status: 400 });
   }
 
-  if (!user_id) return NextResponse.json({ error: "Vyžaduje prihlásenie" }, { status: 401 });
-
   const sb = getSupabaseAdmin();
 
   // Ownership check: buď admin/majitel, alebo vlastník záznamu
-  const scope = await getUserScope(user_id);
+  const scope = await getUserScope(auth.user.id);
   if (scope && !scope.isAdmin) {
     const { data: rec } = await sb.from("nehnutelnosti").select("makler_id").eq("id", id).single();
     if (rec && rec.makler_id && rec.makler_id !== scope.makler_id) {

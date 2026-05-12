@@ -46,6 +46,8 @@ export default function NastaveniaPage() {
   const [accountSaved, setAccountSaved] = useState(false);
   const [featureToggles, setFeatureToggles] = useState<FeatureToggles>({});
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [inviteSending, setInviteSending] = useState<string | null>(null);
+  const [inviteSentFor, setInviteSentFor] = useState<string | null>(null);
   const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; email: string | null }>({ connected: false, email: null });
   const [googleLoading, setGoogleLoading] = useState(true);
   const [cenaM2, setCenaM2] = useState(2800);
@@ -1006,6 +1008,34 @@ export default function NastaveniaPage() {
                         padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)",
                         borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)",
                       }}>Heslo</button>
+                      {acc.id !== "ales" && (
+                        <button onClick={async () => {
+                          if (inviteSending) return;
+                          setInviteSending(acc.id);
+                          setInviteSentFor(null);
+                          try {
+                            const res = await fetch("/api/users/invite", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ user_id: acc.id }),
+                            });
+                            const body = await res.json();
+                            if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
+                            setInviteSentFor(acc.id);
+                            setTimeout(() => setInviteSentFor(null), 4000);
+                          } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
+                          finally { setInviteSending(null); }
+                        }} style={{
+                          padding: "5px 10px",
+                          background: inviteSentFor === acc.id ? "#D1FAE5" : "var(--bg-surface)",
+                          border: `1px solid ${inviteSentFor === acc.id ? "#6EE7B7" : "var(--border)"}`,
+                          borderRadius: "6px", fontSize: "11px", cursor: "pointer",
+                          color: inviteSentFor === acc.id ? "#065F46" : "var(--text-secondary)",
+                          opacity: inviteSending === acc.id ? 0.6 : 1,
+                        }}>
+                          {inviteSending === acc.id ? "…" : inviteSentFor === acc.id ? "✓ Odoslané" : "✉ Pozvánka"}
+                        </button>
+                      )}
                       {acc.id !== "ales" && (
                         <button onClick={async () => {
                           if (!confirm(`Resetovať heslo pre ${acc.name}? Vygeneruje sa dočasné heslo ktoré môžeš poslať maklerovi.`)) return;

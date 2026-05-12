@@ -56,6 +56,90 @@ async function logAttempt(sb: ReturnType<typeof getSupabaseAdmin>, ip: string, i
   });
 }
 
+async function checkAndAlertNewIp(
+  sb: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  userName: string,
+  identifier: string,
+  ip: string,
+  userAgent: string,
+) {
+  try {
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: recent } = await sb.from("login_attempts")
+      .select("ip")
+      .eq("identifier", identifier.toLowerCase())
+      .eq("success", true)
+      .gte("attempted_at", since);
+
+    const knownIps = new Set((recent ?? []).map((r: { ip: string }) => r.ip));
+    // Aktuálna session je už vložená v logAttempt, teda ak je tam len táto jedna → nová IP
+    const isNewIp = !knownIps.has(ip) || knownIps.size === 0;
+
+    if (!isNewIp) return;
+
+    const now = new Date().toLocaleString("sk-SK", { timeZone: "Europe/Bratislava" });
+
+    // Zápis do audit_log
+    await sb.from("audit_log").insert({
+      user_id: userId,
+      action: "suspicious_login",
+      entity_type: "user",
+      entity_id: userId,
+      detail: { ip, user_agent: userAgent, user_name: userName },
+      ip,
+      user_agent: userAgent,
+    });
+
+    // Email alert manažérovi
+    const managerEmail = process.env.MANAGER_EMAIL;
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!managerEmail || !resendKey) return;
+
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM || "VIANEMA Real <onboarding@resend.dev>",
+        to: managerEmail,
+        subject: "⚠️ Prihlásenie z novej IP — VIANEMA CRM",
+        html: `
+          <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <div style="font-size: 22px; font-weight: 500; letter-spacing: -0.03em; color: #0A0A0A;">VIANEMA</div>
+              <div style="font-size: 9px; letter-spacing: 0.4em; color: #86868B; margin-top: 2px;">REAL</div>
+            </div>
+            <h2 style="color: #1f2937; margin: 0 0 12px;">Prihlásenie z novej IP adresy</h2>
+            <p style="color: #4b5563; line-height: 1.6;">
+              Do CRM systému sa prihlásil používateľ z IP adresy, ktorú sme za posledných 30 dní nezaznamenali.
+            </p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <tr style="border-bottom: 1px solid #e5e7eb;">
+                <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Používateľ</td>
+                <td style="padding: 8px 0; font-weight: 500;">${userName || identifier}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e5e7eb;">
+                <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">IP adresa</td>
+                <td style="padding: 8px 0; font-weight: 500; font-family: monospace;">${ip}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Čas</td>
+                <td style="padding: 8px 0;">${now}</td>
+              </tr>
+            </table>
+            <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
+              Ak poznáš tohto používateľa a zmenu IP očakávaš (VPN, nová sieť), tento email ignoruj.
+              Ak nie, skontroluj prístup v nastaveniach CRM.
+            </p>
+          </div>
+        `,
+      }),
+    });
+  } catch (e) {
+    console.warn("[login] checkAndAlertNewIp failed:", e);
+  }
+}
+
 async function verifyPassword(plain: string, stored: string | null | undefined): Promise<boolean> {
   if (!stored) return false;
   // Bcrypt hash začína $2a$ / $2b$ / $2y$
@@ -155,6 +239,10 @@ export async function POST(request: Request) {
     }
 
     await logAttempt(sb, ip, identifier, true);
+
+    // Fire-and-forget: alert pri prihlásení z novej IP (neblokuje odpoveď)
+    const userAgent = request.headers.get("user-agent") || "";
+    checkAndAlertNewIp(sb, String(user.id), String(user.name || ""), identifier, ip, userAgent).catch(() => {});
 
     // Nevracaj heslo
     const safeUser = { ...user, password: undefined };

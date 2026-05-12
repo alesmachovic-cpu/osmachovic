@@ -18,6 +18,7 @@ import { NajlepsieZhodyPanel } from "@/components/matching/NajlepsieZhodyPanel";
 import { HypotekaMiniCalc } from "@/components/calc/HypotekaMiniCalc";
 import { ProviziaMiniCalc } from "@/components/calc/ProviziaMiniCalc";
 import { ClientInsightPanel } from "@/components/client-insight/ClientInsightPanel";
+import ProdukciaTab from "@/components/produkcia/ProdukciaTab";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
@@ -307,8 +308,9 @@ export default function KlientDetailPage() {
   const [quickAddSaving, setQuickAddSaving] = useState(false);
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
+  const [produkciaObjednavky, setProdukciaObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
-  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "obhliadky" | "dokumenty" | "historia">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "produkcia" | "obhliadky" | "dokumenty" | "historia">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [detailObj, setDetailObj] = useState<Record<string, unknown> | null>(null);
@@ -436,7 +438,7 @@ export default function KlientDetailPage() {
     setLoading(true);
 
     // Paralelné načítanie cez API routes (service_role, RLS-safe)
-    const [klientJson, naberyData, objednavkyData, inzeratyData, obhliadkyJson, docs, udalostiData] = await Promise.all([
+    const [klientJson, naberyData, objednavkyData, inzeratyData, obhliadkyJson, docs, udalostiData, produkciaData] = await Promise.all([
       fetch(`/api/klienti?id=${id}`).then(r => r.json()),
       fetch(`/api/nabery?klient_id=${id}`).then(r => r.json()),
       fetch(`/api/objednavky?klient_id=${id}`).then(r => r.json()),
@@ -444,6 +446,7 @@ export default function KlientDetailPage() {
       fetch(`/api/obhliadky?klient_id=${id}`).then(r => r.json()),
       listKlientDokumenty(id),
       fetch(`/api/klient-udalosti?klient_id=${id}`).then(r => r.json()),
+      fetch(`/api/produkcia-objednavky?klient_id=${id}`).then(r => r.json()),
     ]);
 
     const klientData = klientJson?.klient ?? null;
@@ -452,10 +455,12 @@ export default function KlientDetailPage() {
     const inzeratyArr = Array.isArray(inzeratyData) ? inzeratyData : [];
     const obhliadkyArr = Array.isArray(obhliadkyJson?.obhliadky) ? obhliadkyJson.obhliadky : [];
     const udalostiArr = Array.isArray(udalostiData) ? udalostiData : [];
+    const produkciaArr = Array.isArray(produkciaData) ? produkciaData : [];
 
     if (klientData) setKlient(klientData);
     setNabery(naberyArr);
     setObjednavky(objednavkyArr);
+    setProdukciaObjednavky(produkciaArr);
     setInzeraty(inzeratyArr);
 
     // Auto-prechod: nabrany + aktivny inzerat → inzerovany
@@ -940,11 +945,15 @@ export default function KlientDetailPage() {
   // kupujuci predáva nič, iba kupuje. Nábery, LV a vlastné inzeráty sa ho
   // netýkajú; relevantnejšie tým je sekcia Objednávky (čo hľadá).
   const isCistyKupujuci = klient.typ === "kupujuci";
+  const produkciaCount = produkciaObjednavky.filter(o => (o as Record<string, unknown>).stav !== "cancelled").length;
   const tabs = [
     { key: "timeline", label: "Aktivita", count: timeline.length },
     ...(isCistyKupujuci ? [] : [{ key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length }]),
     { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
-    { key: "objednavky", label: "Objednávky", count: objednavky.length },
+    ...(isCistyKupujuci
+      ? [{ key: "objednavky", label: "Objednávky", count: objednavky.length }]
+      : [{ key: "produkcia", label: "Produkcia", count: produkciaCount }]
+    ),
     { key: "dokumenty", label: "Dokumenty", count: 0 },
     { key: "historia", label: "CRM Log", count: 0 },
   ];
@@ -1902,7 +1911,10 @@ export default function KlientDetailPage() {
       {(() => {
         const statsItems = [
           ...(!isCistyKupujuci ? [{ label: "Nábery", value: nabery.length, tab: "nehnutelnosti" as const }] : []),
-          { label: "Objednávky", value: objednavky.length, tab: "objednavky" as const },
+          ...(isCistyKupujuci
+            ? [{ label: "Objednávky", value: objednavky.length, tab: "objednavky" as const }]
+            : [{ label: "Produkcia", value: produkciaCount, tab: "produkcia" as const }]
+          ),
           ...(!isCistyKupujuci ? [{ label: "Inzeráty", value: inzeraty.length, tab: "nehnutelnosti" as const }] : []),
           { label: "Obhliadky", value: obhliadky.length, tab: "obhliadky" as const },
         ];
@@ -2503,7 +2515,7 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {activeTab === "objednavky" && (
+      {isCistyKupujuci && activeTab === "objednavky" && (
         <div style={cardSt}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
@@ -2657,6 +2669,21 @@ export default function KlientDetailPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {!isCistyKupujuci && activeTab === "produkcia" && klient && user && (
+        <div style={cardSt}>
+          <ProdukciaTab
+            klient={{
+              id: klient.id,
+              meno: klient.meno || "",
+              telefon: klient.telefon,
+              lokalita: klient.lokalita,
+              typ_nehnutelnosti: (nabery[0] as Record<string, unknown> | undefined)?.typ_nehnutelnosti as string | null ?? null,
+            }}
+            makler={{ id: user.id, name: (user as { name?: string }).name || user.id }}
+          />
         </div>
       )}
 

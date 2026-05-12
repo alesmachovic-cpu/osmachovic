@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord, canEditNaber } from "@/lib/scope";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -76,13 +77,16 @@ export async function POST(req: NextRequest) {
  * na tom čo bolo predtým — povolí.
  */
 export async function PATCH(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 
-  const userId = String(body.user_id || "");
+  const userId = auth.user.id;
   const id = String(body.id || "");
-  if (!userId || !id) return NextResponse.json({ error: "user_id + id required" }, { status: 400 });
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const scope = await getUserScope(userId);
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
@@ -124,11 +128,14 @@ export async function PATCH(req: NextRequest) {
  * admin/majiteľ (a aj to len v krajnom prípade — audit_log).
  */
 export async function DELETE(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
-  const userId = searchParams.get("user_id");
-  if (!id || !userId) return NextResponse.json({ error: "id + user_id required" }, { status: 400 });
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  const userId = auth.user.id;
 
   const scope = await getUserScope(userId);
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
