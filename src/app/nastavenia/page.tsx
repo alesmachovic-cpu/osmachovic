@@ -10,6 +10,8 @@ import { mainNavBase, operativaNav, systemNav } from "@/lib/navItems";
 import type { FeatureId, FeatureToggles } from "@/lib/featureToggles";
 import { getUserItem, setUserItem } from "@/lib/userStorage";
 import { detectPushState, enableBrowserPush, type PushState } from "@/lib/pushClient";
+import { BillingPanel } from "@/components/BillingPanel";
+import type { PlanKey } from "@/lib/stripe-plans";
 
 type NotifPrefs = { monitor: boolean; odklik: boolean; lv: boolean; naklady: boolean };
 const DEFAULT_NOTIF_PREFS: NotifPrefs = { monitor: true, odklik: true, lv: true, naklady: true };
@@ -74,6 +76,11 @@ export default function NastaveniaPage() {
   const [companyIco, setCompanyIco] = useState("");
   const [companyRegistracia, setCompanyRegistracia] = useState("");
   const [companySaved, setCompanySaved] = useState(false);
+
+  // Billing
+  const [billingPlan, setBillingPlan] = useState<PlanKey>("starter");
+  const [billingActive, setBillingActive] = useState(true);
+  const [billingHasCustomer, setBillingHasCustomer] = useState(false);
 
   // Active category
   const [activeCategory, setActiveCategory] = useState("profil");
@@ -197,7 +204,7 @@ export default function NastaveniaPage() {
       setGoogleLoading(false);
     }
 
-    // Check URL params for OAuth callback result
+    // Check URL params for OAuth callback result + billing tab
     const params = new URLSearchParams(window.location.search);
     const googleResult = params.get("google");
     if (googleResult === "ok") {
@@ -209,7 +216,26 @@ export default function NastaveniaPage() {
       }
       window.history.replaceState({}, "", "/nastavenia");
     }
+
+    const tab = params.get("tab");
+    if (tab === "billing") {
+      setActiveCategory("billing");
+    }
   }, [authUser?.id, authUser?.name, authUser?.email]);
+
+  // Načítaj billing info pre aktívnu firmu
+  useEffect(() => {
+    if (activeCategory !== "billing") return;
+    fetch("/api/billing/status")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        setBillingPlan((d.plan as PlanKey) || "starter");
+        setBillingActive(d.is_active !== false);
+        setBillingHasCustomer(!!d.stripe_customer_id);
+      })
+      .catch(() => {});
+  }, [activeCategory]);
 
   function handleSaveCeny() {
     if (!uid) return;
@@ -302,6 +328,7 @@ export default function NastaveniaPage() {
     ...(isAdmin ? [
       { id: "spolocnost", label: "Spoločnosť", icon: "🏢" },
       { id: "ucty", label: "Účty", icon: "👥" },
+      { id: "billing", label: "Predplatné", icon: "💳" },
     ] : []),
   ];
 
@@ -1188,6 +1215,22 @@ export default function NastaveniaPage() {
               Účet aktualizovaný
             </div>
           )}
+        </div>
+      )}
+
+      {activeCategory === "billing" && isAdmin && (
+        <div style={cardSt}>
+          <div style={{ marginBottom: "20px" }}>
+            <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>Predplatné</h2>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "4px 0 0" }}>
+              Spravujte plán a platobné údaje vašej kancelárie.
+            </p>
+          </div>
+          <BillingPanel
+            currentPlan={billingPlan}
+            isSuspended={!billingActive}
+            hasStripeCustomer={billingHasCustomer}
+          />
         </div>
       )}
     </div>
