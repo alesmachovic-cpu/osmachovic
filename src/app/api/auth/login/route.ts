@@ -29,21 +29,25 @@ function getClientIp(request: Request): string {
 
 async function checkRateLimit(sb: ReturnType<typeof getSupabaseAdmin>, ip: string, identifier: string): Promise<string | null> {
   const since = new Date(Date.now() - LOCKOUT_MINUTES * 60 * 1000).toISOString();
-  const { count } = await sb.from("login_attempts")
+
+  // Per IP+identifikátor — makléri zdieľajú office IP, ale každý má vlastný limit
+  const { count: pairCount } = await sb.from("login_attempts")
     .select("*", { count: "exact", head: true })
     .eq("ip", ip)
+    .eq("identifier", identifier)
     .eq("success", false)
     .gte("attempted_at", since);
-  if ((count ?? 0) >= MAX_ATTEMPTS) {
+  if ((pairCount ?? 0) >= MAX_ATTEMPTS) {
     return `Príliš veľa neúspešných pokusov. Skús znova za ${LOCKOUT_MINUTES} min.`;
   }
-  // Aj per-identifier lockout (aby útočník nemohol skúšať bez limitu cez rôzne IP)
+
+  // Per-identifier ochrana voči útokom z rôznych IP
   const { count: userCount } = await sb.from("login_attempts")
     .select("*", { count: "exact", head: true })
     .eq("identifier", identifier)
     .eq("success", false)
     .gte("attempted_at", since);
-  if ((userCount ?? 0) >= MAX_ATTEMPTS * 2) {
+  if ((userCount ?? 0) >= MAX_ATTEMPTS * 3) {
     return `Účet je dočasne zablokovaný. Skús za ${LOCKOUT_MINUTES} min.`;
   }
   return null;
