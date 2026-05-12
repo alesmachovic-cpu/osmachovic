@@ -19,6 +19,7 @@ import { HypotekaMiniCalc } from "@/components/calc/HypotekaMiniCalc";
 import { ProviziaMiniCalc } from "@/components/calc/ProviziaMiniCalc";
 import { ClientInsightPanel } from "@/components/client-insight/ClientInsightPanel";
 import ProdukciaTab from "@/components/produkcia/ProdukciaTab";
+import ObchodTab from "@/components/Obchod/ObchodTab";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
@@ -310,7 +311,7 @@ export default function KlientDetailPage() {
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [produkciaObjednavky, setProdukciaObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
-  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "produkcia" | "obhliadky" | "dokumenty" | "historia">("timeline");
+  const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "produkcia" | "obhliadky" | "dokumenty" | "historia" | "obchod">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [detailObj, setDetailObj] = useState<Record<string, unknown> | null>(null);
@@ -946,9 +947,25 @@ export default function KlientDetailPage() {
   // netýkajú; relevantnejšie tým je sekcia Objednávky (čo hľadá).
   const isCistyKupujuci = klient.typ === "kupujuci";
   const produkciaCount = produkciaObjednavky.filter(o => (o as Record<string, unknown>).stav !== "cancelled").length;
+
+  // Zmluva info z prvého náberáku kde je zmluva=true, inak z prvého náberáku
+  const zmluvaInfo = (() => {
+    const withZmluva = nabery.find(n => (n as Record<string, unknown>).zmluva);
+    const n = (withZmluva || nabery[0]) as Record<string, unknown> | undefined;
+    if (!n) return null;
+    return {
+      zmluva: Boolean(n.zmluva),
+      typZmluvy: (n.typ_zmluvy as string | null) ?? null,
+      zmluva_do: (n.zmluva_do as string | null) ?? null,
+      datum_podpisu: (n.datum_podpisu as string | null) ?? null,
+      naberakId: (n.id as string | null) ?? null,
+    };
+  })();
+
   const tabs = [
     { key: "timeline", label: "Aktivita", count: timeline.length },
     ...(isCistyKupujuci ? [] : [{ key: "nehnutelnosti", label: "Nehnuteľnosti", count: propertyCards.length }]),
+    ...(isCistyKupujuci ? [] : [{ key: "obchod", label: "Obchod" }]),
     { key: "obhliadky", label: "Obhliadky", count: obhliadky.length },
     ...(isCistyKupujuci
       ? [{ key: "objednavky", label: "Objednávky", count: objednavky.length }]
@@ -2331,6 +2348,21 @@ export default function KlientDetailPage() {
                           ? ((card.naberak as Record<string, unknown>).podpis_data ? "📝 Náberák ✓ podpísaný" : "📝 Náberák · čaká na podpis")
                           : "📝 Bez náberáku"}
                       </span>
+                      {card.naberak && (card.naberak as Record<string, unknown>).zmluva && (() => {
+                        const n = card.naberak as Record<string, unknown>;
+                        const typ = n.typ_zmluvy === "exkluzivna" ? "Výhradná" : "Nevýhradná";
+                        const do_ = n.zmluva_do ? new Date(n.zmluva_do as string).toLocaleDateString("sk-SK", { day: "numeric", month: "short", year: "2-digit" }) : null;
+                        const expired = n.zmluva_do ? new Date(n.zmluva_do as string) < new Date() : false;
+                        return (
+                          <span style={{ color: expired ? "#dc2626" : "#059669", fontWeight: 600 }}>
+                            📋 {typ} zmluva{do_ ? ` · do ${do_}` : ""}
+                            {expired ? " ⚠️ expirovaná" : ""}
+                          </span>
+                        );
+                      })()}
+                      {card.naberak && !(card.naberak as Record<string, unknown>).zmluva && (
+                        <span style={{ color: "#f59e0b", fontWeight: 600 }}>📋 Bez zmluvy</span>
+                      )}
                       <span>{hasInzerat ? "📰 Inzerát ✓" : "📰 Bez inzerátu"}</span>
                       {nInzDocs > 0 && <span>📎 {nInzDocs} dokumentov</span>}
                     </div>
@@ -2433,6 +2465,10 @@ export default function KlientDetailPage() {
             return cena ? <ProviziaMiniCalc cena={cena} /> : null;
           })()}
         </div>
+      )}
+
+      {activeTab === "obchod" && klient && user && (
+        <ObchodTab klient={klient} userId={user.id} zmluvaInfo={zmluvaInfo} />
       )}
 
       {activeTab === "obhliadky" && (

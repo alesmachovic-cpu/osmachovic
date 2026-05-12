@@ -32,10 +32,20 @@ interface Obchod {
   notar?: string | null;
   banka?: string | null;
   poznamky?: string | null;
+  rz_vynimka_poziadana?: boolean;
+  rz_vynimka_approved?: boolean;
   created_at: string;
   updated_at: string;
   obchod_ulohy: ObchodUloha[];
 }
+
+type ZmluvaInfo = {
+  zmluva: boolean;
+  typZmluvy: string | null;
+  zmluva_do: string | null;
+  datum_podpisu: string | null;
+  naberakId: string | null;
+} | null;
 
 // ─── Pomocné ──────────────────────────────────────────────────────────────────
 
@@ -445,15 +455,19 @@ function DriveModal({
 export default function ObchodTab({
   klient,
   userId,
+  zmluvaInfo,
 }: {
   klient: Klient;
   userId: string;
+  zmluvaInfo?: ZmluvaInfo;
 }) {
   const [obchody, setObchody] = useState<Obchod[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNovyModal, setShowNovyModal] = useState(false);
   const [driveModal, setDriveModal] = useState<{ ulohaId: string; initial: string } | null>(null);
   const [activeObchodIdx, setActiveObchodIdx] = useState(0);
+  const [rzGate, setRzGate] = useState<{ obchodId: string; ulohaId: string } | null>(null);
+  const [vynimkaSending, setVynimkaSending] = useState(false);
   const notesRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
@@ -473,6 +487,21 @@ export default function ObchodTab({
 
   // ── Toggle úlohy ────────────────────────────────────────────────────────────
   async function toggleUloha(obchodId: string, ulohaId: string, done: boolean) {
+    // Gate: RZ vyžaduje výhradnú zmluvu
+    if (done) {
+      const uloha = obchody.find(o => o.id === obchodId)?.obchod_ulohy.find(u => u.id === ulohaId);
+      const isRZ = uloha?.nazov?.toLowerCase().includes("rezervačná zmluva") || uloha?.nazov?.toLowerCase().includes("rezervacna zmluva");
+      if (isRZ) {
+        const obchod = obchody.find(o => o.id === obchodId);
+        const hasVyhradna = zmluvaInfo?.zmluva && zmluvaInfo.typZmluvy === "exkluzivna";
+        const hasVynimka = obchod?.rz_vynimka_approved;
+        if (!hasVyhradna && !hasVynimka) {
+          setRzGate({ obchodId, ulohaId });
+          return;
+        }
+      }
+    }
+
     const res = await fetch(`/api/obchody/${obchodId}/ulohy/${ulohaId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -489,6 +518,40 @@ export default function ObchodTab({
     }));
 
     // Refresh obchod status z BE
+    const oRes = await fetch(`/api/obchody?klient_id=${klient.id}`, { credentials: "include" });
+    if (oRes.ok) {
+      const { obchody: fresh } = await oRes.json();
+      setObchody(fresh ?? []);
+    }
+  }
+
+  // ── Požiadať o výnimku na RZ ────────────────────────────────────────────────
+  async function poziadatVynimku(obchodId: string) {
+    setVynimkaSending(true);
+    await fetch(`/api/obchody/${obchodId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ rz_vynimka_poziadana: true }),
+    });
+    // Refresh
+    const oRes = await fetch(`/api/obchody?klient_id=${klient.id}`, { credentials: "include" });
+    if (oRes.ok) {
+      const { obchody: fresh } = await oRes.json();
+      setObchody(fresh ?? []);
+    }
+    setVynimkaSending(false);
+    setRzGate(null);
+  }
+
+  // ── Schváliť výnimku (admin/manažér) ───────────────────────────────────────
+  async function schvalitVynimku(obchodId: string) {
+    await fetch(`/api/obchody/${obchodId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ rz_vynimka_approved: true }),
+    });
     const oRes = await fetch(`/api/obchody?klient_id=${klient.id}`, { credentials: "include" });
     if (oRes.ok) {
       const { obchody: fresh } = await oRes.json();
@@ -673,6 +736,116 @@ export default function ObchodTab({
           ))}
         </div>
       </div>
+
+      {/* ── Zmluva status banner ────────────────────────────────────────── */}
+      {zmluvaInfo !== undefined && (() => {
+        const hasVyhradna = zmluvaInfo?.zmluva && zmluvaInfo.typZmluvy === "exkluzivna";
+        const hasNevyhradna = zmluvaInfo?.zmluva && zmluvaInfo.typZmluvy === "neexkluzivna";
+        const noZmluva = !zmluvaInfo?.zmluva;
+        const expired = zmluvaInfo?.zmluva_do ? new Date(zmluvaInfo.zmluva_do) < new Date() : false;
+        const poziadana = obchod.rz_vynimka_poziadana;
+        const approved = obchod.rz_vynimka_approved;
+        return (
+          <div style={{
+            background: "var(--bg-surface)", border: `1px solid ${hasVyhradna ? "#059669" : noZmluva ? "#f59e0b" : "var(--border)"}`,
+            borderRadius: "12px", padding: "14px 18px", marginBottom: "12px",
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "20px" }}>{hasVyhradna ? "📋" : noZmluva ? "⚠️" : "📋"}</span>
+              <div>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: hasVyhradna ? "#059669" : noZmluva ? "#b45309" : "var(--text-primary)" }}>
+                  {hasVyhradna ? "Výhradná zmluva" + (expired ? " — EXPIROVANÁ" : "") :
+                   hasNevyhradna ? "Nevýhradná zmluva" :
+                   "Bez zmluvy"}
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "1px" }}>
+                  {zmluvaInfo?.zmluva && zmluvaInfo.datum_podpisu ? `Podpísaná ${new Date(zmluvaInfo.datum_podpisu).toLocaleDateString("sk-SK")}` : ""}
+                  {zmluvaInfo?.zmluva_do ? ` · platná do ${new Date(zmluvaInfo.zmluva_do).toLocaleDateString("sk-SK")}` : ""}
+                  {noZmluva ? "Na podpis RZ je potrebná výhradná zmluva" : ""}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+              {noZmluva && !approved && (
+                <a href={`/naber?klient_id=${klient.id}`} style={{
+                  padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 600,
+                  background: "#374151", color: "#fff", textDecoration: "none",
+                }}>
+                  + Podpísať zmluvu
+                </a>
+              )}
+              {noZmluva && approved && (
+                <span style={{ padding: "5px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: 600, background: "#d1fae5", color: "#065f46" }}>
+                  ✓ Výnimka schválená manažérom
+                </span>
+              )}
+              {noZmluva && poziadana && !approved && (
+                <span style={{ padding: "5px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: 600, background: "#fef3c7", color: "#92400e" }}>
+                  ⏳ Výnimka čaká na schválenie
+                </span>
+              )}
+              {/* Admin/manažér môže schváliť */}
+              {noZmluva && poziadana && !approved && (
+                <button onClick={() => schvalitVynimku(obchod.id)} style={{
+                  padding: "5px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: 600,
+                  background: "#059669", color: "#fff", border: "none", cursor: "pointer",
+                }}>
+                  Schváliť výnimku
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── RZ Gate modal ────────────────────────────────────────────────── */}
+      {rzGate && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
+        }}>
+          <div style={{
+            background: "var(--bg-surface)", borderRadius: "16px", padding: "28px",
+            maxWidth: "440px", width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+          }}>
+            <div style={{ fontSize: "32px", marginBottom: "12px" }}>🔒</div>
+            <div style={{ fontSize: "17px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "8px" }}>
+              Rezervačná zmluva vyžaduje výhradnú zmluvu
+            </div>
+            <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "20px", lineHeight: 1.5 }}>
+              Pred podpisom rezervačnej zmluvy musí byť podpísaná výhradná sprostredkovateľská zmluva.
+              Môžeš požiadať manažéra pobočky o výnimku — ten ju musí schváliť v systéme.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <a href={`/naber?klient_id=${klient.id}`} style={{
+                padding: "11px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 700,
+                background: "#374151", color: "#fff", textDecoration: "none", textAlign: "center",
+              }}>
+                📋 Podpísať výhradnú zmluvu teraz
+              </a>
+              {!obchody.find(o => o.id === rzGate.obchodId)?.rz_vynimka_poziadana ? (
+                <button onClick={() => poziadatVynimku(rzGate.obchodId)} disabled={vynimkaSending} style={{
+                  padding: "11px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 700,
+                  background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", cursor: "pointer",
+                }}>
+                  {vynimkaSending ? "Odosielam…" : "📨 Požiadať manažéra o výnimku"}
+                </button>
+              ) : (
+                <div style={{ padding: "11px 16px", borderRadius: "10px", fontSize: "13px", fontWeight: 600, background: "#fef3c7", color: "#92400e", textAlign: "center" }}>
+                  ⏳ Žiadosť o výnimku bola odoslaná
+                </div>
+              )}
+              <button onClick={() => setRzGate(null)} style={{
+                padding: "9px 16px", borderRadius: "10px", fontSize: "13px",
+                background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)", cursor: "pointer",
+              }}>
+                Zrušiť
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 4 sekcie v gride ────────────────────────────────────────────── */}
       <div style={{

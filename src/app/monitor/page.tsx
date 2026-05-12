@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
 import { useAuth } from "@/components/AuthProvider";
 import PreCallBriefModal from "@/components/PreCallBriefModal";
 import PriceSparkline from "@/components/PriceSparkline";
+import AnalyzyPage from "@/app/analyzy/page";
 
 /* ── Typy ── */
 interface Inzerat {
@@ -1190,10 +1191,6 @@ function MonitorContent() {
     </div>
   );
 }
-
-// TASK 1 — Wrapper s tabmi: Scraping (default) | AI Analýza
-import AnalyzyPage from "@/app/analyzy/page";
-import { Suspense } from "react";
 
 const MONITOR_TABS = [
   { key: "scraping", label: "Scraping", icon: "📡" },
