@@ -308,8 +308,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     );
   }
 
-  // Na /auth/callback a /reset-password sa vždy zobrazí children (login bypass)
-  const isAuthCallback = pathname?.startsWith("/auth/callback") || pathname?.startsWith("/reset-password");
+  // Na /auth/callback, /reset-password a /registracia sa vždy zobrazí children (login bypass)
+  const isAuthCallback = pathname?.startsWith("/auth/callback") || pathname?.startsWith("/reset-password") || pathname?.startsWith("/registracia");
 
   if (!user && !isAuthCallback) {
     return (
@@ -664,9 +664,17 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
           )}
         </button>
 
+        {/* Registrácia */}
+        <p style={{ textAlign: "center", marginTop: "20px", fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>
+          Nemáte účet?{" "}
+          <a href="/registracia" style={{ color: "rgba(255,255,255,0.65)", textDecoration: "underline" }}>
+            Zaregistrujte kanceláriu
+          </a>
+        </p>
+
         {/* Footer — Tier 1: AMGD attribution under Vianema-branded screen */}
         <div style={{
-          textAlign: "center", marginTop: "24px",
+          textAlign: "center", marginTop: "16px",
           color: "rgba(255,255,255,0.5)",
         }}>
           <PoweredByAMGD size="sm" />
