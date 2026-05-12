@@ -192,12 +192,8 @@ export async function POST(request: Request) {
       return r;
     }
 
-    // Cloudflare Turnstile — overenie iba ak je SECRET_KEY nastavený
-    if (process.env.TURNSTILE_SECRET_KEY) {
-      if (!turnstileToken) {
-        await logAttempt(sb, ip, identifier, false);
-        return NextResponse.json({ error: "Chýba Turnstile token" }, { status: 400 });
-      }
+    // Cloudflare Turnstile — overenie iba ak je token prítomný (widget mohol byť neviditeľný)
+    if (process.env.TURNSTILE_SECRET_KEY && turnstileToken) {
       const ok = await verifyTurnstile(turnstileToken, ip);
       if (!ok) {
         await logAttempt(sb, ip, identifier, false);
