@@ -423,7 +423,6 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const [turnstileRendered, setTurnstileRendered] = useState(false);
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
 
@@ -444,13 +443,12 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
       if (window.turnstile && turnstileRef.current && !widgetIdRef.current) {
         widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
           sitekey: turnstileSiteKey,
-          callback: (token: string) => { setTurnstileToken(token); setTurnstileRendered(true); },
+          callback: (token: string) => setTurnstileToken(token),
           "expired-callback": () => setTurnstileToken(null),
           "error-callback": () => setTurnstileToken(null),
           theme: "dark",
           size: "normal",
         });
-        if (widgetIdRef.current) setTurnstileRendered(true);
       }
     }
     const poll = setInterval(tryRender, 200);
@@ -468,8 +466,6 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (!identifier.trim()) { setError("Zadaj meno alebo email"); return; }
-    // Vyžaduj token len ak sa widget skutočne zobrazil (ak script nenačítal = pustíme ďalej)
-    if (turnstileSiteKey && turnstileRendered && !turnstileToken) { setError("Dokončite overenie (Turnstile)"); return; }
     setSubmitting(true);
     setError("");
     const err = await onLogin(identifier, password, turnstileToken ?? undefined);
@@ -584,13 +580,13 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
 
           <button
             type="submit"
-            disabled={submitting || !identifier.trim() || (!!turnstileSiteKey && turnstileRendered && !turnstileToken)}
+            disabled={submitting || !identifier.trim()}
             style={{
               width: "100%", padding: "14px 16px", borderRadius: "12px",
               background: "#fff", color: "#111827",
               border: "none", fontSize: "14px", fontWeight: 700,
-              cursor: (submitting || !identifier.trim() || (!!turnstileSiteKey && turnstileRendered && !turnstileToken)) ? "default" : "pointer",
-              opacity: (submitting || !identifier.trim() || (!!turnstileSiteKey && turnstileRendered && !turnstileToken)) ? 0.5 : 1,
+              cursor: (submitting || !identifier.trim()) ? "default" : "pointer",
+              opacity: (submitting || !identifier.trim()) ? 0.5 : 1,
               transition: "all 0.15s",
               marginTop: "4px",
               display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
