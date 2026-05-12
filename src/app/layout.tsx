@@ -51,7 +51,7 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale}>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <script dangerouslySetInnerHTML={{ __html: `
@@ -76,7 +76,7 @@ export default async function RootLayout({
           })();
         `}} />
       </head>
-      <body className={`${inter.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${inter.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning>
         <NextIntlClientProvider locale={locale} messages={messages}>
         <AuthProvider>
           <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
