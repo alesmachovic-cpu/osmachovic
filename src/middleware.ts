@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// Stránky ktoré sú dostupné aj pri pozastavenom účte
+const BILLING_EXEMPT = [
+  "/nastavenia",
+  "/api/billing",
+  "/api/auth",
+  "/api/locale",
+];
+
+function isBillingExempt(pathname: string): boolean {
+  return BILLING_EXEMPT.some(p => pathname.startsWith(p));
+}
+
 const ALLOWED_HOSTS = ["vianema.amgd.sk", "test.amgd.sk", "localhost:3000", "localhost:3001"];
 
 // Vercel nastavuje x-forwarded-host na skutočný host požiadavky (aj pri internom
@@ -18,6 +30,17 @@ export function middleware(request: NextRequest) {
   // Blokuj Vercel preview URL (funny-stonebraker-*.vercel.app atď.)
   if (!isAllowedHost(request)) {
     return new NextResponse("Access denied", { status: 403 });
+  }
+
+  // Billing guard — ak firma má is_active=false, presmeruj na billing stránku.
+  // Cookie crm_billing=suspended nastaví /api/auth/login a /api/auth/google/match.
+  const billing = request.cookies.get("crm_billing")?.value;
+  const { pathname } = request.nextUrl;
+  if (billing === "suspended" && !isBillingExempt(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/nastavenia";
+    url.search = "?tab=billing&suspended=1";
+    return NextResponse.redirect(url);
   }
 
   // Nonce-based CSP je zámerně vynechané — keď je nonce prítomný, prehliadač

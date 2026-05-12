@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { buildSessionCookieValue } from "@/lib/auth/session";
+import { buildSessionCookieValue, buildBillingCookieValue } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const { data: users, error } = await sb
     .from("users")
-    .select("id, name, initials, role")
+    .select("id, name, initials, role, company_id")
     .or(`login_email.ilike.${email},email.ilike.${email}`)
     .limit(1)
     .maybeSingle();
@@ -34,7 +34,16 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!users) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
+  // Billing status pre crm_billing cookie
+  let companyActive = true;
+  const companyId = (users as Record<string, unknown>).company_id as string | null;
+  if (companyId) {
+    const { data: co } = await sb.from("companies").select("is_active").eq("id", companyId).single();
+    companyActive = co?.is_active !== false;
+  }
+
   const res = NextResponse.json({ user: users });
-  res.headers.set("Set-Cookie", buildSessionCookieValue(String(users.id)));
+  res.headers.append("Set-Cookie", buildSessionCookieValue(String(users.id)));
+  res.headers.append("Set-Cookie", buildBillingCookieValue(companyActive));
   return res;
 }

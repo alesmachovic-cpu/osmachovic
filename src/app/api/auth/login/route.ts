@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { buildSessionCookieValue } from "@/lib/auth/session";
+import { buildSessionCookieValue, buildBillingCookieValue } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
@@ -247,13 +247,19 @@ export async function POST(request: Request) {
     const userAgent = request.headers.get("user-agent") || "";
     checkAndAlertNewIp(sb, String(user.id), String(user.name || ""), identifier, ip, userAgent).catch(() => {});
 
+    // Billing status — zisti is_active firmy pre crm_billing cookie
+    let companyActive = true;
+    const companyId = user.company_id as string | null;
+    if (companyId) {
+      const { data: co } = await sb.from("companies").select("is_active").eq("id", companyId).single();
+      companyActive = co?.is_active !== false;
+    }
+
     // Nevracaj heslo
     const safeUser = { ...user, password: undefined };
     const res = NextResponse.json({ user: safeUser });
-    // P0 security: nastav HMAC-signed httponly session cookie, aby sme mali
-    // server-side overiteľnú identitu. AuthProvider stále číta user z body,
-    // ale API endpointy budú vyžadovať tento cookie cez requireUser().
-    res.headers.set("Set-Cookie", buildSessionCookieValue(String(user.id)));
+    res.headers.append("Set-Cookie", buildSessionCookieValue(String(user.id)));
+    res.headers.append("Set-Cookie", buildBillingCookieValue(companyActive));
     return res;
   } catch (e) {
     console.error("[login] error:", e);

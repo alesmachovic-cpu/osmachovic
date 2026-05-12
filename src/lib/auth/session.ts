@@ -87,4 +87,11 @@ export function buildLogoutCookieValue(): string {
   return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure`;
 }
 
+/** Cookie pre billing status — čítaný v Edge middleware (nie httponly). */
+export function buildBillingCookieValue(isActive: boolean): string {
+  const val = isActive ? "ok" : "suspended";
+  const maxAge = 24 * 3600; // 1 deň — obnoví sa pri ďalšom logine / API calle
+  return `crm_billing=${val}; Path=/; SameSite=Lax; Max-Age=${maxAge}; Secure`;
+}
+
 export const SESSION_COOKIE_NAME = COOKIE_NAME;
