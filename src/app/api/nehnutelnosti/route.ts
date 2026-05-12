@@ -61,23 +61,21 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-/** DELETE /api/nehnutelnosti?id=<uuid>  body: { user_id } — len admin */
+/** DELETE /api/nehnutelnosti?id=<uuid>  — len admin */
 export async function DELETE(req: NextRequest) {
+  const auth = await requireUser(req, { strict: true });
+  if (auth.error) return auth.error;
+
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  const body = await req.json().catch(() => ({}));
-  const { user_id } = body as { user_id?: string };
-
-  if (!user_id) return NextResponse.json({ error: "Vyžaduje prihlásenie" }, { status: 401 });
-
-  const scope = await getUserScope(user_id);
+  const scope = await getUserScope(auth.user.id);
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
   if (!scope.isAdmin) return NextResponse.json({ error: "Mazanie nehnuteľností je len pre admina" }, { status: 403 });
 
   const sb = getSupabaseAdmin();
   const { error } = await sb.from("nehnutelnosti").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  await logAudit({ action: "nehnutelnost.delete", actor_id: user_id, target_id: id, target_type: "nehnutelnost", ip_address: req.headers.get("x-forwarded-for") || undefined });
+  await logAudit({ action: "nehnutelnost.delete", actor_id: auth.user.id, target_id: id, target_type: "nehnutelnost", ip_address: req.headers.get("x-forwarded-for") || undefined });
   return NextResponse.json({ ok: true });
 }
