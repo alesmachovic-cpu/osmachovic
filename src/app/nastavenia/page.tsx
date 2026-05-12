@@ -48,6 +48,9 @@ export default function NastaveniaPage() {
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [inviteSending, setInviteSending] = useState<string | null>(null);
   const [inviteSentFor, setInviteSentFor] = useState<string | null>(null);
+  const [selectedInvites, setSelectedInvites] = useState<Set<string>>(new Set());
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkDone, setBulkDone] = useState<string[]>([]);
   const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; email: string | null }>({ connected: false, email: null });
   const [googleLoading, setGoogleLoading] = useState(true);
   const [cenaM2, setCenaM2] = useState(2800);
@@ -935,16 +938,77 @@ export default function NastaveniaPage() {
             </div>
           )}
 
+          {/* Bulk invite toolbar */}
+          {selectedInvites.size > 0 && (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "10px 14px", marginBottom: "8px", borderRadius: "10px",
+              background: "#EFF6FF", border: "1px solid #BFDBFE",
+            }}>
+              <span style={{ fontSize: "13px", color: "#1D4ED8", fontWeight: 600 }}>
+                {selectedInvites.size} {selectedInvites.size === 1 ? "maklér vybraný" : "makléri vybraní"}
+              </span>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button onClick={() => setSelectedInvites(new Set())} style={{
+                  padding: "5px 10px", background: "transparent", border: "1px solid #BFDBFE",
+                  borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#1D4ED8",
+                }}>Zrušiť výber</button>
+                <button
+                  disabled={bulkSending}
+                  onClick={async () => {
+                    setBulkSending(true);
+                    setBulkDone([]);
+                    const ids = Array.from(selectedInvites);
+                    const results = await Promise.all(ids.map(id =>
+                      fetch("/api/users/invite", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ user_id: id }),
+                      }).then(r => ({ id, ok: r.ok })).catch(() => ({ id, ok: false }))
+                    ));
+                    const sent = results.filter(r => r.ok).map(r => r.id);
+                    const failed = results.filter(r => !r.ok);
+                    setBulkDone(sent);
+                    setBulkSending(false);
+                    setSelectedInvites(new Set());
+                    if (failed.length > 0) alert(`${failed.length} pozvánok sa nepodarilo odoslať.`);
+                    setTimeout(() => setBulkDone([]), 5000);
+                  }}
+                  style={{
+                    padding: "5px 14px", background: bulkSending ? "#93C5FD" : "#2563EB",
+                    border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600,
+                    cursor: bulkSending ? "not-allowed" : "pointer", color: "#fff",
+                  }}
+                >
+                  {bulkSending ? "Odosielam…" : `✉ Poslať ${selectedInvites.size} pozvánok`}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {accounts.map(acc => (
               <div key={acc.id} style={{
-                borderRadius: "10px", background: "var(--bg-elevated)",
-                border: "1px solid var(--border)", overflow: "hidden",
+                borderRadius: "10px", overflow: "hidden",
+                background: bulkDone.includes(acc.id) ? "#F0FDF4" : "var(--bg-elevated)",
+                border: `1px solid ${bulkDone.includes(acc.id) ? "#86EFAC" : "var(--border)"}`,
               }}>
                 <div style={{
                   display: "flex", alignItems: "center", gap: "12px",
                   padding: "12px 14px",
                 }}>
+                  {acc.id !== "ales" && (
+                    <input
+                      type="checkbox"
+                      checked={selectedInvites.has(acc.id)}
+                      onChange={e => {
+                        const next = new Set(selectedInvites);
+                        e.target.checked ? next.add(acc.id) : next.delete(acc.id);
+                        setSelectedInvites(next);
+                      }}
+                      style={{ width: "15px", height: "15px", accentColor: "#2563EB", flexShrink: 0, cursor: "pointer" }}
+                    />
+                  )}
                   <div style={{
                     width: "38px", height: "38px", borderRadius: "50%",
                     background: "#374151", color: "#fff",
