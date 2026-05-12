@@ -580,13 +580,13 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
 
           <button
             type="submit"
-            disabled={submitting || !identifier.trim()}
+            disabled={submitting}
             style={{
               width: "100%", padding: "14px 16px", borderRadius: "12px",
               background: "#fff", color: "#111827",
               border: "none", fontSize: "14px", fontWeight: 700,
-              cursor: (submitting || !identifier.trim()) ? "default" : "pointer",
-              opacity: (submitting || !identifier.trim()) ? 0.5 : 1,
+              cursor: submitting ? "default" : "pointer",
+              opacity: submitting ? 0.5 : 1,
               transition: "all 0.15s",
               marginTop: "4px",
               display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
