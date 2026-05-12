@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
  * makler_id na cudzieho).
  */
 export async function PATCH(req: NextRequest) {
-  const auth = await requireUser(req);
+  const auth = await requireUser(req, { strict: true });
   if (auth.error) return auth.error;
 
   const sb = getSupabaseAdmin();
@@ -129,7 +129,7 @@ export async function PATCH(req: NextRequest) {
  * použiť anonymize/uvoľniť (existing /api/klienti/anonymize).
  */
 export async function DELETE(req: NextRequest) {
-  const auth = await requireUser(req);
+  const auth = await requireUser(req, { strict: true });
   if (auth.error) return auth.error;
 
   const sb = getSupabaseAdmin();

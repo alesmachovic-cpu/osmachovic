@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
 /** PATCH /api/nehnutelnosti?id=<uuid>  body: { status } */
 export async function PATCH(req: NextRequest) {
-  const auth = await requireUser(req);
+  const auth = await requireUser(req, { strict: true });
   if (auth.error) return auth.error;
 
   const id = req.nextUrl.searchParams.get("id");

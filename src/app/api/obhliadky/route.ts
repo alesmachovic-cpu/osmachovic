@@ -209,7 +209,7 @@ export async function POST(req: NextRequest) {
  *   – pri zápise podpis_data sa server-side dopĺňa IP do podpis_meta.ip
  */
 export async function PATCH(req: NextRequest) {
-  const auth = await requireUser(req);
+  const auth = await requireUser(req, { strict: true });
   if (auth.error) return auth.error;
 
   let body: Record<string, unknown>;
@@ -260,7 +260,7 @@ export async function PATCH(req: NextRequest) {
  * DELETE /api/obhliadky?id=X&user_id=Y
  */
 export async function DELETE(req: NextRequest) {
-  const auth = await requireUser(req);
+  const auth = await requireUser(req, { strict: true });
   if (auth.error) return auth.error;
 
   const id = req.nextUrl.searchParams.get("id");
