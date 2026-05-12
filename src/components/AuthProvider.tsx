@@ -530,6 +530,7 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
               autoComplete="username"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
+              onInput={(e) => setIdentifier((e.target as HTMLInputElement).value)}
               disabled={submitting}
               placeholder="Meno alebo email"
               style={{
@@ -540,7 +541,7 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
                 transition: "all 0.15s",
               }}
               onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+              onBlur={(e) => { setIdentifier(e.currentTarget.value); e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
             />
           </div>
 
@@ -552,6 +553,7 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
               disabled={submitting}
               placeholder="••••••••"
               inverse

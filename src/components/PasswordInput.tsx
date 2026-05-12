@@ -20,6 +20,7 @@ export default function PasswordInput({
 }: {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onInput?: (e: React.FormEvent<HTMLInputElement>) => void;
   placeholder?: string;
   disabled?: boolean;
   autoComplete?: string;
@@ -37,6 +38,7 @@ export default function PasswordInput({
         autoComplete={autoComplete}
         value={value}
         onChange={onChange}
+        onInput={onInput}
         disabled={disabled}
         placeholder={placeholder}
         style={{
