@@ -195,7 +195,9 @@ export async function POST(request: Request) {
     // Rate limit
     const rateLimitError = await checkRateLimit(sb, ip, identifier);
     if (rateLimitError) {
-      return NextResponse.json({ error: rateLimitError }, { status: 429 });
+      const r = NextResponse.json({ error: rateLimitError }, { status: 429 });
+      r.headers.set("Retry-After", String(LOCKOUT_MINUTES * 60));
+      return r;
     }
 
     // Nájdi usera
