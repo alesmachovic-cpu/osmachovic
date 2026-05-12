@@ -3,10 +3,20 @@ import type { NextRequest } from "next/server";
 
 const ALLOWED_HOSTS = ["vianema.amgd.sk", "test.amgd.sk", "localhost:3000", "localhost:3001"];
 
+// Vercel nastavuje x-forwarded-host na skutočný host požiadavky (aj pri internom
+// routingu), zatiaľ čo `host` header môže byť prepísaný na kanonickú doménu.
+// Blokujeme ak ANI jeden z nich nie je v ALLOWED_HOSTS.
+function isAllowedHost(req: NextRequest): boolean {
+  const host = req.headers.get("host") || "";
+  const forwarded = req.headers.get("x-forwarded-host") || "";
+  const candidates = [host, forwarded].filter(Boolean);
+  if (candidates.length === 0) return false;
+  return candidates.every(h => ALLOWED_HOSTS.some(a => h.includes(a)));
+}
+
 export function middleware(request: NextRequest) {
   // Blokuj Vercel preview URL (funny-stonebraker-*.vercel.app atď.)
-  const host = request.headers.get("host") || "";
-  if (!ALLOWED_HOSTS.some(h => host.includes(h))) {
+  if (!isAllowedHost(request)) {
     return new NextResponse("Access denied", { status: 403 });
   }
 
