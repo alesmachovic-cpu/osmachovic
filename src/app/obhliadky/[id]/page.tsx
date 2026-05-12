@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import SignatureCanvas from "@/components/SignatureCanvas";
+import BackButton from "@/components/BackButton";
 import { useAuth } from "@/components/AuthProvider";
 
 type Obhliadka = {
@@ -143,11 +144,7 @@ export default function ObhliadkaDetailPage() {
 
   return (
     <div style={{ maxWidth: "720px" }}>
-      <button onClick={() => router.back()} style={{
-        marginBottom: "16px", padding: "6px 12px", background: "transparent",
-        border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px",
-        color: "var(--text-secondary)", cursor: "pointer",
-      }}>← Späť</button>
+      <BackButton />
 
       <div style={{ background: "var(--bg-surface)", borderRadius: "16px", border: "1px solid var(--border)", padding: "28px", marginBottom: "20px" }}>
         <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 6px" }}>

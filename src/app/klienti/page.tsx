@@ -126,6 +126,7 @@ function KlientiContent() {
   const [lvEditFixName, setLvEditFixName] = useState(true);
   const [lvEditFixLok, setLvEditFixLok] = useState(true);
   const [lvEditSaving, setLvEditSaving] = useState(false);
+  const [klientCounts, setKlientCounts] = useState<Record<string, { obhliadky: number; nabery: number }>>({});
 
   async function handleQuickLvUpload(e: React.ChangeEvent<HTMLInputElement>, klientId: string) {
     const file = e.target.files?.[0];
@@ -192,9 +193,16 @@ function KlientiContent() {
     setMyMaklerUuid(uuid);
 
     // Everyone loads ALL clients — filtering is done client-side
-    const res = await fetch("/api/klienti");
+    const [res, countsRes] = await Promise.all([
+      fetch("/api/klienti"),
+      fetch("/api/klienti/counts"),
+    ]);
     const data = res.ok ? await res.json() : [];
     setKlienti((data as Klient[]) ?? []);
+    if (countsRes.ok) {
+      const countsData = await countsRes.json() as Record<string, { obhliadky: number; nabery: number }>;
+      setKlientCounts(countsData);
+    }
     setLoading(false);
   }
 
@@ -371,11 +379,24 @@ function KlientiContent() {
             {filtered.length} klientov
           </p>
         </div>
-        <button onClick={() => { setEditingKlient(null); setModal(true); }} style={{
-          padding: "10px 20px", background: "#374151", color: "#fff", borderRadius: "10px",
-          fontSize: "13px", fontWeight: "600", border: "none", cursor: "pointer",
-          display: "flex", alignItems: "center", gap: "6px",
-        }}>+ Nový klient</button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button
+            onClick={() => { window.location.href = "/api/klienti/csv"; }}
+            style={{
+              padding: "10px 16px", background: "transparent", color: "var(--text-secondary)",
+              borderRadius: "10px", fontSize: "13px", fontWeight: "600",
+              border: "1px solid var(--border)", cursor: "pointer",
+            }}
+            title="Export do CSV/Excel"
+          >
+            ↓ CSV
+          </button>
+          <button onClick={() => { setEditingKlient(null); setModal(true); }} style={{
+            padding: "10px 20px", background: "#374151", color: "#fff", borderRadius: "10px",
+            fontSize: "13px", fontWeight: "600", border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: "6px",
+          }}>+ Nový klient</button>
+        </div>
       </div>
 
       {/* Stat cards */}
@@ -495,8 +516,18 @@ function KlientiContent() {
                     <div style={{ fontWeight: "600", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {k.meno}
                     </div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                      {k.lokalita || "—"} · {new Date(k.created_at).toLocaleDateString("sk")}
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                      <span>{k.lokalita || "—"} · {new Date(k.created_at).toLocaleDateString("sk")}</span>
+                      {(klientCounts[k.id]?.obhliadky ?? 0) > 0 && (
+                        <span style={{ background: "#EFF6FF", color: "#2563EB", borderRadius: "99px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>
+                          {klientCounts[k.id].obhliadky} obl.
+                        </span>
+                      )}
+                      {(klientCounts[k.id]?.nabery ?? 0) > 0 && (
+                        <span style={{ background: "#F0FDF4", color: "#16A34A", borderRadius: "99px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>
+                          {klientCounts[k.id].nabery} náb.
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

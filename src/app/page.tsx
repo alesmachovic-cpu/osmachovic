@@ -24,7 +24,7 @@ interface ActivityItem {
   sub: string;
 }
 
-type TileKey = "overenie" | "vyhladavanie" | "ciele" | "prehlad" | "aktivita" | "kalendar" | "pipeline" | "urlanalyza" | "kalkulator" | "nastroje";
+type TileKey = "overenie" | "vyhladavanie" | "ciele" | "prehlad" | "aktivita" | "kalendar" | "pipeline" | "urlanalyza" | "kalkulator" | "nastroje" | "dnes";
 
 interface TileConfig {
   key: TileKey;
@@ -33,6 +33,7 @@ interface TileConfig {
 }
 
 const ALL_TILES: TileConfig[] = [
+  { key: "dnes", label: "Dnes mám", icon: "📋" },
   { key: "overenie", label: "Overenie čísla", icon: "📞" },
   { key: "vyhladavanie", label: "Vyhľadávanie", icon: "🔍" },
   { key: "ciele", label: "Mesačné ciele", icon: "🎯" },
@@ -45,10 +46,11 @@ const ALL_TILES: TileConfig[] = [
   { key: "nastroje", label: "Kalkulátor & Matching", icon: "🧮" },
 ];
 
-const DEFAULT_TILES: TileKey[] = ["overenie", "vyhladavanie", "ciele", "prehlad", "urlanalyza", "kalkulator", "kalendar", "pipeline", "aktivita"];
+const DEFAULT_TILES: TileKey[] = ["dnes", "overenie", "vyhladavanie", "ciele", "prehlad", "urlanalyza", "kalkulator", "kalendar", "pipeline", "aktivita"];
 
 /** Šírka tile-ov v 12-col gride: 4 = 1/3, 6 = 1/2, 12 = celá šírka. */
 const DEFAULT_TILE_WIDTHS: Record<TileKey, number> = {
+  dnes: 12,
   overenie: 6, vyhladavanie: 6, ciele: 6, prehlad: 6,
   urlanalyza: 6, kalkulator: 6, nastroje: 6,
   kalendar: 12, pipeline: 12, aktivita: 12,
@@ -129,6 +131,55 @@ function ObhliadkyKandidatiBanner() {
               + Zaradiť ako obhliadku
             </a>
           </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DnesMamTile({ userId }: { userId?: string }) {
+  const [data, setData] = useState<{ obhliadky: number; nabery: number; ulohy: number } | null>(null);
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    Promise.all([
+      fetch(`/api/obhliadky?datum=${today}`).then(r => r.ok ? r.json() : []),
+      fetch("/api/nabery?dnes=1").then(r => r.ok ? r.json() : []),
+      fetch("/api/ulohy?dnes=1").then(r => r.ok ? r.json() : []),
+    ]).then(([obl, nab, ulo]) => {
+      setData({
+        obhliadky: Array.isArray(obl) ? obl.length : 0,
+        nabery: Array.isArray(nab) ? nab.length : 0,
+        ulohy: Array.isArray(ulo) ? ulo.length : 0,
+      });
+    }).catch(() => setData({ obhliadky: 0, nabery: 0, ulohy: 0 }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  const items = [
+    { label: "Obhliadky dnes", value: data?.obhliadky ?? "—", href: "/obhliadky", color: "#2563EB", bg: "#EFF6FF" },
+    { label: "Nábery dnes", value: data?.nabery ?? "—", href: "/naber", color: "#16A34A", bg: "#F0FDF4" },
+    { label: "Úlohy dnes", value: data?.ulohy ?? "—", href: "/ulohy", color: "#D97706", bg: "#FFFBEB" },
+  ];
+
+  return (
+    <div>
+      <div style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-primary)", marginBottom: "14px" }}>
+        Dnes mám · {new Date().toLocaleDateString("sk", { weekday: "long", day: "numeric", month: "long" })}
+      </div>
+      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+        {items.map(item => (
+          <a key={item.label} href={item.href} style={{
+            flex: "1 1 140px", textDecoration: "none",
+            background: item.bg, borderRadius: "12px", padding: "14px 16px",
+            display: "flex", flexDirection: "column", gap: "4px",
+          }}>
+            <span style={{ fontSize: "28px", fontWeight: 700, color: item.color, lineHeight: 1 }}>
+              {item.value}
+            </span>
+            <span style={{ fontSize: "12px", color: item.color, fontWeight: 500 }}>
+              {item.label}
+            </span>
+          </a>
         ))}
       </div>
     </div>
@@ -449,6 +500,7 @@ export default function Dashboard() {
         {tiles.map((key) => (
           <div key={key} className={tileClass} style={{ ...cardSt, ...tileWrapStyle(key) }} {...tileDragProps(key)}>
             <TileControls tileKey={key} />
+            {key === "dnes" && <DnesMamTile userId={user?.id} />}
             {key === "overenie" && (<>
               <div style={{ fontWeight: "600", fontSize: "14px", color: "var(--text-primary)", marginBottom: "4px" }}>Overenie čísla</div>
               <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Automatické overenie pri zadaní čísla</div>
