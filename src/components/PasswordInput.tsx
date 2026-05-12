@@ -12,6 +12,7 @@ import { useState } from "react";
 export default function PasswordInput({
   value,
   onChange,
+  onInput,
   placeholder = "••••••••",
   disabled = false,
   autoComplete = "current-password",

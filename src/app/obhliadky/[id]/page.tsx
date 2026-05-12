@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import SignatureCanvas from "@/components/SignatureCanvas";
 import BackButton from "@/components/BackButton";
 import { useAuth } from "@/components/AuthProvider";
