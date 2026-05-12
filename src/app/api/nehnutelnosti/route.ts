@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope } from "@/lib/scope";
 import { logAudit } from "@/lib/audit";
-import { requireUser } from "@/lib/auth/requireUser";
+import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
+import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 
 export const runtime = "nodejs";
 
@@ -18,12 +19,20 @@ export async function GET(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const id = req.nextUrl.searchParams.get("id");
   const klientId = req.nextUrl.searchParams.get("klient_id");
+
+  const sessionUserId = readSessionUserId(req);
+  let companyId = VIANEMA_COMPANY_ID;
+  if (sessionUserId) {
+    const scope = await getUserScope(sessionUserId);
+    if (scope) companyId = scope.company_id;
+  }
+
   if (id) {
-    const { data, error } = await sb.from("nehnutelnosti").select("*").eq("id", id).maybeSingle();
+    const { data, error } = await sb.from("nehnutelnosti").select("*").eq("id", id).eq("company_id", companyId).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ nehnutelnost: data });
   }
-  let q = sb.from("nehnutelnosti").select("*").order("created_at", { ascending: false });
+  let q = sb.from("nehnutelnosti").select("*").eq("company_id", companyId).order("created_at", { ascending: false });
   if (klientId) q = q.eq("klient_id", klientId);
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

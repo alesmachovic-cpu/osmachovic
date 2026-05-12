@@ -7,6 +7,7 @@ export interface UserScope {
   role: Role;
   makler_id: string | null;
   pobocka_id: string | null;
+  company_id: string;
   isAdmin: boolean;
   isManager: boolean;
 }
@@ -23,7 +24,7 @@ export async function getUserScope(userId: string | null | undefined): Promise<U
   const sb = getSupabaseAdmin();
   const { data: u } = await sb
     .from("users")
-    .select("id, role, makler_id, pobocka_id")
+    .select("id, role, makler_id, pobocka_id, company_id")
     .eq("id", userId)
     .single();
   if (!u) {
@@ -36,6 +37,7 @@ export async function getUserScope(userId: string | null | undefined): Promise<U
     role,
     makler_id: (u.makler_id as string | null) ?? null,
     pobocka_id: (u.pobocka_id as string | null) ?? null,
+    company_id: (u.company_id as string | null) ?? "a0000000-0000-0000-0000-000000000001",
     isAdmin: role === "super_admin" || role === "majitel",
     isManager: role === "super_admin" || role === "majitel" || role === "manazer",
   };

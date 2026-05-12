@@ -1,18 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { requireUser } from "@/lib/auth/requireUser";
+import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
+import { getUserScope } from "@/lib/scope";
+import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const { searchParams } = new URL(req.url);
+
+  const sessionUserId = readSessionUserId(req);
+  let companyId = VIANEMA_COMPANY_ID;
+  if (sessionUserId) {
+    const scope = await getUserScope(sessionUserId);
+    if (scope) companyId = scope.company_id;
+  }
+
   const id = searchParams.get("id");
   if (id) {
     const { data: faktura, error } = await sb
       .from("faktury")
       .select("*")
       .eq("id", id)
+      .eq("company_id", companyId)
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     const { data: polozky } = await sb
@@ -23,13 +34,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ...faktura, polozky: polozky ?? [] });
   }
   const userId = searchParams.get("user_id");
-  // Bez user_id NIČ nevraciame — faktúry sú per-makler a žiadny zdieľaný pohľad
-  // nie je povolený cez tento endpoint.
   if (!userId) return NextResponse.json([]);
   const { data, error } = await sb
     .from("faktury")
     .select("*")
     .eq("user_id", userId)
+    .eq("company_id", companyId)
     .order("datum_vystavenia", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
@@ -58,6 +68,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "user_id required" }, { status: 400 });
   }
 
+  const postSessionUserId = readSessionUserId(req);
+  let postCompanyId = VIANEMA_COMPANY_ID;
+  if (postSessionUserId) {
+    const scope = await getUserScope(postSessionUserId);
+    if (scope) postCompanyId = scope.company_id;
+  } else {
+    const scope = await getUserScope(String(faktura.user_id));
+    if (scope) postCompanyId = scope.company_id;
+  }
+
   const sumaCelkom = polozky.reduce((s: number, p: { spolu?: number }) => s + (Number(p.spolu) || 0), 0);
 
   // Retry loop kvôli race condition pri paralelných POSToch s rovnakým user_id.
@@ -78,6 +98,7 @@ export async function POST(req: NextRequest) {
 
     const payload = {
       user_id: faktura.user_id,
+      company_id: postCompanyId,
       cislo_faktury: cislo,
       variabilny_symbol: vs,
       odberatel_id: faktura.odberatel_id ?? null,

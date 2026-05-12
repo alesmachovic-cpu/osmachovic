@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
-import { requireUser } from "@/lib/auth/requireUser";
+import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
+import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,14 @@ export async function GET(req: NextRequest) {
   const klientId = req.nextUrl.searchParams.get("klient_id");
   const nehnId = req.nextUrl.searchParams.get("nehnutelnost_id");
 
-  let q = sb.from("obhliadky").select("*").order("datum", { ascending: false });
+  const sessionUserId = readSessionUserId(req);
+  let companyId = VIANEMA_COMPANY_ID;
+  if (sessionUserId) {
+    const scope = await getUserScope(sessionUserId);
+    if (scope) companyId = scope.company_id;
+  }
+
+  let q = sb.from("obhliadky").select("*").eq("company_id", companyId).order("datum", { ascending: false });
   if (klientId) {
     q = q.or(`predavajuci_klient_id.eq.${klientId},kupujuci_klient_id.eq.${klientId}`);
   }
@@ -91,6 +99,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Zisti company_id — POST nemá session požiadavku, ale user_id môže byť v body
+  const postSessionUserId = readSessionUserId(req);
+  let postCompanyId = VIANEMA_COMPANY_ID;
+  if (postSessionUserId) {
+    const scope = await getUserScope(postSessionUserId);
+    if (scope) postCompanyId = scope.company_id;
+  } else if (body.user_id) {
+    const scope = await getUserScope(String(body.user_id));
+    if (scope) postCompanyId = scope.company_id;
+  }
+
   // 1) Vlož obhliadku
   const payload: Record<string, unknown> = {
     predavajuci_klient_id: body.predavajuci_klient_id || null,
@@ -105,6 +124,7 @@ export async function POST(req: NextRequest) {
     poznamka: body.poznamka || null,
     status: body.status || "planovana",
     calendar_event_id: body.calendar_event_id || null,
+    company_id: postCompanyId,
   };
   const { data, error } = await sb.from("obhliadky").insert(payload).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

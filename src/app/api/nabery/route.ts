@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord, canEditNaber } from "@/lib/scope";
-import { requireUser } from "@/lib/auth/requireUser";
+import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
+import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,15 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const klientId = req.nextUrl.searchParams.get("klient_id");
-  let query = sb.from("naberove_listy").select("*").order("created_at", { ascending: false });
+
+  const sessionUserId = readSessionUserId(req);
+  let companyId = VIANEMA_COMPANY_ID;
+  if (sessionUserId) {
+    const scope = await getUserScope(sessionUserId);
+    if (scope) companyId = scope.company_id;
+  }
+
+  let query = sb.from("naberove_listy").select("*").eq("company_id", companyId).order("created_at", { ascending: false });
   if (klientId) query = query.eq("klient_id", klientId);
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -52,8 +61,7 @@ export async function POST(req: NextRequest) {
   const payload: Record<string, unknown> = {
     ...rest,
     klient_id: klientId,
-    // Legacy text stĺpec `makler` — niektoré stránky podľa neho filtrujú.
-    // Doplníme meno usera ak nie je v body.
+    company_id: scope.company_id,
     makler: rest.makler ?? null,
   };
   // makler text stĺpec (legacy) — vyplň ak chýba

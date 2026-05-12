@@ -20,7 +20,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export interface AuthOk {
   error: null;
-  user: { id: string; role: string; name: string; email: string };
+  user: { id: string; role: string; name: string; email: string; company_id: string };
   source: "session" | "header_legacy";
 }
 export interface AuthFail {
@@ -83,11 +83,11 @@ export async function requireUser(req: NextRequest, opts: RequireOpts = {}): Pro
     return failResponse(401, "Vyžaduje prihlásenie");
   }
 
-  // 3) Načítaj user z DB (potrebné pre role checks)
+  // 3) Načítaj user z DB (potrebné pre role checks + company_id)
   const sb = getSupabaseAdmin();
   const { data: user } = await sb
     .from("users")
-    .select("id, name, role, email")
+    .select("id, name, role, email, company_id")
     .eq("id", userId)
     .maybeSingle();
   if (!user) {
@@ -103,7 +103,13 @@ export async function requireUser(req: NextRequest, opts: RequireOpts = {}): Pro
 
   return {
     error: null,
-    user: user as AuthOk["user"],
+    user: {
+      id: user.id as string,
+      role: user.role as string,
+      name: user.name as string,
+      email: user.email as string,
+      company_id: (user.company_id ?? "a0000000-0000-0000-0000-000000000001") as string,
+    },
     source,
   };
 }

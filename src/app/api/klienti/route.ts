@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
 import { logAudit } from "@/lib/audit";
-import { requireUser } from "@/lib/auth/requireUser";
+import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
+import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 
 export const runtime = "nodejs";
 
@@ -17,23 +18,32 @@ export async function GET(req: NextRequest) {
   const id = params.get("id");
   const telefon = params.get("telefon");
   const q = params.get("q");
+
+  // Zisti company_id zo session (fallback = Vianema pre backward compat)
+  const sessionUserId = readSessionUserId(req);
+  let companyId = VIANEMA_COMPANY_ID;
+  if (sessionUserId) {
+    const scope = await getUserScope(sessionUserId);
+    if (scope) companyId = scope.company_id;
+  }
+
   if (id) {
-    const { data, error } = await sb.from("klienti").select("*").eq("id", id).maybeSingle();
+    const { data, error } = await sb.from("klienti").select("*").eq("id", id).eq("company_id", companyId).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ klient: data });
   }
   if (telefon) {
     const last9 = telefon.replace(/\D/g, "").slice(-9);
-    const { data, error } = await sb.from("klienti").select("*").ilike("telefon", `%${last9}%`).limit(1).maybeSingle();
+    const { data, error } = await sb.from("klienti").select("*").ilike("telefon", `%${last9}%`).eq("company_id", companyId).limit(1).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ klient: data });
   }
   if (q) {
-    const { data, error } = await sb.from("klienti").select("id, meno, telefon, email").ilike("meno", `%${q}%`).limit(8);
+    const { data, error } = await sb.from("klienti").select("id, meno, telefon, email").ilike("meno", `%${q}%`).eq("company_id", companyId).limit(8);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data ?? []);
   }
-  const { data, error } = await sb.from("klienti").select("*").order("created_at", { ascending: false });
+  const { data, error } = await sb.from("klienti").select("*").eq("company_id", companyId).order("created_at", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 }
@@ -63,7 +73,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Užívateľ nemá priradeného makléra" }, { status: 400 });
   }
 
-  const payload = { ...rest, makler_id };
+  const payload = { ...rest, makler_id, company_id: scope.company_id };
   const { data, error } = await sb.from("klienti").insert(payload).select().single();
   if (error) {
     if (error.code === "23505") {
