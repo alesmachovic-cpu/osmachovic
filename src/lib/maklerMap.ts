@@ -14,13 +14,15 @@ export async function getMaklerUuid(userId: string): Promise<string | null> {
   if (!loaded) {
     // Load all users and makleri, build mapping
     const [{ data: users }, { data: makleri }] = await Promise.all([
-      supabase.from("users").select("id, email, name"),
+      supabase.from("users").select("id, email, login_email, name"),
       supabase.from("makleri").select("id, email, meno"),
     ]);
 
     if (users && makleri) {
       for (const u of users) {
-        const m = makleri.find(m => m.email === u.email) || makleri.find(m => m.meno === u.name);
+        const m = makleri.find(m => m.email && u.email && m.email === u.email)
+          || makleri.find(m => m.email && u.login_email && m.email === u.login_email)
+          || makleri.find(m => m.meno && u.name && m.meno === u.name);
         if (m) cache[u.id] = m.id;
       }
     }
