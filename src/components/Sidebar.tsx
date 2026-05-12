@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/AuthProvider";
 import { PoweredByAMGD } from "@/components/brand";
 import { isFeatureEnabled } from "@/lib/featureToggles";
@@ -66,6 +67,7 @@ function SectionLabel({ label }: { label: string }) {
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const tNav = useTranslations("nav");
   const [counts, setCounts] = useState<{ portfolio?: number; klienti?: number; kupujuci?: number }>({});
   const [devOpen, setDevOpen] = useState(false);
 
@@ -136,7 +138,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: "0 8px", overflowY: "auto" }}>
-        <SectionLabel label="HLAVNÉ" />
+        <SectionLabel label={tNav("sections.main")} />
         {filterNav(mainNav).map(item => {
           const prefix = item.matchPrefix || (item.href.split("?")[0]);
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(prefix);
@@ -144,13 +146,13 @@ export default function Sidebar() {
         })}
         {toolsNav.length > 0 && (
           <>
-            <SectionLabel label="NÁSTROJE" />
+            <SectionLabel label={tNav("sections.tools")} />
             {filterNav(toolsNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
           </>
         )}
-        <SectionLabel label="ADMINISTRATÍVA" />
+        <SectionLabel label={tNav("sections.admin")} />
         {filterNav(operativaNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
-        <SectionLabel label="SYSTÉM" />
+        <SectionLabel label={tNav("sections.system")} />
         {filterNav(systemNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
         {user?.id === "ales" && (
           <>

@@ -1,0 +1,155 @@
+{
+  "nav": {
+    "sections": {
+      "main": "HLAVNÉ",
+      "tools": "NÁSTROJE",
+      "admin": "ADMINISTRATÍVA",
+      "system": "SYSTÉM"
+    },
+    "items": {
+      "home": "Prehľad",
+      "portfolio": "Portfólio",
+      "klienti": "Klienti",
+      "naberove_listy": "Náberové listy",
+      "obchody": "Obchody",
+      "faktury": "Faktúry",
+      "operativa": "Operatíva",
+      "monitor": "Monitor",
+      "nastroje": "Nástroje",
+      "statistiky": "Štatistiky",
+      "vytazenost": "Vyťaženosť",
+      "nastavenia": "Nastavenia",
+      "produkcia": "Produkcia",
+      "provizie": "Provízie maklérov",
+      "tim": "Tím",
+      "inzerat": "Nový inzerát",
+      "more": "Viac"
+    },
+    "logout": "Odhlásiť"
+  },
+  "common": {
+    "save": "Uložiť",
+    "cancel": "Zrušiť",
+    "delete": "Vymazať",
+    "edit": "Upraviť",
+    "add": "Pridať",
+    "close": "Zavrieť",
+    "search": "Hľadať",
+    "loading": "Načítavam...",
+    "error": "Nastala chyba",
+    "success": "Uložené",
+    "confirm": "Potvrdiť",
+    "back": "Späť",
+    "next": "Ďalej",
+    "yes": "Áno",
+    "no": "Nie",
+    "send": "Odoslať",
+    "download": "Stiahnuť",
+    "upload": "Nahrať",
+    "filter": "Filtrovať",
+    "reset": "Resetovať",
+    "export": "Exportovať",
+    "print": "Tlačiť",
+    "copy": "Kopírovať",
+    "copied": "Skopírované",
+    "noData": "Žiadne záznamy",
+    "required": "Povinné pole",
+    "optional": "Voliteľné",
+    "all": "Všetky",
+    "none": "Žiadne",
+    "total": "Spolu",
+    "from": "Od",
+    "to": "Do"
+  },
+  "auth": {
+    "login": "Prihlásiť sa",
+    "logout": "Odhlásiť sa",
+    "loginWith": "Prihlásiť sa cez {provider}",
+    "loginError": "Prihlásenie zlyhalo",
+    "sessionExpired": "Relácia vypršala — prihlás sa znova",
+    "noAccess": "Nemáš prístup k tejto stránke",
+    "identifier": "Meno alebo email",
+    "password": "Heslo",
+    "forgotPassword": "Zabudnuté heslo",
+    "wrongCredentials": "Nesprávne meno/email alebo heslo",
+    "tooManyAttempts": "Príliš veľa pokusov. Skús za {minutes} min."
+  },
+  "klienti": {
+    "title": "Klienti",
+    "add": "Pridať klienta",
+    "search": "Hľadať klientov...",
+    "types": {
+      "predavajuci": "Predávajúci",
+      "kupujuci": "Kupujúci",
+      "zaujemca": "Záujemca"
+    },
+    "status": {
+      "aktivny": "Aktívny",
+      "neaktivny": "Neaktívny",
+      "novy_kontakt": "Nový kontakt",
+      "rozpracovany": "Rozpracovaný",
+      "uzavretý": "Uzavretý"
+    },
+    "fields": {
+      "name": "Meno a priezvisko",
+      "phone": "Telefón",
+      "email": "Email",
+      "type": "Typ klienta",
+      "status": "Stav",
+      "source": "Zdroj",
+      "note": "Poznámka",
+      "broker": "Maklér"
+    },
+    "deleteConfirm": "Naozaj chceš vymazať klienta {name}?",
+    "notFound": "Klient nenájdený"
+  },
+  "nehnutelnosti": {
+    "title": "Nehnuteľnosti",
+    "add": "Pridať nehnuteľnosť",
+    "status": {
+      "aktivny": "Aktívny",
+      "koncept": "Koncept",
+      "predany": "Predaný",
+      "archivovany": "Archivovaný",
+      "pripravujeme": "Pripravujeme"
+    }
+  },
+  "obhliadky": {
+    "title": "Obhliadky",
+    "add": "Naplánovať obhliadku",
+    "status": {
+      "planovana": "Plánovaná",
+      "prebehla": "Prebehla",
+      "zrusena": "Zrušená"
+    }
+  },
+  "faktury": {
+    "title": "Faktúry",
+    "add": "Nová faktúra",
+    "status": {
+      "zaplatene": "Zaplatená",
+      "nezaplatene": "Nezaplatená",
+      "po_splatnosti": "Po splatnosti"
+    }
+  },
+  "settings": {
+    "title": "Nastavenia",
+    "company": "Firemné nastavenia",
+    "billing": "Fakturácia",
+    "team": "Tím",
+    "profile": "Môj profil",
+    "language": "Jazyk",
+    "theme": "Téma",
+    "notifications": "Notifikácie"
+  },
+  "billing": {
+    "plan": "Plán",
+    "starter": "Starter",
+    "pro": "Pro",
+    "enterprise": "Enterprise",
+    "upgrade": "Prejsť na Pro",
+    "manage": "Spravovať predplatné",
+    "perMonth": "/ mesiac",
+    "currentPlan": "Aktuálny plán"
+  }
+}

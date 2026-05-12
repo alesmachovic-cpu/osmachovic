@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 
 /**
  * HTTP security headers — defense-in-depth proti XSS, clickjacking, MIME sniffing,
@@ -79,4 +80,5 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const withNextIntl = createNextIntlPlugin("./src/i18n.ts");
+export default withNextIntl(nextConfig);

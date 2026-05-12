@@ -1,0 +1,155 @@
+{
+  "nav": {
+    "sections": {
+      "main": "MAIN",
+      "tools": "TOOLS",
+      "admin": "ADMINISTRATION",
+      "system": "SYSTEM"
+    },
+    "items": {
+      "home": "Overview",
+      "portfolio": "Portfolio",
+      "klienti": "Clients",
+      "naberove_listy": "Acquisition Docs",
+      "obchody": "Deals",
+      "faktury": "Invoices",
+      "operativa": "Operations",
+      "monitor": "Monitor",
+      "nastroje": "Tools",
+      "statistiky": "Statistics",
+      "vytazenost": "Workload",
+      "nastavenia": "Settings",
+      "produkcia": "Production",
+      "provizie": "Commissions",
+      "tim": "Team",
+      "inzerat": "New Listing",
+      "more": "More"
+    },
+    "logout": "Log out"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "close": "Close",
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "success": "Saved",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "yes": "Yes",
+    "no": "No",
+    "send": "Send",
+    "download": "Download",
+    "upload": "Upload",
+    "filter": "Filter",
+    "reset": "Reset",
+    "export": "Export",
+    "print": "Print",
+    "copy": "Copy",
+    "copied": "Copied",
+    "noData": "No records",
+    "required": "Required",
+    "optional": "Optional",
+    "all": "All",
+    "none": "None",
+    "total": "Total",
+    "from": "From",
+    "to": "To"
+  },
+  "auth": {
+    "login": "Sign in",
+    "logout": "Sign out",
+    "loginWith": "Sign in with {provider}",
+    "loginError": "Sign in failed",
+    "sessionExpired": "Session expired — please sign in again",
+    "noAccess": "You don't have access to this page",
+    "identifier": "Username or email",
+    "password": "Password",
+    "forgotPassword": "Forgot password",
+    "wrongCredentials": "Incorrect username/email or password",
+    "tooManyAttempts": "Too many attempts. Try again in {minutes} min."
+  },
+  "klienti": {
+    "title": "Clients",
+    "add": "Add client",
+    "search": "Search clients...",
+    "types": {
+      "predavajuci": "Seller",
+      "kupujuci": "Buyer",
+      "zaujemca": "Prospect"
+    },
+    "status": {
+      "aktivny": "Active",
+      "neaktivny": "Inactive",
+      "novy_kontakt": "New contact",
+      "rozpracovany": "In progress",
+      "uzavretý": "Closed"
+    },
+    "fields": {
+      "name": "Full name",
+      "phone": "Phone",
+      "email": "Email",
+      "type": "Client type",
+      "status": "Status",
+      "source": "Source",
+      "note": "Note",
+      "broker": "Broker"
+    },
+    "deleteConfirm": "Are you sure you want to delete {name}?",
+    "notFound": "Client not found"
+  },
+  "nehnutelnosti": {
+    "title": "Properties",
+    "add": "Add property",
+    "status": {
+      "aktivny": "Active",
+      "koncept": "Draft",
+      "predany": "Sold",
+      "archivovany": "Archived",
+      "pripravujeme": "Preparing"
+    }
+  },
+  "obhliadky": {
+    "title": "Viewings",
+    "add": "Schedule viewing",
+    "status": {
+      "planovana": "Planned",
+      "prebehla": "Completed",
+      "zrusena": "Cancelled"
+    }
+  },
+  "faktury": {
+    "title": "Invoices",
+    "add": "New invoice",
+    "status": {
+      "zaplatene": "Paid",
+      "nezaplatene": "Unpaid",
+      "po_splatnosti": "Overdue"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "company": "Company settings",
+    "billing": "Billing",
+    "team": "Team",
+    "profile": "My profile",
+    "language": "Language",
+    "theme": "Theme",
+    "notifications": "Notifications"
+  },
+  "billing": {
+    "plan": "Plan",
+    "starter": "Starter",
+    "pro": "Pro",
+    "enterprise": "Enterprise",
+    "upgrade": "Upgrade to Pro",
+    "manage": "Manage subscription",
+    "perMonth": "/ month",
+    "currentPlan": "Current plan"
+  }
+}

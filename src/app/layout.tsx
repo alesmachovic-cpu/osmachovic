@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
@@ -40,13 +42,16 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="sk">
+    <html lang={locale}>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <script dangerouslySetInnerHTML={{ __html: `
@@ -72,6 +77,7 @@ export default function RootLayout({
         `}} />
       </head>
       <body className={`${inter.variable} ${geistMono.variable} antialiased`}>
+        <NextIntlClientProvider locale={locale} messages={messages}>
         <AuthProvider>
           <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
             {/* Desktop sidebar */}
@@ -100,6 +106,7 @@ export default function RootLayout({
           </div>
           <BottomTabs />
         </AuthProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

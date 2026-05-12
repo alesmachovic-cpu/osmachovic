@@ -3,19 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
-
-const tabs = [
-  { label: "Prehľad", href: "/", icon: "🏠" },
-  { label: "Portfólio", href: "/portfolio", icon: "🏘️" },
-  { label: "Klienti", href: "/klienti?tab=predavajuci", icon: "👥", matchPrefix: "/klienti" },
-  { label: "Operatíva", href: "/operativa?tab=obhliadky", icon: "📅", matchPrefix: "/operativa" },
-  { label: "Viac", href: "/nastavenia", icon: "⋯" },
-];
+import { useTranslations } from "next-intl";
 
 export default function BottomTabs() {
   const pathname = usePathname();
+  const t = useTranslations("nav.items");
   const [hidden, setHidden] = useState(false);
   const lastY = useRef(0);
+
+  const tabs = [
+    { label: t("home"), href: "/", icon: "🏠" },
+    { label: t("portfolio"), href: "/portfolio", icon: "🏘️" },
+    { label: t("klienti"), href: "/klienti?tab=predavajuci", icon: "👥", matchPrefix: "/klienti" },
+    { label: t("operativa"), href: "/operativa?tab=obhliadky", icon: "📅", matchPrefix: "/operativa" },
+    { label: t("more"), href: "/nastavenia", icon: "⋯" },
+  ];
 
   useEffect(() => {
     // Watch the <main> scroll container, fallback to window

@@ -1,0 +1,155 @@
+{
+  "nav": {
+    "sections": {
+      "main": "HLAVNÍ",
+      "tools": "NÁSTROJE",
+      "admin": "ADMINISTRATIVA",
+      "system": "SYSTÉM"
+    },
+    "items": {
+      "home": "Přehled",
+      "portfolio": "Portfolio",
+      "klienti": "Klienti",
+      "naberove_listy": "Náborové listy",
+      "obchody": "Obchody",
+      "faktury": "Faktury",
+      "operativa": "Operativa",
+      "monitor": "Monitor",
+      "nastroje": "Nástroje",
+      "statistiky": "Statistiky",
+      "vytazenost": "Vytíženost",
+      "nastavenia": "Nastavení",
+      "produkcia": "Produkce",
+      "provizie": "Provize makléřů",
+      "tim": "Tým",
+      "inzerat": "Nový inzerát",
+      "more": "Více"
+    },
+    "logout": "Odhlásit"
+  },
+  "common": {
+    "save": "Uložit",
+    "cancel": "Zrušit",
+    "delete": "Smazat",
+    "edit": "Upravit",
+    "add": "Přidat",
+    "close": "Zavřít",
+    "search": "Hledat",
+    "loading": "Načítám...",
+    "error": "Nastala chyba",
+    "success": "Uloženo",
+    "confirm": "Potvrdit",
+    "back": "Zpět",
+    "next": "Dále",
+    "yes": "Ano",
+    "no": "Ne",
+    "send": "Odeslat",
+    "download": "Stáhnout",
+    "upload": "Nahrát",
+    "filter": "Filtrovat",
+    "reset": "Resetovat",
+    "export": "Exportovat",
+    "print": "Tisknout",
+    "copy": "Kopírovat",
+    "copied": "Zkopírováno",
+    "noData": "Žádné záznamy",
+    "required": "Povinné pole",
+    "optional": "Volitelné",
+    "all": "Všechny",
+    "none": "Žádné",
+    "total": "Celkem",
+    "from": "Od",
+    "to": "Do"
+  },
+  "auth": {
+    "login": "Přihlásit se",
+    "logout": "Odhlásit se",
+    "loginWith": "Přihlásit se přes {provider}",
+    "loginError": "Přihlášení se nezdařilo",
+    "sessionExpired": "Relace vypršela — přihlaš se znovu",
+    "noAccess": "Nemáš přístup k této stránce",
+    "identifier": "Jméno nebo email",
+    "password": "Heslo",
+    "forgotPassword": "Zapomenuté heslo",
+    "wrongCredentials": "Nesprávné jméno/email nebo heslo",
+    "tooManyAttempts": "Příliš mnoho pokusů. Zkus za {minutes} min."
+  },
+  "klienti": {
+    "title": "Klienti",
+    "add": "Přidat klienta",
+    "search": "Hledat klienty...",
+    "types": {
+      "predavajuci": "Prodávající",
+      "kupujuci": "Kupující",
+      "zaujemca": "Zájemce"
+    },
+    "status": {
+      "aktivny": "Aktivní",
+      "neaktivny": "Neaktivní",
+      "novy_kontakt": "Nový kontakt",
+      "rozpracovany": "Rozpracovaný",
+      "uzavretý": "Uzavřený"
+    },
+    "fields": {
+      "name": "Jméno a příjmení",
+      "phone": "Telefon",
+      "email": "Email",
+      "type": "Typ klienta",
+      "status": "Stav",
+      "source": "Zdroj",
+      "note": "Poznámka",
+      "broker": "Makléř"
+    },
+    "deleteConfirm": "Opravdu chceš smazat klienta {name}?",
+    "notFound": "Klient nenalezen"
+  },
+  "nehnutelnosti": {
+    "title": "Nemovitosti",
+    "add": "Přidat nemovitost",
+    "status": {
+      "aktivny": "Aktivní",
+      "koncept": "Koncept",
+      "predany": "Prodaný",
+      "archivovany": "Archivovaný",
+      "pripravujeme": "Připravujeme"
+    }
+  },
+  "obhliadky": {
+    "title": "Prohlídky",
+    "add": "Naplánovat prohlídku",
+    "status": {
+      "planovana": "Plánovaná",
+      "prebehla": "Proběhla",
+      "zrusena": "Zrušená"
+    }
+  },
+  "faktury": {
+    "title": "Faktury",
+    "add": "Nová faktura",
+    "status": {
+      "zaplatene": "Zaplacená",
+      "nezaplatene": "Nezaplacená",
+      "po_splatnosti": "Po splatnosti"
+    }
+  },
+  "settings": {
+    "title": "Nastavení",
+    "company": "Firemní nastavení",
+    "billing": "Fakturace",
+    "team": "Tým",
+    "profile": "Můj profil",
+    "language": "Jazyk",
+    "theme": "Téma",
+    "notifications": "Notifikace"
+  },
+  "billing": {
+    "plan": "Plán",
+    "starter": "Starter",
+    "pro": "Pro",
+    "enterprise": "Enterprise",
+    "upgrade": "Přejít na Pro",
+    "manage": "Spravovat předplatné",
+    "perMonth": "/ měsíc",
+    "currentPlan": "Aktuální plán"
+  }
+}
