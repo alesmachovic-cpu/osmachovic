@@ -178,26 +178,27 @@ export async function POST(request: Request) {
     }
 
     const ip = getClientIp(request);
-
-    // Cloudflare Turnstile — overenie iba ak je SECRET_KEY nastavený
-    if (process.env.TURNSTILE_SECRET_KEY) {
-      if (!turnstileToken) {
-        return NextResponse.json({ error: "Chýba Turnstile token" }, { status: 400 });
-      }
-      const ok = await verifyTurnstile(turnstileToken, ip);
-      if (!ok) {
-        return NextResponse.json({ error: "Overenie Turnstile zlyhalo. Obnovte stránku a skúste znova." }, { status: 403 });
-      }
-    }
-
     const sb = getSupabaseAdmin();
 
-    // Rate limit
+    // Rate limit musí byť prvý — pred Turnstile aj pred DB lookupom
     const rateLimitError = await checkRateLimit(sb, ip, identifier);
     if (rateLimitError) {
       const r = NextResponse.json({ error: rateLimitError }, { status: 429 });
       r.headers.set("Retry-After", String(LOCKOUT_MINUTES * 60));
       return r;
+    }
+
+    // Cloudflare Turnstile — overenie iba ak je SECRET_KEY nastavený
+    if (process.env.TURNSTILE_SECRET_KEY) {
+      if (!turnstileToken) {
+        await logAttempt(sb, ip, identifier, false);
+        return NextResponse.json({ error: "Chýba Turnstile token" }, { status: 400 });
+      }
+      const ok = await verifyTurnstile(turnstileToken, ip);
+      if (!ok) {
+        await logAttempt(sb, ip, identifier, false);
+        return NextResponse.json({ error: "Overenie Turnstile zlyhalo. Obnovte stránku a skúste znova." }, { status: 403 });
+      }
     }
 
     // Nájdi usera
