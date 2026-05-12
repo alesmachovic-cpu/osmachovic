@@ -7,6 +7,8 @@ const BILLING_EXEMPT = [
   "/api/billing",
   "/api/auth",
   "/api/locale",
+  "/api/admin",
+  "/admin",
 ];
 
 function isBillingExempt(pathname: string): boolean {
