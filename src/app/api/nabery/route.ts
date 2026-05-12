@@ -12,16 +12,27 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const klientId = req.nextUrl.searchParams.get("klient_id");
+  const mine = req.nextUrl.searchParams.get("mine") === "1";
+  const dnes = req.nextUrl.searchParams.get("dnes") === "1";
 
   const sessionUserId = readSessionUserId(req);
   let companyId = VIANEMA_COMPANY_ID;
+  let maklerUuid: string | null = null;
   if (sessionUserId) {
     const scope = await getUserScope(sessionUserId);
-    if (scope) companyId = scope.company_id;
+    if (scope) {
+      companyId = scope.company_id;
+      if (mine) maklerUuid = scope.makler_id ?? null;
+    }
   }
 
   let query = sb.from("naberove_listy").select("*").eq("company_id", companyId).order("created_at", { ascending: false });
   if (klientId) query = query.eq("klient_id", klientId);
+  if (maklerUuid) query = query.eq("makler_id", maklerUuid);
+  if (dnes) {
+    const today = new Date().toISOString().slice(0, 10);
+    query = query.gte("created_at", today + "T00:00:00").lte("created_at", today + "T23:59:59");
+  }
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);

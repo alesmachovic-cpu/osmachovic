@@ -143,7 +143,7 @@ function DnesMamTile({ userId }: { userId?: string }) {
     const today = new Date().toISOString().slice(0, 10);
     Promise.all([
       fetch(`/api/obhliadky?datum=${today}`).then(r => r.ok ? r.json() : []),
-      fetch("/api/nabery?dnes=1").then(r => r.ok ? r.json() : []),
+      fetch("/api/nabery?dnes=1&mine=1").then(r => r.ok ? r.json() : []),
       fetch("/api/ulohy?dnes=1").then(r => r.ok ? r.json() : []),
     ]).then(([obl, nab, ulo]) => {
       setData({
