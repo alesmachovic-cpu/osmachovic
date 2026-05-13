@@ -21,7 +21,7 @@ export default function SmsSignButton({
   buttonLabel = "📧 Klient nie je tu — podpis cez email",
   autoOpen = false,
 }: {
-  entityType: "naber" | "objednavka";
+  entityType: "naber" | "objednavka" | "vyhradna_zmluva";
   entityId: string;
   defaultEmail?: string;
   /** @deprecated nahradené defaultEmail (SMS UI je dočasne skryté) */

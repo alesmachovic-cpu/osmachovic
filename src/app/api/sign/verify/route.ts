@@ -68,6 +68,11 @@ export async function GET(req: NextRequest) {
       .select("majitel, obec, ulica, supisne_cislo, plocha, predajna_cena, typ_nehnutelnosti")
       .eq("id", data.entity_id).maybeSingle();
     entityMeta = (n || {}) as Record<string, unknown>;
+  } else if (data.entity_type === "vyhradna_zmluva") {
+    const { data: z } = await sb.from("vyhradne_zmluvy")
+      .select("obec, okres, pozadovana_cena, datum_zacatia, trvanie_mesiacov")
+      .eq("id", data.entity_id).maybeSingle();
+    entityMeta = (z || {}) as Record<string, unknown>;
   } else {
     const { data: o } = await sb.from("objednavky")
       .select("druh, cena_do, lokalita, klient_id")
@@ -127,14 +132,16 @@ export async function POST(req: NextRequest) {
     await sb.from("naberove_listy").update({
       podpis_data: signatureData,
       podpis_meta: {
-        method: methodLabel,
-        channel,
-        ip,
-        user_agent: ua,
-        signed_at: signedAt,
-        // pole sa volá "telefon" historicky — môže obsahovať email keď channel=email
-        recipient: row.telefon,
+        method: methodLabel, channel, ip, user_agent: ua, signed_at: signedAt, recipient: row.telefon,
       },
+    }).eq("id", row.entity_id);
+  } else if (row.entity_type === "vyhradna_zmluva") {
+    await sb.from("vyhradne_zmluvy").update({
+      podpis_data: signatureData,
+      podpis_meta: {
+        method: methodLabel, channel, ip, user_agent: ua, signed_at: signedAt, recipient: row.telefon,
+      },
+      podpisane_at: signedAt,
     }).eq("id", row.entity_id);
   } else {
     await sb.from("objednavky").update({

@@ -14,6 +14,7 @@ import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type Kli
 import { createCalendarEvent, notifyCalendarFail } from "@/lib/calendar";
 import { klientUpdate } from "@/lib/klientApi";
 import SmsSignButton from "@/components/SmsSignButton";
+import VyhradnaZmluvaModal from "@/components/VyhradnaZmluvaModal";
 import { NajlepsieZhodyPanel } from "@/components/matching/NajlepsieZhodyPanel";
 import { HypotekaMiniCalc } from "@/components/calc/HypotekaMiniCalc";
 import { ProviziaMiniCalc } from "@/components/calc/ProviziaMiniCalc";
@@ -316,6 +317,8 @@ export default function KlientDetailPage() {
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
   const [detailObj, setDetailObj] = useState<Record<string, unknown> | null>(null);
   const [showObhliadkaModal, setShowObhliadkaModal] = useState(false);
+  const [zvsOpen, setZvsOpen] = useState(false);
+  const [zvsNaberId, setZvsNaberId] = useState<string | null>(null);
   const [obhliadkaPrefill, setObhliadkaPrefill] = useState<{ datum: string; miesto: string } | null>(null);
   const [insightKupujuciPrefill, setInsightKupujuciPrefill] = useState<{ klientId: string; meno: string; tel?: string | null } | null>(null);
   // Pamätáme si, či sa Obhliadka modal otvoril z datetime pickeru (tlačidlo "Späť")
@@ -2412,6 +2415,13 @@ export default function KlientDetailPage() {
                           onSigned={() => loadAll()}
                         />
                       )}
+                      {/* Výhradná zmluva */}
+                      <button
+                        onClick={() => { setZvsNaberId(naberakId || null); setZvsOpen(true); }}
+                        style={{ padding: "6px 12px", background: "#7c3aed", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
+                      >
+                        📄 Výhradná zmluva
+                      </button>
                       {/* Archivovať — dostupné všetkým ak nie je už archivovaná */}
                       {inzId && card.status !== "archivovany" && (
                         <button onClick={async () => {
@@ -3368,6 +3378,17 @@ export default function KlientDetailPage() {
       )}
 
       </div>{/* END flex row */}
+
+      <VyhradnaZmluvaModal
+        open={zvsOpen}
+        onClose={() => setZvsOpen(false)}
+        naberId={zvsNaberId}
+        klientId={klient?.id}
+        klientEmail={klient?.email || ""}
+        userId={user?.id}
+        lvData={(klient?.lv_data as Record<string, unknown> | null) ?? null}
+        naberData={nabery[0] ?? null}
+      />
     </div>
   );
 }

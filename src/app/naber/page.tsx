@@ -12,6 +12,7 @@ import { getMaklerUuid } from "@/lib/maklerMap";
 import { getUserItem } from "@/lib/userStorage";
 import { klientUpdate, naberUpdate } from "@/lib/klientApi";
 import SmsSignButton from "@/components/SmsSignButton";
+import VyhradnaZmluvaModal from "@/components/VyhradnaZmluvaModal";
 
 type TypNaber = "byt" | "rodinny_dom" | "pozemok";
 
@@ -75,6 +76,7 @@ function NaberPageContent() {
   const [selectedType, setSelectedType] = useState<TypNaber | null>(null);
   const [submittedAt, setSubmittedAt] = useState("");
   const [savedNaberId, setSavedNaberId] = useState<string | null>(null);
+  const [zvsOpen, setZvsOpen] = useState(false);
   const [naberDatum, setNaberDatum] = useState(() => {
     // Default: teraz (zaokrúhlené na 15 minút dopredu)
     const now = new Date();
@@ -751,6 +753,33 @@ function NaberPageContent() {
             />
           </div>
         )}
+
+        {/* Výhradná zmluva */}
+        {savedNaberId && (
+          <div style={{ marginBottom: "16px" }}>
+            <button
+              onClick={() => setZvsOpen(true)}
+              style={{
+                padding: "10px 22px", borderRadius: "10px",
+                background: "#7c3aed", color: "#fff", border: "none",
+                fontSize: "13px", fontWeight: 700, cursor: "pointer",
+                display: "inline-flex", alignItems: "center", gap: "6px",
+              }}
+            >
+              📄 Výhradná zmluva
+            </button>
+          </div>
+        )}
+        <VyhradnaZmluvaModal
+          open={zvsOpen}
+          onClose={() => setZvsOpen(false)}
+          naberId={savedNaberId}
+          klientId={selectedKlient?.id}
+          klientEmail={selectedKlient?.email || ""}
+          userId={user?.id}
+          lvData={(selectedKlient?.lv_data as Record<string, unknown> | null) ?? null}
+          naberData={savedNaberData}
+        />
 
         {/* Kalendár info */}
         {naberDatum && (
