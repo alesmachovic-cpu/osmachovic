@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const authed = auth.error === null;
 
     const select = authed
-      ? "id, name, initials, role, email, login_email, pobocka_id, notification_prefs, vzorove_inzeraty, nav_prefs, created_at"
+      ? "id, name, initials, role, email, login_email, pobocka_id, makler_id, company_id, notification_prefs, vzorove_inzeraty, nav_prefs, created_at"
       : "id, name, initials";
 
     const { data, error } = await sb.from("users").select(select).order("created_at");

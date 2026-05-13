@@ -18,7 +18,13 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   if (!body.user_id) return NextResponse.json({ error: "user_id required" }, { status: 400 });
-  const payload = {
+  const sb = getSupabaseAdmin();
+
+  // Zisti company_id používateľa
+  const { data: userRow } = await sb.from("users").select("company_id").eq("id", body.user_id).single();
+  const company_id = userRow?.company_id ?? null;
+
+  const payload: Record<string, unknown> = {
     user_id: body.user_id,
     nazov: body.nazov,
     adresa: body.adresa ?? null,
@@ -28,8 +34,9 @@ export async function POST(req: NextRequest) {
     email: body.email ?? null,
     telefon: body.telefon ?? null,
   };
+  if (company_id) payload.company_id = company_id;
   if (!payload.nazov) return NextResponse.json({ error: "nazov required" }, { status: 400 });
-  const { data, error } = await getSupabaseAdmin().from("odberatelia").insert(payload).select().single();
+  const { data, error } = await sb.from("odberatelia").insert(payload).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }

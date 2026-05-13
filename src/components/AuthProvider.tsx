@@ -25,6 +25,8 @@ interface User {
   login_email?: string; // Google email (Gmail) pre OAuth login — môže byť rôzny
   password?: string;
   nav_prefs?: string[]; // skryté href-y v sidebar, prázdne = zobraziť všetko
+  makler_id?: string | null;
+  company_id?: string | null;
 }
 
 interface AuthContextType {
@@ -64,7 +66,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const [checking, setChecking] = useState(true);
 
   async function loadAccounts() {
-    const res = await fetch("/api/users").catch(() => null);
+    const res = await fetch("/api/users", { credentials: "include" }).catch(() => null);
     if (!res?.ok) return [] as User[];
     const body = await res.json().catch(() => ({}));
     return (body.users ?? []) as User[];
@@ -126,7 +128,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
             } catch (e) {
               console.warn("[auth] session-bootstrap failed:", e);
             }
-            setUser(found);
+            // Po bootstrap cookie máme session — reload accounts pre plné dáta (makler_id, company_id)
+            const fullAccs = await loadAccounts().catch(() => accs);
+            const fullFound = fullAccs.find(a => a.id === savedId) ?? found;
+            setAccounts(fullAccs);
+            setUser(fullFound);
           }
         }
       } catch (e) {

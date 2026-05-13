@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
   if (polozky.length) {
     const rows = polozky.map((p: { popis?: string; mnozstvo?: number; jednotka?: string; cena_jednotka?: number; spolu?: number }, i: number) => ({
       faktura_id: created.id,
+      company_id: postCompanyId,
       popis: p.popis || "",
       mnozstvo: Number(p.mnozstvo) || 1,
       jednotka: p.jednotka || "ks",
@@ -134,7 +135,8 @@ export async function POST(req: NextRequest) {
       spolu: Number(p.spolu) || 0,
       poradie: i,
     }));
-    await sb.from("faktura_polozky").insert(rows);
+    const { error: polozkyErr } = await sb.from("faktura_polozky").insert(rows);
+    if (polozkyErr) console.error("[faktury POST] polozky insert failed:", polozkyErr.message);
   }
 
   // Pridať do prehľadu ako prijem

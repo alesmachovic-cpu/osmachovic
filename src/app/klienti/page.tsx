@@ -188,14 +188,15 @@ function KlientiContent() {
   async function fetchKlienti() {
     setLoading(true);
 
-    // Get my makler UUID
-    const uuid = user?.id ? await getMaklerUuid(user.id) : null;
+    // Použi makler_id priamo z user objektu (server ho pridáva cez /api/users)
+    // Fallback na getMaklerUuid pre prípad že user ešte nemá makler_id v DB
+    const uuid = user?.makler_id ?? (user?.id ? await getMaklerUuid(user.id) : null);
     setMyMaklerUuid(uuid);
 
     // Everyone loads ALL clients — filtering is done client-side
     const [res, countsRes] = await Promise.all([
-      fetch("/api/klienti"),
-      fetch("/api/klienti/counts"),
+      fetch("/api/klienti", { credentials: "include" }),
+      fetch("/api/klienti/counts", { credentials: "include" }),
     ]);
     const data = res.ok ? await res.json() : [];
     setKlienti((data as Klient[]) ?? []);

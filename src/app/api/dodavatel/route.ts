@@ -5,6 +5,7 @@ const FIELDS = [
   "nazov", "adresa", "ico", "dic", "ic_dph",
   "iban", "banka", "swift", "obch_register", "konst_symbol",
   "email", "telefon", "splatnost_dni", "uvodny_text", "poznamka_default", "vystavil",
+  "podpis_data",
 ] as const;
 
 function pickFields(input: Record<string, unknown>) {

@@ -7,7 +7,6 @@ import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/AuthProvider";
 import { PoweredByAMGD } from "@/components/brand";
 import { isFeatureEnabled } from "@/lib/featureToggles";
-import { supabase } from "@/lib/supabase";
 import { useGoogleConnected } from "@/lib/useGoogleConnected";
 import { mainNavBase, operativaNav, systemNav, devNav } from "@/lib/navItems";
 import type { NavItem } from "@/lib/navItems";
@@ -74,21 +73,24 @@ export default function Sidebar() {
   useEffect(() => {
     (async () => {
       try {
-        const [pf, kl, kp] = await Promise.all([
-          supabase.from("nehnutelnosti").select("id", { count: "exact", head: true }),
-          // Klienti badge = predávajúci + oboje + prenajímateľ (všetci okrem "kupujuci")
-          supabase.from("klienti").select("id", { count: "exact", head: true }).in("typ", ["predavajuci", "oboje", "prenajimatel"]),
-          // Kupujúci badge = kupujuci + oboje (oboje sa zobrazujú na /kupujuci stránke)
-          supabase.from("klienti").select("id", { count: "exact", head: true }).in("typ", ["kupujuci", "oboje"]),
+        const [pfRes, klRes] = await Promise.all([
+          fetch("/api/nehnutelnosti", { credentials: "include" }),
+          fetch("/api/klienti", { credentials: "include" }),
         ]);
+        const [pf, kl]: [unknown[], { typ?: string }[]] = await Promise.all([
+          pfRes.ok ? pfRes.json() : Promise.resolve([]),
+          klRes.ok ? klRes.json() : Promise.resolve([]),
+        ]);
+        const predavajuciTypy = new Set(["predavajuci", "oboje", "prenajimatel"]);
+        const kupujuciTypy = new Set(["kupujuci", "oboje"]);
         setCounts({
-          portfolio: pf.count ?? 0,
-          klienti: kl.count ?? 0,
-          kupujuci: kp.count ?? 0,
+          portfolio: Array.isArray(pf) ? pf.length : 0,
+          klienti: Array.isArray(kl) ? kl.filter(k => predavajuciTypy.has(k.typ ?? "")).length : 0,
+          kupujuci: Array.isArray(kl) ? kl.filter(k => kupujuciTypy.has(k.typ ?? "")).length : 0,
         });
       } catch { /* ignore */ }
     })();
-  }, [pathname]);
+  }, [pathname, user?.id]);
 
   const mainNav: NavItem[] = mainNavBase.map((it) => {
     if (it.href === "/portfolio") return { ...it, badge: counts.portfolio };

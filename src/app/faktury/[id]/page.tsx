@@ -43,8 +43,8 @@ export default function FakturaDetail() {
           <button onClick={() => window.print()} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-primary)", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
             Tlačiť
           </button>
-          <a href={`/api/faktury/pdf?id=${f.id}`} target="_blank" rel="noopener noreferrer" style={{ background: "#374151", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer", textDecoration: "none" }}>
-            Stiahnuť PDF
+          <a href={`/faktury/${f.id}/pdf`} style={{ background: "#374151", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer", textDecoration: "none" }}>
+            Zobraziť PDF
           </a>
         </div>
       </div>

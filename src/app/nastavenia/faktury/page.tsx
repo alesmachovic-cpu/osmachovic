@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { getUserItem } from "@/lib/userStorage";
@@ -22,6 +22,7 @@ export type DodavatelSettings = {
   uvodny_text: string;
   poznamka_default: string;
   vystavil: string;
+  podpis_data: string;
 };
 
 export const DEFAULT_DODAVATEL: DodavatelSettings = {
@@ -41,6 +42,7 @@ export const DEFAULT_DODAVATEL: DodavatelSettings = {
   uvodny_text: "",
   poznamka_default: "",
   vystavil: "",
+  podpis_data: "",
 };
 
 const STORAGE_KEY = "faktury_dodavatel"; // legacy localStorage key (auto-migrated 1×)
@@ -110,10 +112,103 @@ export default function NastaveniaFakturyPage() {
   const [icoLooking, setIcoLooking] = useState(false);
   const [icoErr, setIcoErr] = useState("");
 
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isDrawingRef = useRef(false);
+  const strokesRef = useRef<[number, number][][]>([]);
+  const currentStrokeRef = useRef<[number, number][]>([]);
+  const podpisNacitanyRef = useRef(false);
+
   useEffect(() => {
     if (!user?.id) return;
     fetchDodavatel(user.id).then(setS);
   }, [user?.id]);
+
+  function redrawCanvas() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "#1a3abf";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const stroke of strokesRef.current) {
+      if (stroke.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(stroke[0][0], stroke[0][1]);
+      for (let i = 1; i < stroke.length; i++) ctx.lineTo(stroke[i][0], stroke[i][1]);
+      ctx.stroke();
+    }
+  }
+
+  useEffect(() => {
+    if (!s.podpis_data || podpisNacitanyRef.current) return;
+    try {
+      const parsed = JSON.parse(s.podpis_data) as { strokes: [number, number][][]; w: number; h: number };
+      if (parsed.strokes?.length) {
+        strokesRef.current = parsed.strokes;
+        podpisNacitanyRef.current = true;
+        requestAnimationFrame(redrawCanvas);
+      }
+    } catch { /* ignoruj zlý JSON */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.podpis_data]);
+
+  function getCanvasPos(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>): [number, number] {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ("touches" in e) {
+      const t = e.touches[0];
+      return [(t.clientX - rect.left) * scaleX, (t.clientY - rect.top) * scaleY];
+    }
+    return [(e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY];
+  }
+
+  function podpisStart(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
+    e.preventDefault();
+    isDrawingRef.current = true;
+    const pos = getCanvasPos(e);
+    currentStrokeRef.current = [pos];
+    const ctx = canvasRef.current!.getContext("2d")!;
+    ctx.strokeStyle = "#1a3abf";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(pos[0], pos[1]);
+  }
+
+  function podpisDraw(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
+    e.preventDefault();
+    if (!isDrawingRef.current) return;
+    const pos = getCanvasPos(e);
+    currentStrokeRef.current.push(pos);
+    const ctx = canvasRef.current!.getContext("2d")!;
+    ctx.lineTo(pos[0], pos[1]);
+    ctx.stroke();
+  }
+
+  function podpisEnd() {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    if (currentStrokeRef.current.length >= 2) {
+      strokesRef.current = [...strokesRef.current, currentStrokeRef.current];
+    }
+    currentStrokeRef.current = [];
+    const canvas = canvasRef.current!;
+    setS(prev => ({ ...prev, podpis_data: JSON.stringify({ strokes: strokesRef.current, w: canvas.width, h: canvas.height }) }));
+  }
+
+  function clearPodpis() {
+    strokesRef.current = [];
+    currentStrokeRef.current = [];
+    podpisNacitanyRef.current = true;
+    redrawCanvas();
+    setS(prev => ({ ...prev, podpis_data: "" }));
+  }
 
   async function save() {
     if (!user?.id) return;
@@ -233,6 +328,38 @@ export default function NastaveniaFakturyPage() {
         </div>
         <div style={{ marginTop: "12px" }}>
           {field("poznamka_default", "Predvolená poznámka")}
+        </div>
+
+        <div style={{ fontSize: "13px", fontWeight: 700, color: "#374151", margin: "24px 0 12px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Podpis</div>
+        <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "10px" }}>Nakreslite podpis — automaticky sa pridá k faktúram v modrej farbe</div>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+          <canvas
+            ref={canvasRef}
+            width={300}
+            height={120}
+            style={{
+              display: "block",
+              border: "1px solid var(--border)",
+              borderRadius: "10px",
+              background: "#fff",
+              cursor: "crosshair",
+              touchAction: "none",
+              maxWidth: "100%",
+            }}
+            onMouseDown={podpisStart}
+            onMouseMove={podpisDraw}
+            onMouseUp={podpisEnd}
+            onMouseLeave={podpisEnd}
+            onTouchStart={podpisStart}
+            onTouchMove={podpisDraw}
+            onTouchEnd={podpisEnd}
+          />
+          <button
+            onClick={clearPodpis}
+            style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: "10px", padding: "8px 16px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
+          >
+            Vymazať
+          </button>
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "24px" }}>
