@@ -275,9 +275,9 @@ async function buildOps(
   const signatureY = y;
   const signatureW = 160;
   const signatureH = 60;
-  const qrSize = 80;
+  const qrSize = signatureH; // 60px — rovnaká výška ako signature box
   const qrX = pageW - margin - qrSize;
-  const qrY = y + qrSize; // y = bottom-left of QR in PDF coords
+  const qrY = signatureY + signatureH; // QR top = signature top → rovnaké zarovnanie
 
   // QR kód na platbu
   const hasQrData = dodavatel.iban;

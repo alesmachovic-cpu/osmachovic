@@ -20,7 +20,7 @@ const cspDirectives = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self' https://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.resend.com https://*.googleapis.com https://api.openai.com https://accounts.google.com https://*.vercel-insights.com",
-  "frame-src 'self' https://accounts.google.com",
+  "frame-src 'self' blob: https://accounts.google.com",
   "frame-ancestors 'self'",
   "base-uri 'self'",
   "form-action 'self' https://accounts.google.com",
