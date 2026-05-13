@@ -21,7 +21,7 @@ const cspDirectives = [
   "font-src 'self' data:",
   "connect-src 'self' https://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.resend.com https://*.googleapis.com https://api.openai.com https://accounts.google.com https://*.vercel-insights.com",
   "frame-src 'self' https://accounts.google.com",
-  "frame-ancestors 'none'",
+  "frame-ancestors 'self'",
   "base-uri 'self'",
   "form-action 'self' https://accounts.google.com",
   "object-src 'none'",
@@ -32,7 +32,7 @@ const securityHeaders = [
   // Prevent MIME sniffing (XSS vector)
   { key: "X-Content-Type-Options", value: "nosniff" },
   // Prevent clickjacking — nikto nemôže embedovať appku do iframe
-  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
   // Referrer policy — chráni citlivé URL query params pred leakom
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // Force HTTPS for 2 years (HSTS), vrátane subdomén
