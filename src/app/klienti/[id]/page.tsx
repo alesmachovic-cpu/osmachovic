@@ -3388,6 +3388,7 @@ export default function KlientDetailPage() {
         userId={user?.id}
         lvData={(klient?.lv_data as Record<string, unknown> | null) ?? null}
         naberData={nabery[0] ?? null}
+        klientData={klient as Record<string, unknown> | null}
       />
     </div>
   );

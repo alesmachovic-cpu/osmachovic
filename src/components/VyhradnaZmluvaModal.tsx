@@ -40,21 +40,32 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function initFromLv(lvData: Record<string, unknown> | null | undefined, naber: Record<string, unknown> | null | undefined): Partial<ZvsData> {
+function initFromLv(
+  lvData: Record<string, unknown> | null | undefined,
+  naber: Record<string, unknown> | null | undefined,
+  klient: Record<string, unknown> | null | undefined,
+): Partial<ZvsData> {
   const lv = lvData || {};
   const majiteliaLv = (lv.majitelia as Array<{ meno?: string; podiel?: string; datum_narodenia?: string; adresa?: string }> | undefined) || [];
   const pozemkyLv = (lv.pozemky as Array<{ cislo_parcely?: string; druh?: string; vymera?: number }> | undefined) || [];
 
   const majitelia: Majitel[] = majiteliaLv.length
-    ? majiteliaLv.map(m => ({
-        meno: m.meno || "",
+    ? majiteliaLv.map((m, i) => ({
+        meno: m.meno || (i === 0 ? String(klient?.meno || "") : ""),
         datum_narodenia: m.datum_narodenia || "",
         rc: "",
-        bydlisko: m.adresa || "",
-        email: "",
-        telefon: "",
+        bydlisko: m.adresa || (i === 0 ? String(klient?.lokalita || "") : ""),
+        email: i === 0 ? String(klient?.email || "") : "",
+        telefon: i === 0 ? String(klient?.telefon || "") : "",
       }))
-    : [{ ...EMPTY_MAJITEL }];
+    : [{
+        meno: String(klient?.meno || ""),
+        datum_narodenia: "",
+        rc: "",
+        bydlisko: String(klient?.lokalita || ""),
+        email: String(klient?.email || ""),
+        telefon: String(klient?.telefon || ""),
+      }];
 
   const stavby: Stavba[] = [{
     druh: String(lv.typ || naber?.typ_nehnutelnosti || "Byt"),
@@ -109,6 +120,7 @@ export default function VyhradnaZmluvaModal({
   userId,
   lvData,
   naberData,
+  klientData,
 }: {
   open: boolean;
   onClose: () => void;
@@ -118,6 +130,7 @@ export default function VyhradnaZmluvaModal({
   userId?: string;
   lvData?: Record<string, unknown> | null;
   naberData?: Record<string, unknown> | null;
+  klientData?: Record<string, unknown> | null;
 }) {
   const [tab, setTab] = useState<"zaujemcovia" | "nehnutelnost" | "podmienky">("zaujemcovia");
   const [data, setData] = useState<ZvsData>(() => ({
@@ -135,15 +148,15 @@ export default function VyhradnaZmluvaModal({
   const [err, setErr] = useState("");
   const [znizenieOpen, setZnizenieOpen] = useState(false);
 
-  // Predvyplň z LV + náberák pri otvorení
+  // Predvyplň z LV + náberák + klient pri otvorení
   useEffect(() => {
     if (!open) return;
-    const prefill = initFromLv(lvData, naberData);
+    const prefill = initFromLv(lvData, naberData, klientData);
     setData(prev => ({ ...prev, ...prefill }));
     setZnizenieOpen(false);
     setTab("zaujemcovia");
     setErr("");
-  }, [open, lvData, naberData]);
+  }, [open, lvData, naberData, klientData]);
 
   // Načítaj existujúcu zmluvu ak existuje
   useEffect(() => {
