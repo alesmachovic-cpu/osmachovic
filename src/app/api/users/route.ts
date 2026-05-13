@@ -7,19 +7,13 @@ import { validatePasswordStrength } from "@/lib/auth/password";
 
 export const runtime = "nodejs";
 
-// GET — dva módy podľa cookie:
-//   - autentifikovaný (má crm_session) → plné dáta (potrebuje AuthProvider + nastavenia)
-//   - neautentifikovaný → len id, name, initials (pre login screen — výber účtu)
 export async function GET(req: NextRequest) {
   try {
-    const sb = getSupabaseAdmin();
     const auth = await requireUser(req);
-    const authed = auth.error === null;
+    if (auth.error) return auth.error;
 
-    const select = authed
-      ? "id, name, initials, role, email, login_email, pobocka_id, makler_id, company_id, notification_prefs, vzorove_inzeraty, nav_prefs, created_at"
-      : "id, name, initials";
-
+    const sb = getSupabaseAdmin();
+    const select = "id, name, initials, role, email, login_email, pobocka_id, makler_id, company_id, notification_prefs, vzorove_inzeraty, nav_prefs, created_at";
     const { data, error } = await sb.from("users").select(select).order("created_at");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ users: data || [] });

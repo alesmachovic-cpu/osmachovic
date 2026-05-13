@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.80.0",
+    "@anthropic-ai/sdk": "^0.96.0",
     "@dnd-kit/core": "^6.3.1",
     "@supabase/supabase-js": "^2.99.3",
     "@types/bcryptjs": "^2.4.6",
@@ -20,7 +20,7 @@
     "bcryptjs": "^3.0.3",
     "jspdf": "^4.2.1",
     "mammoth": "^1.12.0",
-    "next": "16.1.7",
+    "next": "^16.2.6",
     "next-intl": "^4.11.2",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.6.205",
@@ -42,6 +42,6 @@
     "eslint-config-next": "16.1.7",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.6"
   }
 }
