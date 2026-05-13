@@ -106,6 +106,7 @@ export default function OdberateliaPage() {
 
   async function save() {
     if (!form.nazov.trim()) return alert("Názov je povinný");
+    if (!form.ico.trim()) return alert("IČO je povinné");
     if (!user?.id) return alert("Nie si prihlásený");
     const method = editing ? "PATCH" : "POST";
     const body = editing ? { id: editing.id, ...form } : { user_id: user.id, ...form };
@@ -263,9 +264,9 @@ export default function OdberateliaPage() {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
                 <div>
-                  <div style={labelSt}>IČO</div>
+                  <div style={labelSt}>IČO *</div>
                   <div style={{ display: "flex", gap: "6px" }}>
-                    <input style={inputSt} value={form.ico} onChange={(e) => setForm({ ...form, ico: e.target.value })} />
+                    <input style={{ ...inputSt, width: "auto", flex: 1, minWidth: 0 }} value={form.ico} onChange={(e) => setForm({ ...form, ico: e.target.value })} />
                     <button
                       onClick={lookupIco}
                       disabled={icoLooking || !form.ico.trim()}

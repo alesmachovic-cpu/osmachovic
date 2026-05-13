@@ -179,7 +179,7 @@ export default function NastaveniaFakturyPage() {
               <div style={labelSt}>IČO</div>
               <div style={{ display: "flex", gap: "6px" }}>
                 <input
-                  style={inputSt}
+                  style={{ ...inputSt, width: "auto", flex: 1, minWidth: 0 }}
                   value={s.ico}
                   onChange={(e) => setS({ ...s, ico: e.target.value })}
                 />
