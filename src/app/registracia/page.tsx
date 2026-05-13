@@ -105,6 +105,18 @@ export default function RegistraciaPage() {
             </div>
           ))}
 
+          <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", lineHeight: 1.6, margin: "4px 0 0" }}>
+            Registráciou súhlasíte s{" "}
+            <Link href="/obchodne-podmienky" target="_blank" style={{ color: "rgba(255,255,255,0.65)", textDecoration: "underline" }}>
+              Obchodnými podmienkami
+            </Link>{" "}
+            a{" "}
+            <Link href="/gdpr" target="_blank" style={{ color: "rgba(255,255,255,0.65)", textDecoration: "underline" }}>
+              Zásadami ochrany osobných údajov
+            </Link>.
+            Máte právo odstúpiť od zmluvy do 30 dní (zákon č. 108/2024 Z. z.).
+          </p>
+
           <button
             type="submit"
             disabled={submitting}
