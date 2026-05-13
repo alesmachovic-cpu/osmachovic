@@ -779,7 +779,7 @@ function NaberPageContent() {
           userId={user?.id}
           lvData={(selectedKlient?.lv_data as Record<string, unknown> | null) ?? null}
           naberData={savedNaberData}
-          klientData={selectedKlient as Record<string, unknown> | null}
+          klientData={selectedKlient as unknown as Record<string, unknown> | null}
         />
 
         {/* Kalendár info */}
