@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getFirmaInfo } from "@/lib/getFirmaInfo";
 
 export const metadata: Metadata = {
   title: "Kontakt | Vianema",
@@ -6,7 +7,10 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function KontaktPage() {
+export default async function KontaktPage() {
+  const f = await getFirmaInfo();
+  const prevadzkarena = f.prevadzkarena || f.sidlo;
+
   return (
     <>
       <header style={headerSt}>
@@ -15,16 +19,16 @@ export default function KontaktPage() {
       </header>
 
       <Section title="Prevádzkovateľ (povinné údaje podľa § 4 zák. č. 22/2004 Z. z.)">
-        <Row label="Obchodné meno" value="Vianema s. r. o." />
-        <Row label="Sídlo" value="Karpatské námestie 10A, 831 06 Bratislava — mestská časť Rača" />
-        <Row label="IČO" value="47395095" />
-        <Row label="DIČ" value="2023848508" />
-        <Row label="IČ DPH" value="SK2023848508" />
-        <Row label="Zápis v OR" value="Obchodný register Mestského súdu Bratislava III, oddiel Sro, vložka č. 123596/B" />
-        <Row label="Štatutárny orgán" value="Konateľ: Aleš Machovič" />
-        <Row label="Telefón" value="+421 [DOPLŇTE]" />
-        <Row label="E-mail" value="info@vianema.sk" />
-        <Row label="Web" value="vianema.sk" />
+        <Row label="Obchodné meno" value={f.nazov} />
+        <Row label="Sídlo" value={f.sidlo} />
+        <Row label="IČO" value={f.ico} />
+        <Row label="DIČ" value={f.dic} />
+        <Row label="IČ DPH" value={f.ic_dph} />
+        <Row label="Zápis v OR" value={`Obchodný register ${f.registracia}`} />
+        <Row label="Štatutárny orgán" value={`Konateľ: ${f.konatel}`} />
+        {f.telefon && <Row label="Telefón" value={f.telefon} />}
+        <Row label="E-mail" value={f.email} />
+        <Row label="Web" value={f.web} />
       </Section>
 
       <Section title="Orgán dozoru">
@@ -42,16 +46,15 @@ export default function KontaktPage() {
 
       <Section title="Kontakt na maklérov">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "16px" }}>
-          <MaklerCard meno="Aleš Machovič" tel="+421 [DOPLŇTE]" email="ales@vianema.sk" />
-          {/* Ďalší makléri */}
+          <MaklerCard meno={f.konatel} tel={f.telefon || "—"} email={f.email} />
         </div>
       </Section>
 
       <Section title="Kde nás nájdete">
-        <p style={pSt}>[DOPLŇTE ADRESU PREVÁDZKARNE]</p>
+        <p style={pSt}>{prevadzkarena}</p>
         <div style={{ background: "var(--bg-elevated)", borderRadius: "10px", padding: "20px", marginTop: "8px", fontSize: "13px", color: "var(--text-muted)" }}>
-          Mapa — <a href={`https://maps.google.com/?q=Vianema+s.r.o.`} style={lnkSt} target="_blank" rel="noopener noreferrer">
-            Zobraziť na Google Maps
+          <a href={`https://maps.google.com/?q=${encodeURIComponent(prevadzkarena)}`} style={lnkSt} target="_blank" rel="noopener noreferrer">
+            Zobraziť na Google Maps →
           </a>
         </div>
       </Section>

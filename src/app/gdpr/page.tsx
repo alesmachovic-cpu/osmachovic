@@ -1,6 +1,7 @@
-"use client";
+import { getFirmaInfo } from "@/lib/getFirmaInfo";
 
-export default function GdprPage() {
+export default async function GdprPage() {
+  const f = await getFirmaInfo();
   return (
     <div style={{ maxWidth: "780px", margin: "0 auto", padding: "0 0 80px" }}>
       <h1 style={{ fontSize: "26px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "8px" }}>
@@ -12,10 +13,10 @@ export default function GdprPage() {
 
       <Section title="1. Prevádzkovateľ">
         <p>
-          <strong>Vianema s. r. o.</strong>, so sídlom <em>Karpatské námestie 10A, 831 06 Bratislava — mestská časť Rača</em>,
-          IČO: <em>47395095</em>, DIČ: <em>2023848508</em>,
-          zapísaná v Obchodnom registri <em>Mestského súdu Bratislava III</em>, oddiel Sro, vložka č. <em>123596/B</em>,
-          štatutárny orgán: konateľ <em>[DOPLŇTE MENO KONATEĽA]</em>
+          <strong>{f.nazov}</strong>, so sídlom <em>{f.sidlo}</em>,
+          IČO: <em>{f.ico}</em>, DIČ: <em>{f.dic}</em>,
+          zapísaná v Obchodnom registri <em>{f.registracia}</em>,
+          štatutárny orgán: konateľ <em>{f.konatel}</em>
           (ďalej len „Prevádzkovateľ") spracúva Vaše osobné údaje v súlade s nariadením EÚ 2016/679
           (GDPR) a zákonom č. 18/2018 Z. z. o ochrane osobných údajov.
         </p>

@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { isSuperAdmin } from "@/lib/auth/requireUser";
+import type { FirmaInfo } from "@/lib/getFirmaInfo";
+import { DEFAULT_FIRMA } from "@/lib/getFirmaInfo";
 import type { User } from "@/components/AuthProvider";
 import PhoneInput from "@/components/PhoneInput";
 import PasswordInput from "@/components/PasswordInput";
@@ -35,7 +38,7 @@ function loadGoals(userId?: string) {
 
 export default function NastaveniaPage() {
   const { user: authUser, accounts, updateAccount, addAccount, deleteAccount } = useAuth();
-  const isAdmin = authUser?.id === "ales";
+  const isAdmin = isSuperAdmin(authUser?.role);
   const [goals, setGoals] = useState(DEFAULT_GOALS);
   const [saved, setSaved] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -71,10 +74,7 @@ export default function NastaveniaPage() {
   const [vzorSaved, setVzorSaved] = useState(false);
 
   // Spoločnosť (admin only)
-  const [companyName, setCompanyName] = useState("Vianema s. r. o.");
-  const [companySidlo, setCompanySidlo] = useState("");
-  const [companyIco, setCompanyIco] = useState("");
-  const [companyRegistracia, setCompanyRegistracia] = useState("");
+  const [firma, setFirma] = useState<FirmaInfo>(DEFAULT_FIRMA);
   const [companySaved, setCompanySaved] = useState(false);
 
   // Billing
@@ -173,21 +173,14 @@ export default function NastaveniaPage() {
         }
       });
 
-      // Load company info (admin only, from Supabase)
+      // Load company info (admin only)
       if (isAdmin) {
-        import("@/lib/supabase").then(({ supabase: sb }) => {
-          sb.from("makleri").select("firma").eq("email", "ales@vianema.sk").single().then(({ data }) => {
-            if (data?.firma) {
-              try {
-                const c = typeof data.firma === "string" ? JSON.parse(data.firma) : data.firma;
-                if (c.nazov) setCompanyName(c.nazov);
-                if (c.sidlo) setCompanySidlo(c.sidlo);
-                if (c.ico) setCompanyIco(c.ico);
-                if (c.registracia) setCompanyRegistracia(c.registracia);
-              } catch { /* not JSON, legacy value */ }
-            }
-          });
-        });
+        fetch("/api/firma-info")
+          .then(r => r.json())
+          .then((d: Partial<FirmaInfo>) => {
+            if (d && Object.keys(d).length) setFirma(prev => ({ ...prev, ...d }));
+          })
+          .catch(() => {});
       }
 
       // Load feature toggles (global - admin manages all)
@@ -285,13 +278,16 @@ export default function NastaveniaPage() {
 
   async function handleSaveCompany() {
     try {
-      const { supabase: sb } = await import("@/lib/supabase");
-      const companyData = JSON.stringify({
-        nazov: companyName, sidlo: companySidlo, ico: companyIco, registracia: companyRegistracia,
+      const res = await fetch("/api/firma-info", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(firma),
       });
-      await sb.from("makleri").update({ firma: companyData }).eq("email", "ales@vianema.sk");
-      setCompanySaved(true);
-      setTimeout(() => setCompanySaved(false), 2000);
+      if (res.ok) {
+        setCompanySaved(true);
+        setTimeout(() => setCompanySaved(false), 2000);
+      }
     } catch { /* ignore */ }
   }
 
@@ -845,43 +841,110 @@ export default function NastaveniaPage() {
         </div>
       )}
 
-      {/* ═══ Spoločnosť (admin only) ═══ */}
+      {/* ═══ Firemné údaje (super_admin / majitel only) ═══ */}
       {activeCategory === "spolocnost" && isAdmin && (
         <div style={cardSt}>
-          <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "4px" }}>
-            🏢 Info o spoločnosti
-          </div>
+          <div style={{ fontSize: "16px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "4px" }}>🏢 Firemné údaje</div>
           <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "0 0 20px" }}>
-            Fakturačné údaje spoločnosti — zobrazujú sa v náberovom liste a dokumentoch
+            Zobrazujú sa na právnych stránkach (GDPR, Kontakt, O nás…). Prístup: iba konateľ / admin.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+
+          {/* Sekcia: Základné */}
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>Základné údaje</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }} className="naber-grid">
             <div>
               <label style={labelSt}>Názov spoločnosti</label>
-              <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={inputSt}
-                placeholder="napr. Vianema s. r. o." />
+              <input value={firma.nazov} onChange={e => setFirma(f => ({ ...f, nazov: e.target.value }))} style={inputSt} placeholder="Vianema s. r. o." />
             </div>
             <div>
+              <label style={labelSt}>Konateľ</label>
+              <input value={firma.konatel} onChange={e => setFirma(f => ({ ...f, konatel: e.target.value }))} style={inputSt} placeholder="Meno Priezvisko" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
               <label style={labelSt}>Sídlo</label>
-              <input value={companySidlo} onChange={e => setCompanySidlo(e.target.value)} style={inputSt}
-                placeholder="napr. Karpatské námestie 10A, 831 06 Bratislava – mestská časť Rača" />
+              <input value={firma.sidlo} onChange={e => setFirma(f => ({ ...f, sidlo: e.target.value }))} style={inputSt} placeholder="Ulica, PSČ Mesto" />
             </div>
-            <div>
-              <label style={labelSt}>IČO</label>
-              <input value={companyIco} onChange={e => setCompanyIco(e.target.value)} style={inputSt}
-                placeholder="napr. 47 395 095" />
-            </div>
-            <div>
-              <label style={labelSt}>Registrácia</label>
-              <textarea value={companyRegistracia} onChange={e => setCompanyRegistracia(e.target.value)}
-                rows={2} style={{ ...inputSt, resize: "vertical" }}
-                placeholder='napr. zapísaná v OR MS Bratislava III, oddiel: Sro, vložka č.: 123596/B' />
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelSt}>Prevádzkareň (ak iná ako sídlo)</label>
+              <input value={firma.prevadzkarena} onChange={e => setFirma(f => ({ ...f, prevadzkarena: e.target.value }))} style={inputSt} placeholder="Nechaj prázdne ak rovnaká ako sídlo" />
             </div>
           </div>
-          <div style={{ marginTop: "20px", display: "flex", alignItems: "center", gap: "12px" }}>
+
+          {/* Sekcia: IČO / OR */}
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>Identifikácia</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "16px" }} className="naber-grid">
+            <div>
+              <label style={labelSt}>IČO</label>
+              <input value={firma.ico} onChange={e => setFirma(f => ({ ...f, ico: e.target.value }))} style={inputSt} placeholder="47395095" />
+            </div>
+            <div>
+              <label style={labelSt}>DIČ</label>
+              <input value={firma.dic} onChange={e => setFirma(f => ({ ...f, dic: e.target.value }))} style={inputSt} placeholder="2023848508" />
+            </div>
+            <div>
+              <label style={labelSt}>IČ DPH</label>
+              <input value={firma.ic_dph} onChange={e => setFirma(f => ({ ...f, ic_dph: e.target.value }))} style={inputSt} placeholder="SK2023848508" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelSt}>Zápis v OR</label>
+              <input value={firma.registracia} onChange={e => setFirma(f => ({ ...f, registracia: e.target.value }))} style={inputSt} placeholder="Mestského súdu Bratislava III, oddiel Sro, vložka č. 123596/B" />
+            </div>
+          </div>
+
+          {/* Sekcia: Kontakt */}
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>Kontaktné údaje</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "16px" }} className="naber-grid">
+            <div>
+              <label style={labelSt}>Telefón</label>
+              <input value={firma.telefon} onChange={e => setFirma(f => ({ ...f, telefon: e.target.value }))} style={inputSt} placeholder="+421 9XX XXX XXX" />
+            </div>
+            <div>
+              <label style={labelSt}>E-mail</label>
+              <input type="email" value={firma.email} onChange={e => setFirma(f => ({ ...f, email: e.target.value }))} style={inputSt} placeholder="info@vianema.sk" />
+            </div>
+            <div>
+              <label style={labelSt}>Web</label>
+              <input value={firma.web} onChange={e => setFirma(f => ({ ...f, web: e.target.value }))} style={inputSt} placeholder="vianema.sk" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelSt}>Región pôsobenia</label>
+              <input value={firma.region} onChange={e => setFirma(f => ({ ...f, region: e.target.value }))} style={inputSt} placeholder="napr. Bratislava a okolie" />
+            </div>
+          </div>
+
+          {/* Sekcia: O nás */}
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>O nás</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
+            <div>
+              <label style={labelSt}>História firmy</label>
+              <textarea value={firma.historia} onChange={e => setFirma(f => ({ ...f, historia: e.target.value }))}
+                rows={3} style={{ ...inputSt, resize: "vertical" }}
+                placeholder="Rok vzniku, počet zrealizovaných obchodov, špecializácia…" />
+            </div>
+          </div>
+
+          {/* Sekcia: Licencia a poistenie */}
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" }}>Licencia & poistenie</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }} className="naber-grid">
+            <div>
+              <label style={labelSt}>Číslo živnostenského oprávnenia</label>
+              <input value={firma.cislo_licencie} onChange={e => setFirma(f => ({ ...f, cislo_licencie: e.target.value }))} style={inputSt} placeholder="napr. 210-13456" />
+            </div>
+            <div>
+              <label style={labelSt}>Poistenie zodpovednosti</label>
+              <input value={firma.poistovna} onChange={e => setFirma(f => ({ ...f, poistovna: e.target.value }))} style={inputSt} placeholder="napr. Allianz, krytie 100 000 €" />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelSt}>Členstvo v NARKS (alebo iná org.)</label>
+              <input value={firma.narks} onChange={e => setFirma(f => ({ ...f, narks: e.target.value }))} style={inputSt} placeholder="napr. Člen NARKS od 2020, č. člena 123" />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <button onClick={handleSaveCompany} style={{
               padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-            }}>Uložiť</button>
+            }}>Uložiť firemné údaje</button>
             {companySaved && <span style={{ fontSize: "13px", color: "#059669", fontWeight: "600" }}>✓ Uložené</span>}
           </div>
         </div>

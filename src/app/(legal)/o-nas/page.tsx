@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getFirmaInfo } from "@/lib/getFirmaInfo";
 
 export const metadata: Metadata = {
   title: "O nás | Vianema",
@@ -6,7 +7,9 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function ONasPage() {
+export default async function ONasPage() {
+  const f = await getFirmaInfo();
+
   return (
     <>
       <header style={headerSt}>
@@ -16,30 +19,34 @@ export default function ONasPage() {
 
       <Section title="Kto sme">
         <p style={pSt}>
-          <strong>Vianema s. r. o.</strong> je slovenská realitná kancelária pôsobiaca na
-          [DOPLŇTE REGIÓN]. Zameriavame sa na sprostredkovanie predaja a prenájmu rezidenčných
+          <strong>{f.nazov}</strong> je slovenská realitná kancelária pôsobiaca
+          {f.region ? ` v regióne ${f.region}` : " na slovenskom realitnom trhu"}.
+          Zameriavame sa na sprostredkovanie predaja a prenájmu rezidenčných
           nehnuteľností s dôrazom na transparentnosť, odbornosť a osobný prístup ku každému klientovi.
         </p>
-        <p style={pSt}>[DOPLŇTE HISTÓRIU FIRMY — rok vzniku, kľúčové míľniky, počet zrealizovaných obchodov, atď.]</p>
+        {f.historia && <p style={pSt}>{f.historia}</p>}
       </Section>
 
       <Section title="Náš tím">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px", marginTop: "8px" }}>
           <TeamCard
-            meno="Aleš Machovič"
-            rola="Maklér / zakladateľ"
-            email="ales@vianema.sk"
-            licencia="[DOPLŇTE ČÍSLO LICENCIE]"
+            meno={f.konatel}
+            rola="Maklér / konateľ"
+            email={f.email}
+            licencia={f.cislo_licencie || "—"}
           />
-          {/* Ďalší členovia tímu */}
         </div>
       </Section>
 
       <Section title="Profesionálne štandardy">
         <ul style={ulSt}>
-          <li><strong>Licencia:</strong> Viazaná živnosť „Sprostredkovanie predaja, prenájmu a kúpy nehnuteľností"</li>
-          <li><strong>Poistenie zodpovednosti:</strong> [DOPLŇTE POISŤOVŇU, SUMU POISTNÉHO KRYTIA]</li>
-          <li><strong>Členstvo v profesijných organizáciách:</strong> [DOPLŇTE — napr. NARKS, ak ste člen]</li>
+          <li><strong>Licencia:</strong> Viazaná živnosť „Sprostredkovanie predaja, prenájmu a kúpy nehnuteľností"{f.cislo_licencie ? ` · č. ${f.cislo_licencie}` : ""}</li>
+          {f.poistovna
+            ? <li><strong>Poistenie zodpovednosti:</strong> {f.poistovna}</li>
+            : <li><strong>Poistenie zodpovednosti:</strong> informácie na vyžiadanie</li>}
+          {f.narks
+            ? <li><strong>Členstvo v profesijných organizáciách:</strong> {f.narks}</li>
+            : <li><strong>Členstvo v profesijných organizáciách:</strong> informácie na vyžiadanie</li>}
           <li><strong>Vzdelávanie:</strong> Pravidelné odborné školenia, sledovanie legislatívnych zmien</li>
         </ul>
       </Section>
@@ -57,7 +64,7 @@ function TeamCard({ meno, rola, email, licencia }: { meno: string; rola: string;
   return (
     <div style={{ background: "var(--bg-elevated)", borderRadius: "12px", padding: "16px" }}>
       <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "var(--accent)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "18px", marginBottom: "10px" }}>
-        {meno.split(" ").map(w => w[0]).join("")}
+        {meno.split(" ").map(w => w[0]).join("").slice(0, 2)}
       </div>
       <div style={{ fontWeight: 700, fontSize: "14px" }}>{meno}</div>
       <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>{rola}</div>
