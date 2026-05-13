@@ -67,11 +67,12 @@ function initFromLv(
         telefon: String(klient?.telefon || ""),
       }];
 
+  const naberParametre = (naber?.parametre as Record<string, unknown> | undefined) || {};
   const stavby: Stavba[] = [{
     druh: String(lv.typ || naber?.typ_nehnutelnosti || "Byt"),
     supisne_cislo: String(lv.supisne_cislo || naber?.supisne_cislo || ""),
-    cislo_bytu: String(lv.cislo_bytu || naber?.byt_cislo || ""),
-    lv_cislo: String((naber?.oznacenie as Record<string, unknown> | undefined)?.list_vlastnictva || ""),
+    cislo_bytu: String(lv.cislo_bytu || naberParametre.byt_cislo || ""),
+    lv_cislo: String(lv.lv_cislo || lv.list_vlastnictva || ""),
     podiel: majiteliaLv[0]?.podiel || "1/1",
   }];
 
