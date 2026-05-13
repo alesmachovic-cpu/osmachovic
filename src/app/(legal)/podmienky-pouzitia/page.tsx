@@ -16,7 +16,7 @@ export default function PodmienkyPouzivaniaPage() {
 
       <Section title="1. Definície">
         <ul style={ulSt}>
-          <li><strong>Prevádzkovateľ</strong> — Vianema s. r. o., IČO: [DOPLŇTE], prevádzkovateľ CRM systému</li>
+          <li><strong>Prevádzkovateľ</strong> — Vianema s. r. o., IČO: 47395095, prevádzkovateľ CRM systému</li>
           <li><strong>CRM systém</strong> — softvérová platforma dostupná na vianema.amgd.sk a vianema.sk</li>
           <li><strong>Maklér</strong> — zamestnanec alebo spolupracovník Prevádzkovateľa s prístupom do CRM</li>
           <li><strong>Klient</strong> — fyzická alebo právnická osoba využívajúca realitné služby Prevádzkovateľa</li>

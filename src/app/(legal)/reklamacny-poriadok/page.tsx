@@ -19,7 +19,7 @@ export default function ReklamacnyPoriadokPage() {
         <p style={pSt}>Reklamáciu možno uplatniť:</p>
         <ul style={ulSt}>
           <li><strong>E-mailom:</strong> <a href="mailto:reklamacie@vianema.sk" style={lnkSt}>reklamacie@vianema.sk</a></li>
-          <li><strong>Písomne:</strong> na adresu sídla Vianema s. r. o., [DOPLŇTE ADRESU]</li>
+          <li><strong>Písomne:</strong> na adresu sídla Vianema s. r. o., Karpatské námestie 10A, 831 06 Bratislava — mestská časť Rača</li>
           <li><strong>Osobne:</strong> v prevádzke na adrese [DOPLŇTE ADRESU PREVÁDZKARNE] v pracovných dňoch 9:00–17:00</li>
         </ul>
       </Section>

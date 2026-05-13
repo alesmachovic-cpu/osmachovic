@@ -68,7 +68,7 @@ export default function LegalFooter() {
         </div>
       </div>
       <p style={{ fontSize: "11px", color: "var(--text-muted)", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
-        © 2026 Vianema s. r. o. · IČO: <span style={{ opacity: 0.6 }}>[doplniť]</span> · Powered by AMGD
+        © 2026 Vianema s. r. o. · IČO: 47395095 · Powered by AMGD
       </p>
     </footer>
   );

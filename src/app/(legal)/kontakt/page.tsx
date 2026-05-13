@@ -16,12 +16,12 @@ export default function KontaktPage() {
 
       <Section title="Prevádzkovateľ (povinné údaje podľa § 4 zák. č. 22/2004 Z. z.)">
         <Row label="Obchodné meno" value="Vianema s. r. o." />
-        <Row label="Sídlo" value="[DOPLŇTE ADRESU SÍDLA]" />
-        <Row label="IČO" value="[DOPLŇTE IČO]" />
-        <Row label="DIČ" value="[DOPLŇTE DIČ]" />
-        <Row label="IČ DPH" value="[DOPLŇTE IČ DPH alebo: Nie je platca DPH]" />
-        <Row label="Zápis v OR" value="Obchodný register [DOPLŇTE SÚD], oddiel Sro, vložka č. [DOPLŇTE Č. VLOŽKY]" />
-        <Row label="Štatutárny orgán" value="Konateľ: [DOPLŇTE MENO KONATEĽA]" />
+        <Row label="Sídlo" value="Karpatské námestie 10A, 831 06 Bratislava — mestská časť Rača" />
+        <Row label="IČO" value="47395095" />
+        <Row label="DIČ" value="2023848508" />
+        <Row label="IČ DPH" value="SK2023848508" />
+        <Row label="Zápis v OR" value="Obchodný register Mestského súdu Bratislava III, oddiel Sro, vložka č. 123596/B" />
+        <Row label="Štatutárny orgán" value="Konateľ: Aleš Machovič" />
         <Row label="Telefón" value="+421 [DOPLŇTE]" />
         <Row label="E-mail" value="info@vianema.sk" />
         <Row label="Web" value="vianema.sk" />
@@ -30,9 +30,9 @@ export default function KontaktPage() {
       <Section title="Orgán dozoru">
         <p style={pSt}>
           <strong>Slovenská obchodná inšpekcia (SOI)</strong><br />
-          Inšpektorát SOI pre [DOPLŇTE KRAJ] kraj<br />
-          [DOPLŇTE ADRESU INŠPEKTORÁTU]<br />
-          Tel.: [DOPLŇTE], E-mail: [DOPLŇTE]<br />
+          Inšpektorát SOI pre Bratislavský kraj<br />
+          Bajkalská 21/A, P. O. BOX 5, 820 07 Bratislava<br />
+          Tel.: 02/58 27 21 72, E-mail: ba@soi.sk<br />
           <a href="https://www.soi.sk" style={lnkSt} target="_blank" rel="noopener noreferrer">www.soi.sk</a>
         </p>
         <p style={pSt}>

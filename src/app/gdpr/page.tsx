@@ -12,9 +12,9 @@ export default function GdprPage() {
 
       <Section title="1. Prevádzkovateľ">
         <p>
-          <strong>Vianema s. r. o.</strong>, so sídlom <em>[DOPLŇTE ADRESU SÍDLA]</em>,
-          IČO: <em>[DOPLŇTE IČO]</em>, DIČ: <em>[DOPLŇTE DIČ]</em>,
-          zapísaná v Obchodnom registri <em>[DOPLŇTE SÚD]</em>, oddiel Sro, vložka č. <em>[DOPLŇTE Č. VLOŽKY]</em>,
+          <strong>Vianema s. r. o.</strong>, so sídlom <em>Karpatské námestie 10A, 831 06 Bratislava — mestská časť Rača</em>,
+          IČO: <em>47395095</em>, DIČ: <em>2023848508</em>,
+          zapísaná v Obchodnom registri <em>Mestského súdu Bratislava III</em>, oddiel Sro, vložka č. <em>123596/B</em>,
           štatutárny orgán: konateľ <em>[DOPLŇTE MENO KONATEĽA]</em>
           (ďalej len „Prevádzkovateľ") spracúva Vaše osobné údaje v súlade s nariadením EÚ 2016/679
           (GDPR) a zákonom č. 18/2018 Z. z. o ochrane osobných údajov.

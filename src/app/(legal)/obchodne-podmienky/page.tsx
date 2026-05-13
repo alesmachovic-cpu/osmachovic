@@ -20,7 +20,7 @@ export default function ObchodnePodmienkyPage() {
       <Section title="1. Prevádzkovateľ a predmet podmienok">
         <p style={pSt}>
           Tieto všeobecné obchodné podmienky (ďalej „VOP") upravujú vzťahy medzi spoločnosťou{" "}
-          <strong>Vianema s. r. o.</strong>, IČO: [DOPLŇTE], sídlom [DOPLŇTE ADRESU] (ďalej „Realitná
+          <strong>Vianema s. r. o.</strong>, IČO: 47395095, sídlom Karpatské námestie 10A, 831 06 Bratislava — mestská časť Rača (ďalej „Realitná
           kancelária") a jej klientmi pri sprostredkovaní predaja, kúpy a prenájmu nehnuteľností.
           Realitná činnosť je vykonávaná na základe živnostenského oprávnenia (viazaná živnosť
           „Sprostredkovanie predaja, prenájmu a kúpy nehnuteľností").
