@@ -4,11 +4,15 @@ import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   const { data, error } = await sb
     .from("prehlad_zaznamy")
     .select("*")
+    .eq("user_id", auth.user.id)
     .order("datum", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
@@ -20,6 +24,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const payload = {
+    user_id: auth.user.id,
     typ: body.typ,
     datum: body.datum || new Date().toISOString().slice(0, 10),
     popis: body.popis ?? null,
@@ -41,7 +46,7 @@ export async function PATCH(req: NextRequest) {
   const { id, ...rest } = body;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const sb = getSupabaseAdmin();
-  const { data, error } = await sb.from("prehlad_zaznamy").update(rest).eq("id", id).select().single();
+  const { data, error } = await sb.from("prehlad_zaznamy").update(rest).eq("id", id).eq("user_id", auth.user.id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (rest.zaplatene !== undefined && data?.faktura_id) {
     await sb.from("faktury").update({
@@ -59,7 +64,7 @@ export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-  const { error } = await getSupabaseAdmin().from("prehlad_zaznamy").delete().eq("id", id);
+  const { error } = await getSupabaseAdmin().from("prehlad_zaznamy").delete().eq("id", id).eq("user_id", auth.user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
