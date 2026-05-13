@@ -107,6 +107,8 @@ export default function NastaveniaFakturyPage() {
   const [s, setS] = useState<DodavatelSettings>(DEFAULT_DODAVATEL);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [icoLooking, setIcoLooking] = useState(false);
+  const [icoErr, setIcoErr] = useState("");
 
   useEffect(() => {
     if (!user?.id) return;
@@ -120,6 +122,29 @@ export default function NastaveniaFakturyPage() {
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function lookupIco() {
+    const ico = s.ico.replace(/\s/g, "");
+    if (!ico) return;
+    setIcoLooking(true);
+    setIcoErr("");
+    try {
+      const r = await fetch(`/api/ico-lookup?ico=${encodeURIComponent(ico)}`);
+      const d = await r.json();
+      if (!r.ok) { setIcoErr(d.error || "Nenájdené"); return; }
+      setS((prev) => ({
+        ...prev,
+        nazov: d.nazov || prev.nazov,
+        adresa: d.adresa || prev.adresa,
+        dic: d.dic || prev.dic,
+        ic_dph: d.ic_dph || prev.ic_dph,
+      }));
+    } catch {
+      setIcoErr("Chyba siete");
+    } finally {
+      setIcoLooking(false);
+    }
   }
 
   function field(k: keyof DodavatelSettings, label: string, type: string = "text") {
@@ -150,7 +175,37 @@ export default function NastaveniaFakturyPage() {
           {field("nazov", "Názov spoločnosti")}
           {field("adresa", "Adresa")}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
-            {field("ico", "IČO")}
+            <div>
+              <div style={labelSt}>IČO</div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <input
+                  style={inputSt}
+                  value={s.ico}
+                  onChange={(e) => setS({ ...s, ico: e.target.value })}
+                />
+                <button
+                  onClick={lookupIco}
+                  disabled={icoLooking || !s.ico.trim()}
+                  title="Nájsť údaje podľa IČO"
+                  style={{
+                    flexShrink: 0,
+                    padding: "0 12px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "10px",
+                    background: "var(--bg-elevated)",
+                    color: "var(--text-primary)",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    cursor: icoLooking || !s.ico.trim() ? "not-allowed" : "pointer",
+                    opacity: icoLooking || !s.ico.trim() ? 0.5 : 1,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {icoLooking ? "…" : "Nájsť"}
+                </button>
+              </div>
+              {icoErr && <div style={{ fontSize: "11px", color: "var(--danger)", marginTop: "4px" }}>{icoErr}</div>}
+            </div>
             {field("dic", "DIČ")}
             {field("ic_dph", "IČ DPH")}
           </div>

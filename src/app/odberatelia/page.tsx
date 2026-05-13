@@ -37,6 +37,8 @@ export default function OdberateliaPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Odberatel | null>(null);
   const [q, setQ] = useState("");
+  const [icoLooking, setIcoLooking] = useState(false);
+  const [icoErr, setIcoErr] = useState("");
 
   const [form, setForm] = useState({
     nazov: "",
@@ -58,13 +60,38 @@ export default function OdberateliaPage() {
   }, [user?.id]);
   useEffect(() => { load(); }, [load]);
 
+  async function lookupIco() {
+    const ico = form.ico.replace(/\s/g, "");
+    if (!ico) return;
+    setIcoLooking(true);
+    setIcoErr("");
+    try {
+      const r = await fetch(`/api/ico-lookup?ico=${encodeURIComponent(ico)}`);
+      const d = await r.json();
+      if (!r.ok) { setIcoErr(d.error || "Nenájdené"); return; }
+      setForm((prev) => ({
+        ...prev,
+        nazov: d.nazov || prev.nazov,
+        adresa: d.adresa || prev.adresa,
+        dic: d.dic || prev.dic,
+        ic_dph: d.ic_dph || prev.ic_dph,
+      }));
+    } catch {
+      setIcoErr("Chyba siete");
+    } finally {
+      setIcoLooking(false);
+    }
+  }
+
   function openNew() {
     setEditing(null);
     setForm({ nazov: "", adresa: "", ico: "", dic: "", ic_dph: "", email: "", telefon: "" });
+    setIcoErr("");
     setModalOpen(true);
   }
   function openEdit(o: Odberatel) {
     setEditing(o);
+    setIcoErr("");
     setForm({
       nazov: o.nazov || "",
       adresa: o.adresa || "",
@@ -237,7 +264,30 @@ export default function OdberateliaPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
                 <div>
                   <div style={labelSt}>IČO</div>
-                  <input style={inputSt} value={form.ico} onChange={(e) => setForm({ ...form, ico: e.target.value })} />
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <input style={inputSt} value={form.ico} onChange={(e) => setForm({ ...form, ico: e.target.value })} />
+                    <button
+                      onClick={lookupIco}
+                      disabled={icoLooking || !form.ico.trim()}
+                      title="Nájsť údaje podľa IČO"
+                      style={{
+                        flexShrink: 0,
+                        padding: "0 10px",
+                        border: "1px solid var(--border)",
+                        borderRadius: "10px",
+                        background: "var(--bg-elevated)",
+                        color: "var(--text-primary)",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        cursor: icoLooking || !form.ico.trim() ? "not-allowed" : "pointer",
+                        opacity: icoLooking || !form.ico.trim() ? 0.5 : 1,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {icoLooking ? "…" : "Nájsť"}
+                    </button>
+                  </div>
+                  {icoErr && <div style={{ fontSize: "11px", color: "var(--danger)", marginTop: "4px" }}>{icoErr}</div>}
                 </div>
                 <div>
                   <div style={labelSt}>DIČ</div>
