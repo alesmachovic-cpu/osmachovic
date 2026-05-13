@@ -264,11 +264,11 @@ async function buildOps(
 
   // Súčet
   y -= 8;
-  ops.push({ kind: "line", x1: pageW - margin - 240, y1: y, x2: pageW - margin, y2: y, gray: 0.2 });
+  ops.push({ kind: "line", x1: margin, y1: y, x2: pageW - margin, y2: y, gray: 0.2 });
   y -= 16;
-  ops.push({ kind: "text", x: pageW - margin - 240, y, size: 12, text: "Celkom k uhrade" });
-  ops.push({ kind: "text", x: pageW - margin - 80, y, size: 14, text: fmtMoney(faktura.suma_celkom as number) });
-  y -= 36;
+  ops.push({ kind: "text", x: margin, y, size: 12, text: "Celkom k uhrade" });
+  ops.push({ kind: "text", x: margin + 170, y, size: 14, text: fmtMoney(faktura.suma_celkom as number) });
+  y -= 90;
 
   // Podpis vľavo + QR kód vpravo
   const signatureX = margin;
@@ -294,20 +294,16 @@ async function buildOps(
     ops.push({ kind: "text", x: qrX, y: qrY - qrSize - 10, size: 7, text: "QR platba" });
   }
 
-  // Podpis — vykreslí sa priamo nad čiaru Vystavil
-  // Najprv vypočítame kde bude čiara, potom posunieme podpis tesne nad ňu
-  const vystavilY = signatureY - 18;
-  const lineY = signatureY - 4;
-
+  // Podpis — bottom edge je signatureY, top je signatureY + signatureH
   if (dodavatel.podpis_data) {
-    // Podpis vykreslíme tak, aby jeho dolná hrana sedela na čiare
-    const signOps = signatureToOps(dodavatel.podpis_data, signatureX, lineY + signatureH + 4, signatureW, signatureH);
+    const signOps = signatureToOps(dodavatel.podpis_data, signatureX, signatureY, signatureW, signatureH);
     ops.push(...signOps);
   }
-  // Linka pre podpis (vždy, aj bez uloženého podpisu)
-  ops.push({ kind: "line", x1: signatureX, y1: lineY, x2: signatureX + signatureW, y2: lineY, gray: 0.7 });
+  // Linka priamo pod dolnou hranou podpisu (signatureY = bottom of signature box)
+  ops.push({ kind: "line", x1: signatureX, y1: signatureY - 4, x2: signatureX + signatureW, y2: signatureY - 4, gray: 0.7 });
 
-  // Vystavil — tesne pod čiarou
+  // Vystavil tesne pod čiarou
+  const vystavilY = signatureY - 18;
   if (dodavatel.vystavil) {
     ops.push({ kind: "text", x: signatureX, y: vystavilY, size: 9, text: "Vystavil:" });
     ops.push({ kind: "text", x: signatureX, y: vystavilY - 12, size: 10, text: dodavatel.vystavil });
