@@ -294,16 +294,20 @@ async function buildOps(
     ops.push({ kind: "text", x: qrX, y: qrY - qrSize - 10, size: 7, text: "QR platba" });
   }
 
-  // Podpis
-  if (dodavatel.podpis_data) {
-    const signOps = signatureToOps(dodavatel.podpis_data, signatureX, signatureY, signatureW, signatureH);
-    ops.push(...signOps);
-    // Linka pod podpisom
-    ops.push({ kind: "line", x1: signatureX, y1: signatureY - signatureH - 4, x2: signatureX + signatureW, y2: signatureY - signatureH - 4, gray: 0.7 });
-  }
+  // Podpis — vykreslí sa priamo nad čiaru Vystavil
+  // Najprv vypočítame kde bude čiara, potom posunieme podpis tesne nad ňu
+  const vystavilY = signatureY - 18;
+  const lineY = signatureY - 4;
 
-  // Vystavil
-  const vystavilY = signatureY - signatureH - 18;
+  if (dodavatel.podpis_data) {
+    // Podpis vykreslíme tak, aby jeho dolná hrana sedela na čiare
+    const signOps = signatureToOps(dodavatel.podpis_data, signatureX, lineY + signatureH + 4, signatureW, signatureH);
+    ops.push(...signOps);
+  }
+  // Linka pre podpis (vždy, aj bez uloženého podpisu)
+  ops.push({ kind: "line", x1: signatureX, y1: lineY, x2: signatureX + signatureW, y2: lineY, gray: 0.7 });
+
+  // Vystavil — tesne pod čiarou
   if (dodavatel.vystavil) {
     ops.push({ kind: "text", x: signatureX, y: vystavilY, size: 9, text: "Vystavil:" });
     ops.push({ kind: "text", x: signatureX, y: vystavilY - 12, size: 10, text: dodavatel.vystavil });
