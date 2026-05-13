@@ -14,3 +14,5 @@ User-agent: CCBot
 Disallow: /
 User-agent: ChatGPT-User
 Disallow: /
+
+Sitemap: https://vianema.sk/sitemap.xml

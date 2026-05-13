@@ -1,0 +1,7 @@
+Contact: mailto:security@vianema.sk
+Contact: https://vianema.sk/kontakt
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: sk, en, cs
+Canonical: https://vianema.sk/.well-known/security.txt
+Policy: https://vianema.sk/bezpecnost
+Acknowledgments: https://vianema.sk/bezpecnost#poďakovania

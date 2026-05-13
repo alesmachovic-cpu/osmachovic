@@ -8,6 +8,7 @@ import Navbar from "@/components/Navbar";
 import BottomTabs from "@/components/BottomTabs";
 import SidebarOverlay from "@/components/SidebarOverlay";
 import AuthProvider from "@/components/AuthProvider";
+import LegalFooter from "@/components/LegalFooter";
 
 // Inter ako primárny font — latin-ext potrebný pre slovenské diakritiky
 // (č, š, ž, ľ, ť, á, í, é). Brand komponenty (Logo, Wordmark, Monogram,
@@ -97,10 +98,11 @@ export default async function RootLayout({
                   flex: 1,
                   overflow: "auto",
                   background: "var(--bg-base)",
-                  padding: "24px 28px",
+                  padding: "24px 28px 0",
                 }}
               >
-                {children}
+                <div style={{ minHeight: "calc(100% - 120px)" }}>{children}</div>
+                <LegalFooter />
               </main>
             </div>
           </div>
