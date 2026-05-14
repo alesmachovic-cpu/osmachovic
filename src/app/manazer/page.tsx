@@ -654,6 +654,7 @@ function TabTim() {
   const [newUserLoginEmail, setNewUserLoginEmail] = useState("");
   const [newUserRole, setNewUserRole]         = useState("Maklér · Vianema");
   const [newUserPw, setNewUserPw]             = useState("");
+  const [newUserPct, setNewUserPct]           = useState("");
 
   // Editácia účtu
   const [editingUser, setEditingUser]   = useState<User | null>(null);
@@ -776,15 +777,31 @@ function TabTim() {
                 style={inputSt as React.CSSProperties}
               />
             </div>
+            <div>
+              <div style={labelSt}>Provízne % (voliteľné)</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="number" min="0" max="100" step="0.5"
+                  style={inputSt} value={newUserPct}
+                  onChange={e => setNewUserPct(e.target.value)}
+                  placeholder="napr. 30"
+                />
+                <span style={{ fontSize: 13, color: "var(--text-muted)" }}>%</span>
+              </div>
+            </div>
           </div>
           <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-            <button onClick={() => {
+            <button onClick={async () => {
               if (!newUserName.trim()) return;
               const id = newUserName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
               const parts = newUserName.trim().split(" ");
               const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
               addAccount({ id, name: newUserName.trim(), initials, role: newUserRole, email: newUserEmail, login_email: newUserLoginEmail || undefined, password: newUserPw || "" });
-              setNewUserName(""); setNewUserEmail(""); setNewUserLoginEmail(""); setNewUserPw("");
+              if (newUserPct.trim()) {
+                await fetch("/api/maklerske-provizie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meno: newUserName.trim(), percento: parseFloat(newUserPct.replace(",", ".")) || 0, makler_id: id }) });
+                loadProvizie();
+              }
+              setNewUserName(""); setNewUserEmail(""); setNewUserLoginEmail(""); setNewUserPw(""); setNewUserPct("");
               setShowForm(false);
             }} style={{
               padding: "8px 18px", background: "#374151", color: "#fff", border: "none",
