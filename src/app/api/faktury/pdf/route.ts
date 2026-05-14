@@ -54,6 +54,27 @@ function fmtMoney(n: number | null | undefined): string {
   return `${Number(n || 0).toFixed(2)} EUR`;
 }
 
+function wrapText(text: string, maxChars: number): string[] {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    if ((line ? line + " " + word : word).length <= maxChars) {
+      line = line ? `${line} ${word}` : word;
+    } else {
+      if (line) lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [text];
+}
+
+// Approximate right-aligned x for Helvetica (0.55 × size per char)
+function xRight(text: string, size: number, rightEdge: number): number {
+  return rightEdge - text.length * size * 0.55;
+}
+
 type PdfOp =
   | { kind: "text"; x: number; y: number; size: number; text: string }
   | { kind: "rect"; x: number; y: number; w: number; h: number; fill: [number, number, number] }
@@ -192,7 +213,11 @@ async function buildOps(
     ops.push({ kind: "text", x: right - 200, y: dy, size: 11, text: dodavatel.nazov });
     dy -= 14;
   }
-  if (dodavatel.adresa) { ops.push({ kind: "text", x: right - 200, y: dy, size: 9, text: dodavatel.adresa }); dy -= 12; }
+  if (dodavatel.adresa) {
+    for (const ln of wrapText(dodavatel.adresa, 36)) {
+      ops.push({ kind: "text", x: right - 200, y: dy, size: 9, text: ln }); dy -= 12;
+    }
+  }
   if (dodavatel.ico)    { ops.push({ kind: "text", x: right - 200, y: dy, size: 9, text: `ICO: ${dodavatel.ico}` }); dy -= 12; }
   if (dodavatel.dic)    { ops.push({ kind: "text", x: right - 200, y: dy, size: 9, text: `DIC: ${dodavatel.dic}` }); dy -= 12; }
   if (dodavatel.ic_dph) { ops.push({ kind: "text", x: right - 200, y: dy, size: 9, text: `IC DPH: ${dodavatel.ic_dph}` }); dy -= 12; }
@@ -232,7 +257,7 @@ async function buildOps(
   ops.push({ kind: "text", x: colX.popis,    y: y - 12, size: 9, text: "POPIS" });
   ops.push({ kind: "text", x: colX.mnozstvo, y: y - 12, size: 9, text: "MNOZSTVO" });
   ops.push({ kind: "text", x: colX.cena,     y: y - 12, size: 9, text: "CENA/J" });
-  ops.push({ kind: "text", x: colX.spolu,    y: y - 12, size: 9, text: "SPOLU" });
+  ops.push({ kind: "text", x: xRight("SPOLU", 9, pageW - margin), y: y - 12, size: 9, text: "SPOLU" });
   y -= 28;
 
   for (const p of polozky.sort((a, b) => (a.poradie ?? 0) - (b.poradie ?? 0))) {
@@ -253,7 +278,7 @@ async function buildOps(
     ops.push({ kind: "text", x: colX.popis, y, size: 10, text: popisChunks[0] || "" });
     ops.push({ kind: "text", x: colX.mnozstvo, y, size: 10, text: `${Number(p.mnozstvo || 0)} ${p.jednotka || ""}` });
     ops.push({ kind: "text", x: colX.cena, y, size: 10, text: fmtMoney(p.cena_jednotka) });
-    ops.push({ kind: "text", x: colX.spolu, y, size: 10, text: fmtMoney(p.spolu) });
+    ops.push({ kind: "text", x: xRight(fmtMoney(p.spolu), 10, pageW - margin), y, size: 10, text: fmtMoney(p.spolu) });
     y -= 14;
     for (let i = 1; i < popisChunks.length; i++) {
       ops.push({ kind: "text", x: colX.popis, y, size: 10, text: popisChunks[i] });
@@ -267,7 +292,7 @@ async function buildOps(
   ops.push({ kind: "line", x1: margin, y1: y, x2: pageW - margin, y2: y, gray: 0.2 });
   y -= 16;
   ops.push({ kind: "text", x: margin, y, size: 12, text: "Celkom k uhrade" });
-  ops.push({ kind: "text", x: margin + 170, y, size: 14, text: fmtMoney(faktura.suma_celkom as number) });
+  ops.push({ kind: "text", x: xRight(fmtMoney(faktura.suma_celkom as number), 14, pageW - margin), y, size: 14, text: fmtMoney(faktura.suma_celkom as number) });
 
   if (faktura.poznamka) {
     y -= 20;
