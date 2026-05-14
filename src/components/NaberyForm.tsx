@@ -1953,6 +1953,20 @@ Odpovedaj stručne po slovensky.`;
           <input type="checkbox" checked={zmluva} onChange={e => setZmluva(e.target.checked)} style={{ width: "20px", height: "20px" }} />
           Klient má záujem o výhradnú zmluvu
         </label>
+        {zmluva && (
+          <div style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <div>
+                <label style={labelSt}>Platnosť od</label>
+                <input type="date" value={datumPodpisu} onChange={e => setDatumPodpisu(e.target.value)} style={inputSt} />
+              </div>
+              <div>
+                <label style={labelSt}>Platnosť do</label>
+                <input type="date" value={zmluvaDo} onChange={e => setZmluvaDo(e.target.value)} style={inputSt} />
+              </div>
+            </div>
+          </div>
+        )}
         <div style={{ marginTop: "16px" }}>
           <label style={labelSt}>Popis</label>
           <textarea value={popis} onChange={e => setPopis(e.target.value)} rows={3}

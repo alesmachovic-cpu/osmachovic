@@ -760,12 +760,21 @@ function NaberPageContent() {
         )}
 
         {savedNaberData?.zmluva && (
-          <div style={{
-            padding: "12px 16px", borderRadius: "12px", marginBottom: "16px",
-            background: "#f5f3ff", border: "1px solid #c4b5fd",
-            fontSize: "13px", color: "#5b21b6", fontWeight: 600,
-          }}>
-            ✅ Záujem o VZ zaznamenaný — výhradnú zmluvu podpíšte v karte klienta
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px" }}>
+            <div style={{
+              padding: "12px 16px", borderRadius: "12px",
+              background: "#f5f3ff", border: "1px solid #c4b5fd",
+              fontSize: "13px", color: "#5b21b6", fontWeight: 600,
+            }}>
+              ✅ Záujem o VZ zaznamenaný
+            </div>
+            <button onClick={() => setZvsOpen(true)} style={{
+              padding: "12px 18px", borderRadius: "12px", border: "none", cursor: "pointer",
+              background: "#7C3AED", color: "#fff", fontWeight: "600", fontSize: "14px",
+              display: "flex", alignItems: "center", gap: "8px",
+            }}>
+              📄 Vyplniť výhradnú zmluvu teraz
+            </button>
           </div>
         )}
         <VyhradnaZmluvaModal
