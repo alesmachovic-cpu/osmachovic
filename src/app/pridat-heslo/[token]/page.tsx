@@ -6,6 +6,15 @@ import PasswordInput from "@/components/PasswordInput";
 
 type TokenState = "loading" | "valid" | "invalid";
 
+function PasswordRule({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: ok ? "#059669" : "#6B7280" }}>
+      <span style={{ fontSize: 14 }}>{ok ? "✓" : "○"}</span>
+      {label}
+    </div>
+  );
+}
+
 export default function PridatHesloPage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
@@ -29,9 +38,19 @@ export default function PridatHesloPage() {
       .catch(() => setState("invalid"));
   }, [token]);
 
+  const rules = {
+    minLength:    password.length >= 8,
+    hasUppercase: /[A-Z]/.test(password),
+    hasLowercase: /[a-z]/.test(password),
+    hasNumber:    /[0-9]/.test(password),
+  };
+  const passwordOk = Object.values(rules).every(Boolean);
+  const confirmOk = confirm.length > 0 && password === confirm;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (!passwordOk) { setError("Heslo nespĺňa požiadavky"); return; }
     if (password !== confirm) { setError("Heslá sa nezhodujú"); return; }
     setSubmitting(true);
     try {
@@ -50,47 +69,93 @@ export default function PridatHesloPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-sm border border-[#E5E5EA] w-full max-w-sm p-8">
-        <div className="text-center mb-8">
-          <div className="text-3xl font-semibold text-[#1d1d1f] tracking-tight mb-1">VIANEMA</div>
-          <div className="text-sm text-[#6e6e73]">CRM systém</div>
+    <div style={{
+      minHeight: "100vh", background: "#F5F5F7",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif",
+    }}>
+      <div style={{
+        background: "#fff", borderRadius: 20, border: "1px solid #E5E5EA",
+        boxShadow: "0 4px 24px rgba(0,0,0,0.06)",
+        width: "100%", maxWidth: 380, padding: "36px 32px",
+      }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "#1d1d1f", letterSpacing: "-0.02em", marginBottom: 2 }}>VIANEMA</div>
+          <div style={{ fontSize: 13, color: "#6e6e73" }}>CRM systém</div>
         </div>
 
         {state === "loading" && (
-          <p className="text-center text-[#6e6e73] text-sm">Overujem odkaz…</p>
+          <p style={{ textAlign: "center", color: "#6e6e73", fontSize: 13 }}>Overujem odkaz…</p>
         )}
 
         {state === "invalid" && (
-          <div className="text-center">
-            <div className="text-4xl mb-4">🔒</div>
-            <p className="font-medium text-[#1d1d1f] mb-2">Odkaz nie je platný</p>
-            <p className="text-sm text-[#6e6e73]">Odkaz expiroval alebo bol už použitý. Požiadaj administrátora o novú pozvánku.</p>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
+            <div style={{ fontWeight: 600, color: "#1d1d1f", marginBottom: 8, fontSize: 15 }}>Odkaz nie je platný</div>
+            <div style={{ fontSize: 13, color: "#6e6e73" }}>Odkaz expiroval alebo bol už použitý. Požiadaj administrátora o novú pozvánku.</div>
           </div>
         )}
 
         {state === "valid" && !done && (
           <>
-            <h1 className="text-xl font-semibold text-[#1d1d1f] mb-1">
-              {userName ? `Ahoj, ${userName}` : "Nastav si heslo"}
-            </h1>
-            <p className="text-sm text-[#6e6e73] mb-6">Vytvor si heslo pre prihlásenie do CRM.</p>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 18, fontWeight: 600, color: "#1d1d1f", marginBottom: 4 }}>
+                {userName ? `Ahoj, ${userName} 👋` : "Nastav si heslo"}
+              </div>
+              <div style={{ fontSize: 13, color: "#6e6e73" }}>Vytvor si heslo pre prihlásenie do CRM.</div>
+            </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div>
-                <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Nové heslo</label>
-                <PasswordInput value={password} onChange={e => setPassword(e.target.value)} placeholder="Minimálne 10 znakov" />
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#1d1d1f", marginBottom: 6 }}>Heslo</label>
+                <PasswordInput
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Minimálne 8 znakov"
+                  autoComplete="new-password"
+                />
+                {password.length > 0 && (
+                  <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4, padding: "10px 12px", background: "#F9FAFB", borderRadius: 10, border: "1px solid #E5E7EB" }}>
+                    <PasswordRule ok={rules.minLength}    label="Aspoň 8 znakov" />
+                    <PasswordRule ok={rules.hasUppercase} label="Veľké písmeno (A–Z)" />
+                    <PasswordRule ok={rules.hasLowercase} label="Malé písmeno (a–z)" />
+                    <PasswordRule ok={rules.hasNumber}    label="Číslica (0–9)" />
+                  </div>
+                )}
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-[#1d1d1f] mb-1">Potvrdiť heslo</label>
-                <PasswordInput value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Zopakuj heslo" />
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#1d1d1f", marginBottom: 6 }}>Potvrdiť heslo</label>
+                <PasswordInput
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  placeholder="Zopakuj heslo"
+                  autoComplete="new-password"
+                />
+                {confirm.length > 0 && (
+                  <div style={{ marginTop: 6, fontSize: 12, color: confirmOk ? "#059669" : "#DC2626" }}>
+                    {confirmOk ? "✓ Heslá sa zhodujú" : "Heslá sa nezhodujú"}
+                  </div>
+                )}
               </div>
-              {error && <p className="text-red-500 text-sm">{error}</p>}
+
+              {error && (
+                <div style={{ padding: "10px 12px", borderRadius: 10, background: "#FEF2F2", border: "1px solid #FECACA", color: "#DC2626", fontSize: 12 }}>
+                  {error}
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={submitting || !password || !confirm}
-                className="w-full bg-[#0071e3] hover:bg-[#0077ed] disabled:opacity-40 text-white font-medium py-2.5 rounded-xl transition-colors"
-              >
+                disabled={submitting || !passwordOk || !confirmOk}
+                style={{
+                  width: "100%", padding: "13px 16px", borderRadius: 12,
+                  background: "#0071e3", color: "#fff", border: "none",
+                  fontSize: 14, fontWeight: 600,
+                  cursor: (submitting || !passwordOk || !confirmOk) ? "default" : "pointer",
+                  opacity: (submitting || !passwordOk || !confirmOk) ? 0.45 : 1,
+                  transition: "opacity 0.15s",
+                }}>
                 {submitting ? "Ukladám…" : "Nastaviť heslo"}
               </button>
             </form>
@@ -98,10 +163,10 @@ export default function PridatHesloPage() {
         )}
 
         {done && (
-          <div className="text-center">
-            <div className="text-4xl mb-4">✅</div>
-            <p className="font-medium text-[#1d1d1f] mb-1">Heslo nastavené</p>
-            <p className="text-sm text-[#6e6e73]">Presmerúvam ťa na CRM…</p>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
+            <div style={{ fontWeight: 600, color: "#1d1d1f", marginBottom: 6, fontSize: 15 }}>Heslo nastavené</div>
+            <div style={{ fontSize: 13, color: "#6e6e73" }}>Presmerúvam ťa na CRM…</div>
           </div>
         )}
       </div>

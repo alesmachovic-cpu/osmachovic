@@ -653,7 +653,6 @@ function TabTim() {
   const [newUserEmail, setNewUserEmail]       = useState("");
   const [newUserLoginEmail, setNewUserLoginEmail] = useState("");
   const [newUserRole, setNewUserRole]         = useState("Maklér · Vianema");
-  const [newUserPw, setNewUserPw]             = useState("");
   const [newUserPct, setNewUserPct]           = useState("");
 
   // Editácia účtu
@@ -769,15 +768,6 @@ function TabTim() {
               </select>
             </div>
             <div>
-              <div style={labelSt}>Heslo (voliteľné)</div>
-              <PasswordInput
-                autoComplete="new-password"
-                value={newUserPw} onChange={e => setNewUserPw(e.target.value)}
-                placeholder="Bez hesla = priamy prístup"
-                style={inputSt as React.CSSProperties}
-              />
-            </div>
-            <div>
               <div style={labelSt}>Provízne % (voliteľné)</div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <input
@@ -796,12 +786,12 @@ function TabTim() {
               const id = newUserName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
               const parts = newUserName.trim().split(" ");
               const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
-              await addAccount({ id, name: newUserName.trim(), initials, role: newUserRole, email: newUserEmail, login_email: newUserLoginEmail || undefined, password: newUserPw || undefined });
+              await addAccount({ id, name: newUserName.trim(), initials, role: newUserRole, email: newUserEmail, login_email: newUserLoginEmail || undefined });
               if (newUserPct.trim()) {
                 await fetch("/api/maklerske-provizie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meno: newUserName.trim(), percento: parseFloat(newUserPct.replace(",", ".")) || 0, makler_id: id }) });
                 loadProvizie();
               }
-              setNewUserName(""); setNewUserEmail(""); setNewUserLoginEmail(""); setNewUserPw(""); setNewUserPct("");
+              setNewUserName(""); setNewUserEmail(""); setNewUserLoginEmail(""); setNewUserPct("");
               setShowForm(false);
             }} style={{
               padding: "8px 18px", background: "#374151", color: "#fff", border: "none",
