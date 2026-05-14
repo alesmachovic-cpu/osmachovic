@@ -7,7 +7,7 @@ export const mainNavBase: NavItem[] = [
   { label: "Náberový list",     href: "/naber",                    icon: "📝" },
   { label: "Monitor & Analýza", href: "/monitor?tab=scraping",     icon: "📡", matchPrefix: "/monitor" },
   { label: "Štatistiky",        href: "/statistiky",               icon: "📉" },
-  { label: "Operatíva",         href: "/operativa?tab=obhliadky",  icon: "📋", matchPrefix: "/operativa" },
+  { label: "Náklady",           href: "/operativa?tab=naklady",    icon: "💰", matchPrefix: "/operativa" },
 ];
 
 export const operativaNav: NavItem[] = [
