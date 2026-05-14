@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
       token,
       created_by: auth.user.id,
       expires_at: expiresAt,
+      company_id: auth.user.company_id,
     });
     if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
 
