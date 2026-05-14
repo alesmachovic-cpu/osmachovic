@@ -205,7 +205,7 @@ async function buildOps(
 
   ops.push({ kind: "text", x: margin, y: y - 4, size: 10, text: "FAKTURA" });
   ops.push({ kind: "text", x: margin, y: y - 24, size: 22, text: String(faktura.cislo_faktury || "") });
-  ops.push({ kind: "text", x: margin, y: y - 40, size: 9, text: `VS: ${String(faktura.variabilny_symbol || "")}` });
+  ops.push({ kind: "text", x: margin, y: y - 40, size: 9, text: String(faktura.variabilny_symbol || "") });
 
   let dy = y - 4;
   const right = pageW - margin;
