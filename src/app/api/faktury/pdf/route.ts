@@ -236,7 +236,7 @@ async function buildOps(
   y -= 28;
 
   for (const p of polozky.sort((a, b) => (a.poradie ?? 0) - (b.poradie ?? 0))) {
-    if (y < margin + 80) break;
+    if (y < 240) break;
     const popis = String(p.popis || "");
     const popisChunks: string[] = [];
     let rest = popis;
@@ -268,11 +268,26 @@ async function buildOps(
   y -= 16;
   ops.push({ kind: "text", x: margin, y, size: 12, text: "Celkom k uhrade" });
   ops.push({ kind: "text", x: margin + 170, y, size: 14, text: fmtMoney(faktura.suma_celkom as number) });
-  y -= 90;
 
-  // Podpis vľavo + QR kód vpravo
+  if (faktura.poznamka) {
+    y -= 20;
+    ops.push({ kind: "text", x: margin, y, size: 9, text: "Poznamka:" }); y -= 12;
+    let restPoz = String(faktura.poznamka);
+    while (restPoz.length > 0 && y > 200) {
+      let chunk = restPoz.slice(0, 90);
+      if (restPoz.length > 90) {
+        const sp = chunk.lastIndexOf(" ");
+        if (sp > 40) chunk = chunk.slice(0, sp);
+      }
+      ops.push({ kind: "text", x: margin, y, size: 9, text: chunk });
+      y -= 12;
+      restPoz = restPoz.slice(chunk.length).trimStart();
+    }
+  }
+
+  // Podpis vľavo + QR kód vpravo — FIXED position ~4cm from bottom
   const signatureX = margin;
-  const signatureY = y;
+  const signatureY = 120;
   const signatureW = 160;
   const signatureH = 60;
   const qrSize = signatureH; // 60px — rovnaká výška ako signature box
@@ -311,23 +326,7 @@ async function buildOps(
     if (dodavatel.telefon) { ops.push({ kind: "text", x: signatureX, y: vy, size: 9, text: `Mobil: ${dodavatel.telefon}` }); vy -= 12; }
   }
 
-  if (faktura.poznamka) {
-    let pnY = vystavilY - 50;
-    ops.push({ kind: "text", x: margin, y: pnY, size: 9, text: "Poznamka:" }); pnY -= 12;
-    let restPoz = String(faktura.poznamka);
-    while (restPoz.length > 0 && pnY > margin + 20) {
-      let chunk = restPoz.slice(0, 90);
-      if (restPoz.length > 90) {
-        const sp = chunk.lastIndexOf(" ");
-        if (sp > 40) chunk = chunk.slice(0, sp);
-      }
-      ops.push({ kind: "text", x: margin, y: pnY, size: 9, text: chunk });
-      pnY -= 12;
-      restPoz = restPoz.slice(chunk.length).trimStart();
-    }
-  }
-
-  ops.push({ kind: "text", x: margin, y: margin - 12, size: 8, text: "Powered by AMGD" });
+  ops.push({ kind: "text", x: margin, y: 20, size: 8, text: "Powered by AMGD" });
 
   return ops;
 }
