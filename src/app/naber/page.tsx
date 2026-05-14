@@ -309,9 +309,14 @@ function NaberPageContent() {
   const filtered = klienti.filter(k => {
     // Len predávajúci alebo oboje — kupujúci nepatria do náberu
     if (k.typ === "kupujuci") return false;
-    // Makler filter
-    if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
-    if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
+    // Makler filter — non-admin je vždy "mine", uuid null = čakaj (ukaž prázdno)
+    const effectiveFilter = isAdmin ? filterMakler : "mine";
+    if (effectiveFilter === "mine") {
+      if (!myMaklerUuid) return false; // UUID sa ešte načítava — nezobrazuj nič
+      if (k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
+    } else if (effectiveFilter !== "all") {
+      if (k.makler_id !== effectiveFilter) return false;
+    }
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -429,8 +434,8 @@ function NaberPageContent() {
           </p>
         </div>
 
-        {/* Makler filter */}
-        {makleri.length > 0 && (
+        {/* Makler filter — len admin */}
+        {isAdmin && makleri.length > 0 && (
           <div style={{ marginBottom: "12px" }}>
             <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={{
               padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)",
