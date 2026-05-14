@@ -39,9 +39,10 @@ export async function POST(request: Request) {
       name: body.name,
       initials: body.initials,
       role: body.role,
-      email: body.email,
+      ...(body.email ? { email: body.email } : {}),
       login_email: body.login_email || null,
       password: body.password || "",
+      company_id: auth.user.company_id,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     await logAudit({ action: "user.create", actor_id: auth.user.id, actor_name: auth.user.name, target_id: body.id, target_type: "user", target_name: body.name, ip_address: (request as NextRequest).headers.get("x-forwarded-for") || undefined });
