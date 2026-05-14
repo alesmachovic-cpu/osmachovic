@@ -1,15 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
+import { requireUser, isSuperAdmin, isManagerOrAbove } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+  if (!isManagerOrAbove(auth.user.role)) {
+    return NextResponse.json({ error: "Len manažér, majiteľ alebo admin má prístup k províziam" }, { status: 403 });
+  }
+
   const sb = getSupabaseAdmin();
-  const { data, error } = await sb
-    .from("makler_provizie_pct")
-    .select("*")
-    .order("meno", { ascending: true });
+  let query = sb.from("makler_provizie_pct").select("*").order("meno", { ascending: true });
+
+  // Manažér vidí len maklérov svojej pobočky
+  if (auth.user.role === "manazer" && auth.user.pobocka_id) {
+    const { data: branchUsers } = await sb
+      .from("users")
+      .select("id")
+      .eq("pobocka_id", auth.user.pobocka_id);
+    const ids = (branchUsers ?? []).map((u: { id: string }) => u.id);
+    if (ids.length > 0) {
+      query = query.in("makler_id", ids);
+    } else {
+      return NextResponse.json([]);
+    }
+  }
+
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 }

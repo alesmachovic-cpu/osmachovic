@@ -99,8 +99,17 @@ export default function Sidebar() {
     return it;
   });
 
+  const canSeeMinRole = (minRole: NavItem["minRole"]) => {
+    if (!minRole) return true;
+    const role = (user as { role?: string } | null)?.role ?? "";
+    if (role === "super_admin" || role === "majitel") return true;
+    if (minRole === "manazer" && role === "manazer") return true;
+    return false;
+  };
+
   const filterNav = (items: NavItem[]) =>
     user ? items.filter(item => {
+      if (!canSeeMinRole(item.minRole)) return false;
       if (item.href === "/inzerat" && user.id !== "ales") return false;
       if (user.id !== "ales") {
         const hidden = user.nav_prefs ?? [];

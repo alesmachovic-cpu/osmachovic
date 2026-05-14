@@ -1,4 +1,4 @@
-export type NavItem = { label: string; href: string; icon: string; badge?: number; matchPrefix?: string };
+export type NavItem = { label: string; href: string; icon: string; badge?: number; matchPrefix?: string; minRole?: "manazer" | "majitel" | "super_admin" };
 
 export const mainNavBase: NavItem[] = [
   { label: "Prehľad",           href: "/",                         icon: "📊" },
@@ -16,7 +16,7 @@ export const operativaNav: NavItem[] = [
   { label: "Odberatelia",        href: "/odberatelia",         icon: "🏷️" },
   { label: "Faktúry",            href: "/faktury",             icon: "🧾" },
   { label: "Prehľad financií",  href: "/prehlad-financii",    icon: "💶" },
-  { label: "Provízie maklérov", href: "/provizie-maklerov",   icon: "💼" },
+  { label: "Provízie maklérov", href: "/provizie-maklerov",   icon: "💼", minRole: "manazer" },
   { label: "Účtovný prehľad",   href: "/uctovny-prehlad",     icon: "📊" },
   { label: "Pravidelné náklady", href: "/pravidelne-naklady",  icon: "🔁" },
 ];

@@ -20,7 +20,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export interface AuthOk {
   error: null;
-  user: { id: string; role: string; name: string; email: string; company_id: string };
+  user: { id: string; role: string; name: string; email: string; company_id: string; pobocka_id: string | null };
   source: "session" | "header_legacy";
 }
 export interface AuthFail {
@@ -87,7 +87,7 @@ export async function requireUser(req: NextRequest, opts: RequireOpts = {}): Pro
   const sb = getSupabaseAdmin();
   const { data: user } = await sb
     .from("users")
-    .select("id, name, role, email, company_id")
+    .select("id, name, role, email, company_id, pobocka_id")
     .eq("id", userId)
     .maybeSingle();
   if (!user) {
@@ -109,6 +109,7 @@ export async function requireUser(req: NextRequest, opts: RequireOpts = {}): Pro
       name: user.name as string,
       email: user.email as string,
       company_id: (user.company_id ?? "a0000000-0000-0000-0000-000000000001") as string,
+      pobocka_id: (user.pobocka_id as string | null) ?? null,
     },
     source,
   };
@@ -124,3 +125,11 @@ export function readSessionUserId(req: NextRequest): string | null {
 
 export const isSuperAdmin = (role: string | null | undefined): boolean =>
   role === "super_admin" || role === "majitel";
+
+/** manazer + všetko nad tým */
+export const isManagerOrAbove = (role: string | null | undefined): boolean =>
+  isSuperAdmin(role) || role === "manazer";
+
+/** Čistý makler (bez manažérskych práv) */
+export const isMakler = (role: string | null | undefined): boolean =>
+  !isManagerOrAbove(role);
