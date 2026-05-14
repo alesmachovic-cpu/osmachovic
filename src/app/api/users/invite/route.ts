@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true, email: recipientEmail });
+    return NextResponse.json({ success: true, email: recipientEmail, invite_url: inviteUrl });
   } catch (e) {
     console.error("[invite] error:", e);
     return NextResponse.json({ error: String(e) }, { status: 500 });

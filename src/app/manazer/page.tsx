@@ -670,6 +670,7 @@ function TabTim() {
   // Pozvánky
   const [inviteSending, setInviteSending]   = useState<string | null>(null);
   const [inviteSentFor, setInviteSentFor]   = useState<string | null>(null);
+  const [inviteLink, setInviteLink]         = useState<{ userId: string; url: string } | null>(null);
   const [selectedInvites, setSelectedInvites] = useState<Set<string>>(new Set());
   const [bulkSending, setBulkSending]       = useState(false);
   const [bulkDone, setBulkDone]             = useState<string[]>([]);
@@ -957,24 +958,23 @@ function TabTim() {
                   {isAdmin && acc.id !== "ales" && (
                     <button onClick={async () => {
                       if (inviteSending) return;
-                      setInviteSending(acc.id); setInviteSentFor(null);
+                      setInviteSending(acc.id); setInviteLink(null);
                       try {
                         const res = await fetch("/api/users/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: acc.id }) });
                         const body = await res.json();
                         if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
-                        setInviteSentFor(acc.id);
-                        setTimeout(() => setInviteSentFor(null), 4000);
+                        setInviteLink({ userId: acc.id, url: body.invite_url });
                       } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
                       finally { setInviteSending(null); }
                     }} style={{
                       padding: "5px 10px",
-                      background: inviteSentFor === acc.id ? "#D1FAE5" : "var(--bg-surface)",
-                      border: `1px solid ${inviteSentFor === acc.id ? "#6EE7B7" : "var(--border)"}`,
+                      background: inviteLink?.userId === acc.id ? "#D1FAE5" : "var(--bg-surface)",
+                      border: `1px solid ${inviteLink?.userId === acc.id ? "#6EE7B7" : "var(--border)"}`,
                       borderRadius: "6px", fontSize: "11px", cursor: "pointer",
-                      color: inviteSentFor === acc.id ? "#065F46" : "var(--text-secondary)",
+                      color: inviteLink?.userId === acc.id ? "#065F46" : "var(--text-secondary)",
                       opacity: inviteSending === acc.id ? 0.6 : 1,
                     }}>
-                      {inviteSending === acc.id ? "…" : inviteSentFor === acc.id ? "✓ Odoslané" : "✉ Pozvánka"}
+                      {inviteSending === acc.id ? "…" : "✉ Pozvánka"}
                     </button>
                   )}
                   {isAdmin && acc.id !== "ales" && (
@@ -998,6 +998,28 @@ function TabTim() {
                   )}
                 </div>
               </div>
+
+              {/* Pozvánkový odkaz */}
+              {inviteLink?.userId === acc.id && (
+                <div style={{ padding: "12px 14px", borderTop: "1px solid #BBF7D0", background: "#F0FDF4" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#065F46", marginBottom: "6px" }}>
+                    Odkaz na nastavenie hesla — skopíruj a pošli maklerovi (WhatsApp / SMS)
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <input readOnly value={inviteLink.url} style={{ flex: 1, fontSize: "11px", padding: "6px 8px", borderRadius: "6px", border: "1px solid #86EFAC", background: "#fff", color: "#374151", minWidth: 0 }} onClick={e => (e.target as HTMLInputElement).select()} />
+                    <button onClick={async () => {
+                      await navigator.clipboard.writeText(inviteLink.url);
+                      setInviteLink(null);
+                    }} style={{ padding: "6px 12px", background: "#16A34A", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      Kopírovať
+                    </button>
+                    <button onClick={() => setInviteLink(null)} style={{ padding: "6px 8px", background: "transparent", border: "1px solid #86EFAC", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#065F46" }}>
+                      ✕
+                    </button>
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#16A34A", marginTop: "4px" }}>Platí 7 dní.</div>
+                </div>
+              )}
 
               {/* Editačný panel */}
               {isAdmin && editingId === acc.id && (
