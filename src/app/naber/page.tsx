@@ -240,7 +240,7 @@ function NaberPageContent() {
   }
 
   // Po uložení náberu → sync do kalendára
-  async function handleNaberSubmit(data: { id: string; openVZ?: boolean }) {
+  async function handleNaberSubmit(data: { id: string }) {
     setSavedNaberId(data.id);
     setSubmittedAt(new Date().toLocaleString("sk", {
       day: "numeric", month: "long", year: "numeric",
@@ -298,7 +298,6 @@ function NaberPageContent() {
     }
 
     setStep("hotovo");
-    if (data.openVZ) setZvsOpen(true);
   }
 
   // Filtrovanie — len predávajúci a oboje, dohodnutý náber navrchu
