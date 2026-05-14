@@ -644,6 +644,7 @@ function TabTim() {
 
   const [klienti, setKlienti] = useState<Array<{ makler_id: string }>>([]);
   const [nabery,  setNabery]  = useState<Array<{ makler_id: string }>>([]);
+  const [provizie, setProvizie] = useState<Array<{ id: string; makler_id: string | null; meno: string; percento: number }>>([]);
   const [loading, setLoading] = useState(true);
 
   // Nový účet
@@ -669,6 +670,22 @@ function TabTim() {
   const [bulkSending, setBulkSending]       = useState(false);
   const [bulkDone, setBulkDone]             = useState<string[]>([]);
 
+  async function loadProvizie() {
+    const d = await fetch("/api/maklerske-provizie").then(r => r.json());
+    setProvizie(Array.isArray(d) ? d : []);
+  }
+
+  async function savePct(acc: User, value: string) {
+    const percento = parseFloat(value.replace(",", ".")) || 0;
+    const existing = provizie.find(p => p.makler_id === acc.id);
+    if (existing) {
+      await fetch("/api/maklerske-provizie", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: existing.id, percento }) });
+    } else {
+      await fetch("/api/maklerske-provizie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meno: acc.name, percento, makler_id: acc.id }) });
+    }
+    loadProvizie();
+  }
+
   useEffect(() => {
     setFeatureToggles(loadFeatureToggles());
     (async () => {
@@ -681,6 +698,7 @@ function TabTim() {
       setNabery(nb ?? []);
       setLoading(false);
     })();
+    loadProvizie();
   }, []);
 
   const getKlientCount = (id: string) => klienti.filter(k => k.makler_id === id).length;
@@ -841,6 +859,23 @@ function TabTim() {
                     <div style={{ fontSize: "11px", color: "#3B82F6", marginTop: "2px" }}>G {acc.login_email}</div>
                   )}
                 </div>
+
+                {/* Provízne % — viditeľné a editovateľné pre admina */}
+                {isAdmin && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                    <input
+                      key={acc.id + "-pct-" + (provizie.find(p => p.makler_id === acc.id)?.percento ?? "")}
+                      type="number"
+                      min="0" max="100" step="0.5"
+                      defaultValue={provizie.find(p => p.makler_id === acc.id)?.percento ?? ""}
+                      onBlur={e => { if (e.target.value !== "") savePct(acc, e.target.value); }}
+                      onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                      placeholder="—"
+                      style={{ ...inputSt, width: 54, padding: "4px 6px", fontSize: 12, textAlign: "right" } as React.CSSProperties}
+                    />
+                    <span style={{ fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>%</span>
+                  </div>
+                )}
 
                 {isAdmin && editingUser?.id === acc.id ? (
                   <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
