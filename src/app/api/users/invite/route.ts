@@ -26,8 +26,6 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (!user) return NextResponse.json({ error: "Používateľ neexistuje" }, { status: 404 });
-    const recipientEmail = (user.login_email || user.email) as string | null;
-    if (!recipientEmail) return NextResponse.json({ error: "Používateľ nemá nastavený email ani Gmail" }, { status: 400 });
 
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
@@ -48,8 +46,10 @@ export async function POST(request: NextRequest) {
       : "http://localhost:3000";
     const inviteUrl = `${baseUrl}/pridat-heslo/${token}`;
 
+    // Email je len bonus — link funguje vždy
+    const recipientEmail = (user.login_email || user.email) as string | null;
     const RESEND = process.env.RESEND_API_KEY;
-    if (RESEND) {
+    if (RESEND && recipientEmail) {
       const html = `
         <div style="font-family:sans-serif;max-width:500px;margin:0 auto">
           <h2 style="color:#1d1d1f">Vitaj v VIANEMA CRM</h2>

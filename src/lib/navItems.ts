@@ -24,11 +24,10 @@ export const systemNav: NavItem[] = [
   { label: "Kalendár",      href: "/kalendar",      icon: "📅" },
   { label: "Google Disk",   href: "/disk",          icon: "💾" },
   { label: "Upozornenia",   href: "/upozornenia",   icon: "🔔" },
-  { label: "Klientská zóna", href: "/klientska-zona", icon: "🌐" },
-  { label: "Plán systému",  href: "/plan",          icon: "🗺️" },
+  { label: "Klientská zóna", href: "/klientska-zona", icon: "🌐", minRole: "majitel" },
   { label: "Nastavenia",    href: "/nastavenia",    icon: "⚙️" },
   { label: "Notifikácie",   href: "/notifikacie",   icon: "🔕", badge: 2 },
-  { label: "System Log",    href: "/log",           icon: "📋" },
+  { label: "System Log",    href: "/log",           icon: "📋", minRole: "majitel" },
 ];
 
 export const devNav: NavItem[] = [
