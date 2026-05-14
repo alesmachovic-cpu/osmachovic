@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           from: process.env.RESEND_FROM || "VIANEMA CRM <onboarding@resend.dev>",
           to: recipientEmail,
+          reply_to: process.env.MANAGER_EMAIL || "ales.machovic@gmail.com",
           subject: "Pozvánka do VIANEMA CRM",
           html,
         }),
