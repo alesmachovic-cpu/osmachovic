@@ -285,7 +285,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         role: account.role,
         email: account.email,
         login_email: account.login_email || null,
-        password: account.password || "",
+        ...(account.password ? { password: account.password } : {}),
       }),
     });
     await refreshAccounts();

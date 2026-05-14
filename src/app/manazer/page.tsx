@@ -796,7 +796,7 @@ function TabTim() {
               const id = newUserName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
               const parts = newUserName.trim().split(" ");
               const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
-              addAccount({ id, name: newUserName.trim(), initials, role: newUserRole, email: newUserEmail, login_email: newUserLoginEmail || undefined, password: newUserPw || "" });
+              await addAccount({ id, name: newUserName.trim(), initials, role: newUserRole, email: newUserEmail, login_email: newUserLoginEmail || undefined, password: newUserPw || undefined });
               if (newUserPct.trim()) {
                 await fetch("/api/maklerske-provizie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meno: newUserName.trim(), percento: parseFloat(newUserPct.replace(",", ".")) || 0, makler_id: id }) });
                 loadProvizie();
