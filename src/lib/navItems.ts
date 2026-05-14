@@ -11,7 +11,7 @@ export const mainNavBase: NavItem[] = [
 ];
 
 export const operativaNav: NavItem[] = [
-  { label: "Vyťaženosť tímu",   href: "/vytazenost",          icon: "👷" },
+  { label: "Vyťaženosť tímu",   href: "/vytazenost",          icon: "👷", minRole: "manazer" },
   { label: "Provízie",           href: "/potvrdenie-provizii", icon: "✅" },
   { label: "Odberatelia",        href: "/odberatelia",         icon: "🏷️" },
   { label: "Faktúry",            href: "/faktury",             icon: "🧾" },

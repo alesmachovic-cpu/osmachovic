@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 interface ClenTimu {
   id: string;
@@ -35,6 +36,22 @@ const LS_KEY = "os_machovic_vytazenost";
 const DNI = ["Po", "Ut", "St", "Št", "Pi"];
 
 export default function VytazenostPage() {
+  const { user } = useAuth();
+  const role = user?.role ?? "";
+  const canAccess = role === "super_admin" || role === "majitel" || role === "manazer";
+  if (user && !canAccess) {
+    return (
+      <div style={{ maxWidth: "480px", margin: "80px auto", textAlign: "center", padding: "0 24px" }}>
+        <div style={{ fontSize: "40px", marginBottom: "16px" }}>🔒</div>
+        <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "8px" }}>Nemáš prístup</div>
+        <div style={{ fontSize: "14px", color: "var(--text-muted)" }}>Táto sekcia je dostupná len pre manažérov a vedenie.</div>
+      </div>
+    );
+  }
+  return <VytazenostContent />;
+}
+
+function VytazenostContent() {
   const [tim, setTim] = useState<ClenTimu[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ stav: "" as ClenTimu["stav"], aktualnaZakazka: "", obsadene: 0 });
