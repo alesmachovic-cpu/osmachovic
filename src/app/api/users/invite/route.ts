@@ -21,12 +21,13 @@ export async function POST(request: NextRequest) {
 
     const { data: user } = await sb
       .from("users")
-      .select("id, name, email")
+      .select("id, name, email, login_email")
       .eq("id", userId)
       .maybeSingle();
 
     if (!user) return NextResponse.json({ error: "Používateľ neexistuje" }, { status: 404 });
-    if (!user.email) return NextResponse.json({ error: "Používateľ nemá nastavený email" }, { status: 400 });
+    const recipientEmail = (user.login_email || user.email) as string | null;
+    if (!recipientEmail) return NextResponse.json({ error: "Používateľ nemá nastavený email ani Gmail" }, { status: 400 });
 
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
@@ -40,9 +41,11 @@ export async function POST(request: NextRequest) {
     });
     if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
 
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "https://vianema.amgd.sk";
+    const baseUrl = process.env.VERCEL_ENV === "production"
+      ? "https://vianema.amgd.sk"
+      : process.env.VERCEL_ENV === "preview"
+      ? "https://test.amgd.sk"
+      : "http://localhost:3000";
     const inviteUrl = `${baseUrl}/pridat-heslo/${token}`;
 
     const RESEND = process.env.RESEND_API_KEY;
@@ -65,15 +68,15 @@ export async function POST(request: NextRequest) {
         method: "POST",
         headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: "VIANEMA CRM <onboarding@resend.dev>",
-          to: user.email,
+          from: "VIANEMA CRM <noreply@vianema.sk>",
+          to: recipientEmail,
           subject: "Pozvánka do VIANEMA CRM",
           html,
         }),
       });
     }
 
-    return NextResponse.json({ success: true, email: user.email });
+    return NextResponse.json({ success: true, email: recipientEmail });
   } catch (e) {
     console.error("[invite] error:", e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
