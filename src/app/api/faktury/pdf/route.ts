@@ -54,6 +54,10 @@ function fmtMoney(n: number | null | undefined): string {
   return `${Number(n || 0).toFixed(2)} EUR`;
 }
 
+function fmtNum(n: number | null | undefined): string {
+  return Number(n || 0).toFixed(2);
+}
+
 function wrapText(text: string, maxChars: number): string[] {
   const words = text.split(" ");
   const lines: string[] = [];
@@ -73,6 +77,10 @@ function wrapText(text: string, maxChars: number): string[] {
 // Approximate right-aligned x for Helvetica (0.55 × size per char)
 function xRight(text: string, size: number, rightEdge: number): number {
   return rightEdge - text.length * size * 0.55;
+}
+
+function stripVs(vs: string): string {
+  return vs.startsWith("VS") ? vs.slice(2) : vs;
 }
 
 type PdfOp =
@@ -205,7 +213,7 @@ async function buildOps(
 
   ops.push({ kind: "text", x: margin, y: y - 4, size: 10, text: "FAKTURA" });
   ops.push({ kind: "text", x: margin, y: y - 24, size: 22, text: String(faktura.cislo_faktury || "") });
-  ops.push({ kind: "text", x: margin, y: y - 40, size: 9, text: String(faktura.variabilny_symbol || "") });
+  ops.push({ kind: "text", x: margin, y: y - 40, size: 9, text: stripVs(String(faktura.variabilny_symbol || "")) });
 
   let dy = y - 4;
   const right = pageW - margin;
@@ -243,7 +251,7 @@ async function buildOps(
   rowL("Datum dodania:", fmtDate(faktura.datum_dodania as string));
   rowL("Datum splatnosti:", fmtDate(faktura.datum_splatnosti as string));
   rowL("Forma uhrady:", String(faktura.forma_uhrady || "Prevodom"));
-  rowL("Variabilny symbol:", String(faktura.variabilny_symbol || ""));
+  rowL("Variabilny symbol:", stripVs(String(faktura.variabilny_symbol || "")));
   if (dodavatel.konst_symbol) rowL("Konst. symbol:", dodavatel.konst_symbol);
   if (dodavatel.iban)         rowL("IBAN:", dodavatel.iban);
   if (dodavatel.banka)        rowL("Banka:", dodavatel.banka);
@@ -252,12 +260,15 @@ async function buildOps(
   y = Math.min(oy, ry) - 16;
 
   // Položky — header
-  const colX = { popis: margin, mnozstvo: margin + 280, cena: margin + 360, spolu: margin + 440 };
+  // Pravé hrany stĺpcov: MNOZSTVO→390, CENA/J→470, SPOLU→539
+  const rMnozstvo = margin + 334;
+  const rCena = margin + 414;
+  const rSpolu = pageW - margin;
   ops.push({ kind: "rect", x: margin - 4, y: y - 18, w: pageW - 2 * margin + 8, h: 20, fill: [0.96, 0.96, 0.97] });
-  ops.push({ kind: "text", x: colX.popis,    y: y - 12, size: 9, text: "POPIS" });
-  ops.push({ kind: "text", x: colX.mnozstvo, y: y - 12, size: 9, text: "MNOZSTVO" });
-  ops.push({ kind: "text", x: colX.cena,     y: y - 12, size: 9, text: "CENA/J" });
-  ops.push({ kind: "text", x: xRight("SPOLU", 9, pageW - margin), y: y - 12, size: 9, text: "SPOLU" });
+  ops.push({ kind: "text", x: margin,                          y: y - 12, size: 9, text: "POPIS" });
+  ops.push({ kind: "text", x: xRight("MNOZSTVO", 9, rMnozstvo), y: y - 12, size: 9, text: "MNOZSTVO" });
+  ops.push({ kind: "text", x: xRight("CENA/J",   9, rCena),    y: y - 12, size: 9, text: "CENA/J" });
+  ops.push({ kind: "text", x: xRight("SPOLU",    9, rSpolu),   y: y - 12, size: 9, text: "SPOLU" });
   y -= 28;
 
   for (const p of polozky.sort((a, b) => (a.poradie ?? 0) - (b.poradie ?? 0))) {
@@ -265,7 +276,7 @@ async function buildOps(
     const popis = String(p.popis || "");
     const popisChunks: string[] = [];
     let rest = popis;
-    const maxChars = 48;
+    const maxChars = 44;
     while (rest.length > 0) {
       let chunk = rest.slice(0, maxChars);
       if (rest.length > maxChars) {
@@ -275,13 +286,14 @@ async function buildOps(
       popisChunks.push(chunk);
       rest = rest.slice(chunk.length).trimStart();
     }
-    ops.push({ kind: "text", x: colX.popis, y, size: 10, text: popisChunks[0] || "" });
-    ops.push({ kind: "text", x: colX.mnozstvo, y, size: 10, text: `${Number(p.mnozstvo || 0)} ${p.jednotka || ""}` });
-    ops.push({ kind: "text", x: colX.cena, y, size: 10, text: fmtMoney(p.cena_jednotka) });
-    ops.push({ kind: "text", x: xRight(fmtMoney(p.spolu), 10, pageW - margin), y, size: 10, text: fmtMoney(p.spolu) });
+    const mnozTxt = `${Number(p.mnozstvo || 0)} ${p.jednotka || ""}`;
+    ops.push({ kind: "text", x: margin,                              y, size: 10, text: popisChunks[0] || "" });
+    ops.push({ kind: "text", x: xRight(mnozTxt,               10, rMnozstvo), y, size: 10, text: mnozTxt });
+    ops.push({ kind: "text", x: xRight(fmtNum(p.cena_jednotka), 10, rCena),   y, size: 10, text: fmtNum(p.cena_jednotka) });
+    ops.push({ kind: "text", x: xRight(fmtMoney(p.spolu),       10, rSpolu),  y, size: 10, text: fmtMoney(p.spolu) });
     y -= 14;
     for (let i = 1; i < popisChunks.length; i++) {
-      ops.push({ kind: "text", x: colX.popis, y, size: 10, text: popisChunks[i] });
+      ops.push({ kind: "text", x: margin, y, size: 10, text: popisChunks[i] });
       y -= 14;
     }
     y -= 4;
@@ -327,7 +339,7 @@ async function buildOps(
       dodavatel.swift,
       dodavatel.nazov,
       Number(faktura.suma_celkom || 0),
-      String(faktura.variabilny_symbol || ""),
+      stripVs(String(faktura.variabilny_symbol || "")),
     );
     const qrOps = await qrCodeToOps(qrString, qrX, qrY, qrSize);
     ops.push(...qrOps);
