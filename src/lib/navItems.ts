@@ -11,12 +11,10 @@ export const mainNavBase: NavItem[] = [
 ];
 
 export const operativaNav: NavItem[] = [
-  { label: "Vyťaženosť tímu",   href: "/vytazenost",          icon: "👷", minRole: "manazer" },
   { label: "Provízie",           href: "/potvrdenie-provizii", icon: "✅" },
   { label: "Odberatelia",        href: "/odberatelia",         icon: "🏷️" },
   { label: "Faktúry",            href: "/faktury",             icon: "🧾" },
   { label: "Prehľad financií",  href: "/prehlad-financii",    icon: "💶" },
-  { label: "Provízie maklérov", href: "/provizie-maklerov",   icon: "💼", minRole: "manazer" },
   { label: "Účtovný prehľad",   href: "/uctovny-prehlad",     icon: "📊" },
   { label: "Pravidelné náklady", href: "/pravidelne-naklady",  icon: "🔁" },
 ];
@@ -26,7 +24,7 @@ export const systemNav: NavItem[] = [
   { label: "Kalendár",      href: "/kalendar",      icon: "📅" },
   { label: "Google Disk",   href: "/disk",          icon: "💾" },
   { label: "Upozornenia",   href: "/upozornenia",   icon: "🔔" },
-  { label: "Tím",           href: "/tim",           icon: "👥" },
+  { label: "Tím",           href: "/tim",           icon: "👥", minRole: "manazer" },
   { label: "Manažér",       href: "/manazer",       icon: "📊" },
   { label: "Klientská zóna", href: "/klientska-zona", icon: "🌐" },
   { label: "Plán systému",  href: "/plan",          icon: "🗺️" },
