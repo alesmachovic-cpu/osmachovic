@@ -654,6 +654,8 @@ function TabTim() {
   const [newUserLoginEmail, setNewUserLoginEmail] = useState("");
   const [newUserRole, setNewUserRole]         = useState("Maklér · Vianema");
   const [newUserPct, setNewUserPct]           = useState("");
+  const [newUserSaving, setNewUserSaving]     = useState(false);
+  const [newUserError, setNewUserError]       = useState<string | null>(null);
 
   // Editácia existujúceho účtu
   type EditState = { name: string; email: string; role: string; percento: string; medziprovizia: string; };
@@ -809,9 +811,16 @@ function TabTim() {
               </div>
             </div>
           </div>
+          {newUserError && (
+            <div style={{ marginTop: "8px", padding: "8px 12px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "8px", fontSize: "12px", color: "#DC2626" }}>
+              {newUserError}
+            </div>
+          )}
           <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-            <button onClick={async () => {
+            <button disabled={newUserSaving} onClick={async () => {
               if (!newUserName.trim()) return;
+              setNewUserError(null);
+              setNewUserSaving(true);
               const id = (newUserName.trim().toLowerCase()
                 .normalize("NFD").replace(/[̀-ͯ]/g, "")
                 .replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")
@@ -830,13 +839,15 @@ function TabTim() {
                 setNewUserName(""); setNewUserEmail(""); setNewUserLoginEmail(""); setNewUserPct("");
                 setShowForm(false);
               } catch (e) {
-                alert("Nepodarilo sa vytvoriť účet: " + (e instanceof Error ? e.message : String(e)));
+                setNewUserError("Chyba: " + (e instanceof Error ? e.message : String(e)));
+              } finally {
+                setNewUserSaving(false);
               }
             }} style={{
-              padding: "8px 18px", background: "#374151", color: "#fff", border: "none",
-              borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
-            }}>Vytvoriť</button>
-            <button onClick={() => setShowForm(false)} style={{
+              padding: "8px 18px", background: newUserSaving ? "#9CA3AF" : "#374151", color: "#fff", border: "none",
+              borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: newUserSaving ? "not-allowed" : "pointer",
+            }}>{newUserSaving ? "Ukladám..." : "Vytvoriť"}</button>
+            <button onClick={() => { setShowForm(false); setNewUserError(null); }} style={{
               padding: "8px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
               border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
             }}>Zrušiť</button>
