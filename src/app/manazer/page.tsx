@@ -877,22 +877,32 @@ function TabTim() {
                   )}
                 </div>
 
-                {/* Provízne % — viditeľné a editovateľné pre admina */}
-                {isAdmin && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                    <input
-                      key={acc.id + "-pct-" + (provizie.find(p => p.makler_id === acc.id)?.percento ?? "")}
-                      type="number"
-                      min="0" max="100" step="0.5"
-                      defaultValue={provizie.find(p => p.makler_id === acc.id)?.percento ?? ""}
-                      onBlur={e => { if (e.target.value !== "") savePct(acc, e.target.value); }}
-                      onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                      placeholder="—"
-                      style={{ ...inputSt, width: 54, padding: "4px 6px", fontSize: 12, textAlign: "right" } as React.CSSProperties}
-                    />
-                    <span style={{ fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>%</span>
-                  </div>
-                )}
+                {/* Provízne % — editovateľné pre admina, read-only badge pre ostatných */}
+                {(() => {
+                  const provRec = provizie.find(p => p.makler_id === acc.id || p.meno === acc.name);
+                  const pct = provRec?.percento ?? null;
+                  if (isAdmin) return (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                      <input
+                        key={acc.id + "-pct-" + (pct ?? "")}
+                        type="number"
+                        min="0" max="100" step="0.5"
+                        defaultValue={pct ?? ""}
+                        onBlur={e => { if (e.target.value !== "") savePct(acc, e.target.value); }}
+                        onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                        placeholder="—"
+                        style={{ ...inputSt, width: 54, padding: "4px 6px", fontSize: 12, textAlign: "right" } as React.CSSProperties}
+                      />
+                      <span style={{ fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>%</span>
+                    </div>
+                  );
+                  if (pct !== null) return (
+                    <div style={{ flexShrink: 0, padding: "3px 10px", borderRadius: 20, background: "var(--bg-elevated)", border: "1px solid var(--border)", fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>
+                      {pct} %
+                    </div>
+                  );
+                  return null;
+                })()}
 
                 {isAdmin && editingUser?.id === acc.id ? (
                   <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
