@@ -275,7 +275,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   async function addAccount(account: User) {
-    await fetch("/api/users", {
+    const res = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -283,11 +283,15 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         name: account.name,
         initials: account.initials,
         role: account.role,
-        email: account.email,
-        login_email: account.login_email || null,
+        ...(account.email ? { email: account.email } : {}),
+        ...(account.login_email ? { login_email: account.login_email } : {}),
         ...(account.password ? { password: account.password } : {}),
       }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Chyba ${res.status}`);
+    }
     await refreshAccounts();
   }
 

@@ -812,16 +812,26 @@ function TabTim() {
           <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
             <button onClick={async () => {
               if (!newUserName.trim()) return;
-              const id = newUserName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+              const id = (newUserName.trim().toLowerCase()
+                .normalize("NFD").replace(/[̀-ͯ]/g, "")
+                .replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")
+                .replace(/^-+|-+$/g, "").slice(0, 40)) || `u-${Date.now()}`;
               const parts = newUserName.trim().split(" ");
               const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
-              await addAccount({ id, name: newUserName.trim(), initials, role: newUserRole, email: newUserEmail, login_email: newUserLoginEmail || undefined });
-              if (newUserPct.trim()) {
-                await fetch("/api/maklerske-provizie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meno: newUserName.trim(), percento: parseFloat(newUserPct.replace(",", ".")) || 0, makler_id: id }) });
-                loadProvizie();
+              try {
+                await addAccount({ id, name: newUserName.trim(), initials, role: newUserRole,
+                  ...(newUserEmail.trim() ? { email: newUserEmail.trim() } : {}),
+                  ...(newUserLoginEmail.trim() ? { login_email: newUserLoginEmail.trim() } : {}),
+                } as Parameters<typeof addAccount>[0]);
+                if (newUserPct.trim()) {
+                  await fetch("/api/maklerske-provizie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meno: newUserName.trim(), percento: parseFloat(newUserPct.replace(",", ".")) || 0, makler_id: id }) });
+                  loadProvizie();
+                }
+                setNewUserName(""); setNewUserEmail(""); setNewUserLoginEmail(""); setNewUserPct("");
+                setShowForm(false);
+              } catch (e) {
+                alert("Nepodarilo sa vytvoriť účet: " + (e instanceof Error ? e.message : String(e)));
               }
-              setNewUserName(""); setNewUserEmail(""); setNewUserLoginEmail(""); setNewUserPct("");
-              setShowForm(false);
             }} style={{
               padding: "8px 18px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
