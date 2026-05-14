@@ -151,7 +151,7 @@ interface Props {
   typ: TypNaber;
   klient: Klient;
   onBack: () => void;
-  onSubmit: (data: { id: string }) => void;
+  onSubmit: (data: { id: string; openVZ?: boolean }) => void;
   /** Ak nastavený, nový záznam sa uloží ako DODATOK k existujúcemu náberáku.
    *  Originál zostáva nedotknutý — tak vyžaduje model (audit / legalita). */
   parentNaberakId?: string | null;
@@ -296,6 +296,7 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
   const [makler, setMakler] = useState("Aleš Machovič");
   const [zmluva, setZmluva] = useState(false);
   const [typZmluvy, setTypZmluvy] = useState("exkluzivna");
+  const [openVzPending, setOpenVzPending] = useState(false);
   const [datumPodpisu, setDatumPodpisu] = useState("");
   const [zmluvaDo, setZmluvaDo] = useState("");
   const [provizia, setProvizia] = useState(() => klient.proviziaeur ? String(klient.proviziaeur) : parseNote([/Provízia:\s*(.+)/i]));
@@ -761,7 +762,9 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
     setSaving(false);
     // TASK 11 — po úspešnom uložení vyčisti draft
     try { localStorage.removeItem(draftLsKey); } catch { /* ignore */ }
-    onSubmit({ id: data.id });
+    const shouldOpenVZ = openVzPending;
+    setOpenVzPending(false);
+    onSubmit({ id: data.id, openVZ: shouldOpenVZ });
   }
 
   async function handleAiAnalyza() {
@@ -1965,6 +1968,17 @@ Odpovedaj stručne po slovensky.`;
                 <input type="date" value={zmluvaDo} onChange={e => setZmluvaDo(e.target.value)} style={inputSt} />
               </div>
             </div>
+            <button
+              onClick={() => { setOpenVzPending(true); handleSubmit(); }}
+              disabled={saving}
+              style={{
+                padding: "12px 18px", borderRadius: "12px", border: "none", cursor: "pointer",
+                background: "#7C3AED", color: "#fff", fontWeight: "600", fontSize: "14px",
+                display: "flex", alignItems: "center", gap: "8px", opacity: saving ? 0.6 : 1,
+              }}
+            >
+              📄 Uložiť náberák a vyplniť VZ teraz
+            </button>
           </div>
         )}
         <div style={{ marginTop: "16px" }}>
