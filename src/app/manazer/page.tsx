@@ -639,12 +639,12 @@ function TabStatistiky({ isManagerOrAbove, userEmail }: { isManagerOrAbove: bool
 // ─── Tab: Tím ─────────────────────────────────────────────────────────────────
 
 function TabTim() {
-  const { user, accounts, addAccount, updateAccount, deleteAccount } = useAuth();
+  const { user, accounts, addAccount, deleteAccount, refreshAccounts } = useAuth();
   const isAdmin = isSuperAdmin(user?.role);
 
   const [klienti, setKlienti] = useState<Array<{ makler_id: string }>>([]);
   const [nabery,  setNabery]  = useState<Array<{ makler_id: string }>>([]);
-  const [provizie, setProvizie] = useState<Array<{ id: string; makler_id: string | null; meno: string; percento: number }>>([]);
+  const [provizie, setProvizie] = useState<Array<{ id: string; makler_id: string | null; meno: string; percento: number; medziprovizia: number | null }>>([]);
   const [loading, setLoading] = useState(true);
 
   // Nový účet
@@ -655,9 +655,11 @@ function TabTim() {
   const [newUserRole, setNewUserRole]         = useState("Maklér · Vianema");
   const [newUserPct, setNewUserPct]           = useState("");
 
-  // Editácia účtu
-  const [editingUser, setEditingUser]   = useState<User | null>(null);
-  const [accountSaved, setAccountSaved] = useState(false);
+  // Editácia existujúceho účtu
+  type EditState = { name: string; email: string; role: string; percento: string; medziprovizia: string; };
+  const [editingId, setEditingId]   = useState<string | null>(null);
+  const [editState, setEditState]   = useState<EditState>({ name: "", email: "", role: "", percento: "", medziprovizia: "" });
+  const [editSaving, setEditSaving] = useState(false);
 
   // Feature toggles
   const [featureToggles, setFeatureToggles] = useState<FeatureToggles>({});
@@ -675,15 +677,42 @@ function TabTim() {
     setProvizie(Array.isArray(d) ? d : []);
   }
 
-  async function savePct(acc: User, value: string) {
-    const percento = parseFloat(value.replace(",", ".")) || 0;
-    const existing = provizie.find(p => p.makler_id === acc.id);
-    if (existing) {
-      await fetch("/api/maklerske-provizie", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: existing.id, percento }) });
-    } else {
-      await fetch("/api/maklerske-provizie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meno: acc.name, percento, makler_id: acc.id }) });
+  function openEdit(acc: User) {
+    if (editingId === acc.id) { setEditingId(null); return; }
+    const provRec = provizie.find(p => p.makler_id === acc.id || p.meno === acc.name);
+    setEditState({
+      name: acc.name || "",
+      email: acc.email || "",
+      role: acc.role || "",
+      percento: provRec?.percento != null ? String(provRec.percento) : "",
+      medziprovizia: provRec?.medziprovizia != null ? String(provRec.medziprovizia) : "",
+    });
+    setEditingId(acc.id);
+  }
+
+  async function saveEdit(acc: User) {
+    setEditSaving(true);
+    try {
+      const parts = editState.name.trim().split(" ");
+      const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
+      await fetch(`/api/users?id=${encodeURIComponent(acc.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editState.name.trim(), initials, email: editState.email.trim(), role: editState.role }),
+      });
+      const provRec = provizie.find(p => p.makler_id === acc.id || p.meno === acc.name);
+      const pct = parseFloat(editState.percento.replace(",", ".")) || 0;
+      const mdz = parseFloat(editState.medziprovizia.replace(",", ".")) || 0;
+      if (provRec) {
+        await fetch("/api/maklerske-provizie", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: provRec.id, percento: pct, medziprovizia: mdz }) });
+      } else {
+        await fetch("/api/maklerske-provizie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meno: editState.name.trim(), percento: pct, medziprovizia: mdz, makler_id: acc.id }) });
+      }
+      await Promise.all([loadProvizie(), refreshAccounts()]);
+      setEditingId(null);
+    } finally {
+      setEditSaving(false);
     }
-    loadProvizie();
   }
 
   useEffect(() => {
@@ -867,112 +896,134 @@ function TabTim() {
                   )}
                 </div>
 
-                {/* Provízne % — editovateľné pre admina, read-only badge pre ostatných */}
+                {/* Provízne % badges */}
                 {(() => {
                   const provRec = provizie.find(p => p.makler_id === acc.id || p.meno === acc.name);
-                  const pct = provRec?.percento ?? null;
-                  if (isAdmin) return (
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                      <input
-                        key={acc.id + "-pct-" + (pct ?? "")}
-                        type="number"
-                        min="0" max="100" step="0.5"
-                        defaultValue={pct ?? ""}
-                        onBlur={e => { if (e.target.value !== "") savePct(acc, e.target.value); }}
-                        onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                        placeholder="—"
-                        style={{ ...inputSt, width: 54, padding: "4px 6px", fontSize: 12, textAlign: "right" } as React.CSSProperties}
-                      />
-                      <span style={{ fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>%</span>
+                  if (!provRec && !isAdmin) return null;
+                  return (
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      {provRec?.percento != null && (
+                        <div title="Provízne %" style={{ padding: "3px 9px", borderRadius: 20, background: "#F0FDF4", border: "1px solid #BBF7D0", fontSize: 12, fontWeight: 700, color: "#065F46" }}>
+                          {provRec.percento} %
+                        </div>
+                      )}
+                      {provRec?.medziprovizia != null && provRec.medziprovizia > 0 && (
+                        <div title="Medziprovizia" style={{ padding: "3px 9px", borderRadius: 20, background: "#EFF6FF", border: "1px solid #BFDBFE", fontSize: 12, fontWeight: 700, color: "#1D4ED8" }}>
+                          {provRec.medziprovizia} % ∑
+                        </div>
+                      )}
                     </div>
                   );
-                  if (pct !== null) return (
-                    <div style={{ flexShrink: 0, padding: "3px 10px", borderRadius: 20, background: "var(--bg-elevated)", border: "1px solid var(--border)", fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>
-                      {pct} %
-                    </div>
-                  );
-                  return null;
                 })()}
 
-                {isAdmin && editingUser?.id === acc.id ? (
-                  <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                    <input type="email" placeholder="Gmail pre Google login" value={editingUser.login_email || ""}
-                      onChange={e => setEditingUser({ ...editingUser, login_email: e.target.value })}
-                      style={{ ...inputSt, width: "200px", padding: "6px 10px", fontSize: "12px" }}
-                    />
-                    <div style={{ width: "180px" }}>
-                      <PasswordInput autoComplete="new-password" placeholder="Nové heslo" value={editingUser.password || ""}
-                        onChange={e => setEditingUser({ ...editingUser, password: e.target.value })}
-                        style={{ ...inputSt, padding: "6px 32px 6px 10px", fontSize: "12px" } as React.CSSProperties}
-                      />
-                    </div>
-                    <button onClick={() => {
-                      updateAccount(editingUser); setEditingUser(null);
-                      setAccountSaved(true); setTimeout(() => setAccountSaved(false), 2000);
-                    }} style={{ padding: "6px 12px", background: "#374151", color: "#fff", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: "600", cursor: "pointer" }}>
-                      Uložiť
+                {/* Akčné tlačidlá */}
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", flexShrink: 0 }}>
+                  {isAdmin && (
+                    <button onClick={() => openEdit(acc)} style={{
+                      padding: "5px 10px", fontSize: "11px", fontWeight: 600, borderRadius: "6px", cursor: "pointer",
+                      background: editingId === acc.id ? "#374151" : "var(--bg-surface)",
+                      color: editingId === acc.id ? "#fff" : "var(--text-secondary)",
+                      border: "1px solid var(--border)",
+                    }}>Upraviť</button>
+                  )}
+                  {isAdmin && acc.id !== "ales" && (
+                    <button onClick={() => setExpandedUser(expandedUser === acc.id ? null : acc.id)} style={{
+                      padding: "5px 10px", background: expandedUser === acc.id ? "#374151" : "var(--bg-surface)",
+                      color: expandedUser === acc.id ? "#fff" : "var(--text-secondary)",
+                      border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer",
+                    }}>Funkcie</button>
+                  )}
+                  {isAdmin && acc.id !== "ales" && (
+                    <button onClick={async () => {
+                      if (inviteSending) return;
+                      setInviteSending(acc.id); setInviteSentFor(null);
+                      try {
+                        const res = await fetch("/api/users/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: acc.id }) });
+                        const body = await res.json();
+                        if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
+                        setInviteSentFor(acc.id);
+                        setTimeout(() => setInviteSentFor(null), 4000);
+                      } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
+                      finally { setInviteSending(null); }
+                    }} style={{
+                      padding: "5px 10px",
+                      background: inviteSentFor === acc.id ? "#D1FAE5" : "var(--bg-surface)",
+                      border: `1px solid ${inviteSentFor === acc.id ? "#6EE7B7" : "var(--border)"}`,
+                      borderRadius: "6px", fontSize: "11px", cursor: "pointer",
+                      color: inviteSentFor === acc.id ? "#065F46" : "var(--text-secondary)",
+                      opacity: inviteSending === acc.id ? 0.6 : 1,
+                    }}>
+                      {inviteSending === acc.id ? "…" : inviteSentFor === acc.id ? "✓ Odoslané" : "✉ Pozvánka"}
                     </button>
-                    <button onClick={() => setEditingUser(null)} style={{ padding: "6px 8px", background: "transparent", color: "var(--text-muted)", border: "none", fontSize: "11px", cursor: "pointer" }}>✕</button>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                    {isAdmin && acc.id !== "ales" && (
-                      <button onClick={() => setExpandedUser(expandedUser === acc.id ? null : acc.id)} style={{
-                        padding: "5px 10px", background: expandedUser === acc.id ? "#374151" : "var(--bg-surface)",
-                        color: expandedUser === acc.id ? "#fff" : "var(--text-secondary)",
-                        border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer",
-                      }}>Funkcie</button>
-                    )}
-                    {isAdmin && (
-                      <button onClick={() => setEditingUser({ ...acc })} style={{ padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)" }}>
-                        Heslo
-                      </button>
-                    )}
-                    {isAdmin && acc.id !== "ales" && (
-                      <button onClick={async () => {
-                        if (inviteSending) return;
-                        setInviteSending(acc.id); setInviteSentFor(null);
-                        try {
-                          const res = await fetch("/api/users/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: acc.id }) });
-                          const body = await res.json();
-                          if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
-                          setInviteSentFor(acc.id);
-                          setTimeout(() => setInviteSentFor(null), 4000);
-                        } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
-                        finally { setInviteSending(null); }
-                      }} style={{
-                        padding: "5px 10px",
-                        background: inviteSentFor === acc.id ? "#D1FAE5" : "var(--bg-surface)",
-                        border: `1px solid ${inviteSentFor === acc.id ? "#6EE7B7" : "var(--border)"}`,
-                        borderRadius: "6px", fontSize: "11px", cursor: "pointer",
-                        color: inviteSentFor === acc.id ? "#065F46" : "var(--text-secondary)",
-                        opacity: inviteSending === acc.id ? 0.6 : 1,
-                      }}>
-                        {inviteSending === acc.id ? "…" : inviteSentFor === acc.id ? "✓ Odoslané" : "✉ Pozvánka"}
-                      </button>
-                    )}
-                    {isAdmin && acc.id !== "ales" && (
-                      <button onClick={async () => {
-                        if (!confirm(`Resetovať heslo pre ${acc.name}?`)) return;
-                        try {
-                          const res = await fetch("/api/users/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: acc.id }) });
-                          const body = await res.json();
-                          if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
-                          try { await navigator.clipboard.writeText(body.temp_password); } catch { /* ignore */ }
-                          alert(`✅ Heslo resetované pre ${acc.name}\n\nDočasné heslo (skopírované do schránky):\n\n${body.temp_password}\n\nPošli ho maklerovi bezpečným kanálom.`);
-                        } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
-                      }} style={{ padding: "5px 10px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#92400E" }}>
-                        🔑 Reset
-                      </button>
-                    )}
-                    {isAdmin && acc.id !== "ales" && (
-                      <button onClick={() => { if (confirm(`Odstrániť účet ${acc.name}?`)) deleteAccount(acc.id); }} style={{ padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#EF4444" }}>
-                        Odstrániť
-                      </button>
-                    )}
-                  </div>
-                )}
+                  )}
+                  {isAdmin && acc.id !== "ales" && (
+                    <button onClick={async () => {
+                      if (!confirm(`Resetovať heslo pre ${acc.name}?`)) return;
+                      try {
+                        const res = await fetch("/api/users/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: acc.id }) });
+                        const body = await res.json();
+                        if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
+                        try { await navigator.clipboard.writeText(body.temp_password); } catch { /* ignore */ }
+                        alert(`✅ Heslo resetované pre ${acc.name}\n\nDočasné heslo (skopírované do schránky):\n\n${body.temp_password}\n\nPošli ho maklerovi bezpečným kanálom.`);
+                      } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
+                    }} style={{ padding: "5px 10px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#92400E" }}>
+                      🔑 Reset
+                    </button>
+                  )}
+                  {isAdmin && acc.id !== "ales" && (
+                    <button onClick={() => { if (confirm(`Odstrániť účet ${acc.name}?`)) deleteAccount(acc.id); }} style={{ padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#EF4444" }}>
+                      Odstrániť
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Editačný panel */}
+              {isAdmin && editingId === acc.id && (
+                <div style={{ padding: "16px 14px", borderTop: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }} className="naber-grid">
+                    <div>
+                      <div style={labelSt}>Meno a priezvisko</div>
+                      <input style={inputSt} value={editState.name} onChange={e => setEditState(s => ({ ...s, name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <div style={labelSt}>Email</div>
+                      <input type="email" style={inputSt} value={editState.email} onChange={e => setEditState(s => ({ ...s, email: e.target.value }))} />
+                    </div>
+                    <div>
+                      <div style={labelSt}>Rola</div>
+                      <select style={inputSt} value={editState.role} onChange={e => setEditState(s => ({ ...s, role: e.target.value }))}>
+                        <option value="Maklér · Vianema">Maklér</option>
+                        <option value="manazer">Manažér</option>
+                        <option value="Konateľ · Vianema">Konateľ</option>
+                        <option value="Admin · Vianema">Admin</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={labelSt}>Provízne % (maklerova časť)</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input type="number" min="0" max="100" step="0.5" style={inputSt} value={editState.percento} onChange={e => setEditState(s => ({ ...s, percento: e.target.value }))} placeholder="0" />
+                        <span style={{ fontSize: 13, color: "var(--text-muted)" }}>%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={labelSt}>Medziprovizia % (manažér + firma)</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <input type="number" min="0" max="100" step="0.5" style={inputSt} value={editState.medziprovizia} onChange={e => setEditState(s => ({ ...s, medziprovizia: e.target.value }))} placeholder="0" />
+                        <span style={{ fontSize: 13, color: "var(--text-muted)" }}>%</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button onClick={() => saveEdit(acc)} disabled={editSaving} style={{ padding: "8px 18px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer", opacity: editSaving ? 0.6 : 1 }}>
+                      {editSaving ? "Ukladám…" : "Uložiť zmeny"}
+                    </button>
+                    <button onClick={() => setEditingId(null)} style={{ padding: "8px 14px", background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", cursor: "pointer" }}>
+                      Zrušiť
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Feature toggles panel */}
               {isAdmin && expandedUser === acc.id && acc.id !== "ales" && (
@@ -1011,10 +1062,6 @@ function TabTim() {
           );
         })}
       </div>
-
-      {accountSaved && (
-        <div style={{ fontSize: "13px", color: "#065F46", fontWeight: "500", marginTop: "12px" }}>Účet aktualizovaný</div>
-      )}
     </div>
   );
 }

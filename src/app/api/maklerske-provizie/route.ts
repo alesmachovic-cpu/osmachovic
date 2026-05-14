@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await getSupabaseAdmin().from("makler_provizie_pct").insert({
     meno: body.meno,
     percento: Number(body.percento) || 0,
+    medziprovizia: Number(body.medziprovizia) || 0,
     ...(body.makler_id ? { makler_id: body.makler_id } : {}),
   }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
