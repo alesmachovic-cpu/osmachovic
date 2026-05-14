@@ -256,11 +256,6 @@ function NaberPageContent() {
         // Store naber data for PDF generation
         setSavedNaberData(naberData);
 
-        // Ak je exkluzívna zmluva — automaticky otvor ZVS modal
-        if (naberData?.zmluva && naberData?.typ_zmluvy === "exkluzivna") {
-          setZvsOpen(true);
-        }
-
         const naberAdresa = naberData
           ? [naberData.ulica, naberData.cislo_orientacne, naberData.obec, naberData.okres].filter(Boolean).join(", ")
           : selectedKlient.lokalita || "";
@@ -764,30 +759,13 @@ function NaberPageContent() {
           </div>
         )}
 
-        {/* Výhradná zmluva */}
-        {savedNaberId && (
-          <div style={{ marginBottom: "16px" }}>
-            {savedNaberData?.zmluva && savedNaberData?.typ_zmluvy === "exkluzivna" && (
-              <div style={{
-                padding: "12px 16px", borderRadius: "12px", marginBottom: "10px",
-                background: "#f5f3ff", border: "2px solid #7c3aed",
-                fontSize: "13px", color: "#5b21b6", fontWeight: 600,
-              }}>
-                ✅ Klient súhlasí s výhradnou zmluvou — podpíšte ju teraz
-              </div>
-            )}
-            <button
-              onClick={() => setZvsOpen(true)}
-              style={{
-                padding: "10px 22px", borderRadius: "10px",
-                background: savedNaberData?.zmluva && savedNaberData?.typ_zmluvy === "exkluzivna" ? "#7c3aed" : "#6b7280",
-                color: "#fff", border: "none",
-                fontSize: "13px", fontWeight: 700, cursor: "pointer",
-                display: "inline-flex", alignItems: "center", gap: "6px",
-              }}
-            >
-              📄 Výhradná zmluva
-            </button>
+        {savedNaberData?.zmluva && (
+          <div style={{
+            padding: "12px 16px", borderRadius: "12px", marginBottom: "16px",
+            background: "#f5f3ff", border: "1px solid #c4b5fd",
+            fontSize: "13px", color: "#5b21b6", fontWeight: 600,
+          }}>
+            ✅ Záujem o VZ zaznamenaný — výhradnú zmluvu podpíšte v karte klienta
           </div>
         )}
         <VyhradnaZmluvaModal

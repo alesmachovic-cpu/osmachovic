@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import type { Klient } from "@/lib/database.types";
 import { OBCHOD_STATUS_LABELS, OBCHOD_STATUS_COLORS } from "@/lib/obchodStatus";
 
@@ -45,6 +46,7 @@ type ZmluvaInfo = {
   zmluva_do: string | null;
   datum_podpisu: string | null;
   naberakId: string | null;
+  vzPodpisana?: boolean;
 } | null;
 
 // ─── Pomocné ──────────────────────────────────────────────────────────────────
@@ -461,6 +463,8 @@ export default function ObchodTab({
   userId: string;
   zmluvaInfo?: ZmluvaInfo;
 }) {
+  const { user } = useAuth();
+  const isManazerOrAbove = user?.role === "super_admin" || user?.role === "majitel" || user?.role === "manazer";
   const [obchody, setObchody] = useState<Obchod[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNovyModal, setShowNovyModal] = useState(false);
@@ -493,7 +497,7 @@ export default function ObchodTab({
       const isRZ = uloha?.nazov?.toLowerCase().includes("rezervačná zmluva") || uloha?.nazov?.toLowerCase().includes("rezervacna zmluva");
       if (isRZ) {
         const obchod = obchody.find(o => o.id === obchodId);
-        const hasVyhradna = zmluvaInfo?.zmluva && zmluvaInfo.typZmluvy === "exkluzivna";
+        const hasVyhradna = zmluvaInfo?.vzPodpisana === true;
         const hasVynimka = obchod?.rz_vynimka_approved;
         if (!hasVyhradna && !hasVynimka) {
           setRzGate({ obchodId, ulohaId });
@@ -739,9 +743,9 @@ export default function ObchodTab({
 
       {/* ── Zmluva status banner ────────────────────────────────────────── */}
       {zmluvaInfo !== undefined && (() => {
-        const hasVyhradna = zmluvaInfo?.zmluva && zmluvaInfo.typZmluvy === "exkluzivna";
-        const hasNevyhradna = zmluvaInfo?.zmluva && zmluvaInfo.typZmluvy === "neexkluzivna";
-        const noZmluva = !zmluvaInfo?.zmluva;
+        const hasVyhradna = zmluvaInfo?.vzPodpisana === true;
+        const hasNevyhradna = zmluvaInfo?.zmluva && !hasVyhradna;
+        const noZmluva = !hasVyhradna;
         const expired = zmluvaInfo?.zmluva_do ? new Date(zmluvaInfo.zmluva_do) < new Date() : false;
         const poziadana = obchod.rz_vynimka_poziadana;
         const approved = obchod.rz_vynimka_approved;
@@ -785,8 +789,8 @@ export default function ObchodTab({
                   ⏳ Výnimka čaká na schválenie
                 </span>
               )}
-              {/* Admin/manažér môže schváliť */}
-              {noZmluva && poziadana && !approved && (
+              {/* Len manažér/admin môže schváliť */}
+              {noZmluva && poziadana && !approved && isManazerOrAbove && (
                 <button onClick={() => schvalitVynimku(obchod.id)} style={{
                   padding: "5px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: 600,
                   background: "#059669", color: "#fff", border: "none", cursor: "pointer",

@@ -1949,40 +1949,10 @@ Odpovedaj stručne po slovensky.`;
       {/* 7c. Zmluva */}
       <div style={cardSt}>
         <div style={sectionTitle}>📝 Zmluva</div>
-        <div style={{ marginTop: "0" }}>
-          <label style={{ ...checkSt, fontWeight: "600", marginBottom: "8px", minHeight: "44px" }}>
-            <input type="checkbox" checked={zmluva} onChange={e => { setZmluva(e.target.checked); if (e.target.checked && !datumPodpisu) setDatumPodpisu(new Date().toISOString().split("T")[0]); }} style={{ width: "20px", height: "20px" }} />
-            Klient má záujem podpísať zmluvu
-          </label>
-          {zmluva && (
-            <div style={{ background: "var(--bg-elevated)", borderRadius: "12px", padding: "16px", marginTop: "8px" }}>
-              <div style={{ marginBottom: "14px" }}>
-                <label style={labelSt}>Typ zmluvy</label>
-                <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
-                  {[{ value: "exkluzivna", label: "Exkluzívna" }, { value: "neexkluzivna", label: "Neexkluzívna" }].map(o => (
-                    <button type="button" key={o.value} onClick={() => { setTypZmluvy(o.value); setTypInzercie(o.value === "exkluzivna" ? "vyhradne" : "online"); }} style={{
-                      padding: "10px 18px", borderRadius: "20px", fontSize: "13px", fontWeight: "600",
-                      border: typZmluvy === o.value ? "2px solid #374151" : "1px solid var(--border)",
-                      background: typZmluvy === o.value ? "#374151" : "var(--bg-surface)",
-                      color: typZmluvy === o.value ? "#fff" : "var(--text-secondary)",
-                      cursor: "pointer", flex: 1, textAlign: "center",
-                    }}>{o.label}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="naber-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label style={labelSt}>Dátum podpisu</label>
-                  <input type="date" value={datumPodpisu} onChange={e => setDatumPodpisu(e.target.value)} style={inputSt} />
-                </div>
-                <div>
-                  <label style={labelSt}>Zmluva platná do</label>
-                  <input type="date" value={zmluvaDo} onChange={e => setZmluvaDo(e.target.value)} style={inputSt} />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <label style={{ ...checkSt, fontWeight: "600", minHeight: "44px" }}>
+          <input type="checkbox" checked={zmluva} onChange={e => setZmluva(e.target.checked)} style={{ width: "20px", height: "20px" }} />
+          Klient má záujem o výhradnú zmluvu
+        </label>
         <div style={{ marginTop: "16px" }}>
           <label style={labelSt}>Popis</label>
           <textarea value={popis} onChange={e => setPopis(e.target.value)} rows={3}

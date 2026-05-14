@@ -309,6 +309,7 @@ export default function KlientDetailPage() {
   const [quickAddDatum, setQuickAddDatum] = useState("");
   const [quickAddSaving, setQuickAddSaving] = useState(false);
   const [nabery, setNabery] = useState<Record<string, unknown>[]>([]);
+  const [vzPodpisana, setVzPodpisana] = useState(false);
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [produkciaObjednavky, setProdukciaObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
@@ -442,7 +443,7 @@ export default function KlientDetailPage() {
     setLoading(true);
 
     // Paralelné načítanie cez API routes (service_role, RLS-safe)
-    const [klientJson, naberyData, objednavkyData, inzeratyData, obhliadkyJson, docs, udalostiData, produkciaData] = await Promise.all([
+    const [klientJson, naberyData, objednavkyData, inzeratyData, obhliadkyJson, docs, udalostiData, produkciaData, vzData] = await Promise.all([
       fetch(`/api/klienti?id=${id}`).then(r => r.json()),
       fetch(`/api/nabery?klient_id=${id}`).then(r => r.json()),
       fetch(`/api/objednavky?klient_id=${id}`).then(r => r.json()),
@@ -451,6 +452,7 @@ export default function KlientDetailPage() {
       listKlientDokumenty(id),
       fetch(`/api/klient-udalosti?klient_id=${id}`).then(r => r.json()),
       fetch(`/api/produkcia-objednavky?klient_id=${id}`).then(r => r.json()),
+      fetch(`/api/vyhradna-zmluva?klient_id=${id}`).then(r => r.ok ? r.json() : []),
     ]);
 
     const klientData = klientJson?.klient ?? null;
@@ -466,6 +468,8 @@ export default function KlientDetailPage() {
     setObjednavky(objednavkyArr);
     setProdukciaObjednavky(produkciaArr);
     setInzeraty(inzeratyArr);
+    const vzArr = Array.isArray(vzData) ? vzData : (vzData ? [vzData] : []);
+    setVzPodpisana(vzArr.some((v: Record<string, unknown>) => !!v.podpisane_at));
 
     // Auto-prechod: nabrany + aktivny inzerat → inzerovany
     const hasAktivnyInzerat = inzeratyArr.some(n => (n as Record<string, unknown>).status === "aktivny");
@@ -962,6 +966,7 @@ export default function KlientDetailPage() {
       zmluva_do: (n.zmluva_do as string | null) ?? null,
       datum_podpisu: (n.datum_podpisu as string | null) ?? null,
       naberakId: (n.id as string | null) ?? null,
+      vzPodpisana,
     };
   })();
 
@@ -2415,13 +2420,19 @@ export default function KlientDetailPage() {
                           onSigned={() => loadAll()}
                         />
                       )}
-                      {/* Výhradná zmluva */}
-                      <button
-                        onClick={() => { setZvsNaberId(naberakId || null); setZvsOpen(true); }}
-                        style={{ padding: "6px 12px", background: "#7c3aed", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
-                      >
-                        📄 Výhradná zmluva
-                      </button>
+                      {/* Výhradná zmluva — len ak klient vyjadril záujem */}
+                      {(card.naberak as Record<string, unknown>)?.zmluva && (
+                        <button
+                          onClick={() => { setZvsNaberId(naberakId || null); setZvsOpen(true); }}
+                          style={{
+                            padding: "6px 12px", border: "none", borderRadius: "8px",
+                            fontSize: "12px", fontWeight: 600, cursor: "pointer",
+                            background: vzPodpisana ? "#059669" : "#7c3aed", color: "#fff",
+                          }}
+                        >
+                          {vzPodpisana ? "✓ VZ podpísaná" : "📄 Výhradná zmluva"}
+                        </button>
+                      )}
                       {/* Archivovať — dostupné všetkým ak nie je už archivovaná */}
                       {inzId && card.status !== "archivovany" && (
                         <button onClick={async () => {
