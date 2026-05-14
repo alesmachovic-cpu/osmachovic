@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
         fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + RESEND_API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: 'OS Machovic <noreply@vianema.sk>', to: s.to, subject: s.subject, html: s.html })
+          body: JSON.stringify({ from: 'OS Machovic <noreply@vianema.eu>', to: s.to, subject: s.subject, html: s.html })
         })
       )
     );

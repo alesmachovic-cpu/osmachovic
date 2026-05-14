@@ -103,7 +103,7 @@ export async function sendApiAlert(statuses: ApiStatuses) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "Vianema CRM <noreply@vianema.sk>",
+      from: "Vianema CRM <noreply@vianema.eu>",
       to: [managerEmail],
       subject: `⚠️ API problém — Vianema CRM (${new Date().toLocaleString("sk")})`,
       html: `

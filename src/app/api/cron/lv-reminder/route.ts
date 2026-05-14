@@ -68,7 +68,7 @@ export async function GET() {
           method: "POST",
           headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            from: "OS Machovič <noreply@vianema.sk>",
+            from: "OS Machovič <noreply@vianema.eu>",
             to: makler.email,
             subject: `Pripomienka: Dnes máš náber — ${klient.meno}, chýba LV`,
             html: `

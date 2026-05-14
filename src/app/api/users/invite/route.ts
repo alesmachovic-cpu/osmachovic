@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
         method: "POST",
         headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: "VIANEMA CRM <noreply@vianema.sk>",
+          from: "VIANEMA CRM <noreply@vianema.eu>",
           to: recipientEmail,
           subject: "Pozvánka do VIANEMA CRM",
           html,
