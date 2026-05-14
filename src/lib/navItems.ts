@@ -6,7 +6,7 @@ export const mainNavBase: NavItem[] = [
   { label: "Klienti",           href: "/klienti?tab=predavajuci",  icon: "👥", matchPrefix: "/klienti" },
   { label: "Náberový list",     href: "/naber",                    icon: "📝" },
   { label: "Monitor & Analýza", href: "/monitor?tab=scraping",     icon: "📡", matchPrefix: "/monitor" },
-  { label: "Štatistiky",        href: "/statistiky",               icon: "📉" },
+  { label: "Štatistiky",        href: "/manazer",                  icon: "📉" },
   { label: "Náklady",           href: "/operativa?tab=naklady",    icon: "💰", matchPrefix: "/operativa" },
 ];
 
@@ -24,8 +24,7 @@ export const systemNav: NavItem[] = [
   { label: "Kalendár",      href: "/kalendar",      icon: "📅" },
   { label: "Google Disk",   href: "/disk",          icon: "💾" },
   { label: "Upozornenia",   href: "/upozornenia",   icon: "🔔" },
-  { label: "Tím",           href: "/tim",           icon: "👥", minRole: "manazer" },
-  { label: "Manažér",       href: "/manazer",       icon: "📊" },
+  { label: "Manažér",       href: "/manazer",       icon: "📊", minRole: "manazer" },
   { label: "Klientská zóna", href: "/klientska-zona", icon: "🌐" },
   { label: "Plán systému",  href: "/plan",          icon: "🗺️" },
   { label: "Nastavenia",    href: "/nastavenia",    icon: "⚙️" },
