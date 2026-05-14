@@ -2420,19 +2420,38 @@ export default function KlientDetailPage() {
                           onSigned={() => loadAll()}
                         />
                       )}
-                      {/* Výhradná zmluva — len ak klient vyjadril záujem */}
-                      {(card.naberak as Record<string, unknown>)?.zmluva && (
-                        <button
-                          onClick={() => { setZvsNaberId(naberakId || null); setZvsOpen(true); }}
-                          style={{
-                            padding: "6px 12px", border: "none", borderRadius: "8px",
-                            fontSize: "12px", fontWeight: 600, cursor: "pointer",
-                            background: vzPodpisana ? "#059669" : "#7c3aed", color: "#fff",
-                          }}
-                        >
-                          {vzPodpisana ? "✓ VZ podpísaná" : "📄 Výhradná zmluva"}
-                        </button>
-                      )}
+                      {/* Výhradná zmluva — dostupná vždy ak existuje náberák */}
+                      {card.naberak && (() => {
+                        const hasZaujem = !!(card.naberak as Record<string, unknown>).zmluva;
+                        if (vzPodpisana) {
+                          return (
+                            <button
+                              onClick={() => { setZvsNaberId(naberakId || null); setZvsOpen(true); }}
+                              style={{ padding: "6px 12px", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer", background: "#059669", color: "#fff" }}
+                            >
+                              ✓ VZ podpísaná
+                            </button>
+                          );
+                        }
+                        if (hasZaujem) {
+                          return (
+                            <button
+                              onClick={() => { setZvsNaberId(naberakId || null); setZvsOpen(true); }}
+                              style={{ padding: "6px 12px", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer", background: "#374151", color: "#fff" }}
+                            >
+                              📄 Výhradná zmluva
+                            </button>
+                          );
+                        }
+                        return (
+                          <button
+                            onClick={() => { setZvsNaberId(naberakId || null); setZvsOpen(true); }}
+                            style={{ padding: "6px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", fontWeight: 600, color: "var(--text-muted)", cursor: "pointer" }}
+                          >
+                            📄 Výhradná zmluva
+                          </button>
+                        );
+                      })()}
                       {/* Archivovať — dostupné všetkým ak nie je už archivovaná */}
                       {inzId && card.status !== "archivovany" && (
                         <button onClick={async () => {
