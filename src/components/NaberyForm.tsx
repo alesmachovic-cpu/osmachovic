@@ -10,6 +10,7 @@ import { getUserItem } from "@/lib/userStorage";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { saveKlientDokument } from "@/lib/klientDokumenty";
 import { naberInsert, klientUpdate as klientApiUpdate } from "@/lib/klientApi";
+import DocumentScannerModal from "@/components/DocumentScannerModal";
 
 const OKRESY: Record<string, string[]> = {
   "Bratislavský kraj": ["Bratislava I","Bratislava II","Bratislava III","Bratislava IV","Bratislava V","Malacky","Pezinok","Senec"],
@@ -538,6 +539,8 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
 
   const [dokumenty, setDokumenty] = useState<Record<string, boolean>>({});
   const [dokumentyFotos, setDokumentyFotos] = useState<Record<string, string[]>>({});
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerDocKey, setScannerDocKey] = useState("");
 
   const typLabel = typ === "byt" ? "Byt" : typ === "rodinny_dom" ? "Rodinný dom" : "Pozemok";
 
@@ -568,6 +571,28 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
 
   function removeDocFoto(key: string, index: number) {
     setDokumentyFotos(prev => ({ ...prev, [key]: (prev[key] || []).filter((_, i) => i !== index) }));
+  }
+
+  function handleScanSave(pdfBase64: string, name: string) {
+    setDokumentyFotos(prev => ({
+      ...prev,
+      [scannerDocKey]: [...(prev[scannerDocKey] || []), `pdf:${name}`],
+    }));
+    setScannerOpen(false);
+    if (klient?.id) {
+      const labelMap: Record<string, string> = {
+        lv: "List vlastnictva", energeticky_certifikat: "Energeticky certifikat",
+        podorys: "Podorys", nahlad_katastra: "Nahlad z katastra",
+        znalecky_posudok: "Znalecky posudok", ine: "Iny dokument",
+      };
+      saveKlientDokument({
+        klient_id: klient.id, name,
+        type: labelMap[scannerDocKey] || scannerDocKey,
+        size: Math.round(pdfBase64.length * 0.75),
+        source: "naber", mime: "application/pdf",
+        data_base64: pdfBase64,
+      }).catch(() => {});
+    }
   }
 
   async function handleSubmit() {
@@ -2010,7 +2035,18 @@ Odpovedaj stručne po slovensky.`;
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
                       {(dokumentyFotos[doc.key] || []).map((foto, i) => (
                         <div key={i} style={{ position: "relative", width: "60px", height: "60px" }}>
-                          <img src={foto} alt="" style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--border)" }} />
+                          {foto.startsWith("pdf:") ? (
+                            <div style={{
+                              width: "60px", height: "60px", background: "#FEF2F2", borderRadius: "8px",
+                              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                              border: "1px solid #FECACA",
+                            }}>
+                              <span style={{ fontSize: "20px" }}>📄</span>
+                              <span style={{ fontSize: "8px", color: "#666", textAlign: "center", padding: "0 2px" }}>PDF</span>
+                            </div>
+                          ) : (
+                            <img src={foto} alt="" style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--border)" }} />
+                          )}
                           <button onClick={() => removeDocFoto(doc.key, i)} style={{
                             position: "absolute", top: "-6px", right: "-6px",
                             width: "20px", height: "20px", borderRadius: "50%",
@@ -2022,17 +2058,30 @@ Odpovedaj stručne po slovensky.`;
                       ))}
                     </div>
                   )}
-                  <label style={{
-                    display: "inline-flex", alignItems: "center", gap: "6px",
-                    padding: "6px 12px", borderRadius: "8px", fontSize: "12px",
-                    color: "var(--text-secondary)", background: "var(--bg-surface)",
-                    border: "1px solid var(--border)", cursor: "pointer",
-                  }}>
-                    📎 Pridať súbor
-                    <input type="file" accept="image/*,application/pdf" multiple
-                      onChange={e => handleDocFoto(doc.key, e.target.files)}
-                      style={{ display: "none" }} />
-                  </label>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                      onClick={() => { setScannerDocKey(doc.key); setScannerOpen(true); }}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: "6px",
+                        padding: "6px 12px", borderRadius: "8px", fontSize: "12px",
+                        color: "var(--text-secondary)", background: "var(--bg-surface)",
+                        border: "1px solid var(--border)", cursor: "pointer",
+                      }}
+                    >
+                      📷 Skenovať
+                    </button>
+                    <label style={{
+                      display: "inline-flex", alignItems: "center", gap: "6px",
+                      padding: "6px 12px", borderRadius: "8px", fontSize: "12px",
+                      color: "var(--text-secondary)", background: "var(--bg-surface)",
+                      border: "1px solid var(--border)", cursor: "pointer",
+                    }}>
+                      📁 Súbor
+                      <input type="file" accept="image/*,application/pdf" multiple
+                        onChange={e => handleDocFoto(doc.key, e.target.files)}
+                        style={{ display: "none" }} />
+                    </label>
+                  </div>
                 </div>
               )}
             </div>
@@ -2283,6 +2332,27 @@ Odpovedaj stručne po slovensky.`;
       }}>
         {saving ? "Ukladám..." : remoteSignMode ? "📧 Uložiť a poslať klientovi link na podpis" : "Uložiť náberový list"}
       </button>
+
+      <DocumentScannerModal
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        docLabel={
+          (() => {
+            const found = ([] as { key: string; label: string }[]).concat(
+              [
+                { key: "lv", label: "List vlastníctva" },
+                { key: "energeticky_certifikat", label: "Energetický certifikát" },
+                { key: "podorys", label: "Pôdorys" },
+                { key: "nahlad_katastra", label: "Náhľad z katastra" },
+                { key: "znalecky_posudok", label: "Znalecký posudok" },
+                { key: "ine", label: "Iný dokument" },
+              ]
+            ).find(d => d.key === scannerDocKey);
+            return found ? found.label : scannerDocKey;
+          })()
+        }
+        onSave={handleScanSave}
+      />
     </div>
   );
 }
