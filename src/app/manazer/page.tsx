@@ -110,7 +110,16 @@ export default function ManazerPage() {
 
   // Makler sees only Štatistiky; manager+ sees all tabs
   type TabKey = "prehlad" | "statistiky" | "tim" | "vytazenost" | "provizie";
-  const [tab, setTab] = useState<TabKey>(isManagerOrAbove ? "prehlad" : "statistiky");
+  const [tab, setTab] = useState<TabKey>("statistiky");
+  const [tabSet, setTabSet] = useState(false);
+
+  // Po načítaní usera nastavíme správny default tab
+  useEffect(() => {
+    if (user && !tabSet) {
+      setTab(isManagerOrAbove ? "prehlad" : "statistiky");
+      setTabSet(true);
+    }
+  }, [user, isManagerOrAbove, tabSet]);
 
   const tabs: { id: TabKey; label: string }[] = [
     ...(isManagerOrAbove ? [{ id: "prehlad" as TabKey, label: "📊 Prehľad" }] : []),
@@ -122,7 +131,11 @@ export default function ManazerPage() {
     ] : []),
   ];
 
-  if (user && !isManagerOrAbove && !isMakler) {
+  if (!user) {
+    return <div style={{ textAlign: "center", padding: "80px 0", color: "var(--text-muted)", fontSize: 14 }}>Načítavam...</div>;
+  }
+
+  if (!isManagerOrAbove && !isMakler) {
     return (
       <div style={{ maxWidth: "480px", margin: "80px auto", textAlign: "center", padding: "0 24px" }}>
         <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "8px" }}>Nemáš prístup</div>
