@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import type { User } from "@/components/AuthProvider";
 import SlaPoruseni from "@/components/SlaPoruseni";
+import { isSuperAdmin } from "@/lib/auth/requireUser";
+import PasswordInput from "@/components/PasswordInput";
+import { ALL_FEATURES, loadFeatureToggles, saveFeatureToggles } from "@/lib/featureToggles";
+import type { FeatureId, FeatureToggles } from "@/lib/featureToggles";
 
 // ─── Shared typy ─────────────────────────────────────────────────────────────
 
@@ -100,6 +105,48 @@ function isDeal(stav: string | null) {
   return ["predany", "predaný", "archiv"].includes((stav ?? "").toLowerCase());
 }
 
+function inPeriod(date: string | null, from: Date) {
+  return date ? new Date(date) >= from : false;
+}
+
+function fmtEur(n: number) { return n.toLocaleString("sk", { maximumFractionDigits: 0 }) + " €"; }
+function avatarInitials(name: string) { return name.split(" ").map(p => p[0] || "").join("").toUpperCase().slice(0, 2); }
+
+const S = {
+  card: { background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "18px 20px" } as React.CSSProperties,
+};
+
+function KpiCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
+  return (
+    <div style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: color ?? "var(--text-primary)", lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function PeriodSwitch({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
+  return (
+    <div style={{ display: "flex", gap: 4, background: "var(--bg-elevated)", borderRadius: 8, padding: 3 }}>
+      {([["month", "Mesiac"], ["quarter", "Kvartál"], ["year", "Rok"]] as [Period, string][]).map(([p, l]) => (
+        <button key={p} onClick={() => onChange(p as Period)} style={{
+          padding: "5px 12px", borderRadius: 6, border: "none", fontSize: 12, fontWeight: value === p ? 700 : 500,
+          background: value === p ? "var(--bg-surface)" : "transparent",
+          color: value === p ? "var(--text-primary)" : "var(--text-muted)", cursor: "pointer",
+          boxShadow: value === p ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+        }}>{l}</button>
+      ))}
+    </div>
+  );
+}
+
+// Typy pre Pobočka tab
+interface UserRow { id: string; name: string; email: string; role: string; pobocka_id: string | null; }
+interface PobockaRow { id: string; nazov: string; mesto: string; }
+interface NehPobRow { id: string; stav_inzeratu: string | null; cena: number | null; created_at: string; updated_at: string | null; makler_id: string | null; provizia_hodnota: number | null; }
+interface KlientPobRow { id: string; created_at: string; makler_id: string | null; }
+
 // ─── Root page ────────────────────────────────────────────────────────────────
 
 export default function ManazerPage() {
@@ -109,14 +156,16 @@ export default function ManazerPage() {
   const isMakler = role === "makler";
 
   // Makler sees only Štatistiky; manager+ sees all tabs
-  type TabKey = "prehlad" | "statistiky" | "tim" | "vytazenost" | "provizie";
+  type TabKey = "prehlad" | "statistiky" | "pobocka" | "tim" | "vytazenost" | "provizie";
   const [tab, setTab] = useState<TabKey>("statistiky");
   const [tabSet, setTabSet] = useState(false);
 
-  // Po načítaní usera nastavíme správny default tab
+  // Po načítaní usera nastavíme správny default tab (+ podpora ?tab= URL parametra)
   useEffect(() => {
     if (user && !tabSet) {
-      setTab(isManagerOrAbove ? "prehlad" : "statistiky");
+      const urlTab = new URLSearchParams(window.location.search).get("tab") as TabKey | null;
+      const validTab = urlTab && (["prehlad", "statistiky", "pobocka", "tim", "vytazenost", "provizie"] as TabKey[]).includes(urlTab);
+      setTab(validTab ? urlTab! : (isManagerOrAbove ? "prehlad" : "statistiky"));
       setTabSet(true);
     }
   }, [user, isManagerOrAbove, tabSet]);
@@ -125,6 +174,7 @@ export default function ManazerPage() {
     ...(isManagerOrAbove ? [{ id: "prehlad" as TabKey, label: "📊 Prehľad" }] : []),
     { id: "statistiky" as TabKey, label: "📉 Štatistiky" },
     ...(isManagerOrAbove ? [
+      { id: "pobocka" as TabKey, label: "🏢 Pobočka" },
       { id: "tim" as TabKey, label: "👥 Tím" },
       { id: "vytazenost" as TabKey, label: "👷 Vyťaženosť" },
       { id: "provizie" as TabKey, label: "💼 Provízie" },
@@ -175,6 +225,7 @@ export default function ManazerPage() {
 
       {tab === "prehlad"    && <TabPrehlad />}
       {tab === "statistiky" && <TabStatistiky isManagerOrAbove={isManagerOrAbove} userEmail={user?.email ?? ""} />}
+      {tab === "pobocka"    && <TabPobocka userRole={role} userPobockaId={(user as unknown as { pobocka_id?: string | null })?.pobocka_id ?? null} />}
       {tab === "tim"        && <TabTim />}
       {tab === "vytazenost" && <TabVytazenost />}
       {tab === "provizie"   && <TabProvizie />}
@@ -191,6 +242,9 @@ function TabPrehlad() {
   const [team, setTeam] = useState<TeamStat[]>([]);
   const [monthly, setMonthly] = useState<MonthlyData[]>([]);
   const [criticalCount, setCriticalCount] = useState(0);
+  const [period, setPeriod] = useState<Period>("month");
+  const [rawNeh, setRawNeh] = useState<NehPobRow[]>([]);
+  const [rawMakleri, setRawMakleri] = useState<Array<{ id: string; email: string; meno: string }>>([]);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -221,6 +275,8 @@ function TabPrehlad() {
     const ms = (Array.isArray(makleriData) ? makleriData : []) as Array<{ id: string; email: string }>;
     const hs = (historyData ?? []) as Array<{ from_makler_id: string | null; action: string }>;
     setCriticalCount((slaRes.critical || []).length);
+    setRawNeh(nh as NehPobRow[]);
+    setRawMakleri((Array.isArray(makleriData) ? makleriData : []) as Array<{ id: string; email: string; meno: string }>);
 
     setTotals({ klienti: kl.length, nehnutelnosti: nh.length, nabery: nb.length, objednavky: ob.length });
 
@@ -263,6 +319,15 @@ function TabPrehlad() {
     setLoading(false);
   }
 
+  const top5From = periodStart(period);
+  const top5Deals = rawNeh.filter(n => isDeal(n.stav_inzeratu) && new Date(n.updated_at ?? n.created_at) >= top5From);
+  const top5Makleri = rawMakleri.map(m => ({
+    id: m.id, meno: m.meno,
+    deals: top5Deals.filter(n => n.makler_id === m.id).length,
+    obrat: top5Deals.filter(n => n.makler_id === m.id).reduce((s, n) => s + (n.cena ?? 0), 0),
+  })).filter(m => m.deals > 0).sort((a, b) => b.deals - a.deals).slice(0, 5);
+  const top5Label = period === "month" ? "tento mesiac" : period === "quarter" ? "tento kvartál" : "tento rok";
+
   const konverznyPomer = totals.klienti > 0 ? Math.round((totals.nabery / totals.klienti) * 100) : 0;
   const maxMonthly = Math.max(...monthly.map(m => Math.max(m.klienti, m.nabery)), 1);
 
@@ -274,6 +339,9 @@ function TabPrehlad() {
 
   return (
     <div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+        <PeriodSwitch value={period} onChange={setPeriod} />
+      </div>
       {criticalCount > 0 && (
         <div style={{
           marginBottom: 20, padding: "14px 16px",
@@ -351,6 +419,27 @@ function TabPrehlad() {
           ))}
         </div>
       </div>
+
+      {/* Top 5 maklérov */}
+      {top5Makleri.length > 0 && (
+        <div style={{ background: "var(--bg-surface)", borderRadius: 14, border: "1px solid var(--border)", overflow: "hidden", marginBottom: 24 }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>Top 5 maklérov — {top5Label}</h3>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>podľa uzavretých obchodov</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "28px 2fr 1fr 1fr", padding: "10px 20px", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", borderBottom: "1px solid var(--border)", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            <span>#</span><span>Maklér</span><span style={{ textAlign: "center" }}>Obchody</span><span style={{ textAlign: "right" }}>Obrat</span>
+          </div>
+          {top5Makleri.map((m, i) => (
+            <div key={m.id} style={{ display: "grid", gridTemplateColumns: "28px 2fr 1fr 1fr", padding: "12px 20px", alignItems: "center", borderBottom: i < top5Makleri.length - 1 ? "1px solid var(--border)" : "none", fontSize: 13 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: i === 0 ? "#D97706" : "var(--text-muted)" }}>{i + 1}.</div>
+              <div style={{ fontWeight: 600 }}>{m.meno}</div>
+              <div style={{ textAlign: "center", fontWeight: 700 }}>{m.deals}</div>
+              <div style={{ textAlign: "right", color: "var(--text-muted)" }}>{m.obrat > 0 ? `${m.obrat.toLocaleString("sk")} €` : "—"}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Team performance table */}
       {team.length > 0 && (
@@ -456,19 +545,18 @@ function TabStatistiky({ isManagerOrAbove, userEmail }: { isManagerOrAbove: bool
   const obrat = dealsInPeriod.reduce((s, n) => s + (n.cena ?? 0), 0);
   const konverzia = klientiInPeriod.length > 0 ? Math.round((naberyInPeriod.length / klientiInPeriod.length) * 100) : 0;
 
-  // Top 5 makléri (manager+ only)
+  // Top 5 maklérov — viditeľné pre všetkých (makléri vidia súťaž)
   interface MaklerStat { id: string; meno: string; deals: number; obrat: number; }
-  const topMakleri: MaklerStat[] = isManagerOrAbove
-    ? makleriList.map(m => ({
-        id: m.id,
-        meno: m.meno,
-        deals: dealsInPeriod.filter(n => n.makler_id === m.id || n.makler === m.id).length,
-        obrat: dealsInPeriod.filter(n => n.makler_id === m.id || n.makler === m.id).reduce((s, n) => s + (n.cena ?? 0), 0),
-      }))
-        .filter(m => m.deals > 0)
-        .sort((a, b) => b.deals - a.deals)
-        .slice(0, 5)
-    : [];
+  const allDealsInPeriod = nehnutelnosti.filter(n => isDeal(n.stav_inzeratu) && new Date(n.updated_at ?? n.created_at) >= from);
+  const topMakleri: MaklerStat[] = makleriList.map(m => ({
+    id: m.id,
+    meno: m.meno,
+    deals: allDealsInPeriod.filter(n => n.makler_id === m.id || n.makler === m.id).length,
+    obrat: allDealsInPeriod.filter(n => n.makler_id === m.id || n.makler === m.id).reduce((s, n) => s + (n.cena ?? 0), 0),
+  }))
+    .filter(m => m.deals > 0)
+    .sort((a, b) => b.deals - a.deals)
+    .slice(0, 5);
 
   const periodLabel = period === "month" ? "tento mesiac" : period === "quarter" ? "tento kvartál" : "tento rok";
 
@@ -512,32 +600,34 @@ function TabStatistiky({ isManagerOrAbove, userEmail }: { isManagerOrAbove: bool
         ))}
       </div>
 
-      {/* Top 5 makléri (manager+ only) */}
-      {isManagerOrAbove && topMakleri.length > 0 && (
+      {/* Top 5 maklérov — viditeľné pre všetkých */}
+      {topMakleri.length > 0 ? (
         <div style={{ background: "var(--bg-surface)", borderRadius: 14, border: "1px solid var(--border)", overflow: "hidden" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-              Top makléri — {periodLabel}
-            </h3>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>Top 5 maklérov — {periodLabel}</h3>
+            {!isManagerOrAbove && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>súťaž tímu</span>}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "10px 20px", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", borderBottom: "1px solid var(--border)", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isManagerOrAbove ? "28px 2fr 1fr 1fr" : "28px 2fr 1fr", padding: "10px 20px", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", borderBottom: "1px solid var(--border)", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+            <span>#</span>
             <span>Maklér</span>
-            <span style={{ textAlign: "center" }}>Uzavreté obchody</span>
-            <span style={{ textAlign: "right" }}>Obrat</span>
+            <span style={{ textAlign: "center" }}>Obchody</span>
+            {isManagerOrAbove && <span style={{ textAlign: "right" }}>Obrat</span>}
           </div>
-          {topMakleri.map((m, i) => (
-            <div key={m.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", padding: "13px 20px", alignItems: "center", borderBottom: i < topMakleri.length - 1 ? "1px solid var(--border)" : "none", fontSize: 13 }}>
-              <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{m.meno}</div>
-              <div style={{ textAlign: "center", fontWeight: 700, color: "#374151" }}>{m.deals}</div>
-              <div style={{ textAlign: "right", fontWeight: 600, color: "var(--text-secondary)" }}>
-                {m.obrat > 0 ? `${m.obrat.toLocaleString("sk")} €` : "—"}
+          {topMakleri.map((m, i) => {
+            const isMe = m.id === myMaklerUuid;
+            return (
+              <div key={m.id} style={{ display: "grid", gridTemplateColumns: isManagerOrAbove ? "28px 2fr 1fr 1fr" : "28px 2fr 1fr", padding: "13px 20px", alignItems: "center", borderBottom: i < topMakleri.length - 1 ? "1px solid var(--border)" : "none", fontSize: 13, background: isMe ? "rgba(55,65,81,0.04)" : "transparent" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: i === 0 ? "#D97706" : "var(--text-muted)" }}>{i + 1}.</div>
+                <div style={{ fontWeight: isMe ? 700 : 600, color: "var(--text-primary)" }}>
+                  {m.meno}{isMe && <span style={{ marginLeft: 6, fontSize: 10, color: "var(--text-muted)", fontWeight: 400 }}>vy</span>}
+                </div>
+                <div style={{ textAlign: "center", fontWeight: 700, color: "#374151" }}>{m.deals}</div>
+                {isManagerOrAbove && <div style={{ textAlign: "right", fontWeight: 600, color: "var(--text-secondary)" }}>{m.obrat > 0 ? `${m.obrat.toLocaleString("sk")} €` : "—"}</div>}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-      )}
-
-      {isManagerOrAbove && topMakleri.length === 0 && (
+      ) : (
         <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-muted)", fontSize: 13 }}>
           Žiadne uzavreté obchody za {periodLabel}.
         </div>
@@ -549,84 +639,72 @@ function TabStatistiky({ isManagerOrAbove, userEmail }: { isManagerOrAbove: bool
 // ─── Tab: Tím ─────────────────────────────────────────────────────────────────
 
 function TabTim() {
-  const { user } = useAuth();
-  const [members, setMembers] = useState<TeamMember[]>([]);
+  const { user, accounts, addAccount, updateAccount, deleteAccount } = useAuth();
+  const isAdmin = isSuperAdmin(user?.role);
+
+  const [klienti, setKlienti] = useState<Array<{ makler_id: string }>>([]);
+  const [nabery,  setNabery]  = useState<Array<{ makler_id: string }>>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [formName, setFormName]   = useState("");
-  const [formEmail, setFormEmail] = useState("");
-  const [formRole, setFormRole]   = useState("makler");
-  const [saving, setSaving]       = useState(false);
-  const [inviteSending, setInviteSending] = useState<string | null>(null);
-  const [inviteSentFor, setInviteSentFor] = useState<string | null>(null);
 
-  useEffect(() => { fetchTeam(); }, []);
+  // Nový účet
+  const [showForm, setShowForm]               = useState(false);
+  const [newUserName, setNewUserName]         = useState("");
+  const [newUserEmail, setNewUserEmail]       = useState("");
+  const [newUserLoginEmail, setNewUserLoginEmail] = useState("");
+  const [newUserRole, setNewUserRole]         = useState("Maklér · Vianema");
+  const [newUserPw, setNewUserPw]             = useState("");
 
-  async function fetchTeam() {
-    setLoading(true);
-    const [usersData, klienti, nabery] = await Promise.all([
-      fetch("/api/users").then(r => r.json()),
-      fetch("/api/klienti").then(r => r.json()),
-      fetch("/api/nabery").then(r => r.json()),
-    ]);
-    const users = usersData.users ?? [];
-    setMembers(users.map((u: { id: string; name: string; email: string; role: string }) => ({
-      id: u.id, name: u.name, email: u.email, role: u.role || "makler",
-      klientCount: (klienti ?? []).filter((k: { makler_id: string }) => k.makler_id === u.id).length,
-      naberCount:  (nabery  ?? []).filter((n: { makler_id: string }) => n.makler_id === u.id).length,
-    })));
-    setLoading(false);
-  }
+  // Editácia účtu
+  const [editingUser, setEditingUser]   = useState<User | null>(null);
+  const [accountSaved, setAccountSaved] = useState(false);
 
-  async function handleCreate() {
-    if (!formName.trim() || !formEmail.trim()) return;
-    setSaving(true);
-    const id = formName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-    const parts = formName.trim().split(" ");
-    const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
-    const res = await fetch("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, name: formName.trim(), initials, email: formEmail.trim(), role: formRole, password: "" }),
-    });
-    if (res.ok) {
-      setFormName(""); setFormEmail(""); setFormRole("makler"); setShowForm(false);
-      fetchTeam();
-    }
-    setSaving(false);
-  }
+  // Feature toggles
+  const [featureToggles, setFeatureToggles] = useState<FeatureToggles>({});
+  const [expandedUser, setExpandedUser]     = useState<string | null>(null);
 
-  async function sendInvite(memberId: string) {
-    if (inviteSending) return;
-    setInviteSending(memberId);
-    const res = await fetch("/api/users/invite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: memberId }),
-    });
-    setInviteSending(null);
-    if (res.ok) {
-      setInviteSentFor(memberId);
-      setTimeout(() => setInviteSentFor(null), 5000);
-    } else {
-      alert("Pozvánku sa nepodarilo odoslať.");
-    }
-  }
+  // Pozvánky
+  const [inviteSending, setInviteSending]   = useState<string | null>(null);
+  const [inviteSentFor, setInviteSentFor]   = useState<string | null>(null);
+  const [selectedInvites, setSelectedInvites] = useState<Set<string>>(new Set());
+  const [bulkSending, setBulkSending]       = useState(false);
+  const [bulkDone, setBulkDone]             = useState<string[]>([]);
+
+  useEffect(() => {
+    setFeatureToggles(loadFeatureToggles());
+    (async () => {
+      setLoading(true);
+      const [kl, nb] = await Promise.all([
+        fetch("/api/klienti").then(r => r.json()),
+        fetch("/api/nabery").then(r => r.json()),
+      ]);
+      setKlienti(kl ?? []);
+      setNabery(nb ?? []);
+      setLoading(false);
+    })();
+  }, []);
+
+  const getKlientCount = (id: string) => klienti.filter(k => k.makler_id === id).length;
+  const getNaberCount  = (id: string) => nabery.filter(n => n.makler_id === id).length;
 
   const roleLabel = (r: string) => {
-    if (r === "super_admin") return "Admin";
-    if (r === "majitel")    return "Majiteľ";
-    if (r === "manazer")    return "Manažér";
+    if (r === "super_admin" || r === "Admin · Vianema") return "Admin";
+    if (r === "majitel"     || r === "Konateľ · Vianema") return "Majiteľ";
+    if (r === "manazer") return "Manažér";
     return "Maklér";
   };
 
+  if (loading) return (
+    <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-muted)", fontSize: 14 }}>Načítavam…</div>
+  );
+
   return (
     <div>
+      {/* KPI */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
         {[
-          { label: "Členov tímu",   value: members.length },
-          { label: "Klienti spolu", value: members.reduce((s, m) => s + m.klientCount, 0) },
-          { label: "Nábery spolu",  value: members.reduce((s, m) => s + m.naberCount, 0) },
+          { label: "Členov tímu",   value: accounts.length },
+          { label: "Klienti spolu", value: klienti.length },
+          { label: "Nábery spolu",  value: nabery.length },
         ].map(s => (
           <div key={s.label} style={{ padding: 16, background: "var(--bg-surface)", borderRadius: 12, border: "1px solid var(--border)" }}>
             <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 500, marginBottom: 4 }}>{s.label}</div>
@@ -635,98 +713,255 @@ function TabTim() {
         ))}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <button onClick={() => setShowForm(!showForm)} style={{ padding: "9px 18px", background: "#374151", color: "#fff", borderRadius: 10, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer" }}>
-          + Nový účet
-        </button>
-      </div>
+      {/* Nový účet — iba admin */}
+      {isAdmin && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button onClick={() => setShowForm(!showForm)} style={{
+            padding: "9px 18px", background: "#374151", color: "#fff",
+            borderRadius: 10, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer",
+          }}>
+            + Nový účet
+          </button>
+        </div>
+      )}
 
-      {showForm && (
-        <div style={{ padding: 20, background: "var(--bg-surface)", borderRadius: 14, border: "1px solid var(--border)", marginBottom: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>Nový účet</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+      {isAdmin && showForm && (
+        <div style={{ padding: "16px", borderRadius: "10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", marginBottom: "16px" }}>
+          <div style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "12px" }}>Nový účet</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }} className="naber-grid">
             <div>
-              <label style={labelSt}>Meno a priezvisko</label>
-              <input style={inputSt} value={formName} onChange={e => setFormName(e.target.value)} placeholder="Ján Novák" />
+              <div style={labelSt}>Meno a priezvisko</div>
+              <input style={inputSt} value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Meno Priezvisko" />
             </div>
             <div>
-              <label style={labelSt}>Email</label>
-              <input type="email" style={inputSt} value={formEmail} onChange={e => setFormEmail(e.target.value)} placeholder="jan@vianema.eu" />
+              <div style={labelSt}>Vianema email</div>
+              <input type="email" style={inputSt} value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="meno@vianema.eu" />
             </div>
             <div>
-              <label style={labelSt}>Rola</label>
-              <select style={inputSt} value={formRole} onChange={e => setFormRole(e.target.value)}>
-                <option value="makler">Maklér</option>
-                <option value="manazer">Manažér</option>
-                <option value="majitel">Majiteľ</option>
+              <div style={labelSt}>Gmail pre prihlásenie (Google OAuth)</div>
+              <input type="email" style={inputSt} value={newUserLoginEmail} onChange={e => setNewUserLoginEmail(e.target.value)} placeholder="meno.priezvisko@gmail.com" />
+            </div>
+            <div>
+              <div style={labelSt}>Rola</div>
+              <select style={inputSt} value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
+                <option value="Maklér · Vianema">Maklér</option>
+                <option value="Konateľ · Vianema">Konateľ</option>
+                <option value="Admin · Vianema">Admin</option>
               </select>
             </div>
+            <div>
+              <div style={labelSt}>Heslo (voliteľné)</div>
+              <PasswordInput
+                autoComplete="new-password"
+                value={newUserPw} onChange={e => setNewUserPw(e.target.value)}
+                placeholder="Bez hesla = priamy prístup"
+                style={inputSt as React.CSSProperties}
+              />
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button onClick={() => setShowForm(false)} style={{ padding: "8px 16px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, color: "var(--text-secondary)", cursor: "pointer" }}>
-              Zrušiť
+          <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+            <button onClick={() => {
+              if (!newUserName.trim()) return;
+              const id = newUserName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+              const parts = newUserName.trim().split(" ");
+              const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
+              addAccount({ id, name: newUserName.trim(), initials, role: newUserRole, email: newUserEmail, login_email: newUserLoginEmail || undefined, password: newUserPw || "" });
+              setNewUserName(""); setNewUserEmail(""); setNewUserLoginEmail(""); setNewUserPw("");
+              setShowForm(false);
+            }} style={{
+              padding: "8px 18px", background: "#374151", color: "#fff", border: "none",
+              borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
+            }}>Vytvoriť</button>
+            <button onClick={() => setShowForm(false)} style={{
+              padding: "8px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
+              border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
+            }}>Zrušiť</button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk invite toolbar */}
+      {isAdmin && selectedInvites.size > 0 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", marginBottom: "8px", borderRadius: "10px", background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
+          <span style={{ fontSize: "13px", color: "#1D4ED8", fontWeight: 600 }}>
+            {selectedInvites.size} {selectedInvites.size === 1 ? "maklér vybraný" : "makléri vybraní"}
+          </span>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button onClick={() => setSelectedInvites(new Set())} style={{ padding: "5px 10px", background: "transparent", border: "1px solid #BFDBFE", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#1D4ED8" }}>
+              Zrušiť výber
             </button>
-            <button onClick={handleCreate} disabled={saving || !formName.trim() || !formEmail.trim()} style={{ padding: "8px 16px", background: "#374151", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", opacity: saving || !formName.trim() || !formEmail.trim() ? 0.5 : 1 }}>
-              {saving ? "Ukladám…" : "Vytvoriť"}
+            <button disabled={bulkSending} onClick={async () => {
+              setBulkSending(true); setBulkDone([]);
+              const ids = Array.from(selectedInvites);
+              const results = await Promise.all(ids.map(id =>
+                fetch("/api/users/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: id }) })
+                  .then(r => ({ id, ok: r.ok })).catch(() => ({ id, ok: false }))
+              ));
+              const sent = results.filter(r => r.ok).map(r => r.id);
+              const failed = results.filter(r => !r.ok);
+              setBulkDone(sent); setBulkSending(false); setSelectedInvites(new Set());
+              if (failed.length > 0) alert(`${failed.length} pozvánok sa nepodarilo odoslať.`);
+              setTimeout(() => setBulkDone([]), 5000);
+            }} style={{ padding: "5px 14px", background: bulkSending ? "#93C5FD" : "#2563EB", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: bulkSending ? "not-allowed" : "pointer", color: "#fff" }}>
+              {bulkSending ? "Odosielam…" : `✉ Poslať ${selectedInvites.size} pozvánok`}
             </button>
           </div>
         </div>
       )}
 
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-muted)", fontSize: 14 }}>Načítavam…</div>
-      ) : (
-        <div style={{ background: "var(--bg-surface)", borderRadius: 14, border: "1px solid var(--border)", overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 120px 110px", padding: "10px 20px", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", borderBottom: "1px solid var(--border)", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-            <span>Člen tímu</span>
-            <span style={{ textAlign: "center" }}>Klienti</span>
-            <span style={{ textAlign: "center" }}>Nábery</span>
-            <span style={{ textAlign: "center" }}>Rola</span>
-            <span style={{ textAlign: "right" }}>Pozvánka</span>
-          </div>
-          {members.map((m, i) => {
-            const initials = m.name.split(" ").map(w => w[0] || "").join("").toUpperCase().slice(0, 2);
-            const isMe = user?.id === m.id;
-            const sent = inviteSentFor === m.id;
-            return (
-              <div key={m.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 120px 110px", padding: "13px 20px", alignItems: "center", borderBottom: i < members.length - 1 ? "1px solid var(--border)" : "none", fontSize: 13, background: isMe ? "rgba(55,65,81,0.03)" : "transparent" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: "50%", background: isMe ? "#374151" : "#6B7280", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                    {initials}
+      {/* Zoznam účtov */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {accounts.map(acc => {
+          const isMe = user?.id === acc.id;
+          return (
+            <div key={acc.id} style={{
+              borderRadius: "10px", overflow: "hidden",
+              background: bulkDone.includes(acc.id) ? "#F0FDF4" : "var(--bg-elevated)",
+              border: `1px solid ${bulkDone.includes(acc.id) ? "#86EFAC" : "var(--border)"}`,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 14px" }}>
+                {isAdmin && acc.id !== "ales" && (
+                  <input type="checkbox" checked={selectedInvites.has(acc.id)} onChange={e => {
+                    const next = new Set(selectedInvites);
+                    e.target.checked ? next.add(acc.id) : next.delete(acc.id);
+                    setSelectedInvites(next);
+                  }} style={{ width: "15px", height: "15px", accentColor: "#2563EB", flexShrink: 0, cursor: "pointer" }} />
+                )}
+                <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: isMe ? "#374151" : "#6B7280", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: "700", flexShrink: 0 }}>
+                  {acc.initials}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-primary)" }}>
+                    {acc.name} {acc.password ? "🔒" : ""} {isMe && <span style={{ fontSize: 10, color: "var(--text-muted)" }}>(vy)</span>}
                   </div>
-                  <div>
-                    <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-                      {m.name} {isMe && <span style={{ fontSize: 10, color: "var(--text-muted)" }}>(vy)</span>}
+                  <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                    {acc.email} · {roleLabel(acc.role)} · {getKlientCount(acc.id)} klientov · {getNaberCount(acc.id)} náberov
+                  </div>
+                  {acc.login_email && (
+                    <div style={{ fontSize: "11px", color: "#3B82F6", marginTop: "2px" }}>G {acc.login_email}</div>
+                  )}
+                </div>
+
+                {isAdmin && editingUser?.id === acc.id ? (
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                    <input type="email" placeholder="Gmail pre Google login" value={editingUser.login_email || ""}
+                      onChange={e => setEditingUser({ ...editingUser, login_email: e.target.value })}
+                      style={{ ...inputSt, width: "200px", padding: "6px 10px", fontSize: "12px" }}
+                    />
+                    <div style={{ width: "180px" }}>
+                      <PasswordInput autoComplete="new-password" placeholder="Nové heslo" value={editingUser.password || ""}
+                        onChange={e => setEditingUser({ ...editingUser, password: e.target.value })}
+                        style={{ ...inputSt, padding: "6px 32px 6px 10px", fontSize: "12px" } as React.CSSProperties}
+                      />
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{m.email}</div>
+                    <button onClick={() => {
+                      updateAccount(editingUser); setEditingUser(null);
+                      setAccountSaved(true); setTimeout(() => setAccountSaved(false), 2000);
+                    }} style={{ padding: "6px 12px", background: "#374151", color: "#fff", border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: "600", cursor: "pointer" }}>
+                      Uložiť
+                    </button>
+                    <button onClick={() => setEditingUser(null)} style={{ padding: "6px 8px", background: "transparent", color: "var(--text-muted)", border: "none", fontSize: "11px", cursor: "pointer" }}>✕</button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    {isAdmin && acc.id !== "ales" && (
+                      <button onClick={() => setExpandedUser(expandedUser === acc.id ? null : acc.id)} style={{
+                        padding: "5px 10px", background: expandedUser === acc.id ? "#374151" : "var(--bg-surface)",
+                        color: expandedUser === acc.id ? "#fff" : "var(--text-secondary)",
+                        border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer",
+                      }}>Funkcie</button>
+                    )}
+                    {isAdmin && (
+                      <button onClick={() => setEditingUser({ ...acc })} style={{ padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)" }}>
+                        Heslo
+                      </button>
+                    )}
+                    {isAdmin && acc.id !== "ales" && (
+                      <button onClick={async () => {
+                        if (inviteSending) return;
+                        setInviteSending(acc.id); setInviteSentFor(null);
+                        try {
+                          const res = await fetch("/api/users/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: acc.id }) });
+                          const body = await res.json();
+                          if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
+                          setInviteSentFor(acc.id);
+                          setTimeout(() => setInviteSentFor(null), 4000);
+                        } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
+                        finally { setInviteSending(null); }
+                      }} style={{
+                        padding: "5px 10px",
+                        background: inviteSentFor === acc.id ? "#D1FAE5" : "var(--bg-surface)",
+                        border: `1px solid ${inviteSentFor === acc.id ? "#6EE7B7" : "var(--border)"}`,
+                        borderRadius: "6px", fontSize: "11px", cursor: "pointer",
+                        color: inviteSentFor === acc.id ? "#065F46" : "var(--text-secondary)",
+                        opacity: inviteSending === acc.id ? 0.6 : 1,
+                      }}>
+                        {inviteSending === acc.id ? "…" : inviteSentFor === acc.id ? "✓ Odoslané" : "✉ Pozvánka"}
+                      </button>
+                    )}
+                    {isAdmin && acc.id !== "ales" && (
+                      <button onClick={async () => {
+                        if (!confirm(`Resetovať heslo pre ${acc.name}?`)) return;
+                        try {
+                          const res = await fetch("/api/users/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: acc.id }) });
+                          const body = await res.json();
+                          if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
+                          try { await navigator.clipboard.writeText(body.temp_password); } catch { /* ignore */ }
+                          alert(`✅ Heslo resetované pre ${acc.name}\n\nDočasné heslo (skopírované do schránky):\n\n${body.temp_password}\n\nPošli ho maklerovi bezpečným kanálom.`);
+                        } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
+                      }} style={{ padding: "5px 10px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#92400E" }}>
+                        🔑 Reset
+                      </button>
+                    )}
+                    {isAdmin && acc.id !== "ales" && (
+                      <button onClick={() => { if (confirm(`Odstrániť účet ${acc.name}?`)) deleteAccount(acc.id); }} style={{ padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#EF4444" }}>
+                        Odstrániť
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Feature toggles panel */}
+              {isAdmin && expandedUser === acc.id && acc.id !== "ales" && (
+                <div style={{ padding: "12px 14px", borderTop: "1px solid var(--border)", background: "var(--bg-surface)" }}>
+                  <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: "10px" }}>
+                    Povolené funkcie pre {acc.name}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }} className="naber-grid">
+                    {ALL_FEATURES.map(feat => {
+                      const enabled = featureToggles[acc.id]?.[feat.id] !== false;
+                      return (
+                        <button key={feat.id} onClick={() => {
+                          const next = { ...featureToggles };
+                          if (!next[acc.id]) next[acc.id] = {} as Record<FeatureId, boolean>;
+                          next[acc.id][feat.id] = !enabled;
+                          setFeatureToggles(next);
+                          saveFeatureToggles(next);
+                        }} style={{
+                          display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "8px",
+                          background: enabled ? "#F0FDF4" : "var(--bg-elevated)",
+                          border: `1px solid ${enabled ? "#BBF7D0" : "var(--border)"}`,
+                          cursor: "pointer", fontSize: "12px", fontWeight: "500",
+                          color: enabled ? "#065F46" : "var(--text-muted)", transition: "all 0.15s",
+                        }}>
+                          <div style={{ width: "32px", height: "18px", borderRadius: "9px", background: enabled ? "#10B981" : "#D1D5DB", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                            <div style={{ width: "14px", height: "14px", borderRadius: "50%", background: "#fff", position: "absolute", top: "2px", left: enabled ? "16px" : "2px", transition: "left 0.2s", boxShadow: "0 1px 2px rgba(0,0,0,0.15)" }} />
+                          </div>
+                          {feat.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-                <div style={{ textAlign: "center", fontWeight: 600 }}>{m.klientCount}</div>
-                <div style={{ textAlign: "center", fontWeight: 600 }}>{m.naberCount}</div>
-                <div style={{ textAlign: "center" }}>
-                  <span style={{ fontSize: 11, padding: "3px 10px", borderRadius: 20, fontWeight: 600, background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-                    {roleLabel(m.role)}
-                  </span>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <button
-                    onClick={() => sendInvite(m.id)}
-                    disabled={!!inviteSending || sent}
-                    style={{
-                      padding: "5px 12px", fontSize: 11, fontWeight: 600, borderRadius: 8, cursor: inviteSending || sent ? "default" : "pointer",
-                      background: sent ? "#D1FAE5" : "var(--bg-elevated)",
-                      border: `1px solid ${sent ? "#6EE7B7" : "var(--border)"}`,
-                      color: sent ? "#065F46" : "var(--text-secondary)",
-                      opacity: inviteSending === m.id ? 0.6 : 1,
-                    }}
-                  >
-                    {inviteSending === m.id ? "…" : sent ? "✓ Odoslané" : "✉ Pozvánka"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {accountSaved && (
+        <div style={{ fontSize: "13px", color: "#065F46", fontWeight: "500", marginTop: "12px" }}>Účet aktualizovaný</div>
       )}
     </div>
   );
@@ -979,6 +1214,171 @@ function TabProvizie() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Tab: Pobočka ─────────────────────────────────────────────────────────────
+
+function TabPobocka({ userRole, userPobockaId }: { userRole: string; userPobockaId: string | null }) {
+  const [period, setPeriod] = useState<Period>("month");
+  const [loading, setLoading] = useState(true);
+  const [nehnutelnosti, setNehnutelnosti] = useState<NehPobRow[]>([]);
+  const [klienti, setKlienti] = useState<KlientPobRow[]>([]);
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [pobocky, setPobocky] = useState<PobockaRow[]>([]);
+
+  type SortKey = "nazov" | "makleri" | "nabery" | "obrat" | "obchody";
+  const [sortKey, setSortKey] = useState<SortKey>("obrat");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [drillPobocka, setDrillPobocka] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const [nehData, klData, usersData, pobData] = await Promise.all([
+        fetch("/api/nehnutelnosti").then(r => r.json()),
+        fetch("/api/klienti").then(r => r.json()),
+        fetch("/api/users").then(r => r.json()),
+        fetch("/api/pobocky").then(r => r.json()).catch(() => []),
+      ]);
+      setNehnutelnosti(nehData ?? []);
+      setKlienti(klData ?? []);
+      setUsers(usersData.users ?? []);
+      setPobocky(Array.isArray(pobData) ? pobData : []);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  }
+
+  const from = periodStart(period);
+  const isManazer = userRole === "manazer";
+
+  const rows = useMemo(() => pobocky.map(p => {
+    const pobockaUsers = users.filter(u => u.pobocka_id === p.id);
+    const pobockaUserIds = new Set(pobockaUsers.map(u => u.id));
+    const deals = nehnutelnosti.filter(n => isDeal(n.stav_inzeratu) && inPeriod(n.updated_at ?? n.created_at, from) && (n.makler_id ? pobockaUserIds.has(n.makler_id) : false));
+    const nabery = klienti.filter(k => inPeriod(k.created_at, from) && (k.makler_id ? pobockaUserIds.has(k.makler_id) : false));
+    const obrat = deals.reduce((s, n) => s + (n.cena ?? 0), 0);
+    const provizia = deals.reduce((s, n) => s + (n.provizia_hodnota ?? (n.cena ?? 0) * 0.03), 0);
+    return { ...p, makleriCount: pobockaUsers.length, naberyCount: nabery.length, obchodovCount: deals.length, obrat, provizia };
+  }), [pobocky, users, nehnutelnosti, klienti, from]);
+
+  const sorted = [...rows].sort((a, b) => {
+    const v = sortDir === "asc" ? 1 : -1;
+    if (sortKey === "nazov") return v * a.nazov.localeCompare(b.nazov);
+    if (sortKey === "makleri") return v * (a.makleriCount - b.makleriCount);
+    if (sortKey === "nabery") return v * (a.naberyCount - b.naberyCount);
+    if (sortKey === "obrat") return v * (a.obrat - b.obrat);
+    return v * (a.obchodovCount - b.obchodovCount);
+  });
+
+  const SortTh = ({ k, label }: { k: SortKey; label: string }) => (
+    <th onClick={() => handleSort(k)} style={{ padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textAlign: k === "nazov" ? "left" : "right", cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>
+      {label}{sortKey === k ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+    </th>
+  );
+
+  const drill = drillPobocka ? rows.find(r => r.id === drillPobocka) : null;
+  const drillMakleri = drill ? users.filter(u => u.pobocka_id === drill.id) : [];
+  const drillDeals = drill ? nehnutelnosti.filter(n => isDeal(n.stav_inzeratu) && inPeriod(n.updated_at ?? n.created_at, from) && drillMakleri.some(u => u.id === n.makler_id)) : [];
+
+  if (loading) return <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-muted)", fontSize: 14 }}>Načítavam…</div>;
+
+  if (pobocky.length === 0) return (
+    <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-muted)", fontSize: 14 }}>
+      Žiadne pobočky. Pridaj ich v Nastaveniach.
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Porovnanie pobočiek</div>
+        <PeriodSwitch value={period} onChange={setPeriod} />
+      </div>
+
+      {drillPobocka && drill ? (
+        <div>
+          <button onClick={() => setDrillPobocka(null)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--text-primary)", cursor: "pointer", fontSize: 13, fontWeight: 600, marginBottom: 16, padding: 0 }}>
+            ← Späť
+          </button>
+          <div style={{ ...S.card, marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{drill.nazov}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>{drill.mesto}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+              <KpiCard label="Makléri" value={drill.makleriCount} />
+              <KpiCard label="Nábery" value={drill.naberyCount} sub="za obdobie" />
+              <KpiCard label="Obchody" value={drill.obchodovCount} sub="za obdobie" />
+              <KpiCard label="Obrat" value={drill.obrat ? fmtEur(drill.obrat) : "—"} color="var(--success)" />
+            </div>
+          </div>
+          <div style={{ ...S.card, padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", fontWeight: 600, fontSize: 13 }}>Makléri pobočky</div>
+            {drillMakleri.length === 0 ? (
+              <div style={{ padding: 16, color: "var(--text-muted)", fontSize: 13 }}>Žiadni makléri</div>
+            ) : drillMakleri.map((u, i) => {
+              const uDeals = drillDeals.filter(n => n.makler_id === u.id);
+              const uObrat = uDeals.reduce((s, n) => s + (n.cena ?? 0), 0);
+              return (
+                <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderBottom: i < drillMakleri.length - 1 ? "1px solid var(--border)" : "none", fontSize: 13 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#374151", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0 }}>{avatarInitials(u.name || u.email)}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600 }}>{u.name || u.email}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{u.role}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 700 }}>{uDeals.length} obchodov</div>
+                    <div style={{ fontSize: 11, color: "var(--success)" }}>{uObrat ? fmtEur(uObrat) : "—"}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div style={{ ...S.card, padding: 0, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <SortTh k="nazov" label="Pobočka" />
+                <SortTh k="makleri" label="Makléri" />
+                <SortTh k="nabery" label="Nábery" />
+                <SortTh k="obchody" label="Obchody" />
+                <SortTh k="obrat" label="Obrat" />
+                {(userRole === "super_admin" || userRole === "majitel") && <th style={{ padding: "10px 14px", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textAlign: "right" }}>Provízia</th>}
+                <th style={{ padding: "10px 14px" }} />
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.filter(r => isManazer ? r.id === userPobockaId : true).map((r, i) => {
+                const canDrill = userRole === "super_admin" || userRole === "majitel" || (isManazer && r.id === userPobockaId);
+                return (
+                  <tr key={r.id} style={{ borderBottom: i < sorted.length - 1 ? "1px solid var(--border)" : "none", background: isManazer && r.id === userPobockaId ? "var(--bg-elevated)" : "transparent" }}>
+                    <td style={{ padding: "12px 14px", fontWeight: 600, fontSize: 13 }}>
+                      <div>{r.nazov}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 400 }}>{r.mesto}</div>
+                    </td>
+                    <td style={{ padding: "12px 14px", textAlign: "right", fontSize: 13 }}>{r.makleriCount}</td>
+                    <td style={{ padding: "12px 14px", textAlign: "right", fontSize: 13 }}>{r.naberyCount}</td>
+                    <td style={{ padding: "12px 14px", textAlign: "right", fontSize: 13, fontWeight: 600 }}>{r.obchodovCount}</td>
+                    <td style={{ padding: "12px 14px", textAlign: "right", fontSize: 13, fontWeight: 700 }}>{r.obrat ? fmtEur(r.obrat) : "—"}</td>
+                    {(userRole === "super_admin" || userRole === "majitel") && <td style={{ padding: "12px 14px", textAlign: "right", fontSize: 13, color: "var(--success)" }}>{r.provizia ? fmtEur(r.provizia) : "—"}</td>}
+                    <td style={{ padding: "12px 14px", textAlign: "right" }}>
+                      {canDrill && <button onClick={() => setDrillPobocka(r.id)} style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer", color: "var(--text-primary)" }}>Detail →</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

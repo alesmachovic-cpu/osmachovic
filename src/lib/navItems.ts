@@ -24,7 +24,6 @@ export const systemNav: NavItem[] = [
   { label: "Kalendár",      href: "/kalendar",      icon: "📅" },
   { label: "Google Disk",   href: "/disk",          icon: "💾" },
   { label: "Upozornenia",   href: "/upozornenia",   icon: "🔔" },
-  { label: "Manažér",       href: "/manazer",       icon: "📊", minRole: "manazer" },
   { label: "Klientská zóna", href: "/klientska-zona", icon: "🌐" },
   { label: "Plán systému",  href: "/plan",          icon: "🗺️" },
   { label: "Nastavenia",    href: "/nastavenia",    icon: "⚙️" },

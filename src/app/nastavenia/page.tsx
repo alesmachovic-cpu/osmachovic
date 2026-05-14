@@ -323,7 +323,7 @@ export default function NastaveniaPage() {
     { id: "faktury", label: "Faktúry", icon: "🧾", href: "/nastavenia/faktury" },
     ...(isAdmin ? [
       { id: "spolocnost", label: "Spoločnosť", icon: "🏢" },
-      { id: "ucty", label: "Účty", icon: "👥" },
+      { id: "ucty", label: "Účty", icon: "👥", href: "/manazer?tab=tim" },
       { id: "billing", label: "Predplatné", icon: "💳" },
     ] : []),
   ];

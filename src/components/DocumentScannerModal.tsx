@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
-import jsPDF from "jspdf";
 
 interface Props {
   open: boolean;
@@ -308,18 +307,16 @@ export default function DocumentScannerModal({ open, onClose, docLabel, onSave }
     fileInputRef.current?.click();
   }
 
-  function handleExportPDF() {
+  async function handleExportPDF() {
     if (pages.length === 0) return;
+    const { default: jsPDF } = await import("jspdf");
     const pdf = new jsPDF({ unit: "mm", format: "a4" });
     const PAD = 5;
-    const pageW = 210;
-    const pageH = 297;
-    const availW = pageW - PAD * 2;
-    const availH = pageH - PAD * 2;
+    const availW = 210 - PAD * 2;
+    const availH = 297 - PAD * 2;
 
     pages.forEach((dataUrl, i) => {
       if (i > 0) pdf.addPage();
-      // Load image to get dimensions
       const tmp = new Image();
       tmp.src = dataUrl;
       const iw = tmp.naturalWidth || 800;
