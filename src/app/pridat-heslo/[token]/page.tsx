@@ -21,6 +21,7 @@ export default function PridatHesloPage() {
 
   const [state, setState] = useState<TokenState>("loading");
   const [userName, setUserName] = useState("");
+  const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -32,7 +33,7 @@ export default function PridatHesloPage() {
     fetch(`/api/users/invite/accept?token=${token}`)
       .then(r => r.json())
       .then(d => {
-        if (d.valid) { setState("valid"); setUserName(d.userName); }
+        if (d.valid) { setState("valid"); setUserName(d.userName); setUserId(d.userId ?? ""); }
         else setState("invalid");
       })
       .catch(() => setState("invalid"));
@@ -61,6 +62,9 @@ export default function PridatHesloPage() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Chyba"); return; }
+      // Nastav nového makléra ako aktívneho usera — cookie je už nastavený serverom
+      const uid = data.userId || userId;
+      if (uid) localStorage.setItem("crm_user", uid);
       setDone(true);
       setTimeout(() => router.push("/"), 1500);
     } finally {

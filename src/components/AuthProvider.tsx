@@ -319,7 +319,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   // Na /auth/callback, /reset-password a /registracia sa vždy zobrazí children (login bypass)
-  const isAuthCallback = pathname?.startsWith("/auth/callback") || pathname?.startsWith("/reset-password") || pathname?.startsWith("/registracia");
+  const isAuthCallback = pathname?.startsWith("/auth/callback") || pathname?.startsWith("/reset-password") || pathname?.startsWith("/registracia") || pathname?.startsWith("/pridat-heslo");
 
   if (!user && !isAuthCallback) {
     return (

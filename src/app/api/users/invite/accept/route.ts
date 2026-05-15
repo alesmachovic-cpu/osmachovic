@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   const { data: u } = await sb.from("users").select("name").eq("id", data.user_id).maybeSingle();
   const userName = (u?.name as string | null) ?? "";
-  return NextResponse.json({ valid: true, userName });
+  return NextResponse.json({ valid: true, userName, userId: data.user_id });
 }
 
 /** POST — uloží heslo, označí invite ako použitý, nastaví session */
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       .update({ used_at: new Date().toISOString() })
       .eq("id", invite.id);
 
-    const res = NextResponse.json({ success: true });
+    const res = NextResponse.json({ success: true, userId: invite.user_id });
     res.headers.set("Set-Cookie", buildSessionCookieValue(invite.user_id));
     return res;
   } catch (e) {
