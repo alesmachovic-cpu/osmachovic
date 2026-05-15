@@ -74,7 +74,8 @@ export default function PridatHesloPage() {
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#F5F5F7",
+      position: "fixed", inset: 0, zIndex: 9999,
+      background: "#F5F5F7",
       display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
       fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif",
     }}>
