@@ -110,7 +110,7 @@ export default function Portfolio() {
     if (user?.id) getMaklerUuid(user.id).then(uuid => {
       setMyMaklerUuid(uuid ?? null);
       // Makléri vidia predvolene vlastné portfólio (pokiaľ filter neupravili ručne)
-      if (!filterTouched && user.role === "makler" && uuid) {
+      if (!filterTouched && user.role === "makler") {
         setFilterMakler("mine");
       }
     });
