@@ -227,7 +227,7 @@ export default function ManazerPage() {
       {tab === "statistiky" && <TabStatistiky isManagerOrAbove={isManagerOrAbove} userEmail={user?.email ?? ""} />}
       {tab === "pobocka"    && <TabPobocka userRole={role} userPobockaId={(user as unknown as { pobocka_id?: string | null })?.pobocka_id ?? null} />}
       {tab === "tim"        && <TabTim />}
-      {tab === "vytazenost" && <TabSutaz currentUserId={user?.id} />}
+      {tab === "vytazenost" && <TabSutaz currentMaklerId={user?.makler_id} />}
       {tab === "provizie"   && <TabProvizie />}
     </div>
   );
@@ -1529,7 +1529,7 @@ function TabPobocka({ userRole, userPobockaId }: { userRole: string; userPobocka
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-function TabSutaz({ currentUserId }: { currentUserId?: string }) {
+function TabSutaz({ currentMaklerId }: { currentMaklerId?: string | null }) {
   type CatId = "obchody" | "obrat" | "nabery" | "klienti" | "portfolio";
   type RankRow = { id: string; name: string; value: number };
 
@@ -1538,38 +1538,23 @@ function TabSutaz({ currentUserId }: { currentUserId?: string }) {
   const [loading, setLoading] = useState(true);
   const [rawNeh, setRawNeh] = useState<NehPobRow[]>([]);
   const [rawMakleri, setRawMakleri] = useState<Array<{ id: string; meno: string }>>([]);
-  const [team, setTeam] = useState<TeamStat[]>([]);
+  const [rawKlienti, setRawKlienti] = useState<Array<{ makler_id: string | null }>>([]);
+  const [rawNabery, setRawNabery] = useState<Array<{ makler_id: string | null }>>([]);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       const creds = { credentials: "include" as const };
-      const [nehRes, makleriRes, klientiRes, naberyRes, usersRes] = await Promise.all([
+      const [nehRes, makleriRes, klientiRes, naberyRes] = await Promise.all([
         fetch("/api/nehnutelnosti", creds).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch("/api/makleri",       creds).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch("/api/klienti",       creds).then(r => r.ok ? r.json() : []).catch(() => []),
         fetch("/api/nabery",        creds).then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch("/api/users",         creds).then(r => r.ok ? r.json() : { users: [] }).catch(() => ({ users: [] })),
       ]);
-      const nh = Array.isArray(nehRes) ? nehRes as NehPobRow[] : [];
-      const ms = Array.isArray(makleriRes) ? makleriRes as Array<{ id: string; email: string; meno: string }> : [];
-      const kl = Array.isArray(klientiRes) ? klientiRes : [];
-      const nb = Array.isArray(naberyRes) ? naberyRes : [];
-      const us = (usersRes.users ?? []) as Array<{ id: string; name: string; email: string; role: string; makler_id?: string | null }>;
-      setRawNeh(nh);
-      setRawMakleri(ms);
-      // Použij users.makler_id priamo — nie email matching
-      const teamStats: TeamStat[] = us.map(u => {
-        const mid = u.makler_id || null;
-        return {
-          id: u.id, name: u.name, role: u.role || "makler",
-          klienti:       mid ? kl.filter((k: { makler_id: string }) => k.makler_id === mid).length : 0,
-          nabery:        mid ? nb.filter((n: { makler_id: string }) => n.makler_id === mid).length : 0,
-          nehnutelnosti: mid ? nh.filter(n => n.makler_id === mid).length : 0,
-          konverzia: "0%", napomenutia: 0, sla_critical: 0,
-        };
-      });
-      setTeam(teamStats);
+      setRawNeh(Array.isArray(nehRes) ? nehRes as NehPobRow[] : []);
+      setRawMakleri(Array.isArray(makleriRes) ? makleriRes as Array<{ id: string; meno: string }> : []);
+      setRawKlienti(Array.isArray(klientiRes) ? klientiRes : []);
+      setRawNabery(Array.isArray(naberyRes) ? naberyRes : []);
       setLoading(false);
     })();
   }, []);
@@ -1579,22 +1564,17 @@ function TabSutaz({ currentUserId }: { currentUserId?: string }) {
     n => isDeal(n.stav_inzeratu) && new Date(n.updated_at ?? n.created_at) >= from
   );
 
-  const byObchody: RankRow[] = rawMakleri
-    .map(m => ({ id: m.id, name: m.meno, value: periodDeals.filter(n => n.makler_id === m.id).length }))
-    .filter(r => r.value > 0).sort((a, b) => b.value - a.value);
+  const rank = (getValue: (id: string) => number): RankRow[] =>
+    rawMakleri
+      .map(m => ({ id: m.id, name: m.meno, value: getValue(m.id) }))
+      .filter(r => r.value > 0)
+      .sort((a, b) => b.value - a.value);
 
-  const byObrat: RankRow[] = rawMakleri
-    .map(m => ({ id: m.id, name: m.meno, value: periodDeals.filter(n => n.makler_id === m.id).reduce((s, n) => s + (n.cena ?? 0), 0) }))
-    .filter(r => r.value > 0).sort((a, b) => b.value - a.value);
-
-  const byNabery: RankRow[] = [...team].sort((a, b) => b.nabery - a.nabery).filter(t => t.nabery > 0)
-    .map(t => ({ id: t.id, name: t.name, value: t.nabery }));
-
-  const byKlienti: RankRow[] = [...team].sort((a, b) => b.klienti - a.klienti).filter(t => t.klienti > 0)
-    .map(t => ({ id: t.id, name: t.name, value: t.klienti }));
-
-  const byPortfolio: RankRow[] = [...team].sort((a, b) => b.nehnutelnosti - a.nehnutelnosti).filter(t => t.nehnutelnosti > 0)
-    .map(t => ({ id: t.id, name: t.name, value: t.nehnutelnosti }));
+  const byObchody = rank(id => periodDeals.filter(n => n.makler_id === id).length);
+  const byObrat   = rank(id => periodDeals.filter(n => n.makler_id === id).reduce((s, n) => s + (n.cena ?? 0), 0));
+  const byNabery  = rank(id => rawNabery.filter(n => n.makler_id === id).length);
+  const byKlienti = rank(id => rawKlienti.filter(k => k.makler_id === id).length);
+  const byPortfolio = rank(id => rawNeh.filter(n => n.makler_id === id).length);
 
   const periodStr = period === "month" ? "tento mesiac" : period === "quarter" ? "tento kvartál" : "tento rok";
 
@@ -1645,7 +1625,7 @@ function TabSutaz({ currentUserId }: { currentUserId?: string }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {rows.map((row, i) => {
             const pct = Math.round((row.value / maxVal) * 100);
-            const isMe = row.id === currentUserId;
+            const isMe = !!currentMaklerId && row.id === currentMaklerId;
             const barColor = i < 3 ? topColors[i] : "#0071e3";
             return (
               <div key={row.id} style={{
