@@ -96,6 +96,9 @@ export async function DELETE(request: Request) {
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     const sb = getSupabaseAdmin();
+    // Nullify FK references pred delete — faktury/odberatelia nemajú ON DELETE SET NULL
+    await sb.from("faktury").update({ user_id: null }).eq("user_id", id);
+    await sb.from("odberatelia").update({ user_id: null }).eq("user_id", id);
     const { error } = await sb.from("users").delete().eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     await logAudit({ action: "user.delete", actor_id: auth.user.id, actor_name: auth.user.name, target_id: id, target_type: "user", ip_address: (request as NextRequest).headers.get("x-forwarded-for") || undefined });

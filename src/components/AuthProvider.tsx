@@ -296,7 +296,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   async function deleteAccount(id: string) {
-    await fetch(`/api/users?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const res = await fetch(`/api/users?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(`Chyba pri mazaní: ${body.error || res.status}`);
+      return;
+    }
     await refreshAccounts();
   }
 
