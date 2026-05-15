@@ -1555,16 +1555,12 @@ function TabSutaz({ currentUserId }: { currentUserId?: string }) {
       const ms = Array.isArray(makleriRes) ? makleriRes as Array<{ id: string; email: string; meno: string }> : [];
       const kl = Array.isArray(klientiRes) ? klientiRes : [];
       const nb = Array.isArray(naberyRes) ? naberyRes : [];
-      const us = (usersRes.users ?? []) as Array<{ id: string; name: string; email: string; role: string }>;
+      const us = (usersRes.users ?? []) as Array<{ id: string; name: string; email: string; role: string; makler_id?: string | null }>;
       setRawNeh(nh);
       setRawMakleri(ms);
-      const userToMaklerId: Record<string, string | null> = {};
-      for (const u of us) {
-        const m = ms.find((x: { email: string }) => x.email === u.email);
-        userToMaklerId[u.id] = m?.id || null;
-      }
+      // Použij users.makler_id priamo — nie email matching
       const teamStats: TeamStat[] = us.map(u => {
-        const mid = userToMaklerId[u.id];
+        const mid = u.makler_id || null;
         return {
           id: u.id, name: u.name, role: u.role || "makler",
           klienti:       mid ? kl.filter((k: { makler_id: string }) => k.makler_id === mid).length : 0,
