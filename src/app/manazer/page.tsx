@@ -652,7 +652,7 @@ function TabTim() {
   const [newUserName, setNewUserName]         = useState("");
   const [newUserEmail, setNewUserEmail]       = useState("");
   const [newUserLoginEmail, setNewUserLoginEmail] = useState("");
-  const [newUserRole, setNewUserRole]         = useState("Maklér · Vianema");
+  const [newUserRole, setNewUserRole]         = useState("makler");
   const [newUserPct, setNewUserPct]           = useState("");
   const [newUserSaving, setNewUserSaving]     = useState(false);
   const [newUserError, setNewUserError]       = useState<string | null>(null);
@@ -794,9 +794,10 @@ function TabTim() {
             <div>
               <div style={labelSt}>Rola</div>
               <select style={inputSt} value={newUserRole} onChange={e => setNewUserRole(e.target.value)}>
-                <option value="Maklér · Vianema">Maklér</option>
-                <option value="Konateľ · Vianema">Konateľ</option>
-                <option value="Admin · Vianema">Admin</option>
+                <option value="makler">Maklér</option>
+                <option value="manazer">Manažér</option>
+                <option value="majitel">Konateľ</option>
+                <option value="super_admin">Admin</option>
               </select>
             </div>
             <div>
@@ -1036,10 +1037,10 @@ function TabTim() {
                     <div>
                       <div style={labelSt}>Rola</div>
                       <select style={inputSt} value={editState.role} onChange={e => setEditState(s => ({ ...s, role: e.target.value }))}>
-                        <option value="Maklér · Vianema">Maklér</option>
+                        <option value="makler">Maklér</option>
                         <option value="manazer">Manažér</option>
-                        <option value="Konateľ · Vianema">Konateľ</option>
-                        <option value="Admin · Vianema">Admin</option>
+                        <option value="majitel">Konateľ</option>
+                        <option value="super_admin">Admin</option>
                       </select>
                     </div>
                     <div>
