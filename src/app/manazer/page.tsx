@@ -1543,12 +1543,13 @@ function TabSutaz({ currentUserId }: { currentUserId?: string }) {
   useEffect(() => {
     (async () => {
       setLoading(true);
+      const creds = { credentials: "include" as const };
       const [nehRes, makleriRes, klientiRes, naberyRes, usersRes] = await Promise.all([
-        fetch("/api/nehnutelnosti").then(r => r.json()).catch(() => []),
-        fetch("/api/makleri").then(r => r.json()).catch(() => []),
-        fetch("/api/klienti").then(r => r.json()).catch(() => []),
-        fetch("/api/nabery").then(r => r.json()).catch(() => []),
-        fetch("/api/users").then(r => r.json()).catch(() => ({ users: [] })),
+        fetch("/api/nehnutelnosti", creds).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch("/api/makleri",       creds).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch("/api/klienti",       creds).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch("/api/nabery",        creds).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch("/api/users",         creds).then(r => r.ok ? r.json() : { users: [] }).catch(() => ({ users: [] })),
       ]);
       const nh = Array.isArray(nehRes) ? nehRes as NehPobRow[] : [];
       const ms = Array.isArray(makleriRes) ? makleriRes as Array<{ id: string; email: string; meno: string }> : [];
