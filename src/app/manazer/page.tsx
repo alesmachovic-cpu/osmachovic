@@ -173,10 +173,10 @@ export default function ManazerPage() {
   const tabs: { id: TabKey; label: string }[] = [
     ...(isManagerOrAbove ? [{ id: "prehlad" as TabKey, label: "📊 Prehľad" }] : []),
     { id: "statistiky" as TabKey, label: "📉 Štatistiky" },
+    { id: "vytazenost" as TabKey, label: "🏆 Súťaž" },
     ...(isManagerOrAbove ? [
       { id: "pobocka" as TabKey, label: "🏢 Pobočka" },
       { id: "tim" as TabKey, label: "👥 Tím" },
-      { id: "vytazenost" as TabKey, label: "👷 Vyťaženosť" },
       { id: "provizie" as TabKey, label: "💼 Provízie" },
     ] : []),
   ];

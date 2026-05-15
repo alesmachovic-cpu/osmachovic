@@ -57,6 +57,7 @@ export default function PridatHesloPage() {
       const res = await fetch("/api/users/invite/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ token, password }),
       });
       const data = await res.json();

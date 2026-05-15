@@ -107,8 +107,14 @@ export default function Portfolio() {
   const [zaujemcoviaDrawerFor, setZaujemcoviaDrawerFor] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user?.id) getMaklerUuid(user.id).then(uuid => setMyMaklerUuid(uuid ?? null));
-  }, [user?.id]);
+    if (user?.id) getMaklerUuid(user.id).then(uuid => {
+      setMyMaklerUuid(uuid ?? null);
+      // Makléri vidia predvolene vlastné portfólio (pokiaľ filter neupravili ručne)
+      if (!filterTouched && user.role === "makler" && uuid) {
+        setFilterMakler("mine");
+      }
+    });
+  }, [user?.id]); // filterTouched zámerne nie v deps — nechceme re-trigger po kliknutí
 
   useEffect(() => {
     fetch("/api/makleri").then(r => r.json()).then(data => {
