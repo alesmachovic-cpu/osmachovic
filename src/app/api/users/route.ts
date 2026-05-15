@@ -33,9 +33,23 @@ export async function POST(request: Request) {
     const parsed = CreateUserSchema.safeParse(rawBody);
     if (!parsed.success) return NextResponse.json({ error: "Neplatné dáta", details: parsed.error.flatten() }, { status: 400 });
     const body = parsed.data;
+    const userId = body.id || rawBody.id;
     const sb = getSupabaseAdmin();
+
+    // Pre makléra automaticky vytvor makleri záznam a nalinkuj ho
+    let maklerUuid: string | null = null;
+    if (body.role === "makler") {
+      const { data: mk, error: mkErr } = await sb.from("makleri").insert({
+        meno: body.name,
+        email: body.login_email || body.email || null,
+        aktivny: true,
+      }).select("id").single();
+      if (mkErr) return NextResponse.json({ error: "Chyba pri vytváraní maklér záznamu: " + mkErr.message }, { status: 500 });
+      maklerUuid = mk.id;
+    }
+
     const { error } = await sb.from("users").insert({
-      id: body.id || rawBody.id,
+      id: userId,
       name: body.name,
       initials: body.initials,
       role: body.role,
@@ -43,9 +57,10 @@ export async function POST(request: Request) {
       login_email: body.login_email || null,
       password: body.password || "",
       company_id: auth.user.company_id,
+      ...(maklerUuid ? { makler_id: maklerUuid } : {}),
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    await logAudit({ action: "user.create", actor_id: auth.user.id, actor_name: auth.user.name, target_id: body.id, target_type: "user", target_name: body.name, ip_address: (request as NextRequest).headers.get("x-forwarded-for") || undefined });
+    await logAudit({ action: "user.create", actor_id: auth.user.id, actor_name: auth.user.name, target_id: userId, target_type: "user", target_name: body.name, ip_address: (request as NextRequest).headers.get("x-forwarded-for") || undefined });
     return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
