@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
-import { getMaklerUuid } from "@/lib/maklerMap";
 import PricingEstimateModal from "@/components/PricingEstimateModal";
 import PropertyStoryModal from "@/components/PropertyStoryModal";
 import { ZaujemcoviaChip } from "@/components/matching/ZaujemcoviaChip";
@@ -107,14 +106,13 @@ export default function Portfolio() {
   const [zaujemcoviaDrawerFor, setZaujemcoviaDrawerFor] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user?.id) getMaklerUuid(user.id).then(uuid => {
-      setMyMaklerUuid(uuid ?? null);
-      // Makléri vidia predvolene vlastné portfólio (pokiaľ filter neupravili ručne)
-      if (!filterTouched && user.role === "makler") {
-        setFilterMakler("mine");
-      }
-    });
-  }, [user?.id]); // filterTouched zámerne nie v deps — nechceme re-trigger po kliknutí
+    if (!user?.id) return;
+    const uuid = user.makler_id ?? null;
+    setMyMaklerUuid(uuid);
+    if (!filterTouched && user.role === "makler") {
+      setFilterMakler("mine");
+    }
+  }, [user?.id, user?.makler_id]); // filterTouched zámerne nie v deps
 
   useEffect(() => {
     fetch("/api/makleri").then(r => r.json()).then(data => {
@@ -265,29 +263,18 @@ export default function Portfolio() {
     if (filterMakler === "all") {
       // ukáž všetky — žiadny filter
     } else if (filterMakler === "mine") {
-      const meno = user?.name?.toLowerCase() || "";
-      const email = user?.email?.toLowerCase() || "";
-      const nMakler = (n as unknown as { makler?: string }).makler?.toLowerCase() || "";
-      const nMaklerEmail = (n.makler_email || "").toLowerCase();
-      const nMaklerId = n.makler_id || "";
-      const matchesId = myMaklerUuid && nMaklerId === myMaklerUuid;
-      const matchesUidFallback = user?.id && nMaklerId === user.id;
-      const matchesEmail = email && nMaklerEmail === email;
-      const matchesMeno = meno && nMakler === meno;
-      if (!matchesId && !matchesUidFallback && !matchesEmail && !matchesMeno) {
-        // Neseadí mi — skry len ak patrí konkrétnemu inému maklérovi z DB.
-        const otherMakler = makleriList.find(m =>
-          m.id === nMaklerId ||
-          (m.email && nMaklerEmail && m.email.toLowerCase() === nMaklerEmail) ||
-          (m.meno && nMakler && m.meno.toLowerCase() === nMakler)
-        );
-        const belongsToSomeoneElse = !!otherMakler && (
-          (myMaklerUuid ? otherMakler.id !== myMaklerUuid : true) &&
-          (email ? (otherMakler.email || "").toLowerCase() !== email : true) &&
-          (meno ? otherMakler.meno.toLowerCase() !== meno : true)
-        );
-        if (belongsToSomeoneElse) return false;
-        // Legacy / orphan → necháme vidieť.
+      if (myMaklerUuid) {
+        // Primárny match cez users.makler_id → makleri.id
+        if (n.makler_id !== myMaklerUuid) return false;
+      } else {
+        // Fallback pre legacy users bez makler_id — matchuj cez email/meno
+        const email = user?.email?.toLowerCase() || "";
+        const meno = user?.name?.toLowerCase() || "";
+        const nMaklerEmail = (n.makler_email || "").toLowerCase();
+        const nMakler = (n as unknown as { makler?: string }).makler?.toLowerCase() || "";
+        const matchesEmail = email && nMaklerEmail === email;
+        const matchesMeno = meno && nMakler === meno;
+        if (!matchesEmail && !matchesMeno) return false;
       }
     } else {
       // Konkrétny makler (meno alebo UUID)
