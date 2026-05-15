@@ -15,7 +15,7 @@ function isBillingExempt(pathname: string): boolean {
   return BILLING_EXEMPT.some(p => pathname.startsWith(p));
 }
 
-const ALLOWED_HOSTS = ["vianema.amgd.sk", "test.amgd.sk", "localhost:3000", "localhost:3001"];
+const ALLOWED_HOSTS = ["vianema.amgd.sk", "dev.amgd.sk", "localhost:3000", "localhost:3001"];
 
 // Vercel nastavuje x-forwarded-host na skutočný host požiadavky (aj pri internom
 // routingu), zatiaľ čo `host` header môže byť prepísaný na kanonickú doménu.

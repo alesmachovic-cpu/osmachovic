@@ -14,7 +14,7 @@
 - **Operatíva** — produkcia tímu, vyťaženosť, štatistiky, push notifikácie
 
 Produkcia: **https://vianema.amgd.sk**
-Test/staging: **https://test.amgd.sk**
+Test/staging: **https://dev.amgd.sk**
 
 ## Jazyk a štýl komunikácie
 - **Komunikuj so mnou v slovenčine.**

@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.VERCEL_ENV === "production"
       ? "https://vianema.amgd.sk"
       : process.env.VERCEL_ENV === "preview"
-      ? "https://test.amgd.sk"
+      ? "https://dev.amgd.sk"
       : "http://localhost:3000";
     const inviteUrl = `${baseUrl}/pridat-heslo/${token}`;
 
