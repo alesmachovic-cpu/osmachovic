@@ -227,7 +227,7 @@ export default function ManazerPage() {
       {tab === "statistiky" && <TabStatistiky isManagerOrAbove={isManagerOrAbove} userEmail={user?.email ?? ""} />}
       {tab === "pobocka"    && <TabPobocka userRole={role} userPobockaId={(user as unknown as { pobocka_id?: string | null })?.pobocka_id ?? null} />}
       {tab === "tim"        && <TabTim />}
-      {tab === "vytazenost" && <TabVytazenost />}
+      {tab === "vytazenost" && <TabSutaz currentUserId={user?.id} />}
       {tab === "provizie"   && <TabProvizie />}
     </div>
   );
@@ -1519,6 +1519,172 @@ function TabPobocka({ userRole, userPobockaId }: { userRole: string; userPobocka
               })}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab: Súťaž ──────────────────────────────────────────────────────────────
+
+const MEDALS = ["🥇", "🥈", "🥉"];
+
+function TabSutaz({ currentUserId }: { currentUserId?: string }) {
+  type CatId = "obchody" | "obrat" | "nabery" | "klienti" | "portfolio";
+  type RankRow = { id: string; name: string; value: number };
+
+  const [cat, setCat] = useState<CatId>("obchody");
+  const [period, setPeriod] = useState<Period>("month");
+  const [loading, setLoading] = useState(true);
+  const [rawNeh, setRawNeh] = useState<NehPobRow[]>([]);
+  const [rawMakleri, setRawMakleri] = useState<Array<{ id: string; meno: string }>>([]);
+  const [team, setTeam] = useState<TeamStat[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const [nehRes, makleriRes, klientiRes, naberyRes, usersRes] = await Promise.all([
+        fetch("/api/nehnutelnosti").then(r => r.json()).catch(() => []),
+        fetch("/api/makleri").then(r => r.json()).catch(() => []),
+        fetch("/api/klienti").then(r => r.json()).catch(() => []),
+        fetch("/api/nabery").then(r => r.json()).catch(() => []),
+        fetch("/api/users").then(r => r.json()).catch(() => ({ users: [] })),
+      ]);
+      const nh = Array.isArray(nehRes) ? nehRes as NehPobRow[] : [];
+      const ms = Array.isArray(makleriRes) ? makleriRes as Array<{ id: string; email: string; meno: string }> : [];
+      const kl = Array.isArray(klientiRes) ? klientiRes : [];
+      const nb = Array.isArray(naberyRes) ? naberyRes : [];
+      const us = (usersRes.users ?? []) as Array<{ id: string; name: string; email: string; role: string }>;
+      setRawNeh(nh);
+      setRawMakleri(ms);
+      const userToMaklerId: Record<string, string | null> = {};
+      for (const u of us) {
+        const m = ms.find((x: { email: string }) => x.email === u.email);
+        userToMaklerId[u.id] = m?.id || null;
+      }
+      const teamStats: TeamStat[] = us.map(u => {
+        const mid = userToMaklerId[u.id];
+        return {
+          id: u.id, name: u.name, role: u.role || "makler",
+          klienti:       mid ? kl.filter((k: { makler_id: string }) => k.makler_id === mid).length : 0,
+          nabery:        mid ? nb.filter((n: { makler_id: string }) => n.makler_id === mid).length : 0,
+          nehnutelnosti: mid ? nh.filter(n => n.makler_id === mid).length : 0,
+          konverzia: "0%", napomenutia: 0, sla_critical: 0,
+        };
+      });
+      setTeam(teamStats);
+      setLoading(false);
+    })();
+  }, []);
+
+  const from = periodStart(period);
+  const periodDeals = rawNeh.filter(
+    n => isDeal(n.stav_inzeratu) && new Date(n.updated_at ?? n.created_at) >= from
+  );
+
+  const byObchody: RankRow[] = rawMakleri
+    .map(m => ({ id: m.id, name: m.meno, value: periodDeals.filter(n => n.makler_id === m.id).length }))
+    .filter(r => r.value > 0).sort((a, b) => b.value - a.value);
+
+  const byObrat: RankRow[] = rawMakleri
+    .map(m => ({ id: m.id, name: m.meno, value: periodDeals.filter(n => n.makler_id === m.id).reduce((s, n) => s + (n.cena ?? 0), 0) }))
+    .filter(r => r.value > 0).sort((a, b) => b.value - a.value);
+
+  const byNabery: RankRow[] = [...team].sort((a, b) => b.nabery - a.nabery).filter(t => t.nabery > 0)
+    .map(t => ({ id: t.id, name: t.name, value: t.nabery }));
+
+  const byKlienti: RankRow[] = [...team].sort((a, b) => b.klienti - a.klienti).filter(t => t.klienti > 0)
+    .map(t => ({ id: t.id, name: t.name, value: t.klienti }));
+
+  const byPortfolio: RankRow[] = [...team].sort((a, b) => b.nehnutelnosti - a.nehnutelnosti).filter(t => t.nehnutelnosti > 0)
+    .map(t => ({ id: t.id, name: t.name, value: t.nehnutelnosti }));
+
+  const periodStr = period === "month" ? "tento mesiac" : period === "quarter" ? "tento kvartál" : "tento rok";
+
+  const cats: { id: CatId; icon: string; label: string; rows: RankRow[]; unit: string; isPeriod: boolean }[] = [
+    { id: "obchody",   icon: "🤝", label: "Obchody",   rows: byObchody,   unit: "obchod",       isPeriod: true },
+    { id: "obrat",     icon: "💰", label: "Obrat",     rows: byObrat,     unit: "€",            isPeriod: true },
+    { id: "nabery",    icon: "📝", label: "Nábery",    rows: byNabery,    unit: "náber",        isPeriod: false },
+    { id: "klienti",   icon: "👥", label: "Klienti",   rows: byKlienti,   unit: "klient",       isPeriod: false },
+    { id: "portfolio", icon: "🏠", label: "Portfólio", rows: byPortfolio, unit: "nehnuteľnosť", isPeriod: false },
+  ];
+
+  const active = cats.find(c => c.id === cat)!;
+  const rows = active.rows;
+  const maxVal = Math.max(...rows.map(r => r.value), 1);
+  const topColors = ["#FF9500", "#8E8E93", "#A2845E"];
+
+  if (loading) return <div style={{ textAlign: "center", padding: "60px 0", color: "var(--text-muted)", fontSize: 14 }}>Načítavam…</div>;
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {cats.map(c => (
+            <button key={c.id} onClick={() => setCat(c.id)} style={{
+              padding: "7px 16px", borderRadius: 20, border: "none", cursor: "pointer",
+              background: cat === c.id ? "#1d1d1f" : "var(--bg-elevated)",
+              color: cat === c.id ? "#fff" : "var(--text-secondary)",
+              fontSize: 13, fontWeight: cat === c.id ? 600 : 400, transition: "all 0.15s",
+            }}>
+              {c.icon} {c.label}
+            </button>
+          ))}
+        </div>
+        {active.isPeriod && <PeriodSwitch value={period} onChange={setPeriod} />}
+      </div>
+
+      {active.isPeriod && (
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
+          {active.icon} {active.label} — {periodStr}
+        </div>
+      )}
+
+      {rows.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "48px 0", color: "var(--text-muted)", fontSize: 13 }}>
+          Zatiaľ žiadne dáta
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {rows.map((row, i) => {
+            const pct = Math.round((row.value / maxVal) * 100);
+            const isMe = row.id === currentUserId;
+            const barColor = i < 3 ? topColors[i] : "#0071e3";
+            return (
+              <div key={row.id} style={{
+                background: isMe ? "rgba(0,122,255,0.05)" : "var(--bg-surface)",
+                border: `1px solid ${isMe ? "rgba(0,122,255,0.2)" : "var(--border)"}`,
+                borderRadius: 12, padding: "12px 16px",
+                display: "flex", alignItems: "center", gap: 14,
+              }}>
+                <div style={{ width: 28, textAlign: "center", flexShrink: 0, fontSize: i < 3 ? 20 : 13, fontWeight: 600, color: i < 3 ? undefined : "var(--text-muted)" }}>
+                  {i < 3 ? MEDALS[i] : `${i + 1}.`}
+                </div>
+                <div style={{
+                  width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                  background: i < 3 ? topColors[i] : "#374151",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 13, fontWeight: 700, color: "#fff",
+                }}>
+                  {row.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 5 }}>
+                    {row.name}{isMe && <span style={{ fontSize: 11, color: "#0071e3", fontWeight: 600, marginLeft: 6 }}>• ty</span>}
+                  </div>
+                  <div style={{ height: 5, background: "var(--bg-elevated)", borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{ height: "100%", borderRadius: 4, width: `${pct}%`, background: barColor, transition: "width 0.5s ease" }} />
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text-primary)" }}>
+                    {cat === "obrat" ? `${Math.round(row.value / 1000)}k` : row.value}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{cat === "obrat" ? "€" : active.unit}</div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
