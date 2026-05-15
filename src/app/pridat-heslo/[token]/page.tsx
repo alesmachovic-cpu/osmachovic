@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import PasswordInput from "@/components/PasswordInput";
 
 type TokenState = "loading" | "valid" | "invalid";
@@ -17,7 +17,6 @@ function PasswordRule({ ok, label }: { ok: boolean; label: string }) {
 
 export default function PridatHesloPage() {
   const { token } = useParams<{ token: string }>();
-  const router = useRouter();
 
   const [state, setState] = useState<TokenState>("loading");
   const [userName, setUserName] = useState("");
@@ -66,7 +65,8 @@ export default function PridatHesloPage() {
       const uid = data.userId || userId;
       if (uid) localStorage.setItem("crm_user", uid);
       setDone(true);
-      setTimeout(() => router.push("/"), 1500);
+      // Full reload — nie router.push — aby AuthProvider znova načítal localStorage s novým userom
+      setTimeout(() => { window.location.href = "/"; }, 1500);
     } finally {
       setSubmitting(false);
     }
