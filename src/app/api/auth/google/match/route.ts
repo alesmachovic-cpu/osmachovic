@@ -24,14 +24,31 @@ export async function POST(req: NextRequest) {
   if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
-  const { data: users, error } = await sb
-    .from("users")
-    .select("id, name, initials, role, company_id")
-    .or(`login_email.ilike.${email},email.ilike.${email}`)
-    .limit(1)
-    .maybeSingle();
+  const SELECT = "id, name, initials, role, company_id";
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Skús najprv login_email; ak nič, fallback na email. (`.or()` filter má problém
+  // s bodkami a @ v hodnote — parsuje ich ako oddeľovače cesty, preto chained query.)
+  let users: { id: string; name: string; initials: string | null; role: string | null; company_id: string | null } | null = null;
+  {
+    const { data, error } = await sb
+      .from("users")
+      .select(SELECT)
+      .ilike("login_email", email)
+      .limit(1)
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    users = data as typeof users;
+  }
+  if (!users) {
+    const { data, error } = await sb
+      .from("users")
+      .select(SELECT)
+      .ilike("email", email)
+      .limit(1)
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    users = data as typeof users;
+  }
   if (!users) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   // Billing status pre crm_billing cookie
