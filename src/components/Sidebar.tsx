@@ -67,35 +67,45 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const tNav = useTranslations("nav");
-  const [counts, setCounts] = useState<{ portfolio?: number; klienti?: number; kupujuci?: number }>({});
+  const [counts, setCounts] = useState<{ portfolio?: number; klienti?: number; kupujuci?: number; naber?: number }>({});
   const [devOpen, setDevOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const [pfRes, klRes] = await Promise.all([
+        const [pfRes, klRes, nbRes] = await Promise.all([
           fetch("/api/nehnutelnosti", { credentials: "include" }),
           fetch("/api/klienti", { credentials: "include" }),
+          fetch("/api/nabery?mine=1", { credentials: "include" }),
         ]);
-        const [pf, kl]: [unknown[], { typ?: string }[]] = await Promise.all([
+        const [pf, kl, nb]: [{ makler_id?: string | null }[], { typ?: string; makler_id?: string | null }[], { nabery?: unknown[] } | unknown[]] = await Promise.all([
           pfRes.ok ? pfRes.json() : Promise.resolve([]),
           klRes.ok ? klRes.json() : Promise.resolve([]),
+          nbRes.ok ? nbRes.json() : Promise.resolve([]),
         ]);
         const predavajuciTypy = new Set(["predavajuci", "oboje", "prenajimatel"]);
         const kupujuciTypy = new Set(["kupujuci", "oboje"]);
+        // Filter podľa makler_id current usera; ak user nemá makler_id (super_admin/owner),
+        // ukáž total (vidí všetkých)
+        const mid = (user as { makler_id?: string | null } | null)?.makler_id ?? null;
+        const pfMine = Array.isArray(pf) ? (mid ? pf.filter(x => x.makler_id === mid) : pf) : [];
+        const klMine = Array.isArray(kl) ? (mid ? kl.filter(x => x.makler_id === mid) : kl) : [];
+        const nbArr = Array.isArray(nb) ? nb : (nb && Array.isArray((nb as { nabery?: unknown[] }).nabery) ? (nb as { nabery: unknown[] }).nabery : []);
         setCounts({
-          portfolio: Array.isArray(pf) ? pf.length : 0,
-          klienti: Array.isArray(kl) ? kl.filter(k => predavajuciTypy.has(k.typ ?? "")).length : 0,
-          kupujuci: Array.isArray(kl) ? kl.filter(k => kupujuciTypy.has(k.typ ?? "")).length : 0,
+          portfolio: pfMine.length,
+          klienti: klMine.filter(k => predavajuciTypy.has(k.typ ?? "")).length,
+          kupujuci: klMine.filter(k => kupujuciTypy.has(k.typ ?? "")).length,
+          naber: nbArr.length,
         });
       } catch { /* ignore */ }
     })();
-  }, [pathname, user?.id]);
+  }, [pathname, user?.id, (user as { makler_id?: string | null } | null)?.makler_id]);
 
   const mainNav: NavItem[] = mainNavBase.map((it) => {
     if (it.href === "/portfolio") return { ...it, badge: counts.portfolio };
     // Klienti zlúčuje Predávajúci + Kupujúci → badge = súčet všetkých klientov
     if (it.matchPrefix === "/klienti") return { ...it, badge: (counts.klienti || 0) + (counts.kupujuci || 0) };
+    if (it.href === "/naber") return { ...it, badge: counts.naber };
     return it;
   });
 
