@@ -225,7 +225,12 @@ function KlientiContent() {
     }
   }, [searchParams, klienti]);
 
+  // Predávajúci tab ukazuje len predávajúcich a "oboje"/prenajímateľov.
+  // Čistí kupujúci patria do tabu Kupujúci, kde majú vlastné statusy.
+  const PREDAVAJUCI_TYPY = new Set(["predavajuci", "oboje", "prenajimatel"]);
+
   const filtered = klienti.filter(k => {
+    if (!PREDAVAJUCI_TYPY.has(k.typ ?? "")) return false;
     // Makler filter
     if (filterMakler === "mine") {
       if (!myMaklerUuid) return false;
@@ -250,6 +255,7 @@ function KlientiContent() {
 
   // Counts based on ALL klienti (with makler filter but without status filter)
   const allForCounts = klienti.filter(k => {
+    if (!PREDAVAJUCI_TYPY.has(k.typ ?? "")) return false;
     if (filterMakler === "mine") {
       if (!myMaklerUuid) return false;
       if (k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
@@ -446,7 +452,6 @@ function KlientiContent() {
         </select>
         <select value={filterTyp} onChange={e => setFilterTyp(e.target.value as FilterTyp)} style={selectSt}>
           <option value="">Všetky typy</option>
-          <option value="kupujuci">Kupujúci</option>
           <option value="predavajuci">Predávajúci</option>
           <option value="oboje">Oboje</option>
           <option value="prenajimatel">Prenajímateľ</option>
