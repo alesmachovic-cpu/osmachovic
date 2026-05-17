@@ -6,6 +6,19 @@ import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 
 export const runtime = "nodejs";
 
+// Stĺpce vrátené v list endpointe. Zámerne vylučujeme:
+//   - podpis_data (base64 podpis, ~25 KB/riadok = 97% payloadu) — UI list ho nečíta,
+//     PDF route a PATCH/DELETE handlery si robia vlastný select.
+//   - podpis_meta (JSONB s IP/UA metadátami podpisu) — interné, nečíta sa v list.
+// Detail view (vrátane podpisu) by mal použiť samostatný endpoint /api/nabery/[id]
+// keby raz vznikol; momentálne ho nikto nepoužíva pre podpis_data v UI liste.
+const LIST_COLUMNS =
+  "id, typ_nehnutelnosti, kraj, okres, obec, cast_obce, kat_uzemie, ulica, supisne_cislo, cislo_orientacne, " +
+  "plocha, stav, poznamky_vybavenie, parametre, vybavenie, oznacenie, majitel, konatel, jednatel, " +
+  "kontakt_majitel, uzivatel, kontakt_uzivatel, predajna_cena, makler, makler_id, zmluva, typ_zmluvy, " +
+  "datum_podpisu, zmluva_do, provizia, popis, created_at, klient_id, updated_at, datum_naberu, " +
+  "calendar_event_id, parent_naberak_id, gdpr_consent, gdpr_consent_at, company_id";
+
 /**
  * GET /api/nabery — list naberove_listy
  */
@@ -26,7 +39,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  let query = sb.from("naberove_listy").select("*").eq("company_id", companyId).order("created_at", { ascending: false });
+  let query = sb.from("naberove_listy").select(LIST_COLUMNS).eq("company_id", companyId).order("created_at", { ascending: false });
   if (klientId) query = query.eq("klient_id", klientId);
   if (maklerUuid) query = query.eq("makler_id", maklerUuid);
   if (dnes) {

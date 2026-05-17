@@ -6,6 +6,18 @@ import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 
 export const runtime = "nodejs";
 
+// Stĺpce vrátené v list endpointe. Zámerne vylučujeme:
+//   - podpis_data (base64 podpis, na produkcii desiatky KB/riadok = 90%+ payloadu)
+//   - podpis_meta (interné metadata podpisu, JSONB)
+//   - list_pdf_base64 (uložený PDF list, môže byť 100+ KB; UI ho nečíta v liste,
+//     PDF route si fetuje vlastný select)
+// Detail view (vrátane podpisu) používa /obhliadky/[id] ktorý fetuje single row
+// cez separátne API volanie ak treba.
+const LIST_COLUMNS =
+  "id, predavajuci_klient_id, nehnutelnost_id, kupujuci_klient_id, kupujuci_meno, kupujuci_telefon, kupujuci_email, " +
+  "makler_id, datum, miesto, poznamka, status, podpis_datum, email_sent_at, email_sent_to, " +
+  "calendar_event_id, created_at, updated_at, gdpr_consent, gdpr_consent_at, company_id";
+
 /**
  * GET /api/obhliadky
  *   ?klient_id=X    → obhliadky kde X je predávajúci ALEBO kupujúci
@@ -24,7 +36,7 @@ export async function GET(req: NextRequest) {
     if (scope) companyId = scope.company_id;
   }
 
-  let q = sb.from("obhliadky").select("*").eq("company_id", companyId).order("datum", { ascending: false });
+  let q = sb.from("obhliadky").select(LIST_COLUMNS).eq("company_id", companyId).order("datum", { ascending: false });
   if (klientId) {
     q = q.or(`predavajuci_klient_id.eq.${klientId},kupujuci_klient_id.eq.${klientId}`);
   }

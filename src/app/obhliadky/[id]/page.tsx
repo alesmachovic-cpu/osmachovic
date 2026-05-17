@@ -45,9 +45,14 @@ export default function ObhliadkaDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    fetch(`/api/obhliadky?klient_id=`).then(r => r.json()).then(async d => {
-      const all = (d.obhliadky || []) as Obhliadka[];
-      const found = all.find(o => o.id === id);
+    // Detail endpoint vracia plnú obhliadku vrátane podpis_data (list endpoint
+    // tieto veľké stĺpce neposiela kvôli payload size)
+    fetch(`/api/obhliadky/${id}`).then(r => r.json()).then(async d => {
+      if (d.error) {
+        setError(d.error);
+        return;
+      }
+      const found = d.obhliadka as Obhliadka | undefined;
       if (found) {
         setObhliadka(found);
         setEmailOverride(found.kupujuci_email || "");
@@ -120,11 +125,10 @@ export default function ObhliadkaDetailPage() {
       const d = await r.json();
       if (!r.ok) { setError(d.error || "Email zlyhal"); setSaving(false); return; }
       setSentMsg(`✓ Email odoslaný na ${to}`);
-      // Refresh obhliadka
-      const refreshR = await fetch(`/api/obhliadky?klient_id=`);
+      // Refresh obhliadka cez detail endpoint
+      const refreshR = await fetch(`/api/obhliadky/${obhliadka.id}`);
       const refreshD = await refreshR.json();
-      const found = (refreshD.obhliadky || []).find((o: Obhliadka) => o.id === obhliadka.id);
-      if (found) setObhliadka(found);
+      if (refreshD.obhliadka) setObhliadka(refreshD.obhliadka);
     } catch (e) {
       setError(String(e).slice(0, 200));
     }
