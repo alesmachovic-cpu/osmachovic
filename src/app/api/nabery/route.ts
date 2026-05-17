@@ -30,7 +30,8 @@ export async function GET(req: NextRequest) {
   if (klientId) query = query.eq("klient_id", klientId);
   if (maklerUuid) query = query.eq("makler_id", maklerUuid);
   if (dnes) {
-    const today = new Date().toISOString().slice(0, 10);
+    // Europe/Bratislava dátum (nie UTC) — aby "dnes" zodpovedalo SK kalendárnemu dňu
+    const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Bratislava" }).format(new Date());
     query = query.gte("created_at", today + "T00:00:00").lte("created_at", today + "T23:59:59");
   }
   const { data, error } = await query;
@@ -74,6 +75,7 @@ export async function POST(req: NextRequest) {
     klient_id: klientId,
     company_id: scope.company_id,
     makler: rest.makler ?? null,
+    makler_id: ownerMakler, // denormalized owner pre rýchle filtrovanie cez index
   };
   // makler text stĺpec (legacy) — vyplň ak chýba
   if (!payload.makler) {

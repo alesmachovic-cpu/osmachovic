@@ -59,3 +59,6 @@ next-env.d.ts
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Supabase CLI lokálna cache (link metadata)
+/supabase/.temp/
