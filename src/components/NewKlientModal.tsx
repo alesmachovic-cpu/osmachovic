@@ -1156,8 +1156,11 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
           {isValidLokalita && (
           <div style={{ display: "flex", gap: "10px" }}>
             <div ref={ulicaSuggestRef} style={{ position: "relative", flex: 1 }}>
-              <div style={labelSt}>Ulica</div>
+              <label htmlFor="naber-ulica-input" style={labelSt}>Ulica</label>
               <input
+                id="naber-ulica-input"
+                aria-label="Ulica"
+                required
                 style={{ ...inputSt, border: fieldErrors.ulica ? "2px solid #EF4444" : ulica.trim() ? "2px solid #10B981" : "1px solid var(--border)" }}
                 placeholder={`Ulica v ${lokalitaInput || lokalitaValue}...`} value={ulica}
                 onChange={e => { setUlica(e.target.value); setShowUlicaSuggestions(true); setFieldErrors(p => ({ ...p, ulica: undefined })); }}
@@ -1191,8 +1194,11 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
               )}
             </div>
             <div style={{ width: "90px", flexShrink: 0 }}>
-              <div style={labelSt}>Číslo</div>
+              <label htmlFor="naber-cislo-input" style={labelSt}>Číslo</label>
               <input
+                id="naber-cislo-input"
+                aria-label="Číslo domu"
+                required
                 style={{ ...inputSt, border: fieldErrors.cislo ? "2px solid #EF4444" : cisloDomu.trim() ? "2px solid #10B981" : "1px solid var(--border)" }}
                 placeholder="napr. 25" value={cisloDomu}
                 onChange={e => { setCisloDomu(e.target.value); setFieldErrors(p => ({ ...p, cislo: undefined })); }}

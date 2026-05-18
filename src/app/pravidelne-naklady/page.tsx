@@ -33,8 +33,14 @@ export default function PravidelneNakladyPage() {
 
   async function load() {
     setLoading(true);
-    const r = await fetch("/api/pravidelne-naklady");
-    setList(await r.json());
+    try {
+      const r = await fetch("/api/pravidelne-naklady");
+      const data = await r.json();
+      // API môže pri chybe vrátiť {error: "..."} namiesto array — defenzívne coerce
+      setList(Array.isArray(data) ? data : []);
+    } catch {
+      setList([]);
+    }
     setLoading(false);
   }
   useEffect(() => { load(); }, []);

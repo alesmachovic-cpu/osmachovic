@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
+import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 
 export const runtime = "nodejs";
 
@@ -62,17 +63,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ id: r.data[0].id, data: r.data[0] });
     }
 
-    // INSERT — ak je user_id, vyplň makler_id zo scope (anti-impersonácia)
+    // INSERT — ak je user_id, vyplň makler_id + company_id zo scope (anti-impersonácia)
     const insertPayload: Record<string, unknown> = { ...payload };
     if (userId) {
       const scope = await getUserScope(userId);
       if (scope) {
+        // company_id musí byť vyplnené (NOT NULL constraint). Bez scope by sa pre
+        // niektorých dev/test userov nezapísalo a insert by spadol na NOT NULL.
+        if (scope.company_id) insertPayload.company_id = scope.company_id;
         if (!scope.isAdmin) {
           // bežný maklér — vlastníctvo zo scope, body sa ignoruje
           if (scope.makler_id) insertPayload.makler_id = scope.makler_id;
         }
       }
     }
+    // Fallback ak company_id ešte nie je v payloade ani sa nevyplnilo zo scope
+    // (napr. legacy klient bez user_id, alebo user bez company priradenia).
+    if (!insertPayload.company_id) insertPayload.company_id = VIANEMA_COMPANY_ID;
 
     const r = await admin.from("nehnutelnosti").insert(insertPayload).select();
     if (r.error) return NextResponse.json({ error: r.error.message, code: r.error.code, details: r.error.details }, { status: 500 });
