@@ -169,13 +169,13 @@ Parse `?limit`, `?offset`, default 50, max 200.
 - [~] Fáza 1: 1.4 cleanup — dev worktree čistý, duplicit len v main repo (mimo scope)
 - [x] Fáza 2: 2.1 obhliadky SELECT (commit `c389469`) + nový detail endpoint `/api/obhliadky/[id]`
 - [x] Fáza 2: 2.2 nabery SELECT (commit `c389469`)
-- [ ] Fáza 3: 3.1 pagination helper
+- [ ] Fáza 3: 3.1 pagination helper — **čaká rozhodnutie: tlačidlo / virtuálny scroll?**
 - [ ] Fáza 3: 3.2 aplikácia
-- [ ] Fáza 3: 3.3 UI refaktor — **čaká rozhodnutie: tlačidlo / virtuálny scroll?**
-- [ ] Fáza 4: 4.1 dedupe hook
-- [ ] Fáza 4: 4.2 Google 401 fix — **čaká rozhodnutie: auto-reconnect alebo manuál?**
-- [ ] Fáza 5: prefetch tuning
-- [ ] PR `dev → main` pripravený
+- [ ] Fáza 3: 3.3 UI refaktor
+- [x] Fáza 4: 4.1 dedupe (commit `345d832` — `useGoogleConnected` má module-level cache + inflight dedup)
+- [x] Fáza 4: 4.2 Google 401 — diagnostika + gate frontend volaní cez `useGoogleConnected`. User stále musí re-OAuth-nuť keď refresh token expiruje (Google security).
+- [x] Fáza 5: prefetch tuning (commit `345d832` — `prefetch={false}` na Sidebar/BottomTabs)
+- [ ] PR `dev → main` pripravený — pri appli zachovať: spustiť migráciu 070 na vianema DB pred merge
 
 ### Merané dopady (po deployi)
 - /api/nabery: 1.75 MB → cieľ ~50 KB (97% drop)
