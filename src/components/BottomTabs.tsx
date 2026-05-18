@@ -71,6 +71,7 @@ export default function BottomTabs() {
           <Link
             key={t.label}
             href={t.href}
+            prefetch={false}
             style={{
               display: "flex",
               flexDirection: "column",

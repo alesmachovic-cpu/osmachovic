@@ -25,8 +25,10 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
 const toolsNav: NavItem[] = []; // zrušená sekcia — všetko v hlavnom menu
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+  // prefetch={false} pre nav linky — Next.js inak prefetuje VŠETKÝCH ~23 položiek
+  // pri otvorení sidebar = bandwidth burst. User-driven nav je dosť rýchla aj bez toho.
   return (
-    <Link href={item.href} onClick={() => document.body.classList.remove("sidebar-open")} style={{
+    <Link href={item.href} prefetch={false} onClick={() => document.body.classList.remove("sidebar-open")} style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
       padding: "8px 12px", borderRadius: "8px", fontSize: "13px",
       fontWeight: active ? "600" : "400",
@@ -229,7 +231,7 @@ function GoogleNotConnectedBanner({ userId }: { userId?: string | null }) {
   const connected = useGoogleConnected(userId);
   if (connected !== false) return null; // loading alebo OK → nezobraz
   return (
-    <Link href="/nastavenia" style={{
+    <Link href="/nastavenia" prefetch={false} style={{
       display: "block", margin: "0 12px 8px", padding: "10px 12px",
       borderRadius: "8px", background: "var(--warning-light)",
       border: "1px solid var(--warning)", color: "var(--warning)",

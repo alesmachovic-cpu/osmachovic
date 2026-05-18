@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import { useGoogleConnected } from "@/lib/useGoogleConnected";
 
 /* ─── Types ─── */
 interface CalEvent {
@@ -444,6 +445,7 @@ function DayColumn({ date, events, onEventClick, onSlotClick }: {
 export default function KalendarPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const googleConnected = useGoogleConnected(user?.id);
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>("week");
@@ -457,12 +459,24 @@ export default function KalendarPage() {
 
   const todayStr = toDateStr(new Date());
 
+  // Skip Google fetch ak nie je connected — ušetrí 401 spam.
+  // Lokálne cached events (gcal_events v localStorage, ICS atď.) sa stále zobrazia
+  // cez fetchEvents fallback (per-user OAuth → public ICS → cache).
   useEffect(() => {
+    if (googleConnected === false) {
+      // Načítaj len lokálne (bez API volania) — fetchEvents bez userId preskočí OAuth
+      fetchEvents(undefined).then(evts => {
+        setEvents(evts);
+        setLoading(false);
+      });
+      return;
+    }
+    if (googleConnected === undefined) return; // ešte loading
     fetchEvents(user?.id).then(evts => {
       setEvents(evts);
       setLoading(false);
     });
-  }, [user?.id]);
+  }, [user?.id, googleConnected]);
 
   // Načítaj všetky obhliadky a postav mapu calendar_event_id → obhliadka.id
   useEffect(() => {

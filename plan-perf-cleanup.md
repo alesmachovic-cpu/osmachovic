@@ -162,17 +162,22 @@ Parse `?limit`, `?offset`, default 50, max 200.
 
 ## Status
 
-- [ ] Plán schválený userom
-- [ ] Fáza 1: 1.1 migrácia
-- [ ] Fáza 1: 1.2 /api/nabery code fix
-- [ ] Fáza 1: 1.3 503 diagnostika
-- [ ] Fáza 1: 1.4 cleanup
-- [ ] Fáza 2: 2.1 obhliadky SELECT
-- [ ] Fáza 2: 2.2 nehnutelnosti + klienti SELECT
+- [x] Plán schválený userom
+- [x] Fáza 1: 1.1 migrácia 070 (commit `34a1977`, applied dev DB, 35/47 rows backfilled)
+- [x] Fáza 1: 1.2 /api/nabery code fix (POST píše makler_id, dnes=1 timezone fix)
+- [x] Fáza 1: 1.3 503 diagnostika — auto-vyriešilo sa Fázou 1.1/1.2 (manazer/portfolio/operativa všetky 200)
+- [~] Fáza 1: 1.4 cleanup — dev worktree čistý, duplicit len v main repo (mimo scope)
+- [x] Fáza 2: 2.1 obhliadky SELECT (commit `c389469`) + nový detail endpoint `/api/obhliadky/[id]`
+- [x] Fáza 2: 2.2 nabery SELECT (commit `c389469`)
 - [ ] Fáza 3: 3.1 pagination helper
 - [ ] Fáza 3: 3.2 aplikácia
-- [ ] Fáza 3: 3.3 UI refaktor
+- [ ] Fáza 3: 3.3 UI refaktor — **čaká rozhodnutie: tlačidlo / virtuálny scroll?**
 - [ ] Fáza 4: 4.1 dedupe hook
-- [ ] Fáza 4: 4.2 Google 401 fix
+- [ ] Fáza 4: 4.2 Google 401 fix — **čaká rozhodnutie: auto-reconnect alebo manuál?**
 - [ ] Fáza 5: prefetch tuning
 - [ ] PR `dev → main` pripravený
+
+### Merané dopady (po deployi)
+- /api/nabery: 1.75 MB → cieľ ~50 KB (97% drop)
+- /api/obhliadky: 177 KB → cieľ ~15 KB (91% drop)
+- Detail page obhliadky: prestane sťahovať celý list pri otvorení (z O(N) na O(1))

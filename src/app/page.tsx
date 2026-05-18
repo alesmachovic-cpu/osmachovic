@@ -13,6 +13,7 @@ import LinkGoogleBanner from "@/components/LinkGoogleBanner";
 import UrlAnalyzeModal from "@/components/UrlAnalyzeModal";
 import PricingEstimateModal from "@/components/PricingEstimateModal";
 import { useAuth } from "@/components/AuthProvider";
+import { useGoogleConnected } from "@/lib/useGoogleConnected";
 import { getUserItem, setUserItem } from "@/lib/userStorage";
 
 const CalendarWidget = dynamic(() => import("@/components/CalendarWidget"), { ssr: false });
@@ -74,17 +75,21 @@ function loadTiles(userId?: string): TileKey[] {
 /* ── Banner: kandidáti obhliadok z Google kalendára ───────────────── */
 function ObhliadkyKandidatiBanner() {
   const { user } = useAuth();
+  const googleConnected = useGoogleConnected(user?.id);
   const [candidates, setCandidates] = useState<Array<{ id: string; summary: string; start: string; location: string; description?: string }>>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
+    // Skip ak Google nie je connected — endpoint by stejne vrátil 401.
+    // undefined = ešte loading useGoogleConnected, počkáme.
+    if (googleConnected !== true) return;
     fetch(`/api/obhliadky/auto-detect?userId=${user.id}`)
       .then(r => r.ok ? r.json() : { candidates: [] })
       .then(d => setCandidates((d.candidates || []).slice(0, 5)))
       .catch(() => {});
-  }, [user?.id]);
+  }, [user?.id, googleConnected]);
 
   const visible = candidates.filter(c => !dismissed.has(c.id));
   if (hidden || visible.length === 0) return null;
