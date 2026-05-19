@@ -85,7 +85,7 @@ export default function AuditDashboard() {
       // 4) Subscribe
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublic),
+        applicationServerKey: urlBase64ToUint8Array(vapidPublic) as BufferSource,
       });
 
       // 5) Send to backend
