@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
 import { getUserScope } from "@/lib/scope";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,9 @@ export async function GET(req: NextRequest) {
     const scope = await getUserScope(sessionUserId);
     if (scope) companyId = scope.company_id;
   }
+
+  // includeZrusene=1 ukáže aj soft-deleted (pre archív / kontrolu DPH).
+  const includeZrusene = searchParams.get("includeZrusene") === "1";
 
   const id = searchParams.get("id");
   if (id) {
@@ -35,12 +39,13 @@ export async function GET(req: NextRequest) {
   }
   const userId = searchParams.get("user_id");
   if (!userId) return NextResponse.json([]);
-  const { data, error } = await sb
+  let q = sb
     .from("faktury")
     .select("*")
     .eq("user_id", userId)
-    .eq("company_id", companyId)
-    .order("datum_vystavenia", { ascending: false });
+    .eq("company_id", companyId);
+  if (!includeZrusene) q = q.is("zrusena_at", null);
+  const { data, error } = await q.order("datum_vystavenia", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 }
@@ -169,6 +174,24 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json(data);
 }
 
+/**
+ * DELETE /api/faktury?id=<uuid>&dovod=<text>
+ *
+ * 🚨 FIX 2026-05-20 (Compliance P0):
+ *   Pôvodne fyzicky mazal faktúry. Porušenie zákona 222/2004 § 76 (DPH 10y
+ *   retention) + zák. 431/2002 § 35 (ZoÚ). Pri kontrole Finančnej správy
+ *   = pokuta + dorovnanie DPH + reputačné riziko.
+ *
+ * Teraz: SOFT-DELETE (zrusena_at = now()).
+ *   - faktúra ostáva fyzicky v DB
+ *   - polozky + prehlad_zaznamy NEMAZAŤ (sú súčasť účtovného záznamu)
+ *   - prehlad_zaznamy.zaplatene → false a doplníme "(zrušená)" do popisu
+ *     aby sa nezapočítavalo do príjmov, ale stále evidované
+ *   - audit log MANDATORY
+ *
+ * Hard-delete fyzický (po 10 rokoch) je separátny admin-only flow, nie cez
+ * tento endpoint.
+ */
 export async function DELETE(req: NextRequest) {
   const auth = await requireUser(req, { strict: true });
   if (auth.error) return auth.error;
@@ -176,10 +199,63 @@ export async function DELETE(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
+  const dovod = (searchParams.get("dovod") || "").trim();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-  await sb.from("prehlad_zaznamy").delete().eq("faktura_id", id);
-  await sb.from("faktura_polozky").delete().eq("faktura_id", id);
-  const { error } = await sb.from("faktury").delete().eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  if (!dovod || dovod.length < 3) {
+    return NextResponse.json({
+      error: "Dôvod zrušenia je povinný (min 3 znaky). Napr. 'storno', 'oprava', 'duplikát'.",
+    }, { status: 400 });
+  }
+
+  // Načítaj faktúru pred zmenou pre audit a guardy.
+  const { data: faktura, error: getErr } = await sb
+    .from("faktury")
+    .select("id, cislo_faktury, user_id, company_id, datum_vystavenia, suma_celkom, zrusena_at, zaplatene")
+    .eq("id", id)
+    .maybeSingle();
+  if (getErr) return NextResponse.json({ error: getErr.message }, { status: 500 });
+  if (!faktura) return NextResponse.json({ error: "Faktúra nenájdená" }, { status: 404 });
+  if (faktura.zrusena_at) {
+    return NextResponse.json({
+      error: "Faktúra už bola zrušená",
+      zrusena_at: faktura.zrusena_at,
+    }, { status: 409 });
+  }
+
+  // Soft-delete.
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+  const { error: updErr } = await sb.from("faktury").update({
+    zrusena_at: new Date().toISOString(),
+    zrusena_dovod: dovod,
+    zrusena_by: auth.user.id,
+    zaplatene: false,
+  }).eq("id", id);
+  if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+  // Označ prehlad_zaznamy aby sa nezapočítaval do príjmov, ale ostáva evidovaný.
+  await sb.from("prehlad_zaznamy").update({
+    zaplatene: false,
+    popis: `Faktúra ${faktura.cislo_faktury} (zrušená)`,
+  }).eq("faktura_id", id);
+
+  await logAudit({
+    action: "faktura.soft_delete",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: id,
+    target_type: "faktura",
+    detail: {
+      cislo_faktury: faktura.cislo_faktury,
+      suma_celkom: faktura.suma_celkom,
+      datum_vystavenia: faktura.datum_vystavenia,
+      dovod,
+    },
+    ip_address: ip || undefined,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    soft_deleted: true,
+    message: "Faktúra zrušená. Ostáva v archíve 10 rokov podľa zákona o DPH.",
+  });
 }

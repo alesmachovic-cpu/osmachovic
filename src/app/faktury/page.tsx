@@ -40,8 +40,20 @@ export default function FakturyPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("Zmazať faktúru?")) return;
-    await fetch(`/api/faktury?id=${id}`, { method: "DELETE" });
+    const dovod = prompt(
+      "Faktúra bude zrušená (soft-delete). Zákon o DPH § 76 vyžaduje 10-ročnú archiváciu — fyzicky ostáva v DB.\n\nDôvod zrušenia (min 3 znaky, napr. storno / oprava / duplikát):",
+    );
+    if (!dovod) return;
+    if (dovod.trim().length < 3) {
+      alert("Dôvod musí mať aspoň 3 znaky.");
+      return;
+    }
+    const res = await fetch(`/api/faktury?id=${id}&dovod=${encodeURIComponent(dovod.trim())}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.error || "Zrušenie zlyhalo.");
+      return;
+    }
     load();
   }
 

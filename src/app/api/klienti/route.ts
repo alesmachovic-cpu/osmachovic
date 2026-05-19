@@ -81,6 +81,15 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: error.message, code: error.code }, { status: 500 });
   }
+  await logAudit({
+    action: "klient.create",
+    actor_id: userId,
+    target_id: data.id,
+    target_type: "klient",
+    target_name: typeof data.meno === "string" ? data.meno : undefined,
+    detail: { makler_id, company_id: scope.company_id },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ klient: data });
 }
 
@@ -129,6 +138,15 @@ export async function PATCH(req: NextRequest) {
 
   const { data, error } = await sb.from("klienti").update(patch).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "klient.update",
+    actor_id: userId,
+    target_id: id,
+    target_type: "klient",
+    target_name: typeof data.meno === "string" ? data.meno : undefined,
+    detail: { fields_changed: Object.keys(patch) },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ klient: data });
 }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { OBCHOD_PRESET } from "@/lib/obchodPreset";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -80,6 +81,21 @@ export async function POST(req: NextRequest) {
     .select("*, obchod_ulohy(*)")
     .eq("id", obchod.id)
     .single();
+
+  await logAudit({
+    action: "obchod.create",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: obchod.id,
+    target_type: "obchod",
+    detail: {
+      klient_id: body.klient_id,
+      nehnutelnost_id: body.nehnutelnost_id ?? null,
+      cena: body.cena ?? null,
+      provizia: body.provizia ?? null,
+    },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
 
   return NextResponse.json({ obchod: full }, { status: 201 });
 }
