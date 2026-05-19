@@ -10,13 +10,17 @@
 
 Tieto bugy blokujú produkčný workflow alebo majú právne implikácie.
 
-| # | Issue | Doména / Role | Owner | Žiadané |
-|---|---|---|---|---|
-| 1 | **Monitor scrape cron mŕtve 8 dní na vianeme** | Operativa + Monitor | Patrik + Martin | Diagnostika, fix, monitoring banner |
-| 2 | **Audit log iba 6% coverage** (5/84 write routes) | Compliance | Katarína | Pridať `logAudit()` do 80 routes |
-| 3 | **11 anon RLS `USING(true)` policies** | Security Audit | Adam | Systematický scan, fix každý |
-| 4 | **ESLint v9 config rozbitý** | QA | Daniela | Migrácia .eslintrc → eslint.config.js |
-| 5 | **`ai_usage_log` tabuľka chýba** | AI + Financie | Eva + Mária | Cost tracking po DB + middleware |
+| # | Issue | Doména / Role | Owner | Žiadané | Deadline |
+|---|---|---|---|---|---|
+| 1 | **Monitor scrape cron mŕtve 8 dní na vianeme** | Operativa + Monitor | Patrik + Martin | Diagnostika, fix, monitoring banner | ASAP |
+| 2 | **Audit log iba 6% coverage** (5/84 write routes) | Compliance | Katarína | Pridať `logAudit()` do 80 routes | Q2 2026 |
+| 3 | **11 anon RLS `USING(true)` policies** | Security Audit | Adam | Systematický scan, fix každý | Q2 2026 |
+| 4 | **ESLint v9 config rozbitý** | QA | Daniela | Migrácia .eslintrc → eslint.config.js | ASAP |
+| 5 | **`ai_usage_log` tabuľka chýba** | AI + Financie | Eva + Mária | Cost tracking po DB + middleware | Q2 2026 |
+| L1 | 🆕 **Resend API key INVALID — všetky CRM emaily rozbité** | DevOps + CEO | Jaroslav + Aleš | Nový kľúč na resend.com + update Vercel env | TERAZ |
+| L2 | 🆕 **AML registrácia VIANEMY (zákon 73/2026)** | Compliance | Katarína | Registrácia povinnej osoby | **31.8.2026 zákon** |
+| L3 | 🆕 **eKasa pre RKty** — povinnosť od 1.1.2026 | Financie + Náberáky | Mária + Lenka | Integrácia alebo policy "iba bezhotovostné" | **AKTÍVNE** |
+| L4 | 🆕 **AML hard blocker pred KZ** (KUV identifikácia >15k EUR) | Náberáky + Compliance | Lenka + Katarína | API check pred KZ podpis | Q2 2026 |
 
 ---
 
