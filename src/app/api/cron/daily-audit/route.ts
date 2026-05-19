@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -346,9 +347,17 @@ async function sendPushNotification(title: string, body: string, url: string = "
 }
 
 export async function GET(req: NextRequest) {
+  // Auth: povoľ ak (a) Vercel cron header, (b) Bearer CRON_SECRET, ALEBO (c) admin session
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers.get("authorization") !== `Bearer ${cronSecret}` && req.headers.get("x-vercel-cron") !== "1") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const isVercelCron = req.headers.get("x-vercel-cron") === "1";
+  const isBearerOk = cronSecret ? req.headers.get("authorization") === `Bearer ${cronSecret}` : false;
+
+  if (!isVercelCron && !isBearerOk) {
+    // Skús admin session
+    const auth = await requireUser(req);
+    if (auth.error || !isSuperAdmin(auth.user.role)) {
+      return NextResponse.json({ error: "Unauthorized — vyžaduje admin session, Vercel cron, alebo Bearer secret" }, { status: 401 });
+    }
   }
 
   const sb = getSupabaseAdmin();
