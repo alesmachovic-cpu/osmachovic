@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
+import { sendTelegram, formatAuditAlert } from "@/lib/telegram";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -387,21 +388,33 @@ export async function GET(req: NextRequest) {
     unchanged_ok: diffed.filter(d => d.category === "UNCHANGED_OK").length,
   };
 
-  // 4) Push notifikácia (len ak NOVÝ fail — nie pri persistent, nie pri resolved)
+  // 4) Notifikácie pri zmenách — Telegram (primárne) + Push (záloha)
+  let telegramResult: { sent: boolean; error?: string; chatIds?: string[] } = { sent: false, error: "no changes" };
   let pushResult: { sent: boolean; error?: string } = { sent: false, error: "no new fails" };
-  if (diffCounts.new > 0) {
-    const newFailNames = diffed
-      .filter(d => d.category === "NEW" && d.status === "fail")
-      .map(d => d.name)
-      .slice(0, 3)
-      .join(", ");
-    if (newFailNames) {
-      pushResult = await sendPushNotification(
-        `🚨 VIANEMA audit: ${diffCounts.new} nový problém`,
-        newFailNames + ". Pozri /admin/audit",
-        "/admin/audit"
-      );
-    }
+
+  const newFailItems = diffed
+    .filter(d => d.category === "NEW" && d.status === "fail")
+    .map(d => ({ name: d.name, message: d.message, ownerName: d.ownerName }));
+  const resolvedItems = diffed
+    .filter(d => d.category === "RESOLVED")
+    .map(d => ({ name: d.name }));
+
+  // Pošli Telegram ak NEW fail ALEBO RESOLVED
+  if (newFailItems.length > 0 || resolvedItems.length > 0) {
+    const text = formatAuditAlert({ newFails: newFailItems, resolved: resolvedItems });
+    telegramResult = await sendTelegram({ text });
+  } else {
+    telegramResult = { sent: false, error: "no new fails / no resolved" };
+  }
+
+  // Záložná push notif iba pri NEW fail
+  if (newFailItems.length > 0) {
+    const names = newFailItems.map(f => f.name).slice(0, 3).join(", ");
+    pushResult = await sendPushNotification(
+      `🚨 VIANEMA audit: ${diffCounts.new} nový problém`,
+      names + ". Pozri /admin/audit",
+      "/admin/audit"
+    );
   }
 
   // 5) Save snapshot do DB
@@ -411,6 +424,7 @@ export async function GET(req: NextRequest) {
     results: current,
     email_summary: {
       push: { sent: pushResult.sent, error: pushResult.error },
+      telegram: { sent: telegramResult.sent, error: telegramResult.error, chatIds: telegramResult.chatIds },
       diffCounts,
     },
   });
@@ -419,6 +433,7 @@ export async function GET(req: NextRequest) {
     timestamp: new Date().toISOString(),
     counts,
     diff: diffCounts,
+    telegram: telegramResult,
     push: pushResult,
     saved: !saveErr,
     saveError: saveErr?.message,
