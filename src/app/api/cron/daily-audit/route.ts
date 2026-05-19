@@ -195,7 +195,7 @@ async function sendEmailReport(results: CheckResult[], counts: { ok: number; war
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "VIANEMA Audit <audit@vianema.amgd.sk>",
+        from: process.env.RESEND_FROM || "VIANEMA Audit <noreply@vianema.eu>",
         to: [MANAGER_EMAIL],
         subject,
         html,
