@@ -273,7 +273,10 @@ async function sendEmail(subject: string, html: string): Promise<EmailResult> {
   if (!RESEND_API_KEY) return { sent: false, error: "RESEND_API_KEY missing" };
   if (!MANAGER_EMAIL) return { sent: false, error: "MANAGER_EMAIL missing" };
 
-  const fromAddr = process.env.RESEND_FROM || "VIANEMA Audit <noreply@vianema.eu>";
+  // Sender: Resend default doména (onboarding@resend.dev) — vždy funguje, nepotrebuje verify.
+  // Príjemca: process.env.MANAGER_EMAIL (= ales.machovic@gmail.com).
+  // Žiadny vianema.eu nepoužitý.
+  const fromAddr = "VIANEMA Audit <onboarding@resend.dev>";
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
