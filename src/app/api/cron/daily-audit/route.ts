@@ -57,6 +57,11 @@ const CHECK_OWNERS: Record<string, { owner: string; ownerName: string; departmen
     ownerName: "Ing. Roman Krištof (E011)",
     department: "Google Integrácia",
   },
+  "Email service (Resend)": {
+    owner: "devops",
+    ownerName: "Bc. Jaroslav Šebo (E017) + Aleš (CEO)",
+    department: "DevOps + Infrastructure",
+  },
 };
 
 async function runChecks(): Promise<CheckResult[]> {
@@ -139,7 +144,31 @@ async function runChecks(): Promise<CheckResult[]> {
     results.push({ name: "Klient creation activity", status: "warn", message: `Check failed: ${String(e).slice(0, 100)}` });
   }
 
-  // ─── 5) Google token expiry ───
+  // ─── 5.5) Resend API key valid (KRITICKÉ — ovplyvňuje VŠETKY emaily) ───
+  try {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      results.push({ name: "Email service (Resend)", status: "fail", message: "🚨 RESEND_API_KEY chýba v env" });
+    } else {
+      const r = await fetch("https://api.resend.com/api-keys", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (r.ok) {
+        results.push({ name: "Email service (Resend)", status: "ok", message: "API kľúč valid, emaily sú functional" });
+      } else {
+        results.push({
+          name: "Email service (Resend)",
+          status: "fail",
+          message: `🚨 Resend kľúč INVALID (HTTP ${r.status}) — VŠETKY emaily v CRM sú rozbité`,
+          detail: "Akcia: vytvor nový kľúč na https://resend.com/api-keys a update Vercel env",
+        });
+      }
+    }
+  } catch (e) {
+    results.push({ name: "Email service (Resend)", status: "warn", message: `Check failed: ${String(e).slice(0, 100)}` });
+  }
+
+  // ─── 6) Google token expiry ───
   try {
     const { data } = await sb.from("users").select("google_email, google_token_expires_at");
     if (data) {
