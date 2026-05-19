@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,15 @@ function generateReadablePassword(length = 12): string {
 
 export async function POST(request: Request) {
   try {
+    // 🚨 FIX 2026-05-20 (Security Auditor P0):
+    // Bez auth check tento endpoint resetol heslo akéhokoľvek usera (vrátane admina).
+    // Teraz: VYŽADUJE platnú admin session.
+    const auth = await requireUser(request as NextRequest, { strict: true });
+    if (auth.error) return auth.error;
+    if (!isSuperAdmin(auth.user.role)) {
+      return NextResponse.json({ error: "Len admin/majiteľ môže resetovať heslo" }, { status: 403 });
+    }
+
     const body = await request.json();
     const userId = body.user_id;
     if (!userId) return NextResponse.json({ error: "Missing user_id" }, { status: 400 });
@@ -48,13 +58,13 @@ export async function POST(request: Request) {
       .eq("id", userId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // Audit log
+    // Audit log — actor_id zo session (nie hardcoded "ales")
     await sb.from("audit_log").insert({
-      user_id: "ales", // admin action (ideálne z session, zatial hardcoded)
+      user_id: auth.user.id,
       action: "admin_reset_password",
       entity_type: "user",
       entity_id: userId,
-      detail: { target_name: user.name },
+      detail: { target_name: user.name, target_id: userId },
     });
 
     return NextResponse.json({

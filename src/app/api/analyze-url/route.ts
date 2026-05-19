@@ -1,9 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { analyzeOkolie } from "@/lib/okolie";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+/**
+ * 🚨 SSRF protection (FIX 2026-05-20 Security Auditor P0)
+ *
+ * Whitelist domén — fetchneme len reality portály. Bez whitelist útočník vie
+ * dosiahnuť AWS metadata (http://169.254.169.254/), interné služby
+ * (http://localhost:port), private IPs (10.x, 172.16.x, 192.168.x).
+ */
+const ALLOWED_URL_DOMAINS = [
+  "bazos.sk", "reality.sk", "nehnutelnosti.sk", "topreality.sk",
+  "trh.sk", "byt-byty.sk", "reality.idnes.cz", "sreality.cz",
+  "boomreality.sk", "homefinder.sk", "ucto.sk",
+];
+
+function assertSafeUrl(rawUrl: string): { ok: true; url: URL } | { ok: false; error: string } {
+  let parsed: URL;
+  try { parsed = new URL(rawUrl); }
+  catch { return { ok: false, error: "Neplatný URL formát" }; }
+
+  // Len HTTP/HTTPS
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    return { ok: false, error: "Povolené sú len http:// a https:// URL" };
+  }
+  // Block IP addresses (vrátane localhost, AWS metadata, RFC1918)
+  const host = parsed.hostname.toLowerCase();
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host === "localhost" || host.endsWith(".local")) {
+    return { ok: false, error: "IP adresy a localhost nie sú povolené" };
+  }
+  if (host.startsWith("[")) {
+    return { ok: false, error: "IPv6 nie je povolené" };
+  }
+  // Domain allowlist (real estate portály)
+  const allowed = ALLOWED_URL_DOMAINS.some(d => host === d || host.endsWith("." + d));
+  if (!allowed) {
+    return { ok: false, error: `Doména ${host} nie je v allowliste reality portálov` };
+  }
+  return { ok: true, url: parsed };
+}
 
 /**
  * POST /api/analyze-url
@@ -465,11 +504,20 @@ function hypoteka(cena: number) {
 }
 
 export async function POST(req: NextRequest) {
+  // 🚨 FIX 2026-05-20 (Security Auditor P0): Auth required (predtým public = SSRF + AI cost runaway)
+  const auth = await requireUser(req, { strict: true });
+  if (auth.error) return auth.error;
+
   let body: { url?: string; manual_data?: Partial<ExtractedListing> };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
   const url = String(body.url || "").trim();
   if (!url || !/^https?:\/\//i.test(url)) {
     return NextResponse.json({ error: "Zadaj platný HTTP/HTTPS odkaz" }, { status: 400 });
+  }
+  // 🚨 SSRF protection — whitelist domén pre fetch
+  const safety = assertSafeUrl(url);
+  if (!safety.ok) {
+    return NextResponse.json({ error: `URL nie je povolené: ${safety.error}` }, { status: 400 });
   }
 
   // FALLBACK PATH — ak klient pošle `manual_data` (po zlyhaní AI extrakcie),
@@ -546,9 +594,20 @@ export async function POST(req: NextRequest) {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "sk,en;q=0.8",
       },
-      redirect: "follow",
+      redirect: "manual", // 🚨 SSRF: nedovolíme redirect bypass na private IP
       signal: AbortSignal.timeout(20000),
     });
+    if (r.status >= 300 && r.status < 400) {
+      // Redirect — over že nová URL je tiež v allowliste
+      const loc = r.headers.get("location");
+      if (!loc) return NextResponse.json({ error: "Zdroj vrátil redirect bez location" }, { status: 502 });
+      const safeRedirect = assertSafeUrl(loc);
+      if (!safeRedirect.ok) {
+        return NextResponse.json({ error: `Redirect na nepovolenú URL: ${safeRedirect.error}` }, { status: 502 });
+      }
+      // Pre simplicity: 1 hop max, nepokračujeme. Klient si vie zadať konečnú URL.
+      return NextResponse.json({ error: "Zdroj redirectuje. Skús priamy link." }, { status: 502 });
+    }
     if (!r.ok) {
       return NextResponse.json({ error: `Zdroj vrátil HTTP ${r.status}. Možno je za prihlásením alebo blokuje boty.` }, { status: 502 });
     }
