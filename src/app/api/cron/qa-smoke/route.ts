@@ -96,7 +96,9 @@ export async function GET(req: NextRequest) {
       const { data, error } = await sb.from("obhliadky").insert({
         predavajuci_klient_id: klientId,
         datum: new Date(Date.now() + 86400000).toISOString(),
-        adresa: `${tag} ulica 1, Bratislava`,
+        miesto: `${tag} ulica 1, Bratislava`,
+        status: "planovana",
+        company_id: VIANEMA_COMPANY_ID,
       }).select("id").single();
       if (error) throw new Error(error.message);
       return data.id as string;

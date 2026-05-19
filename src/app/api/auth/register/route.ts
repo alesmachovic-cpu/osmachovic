@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { buildSessionCookieValue, buildBillingCookieValue } from "@/lib/auth/session";
+import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,16 @@ function slugify(name: string): string {
 
 export async function POST(request: Request) {
   try {
+    // 🚨 Rate limit — defence-in-depth pre prípad keď SIGNUP_ENABLED bude true.
+    const ip = getRequestIp(request);
+    const rl = rateLimit({ key: `register:${ip}`, ...RATE_LIMITS.REGISTER });
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: rl.error, code: "RATE_LIMITED" },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      );
+    }
+
     // 🚨 FIX 2026-05-20 (Security Auditor P0):
     // Pôvodne tento endpoint umožnil KOMUKOĽVEK z internetu vytvoriť novú firmu + admin účet.
     // Útočník mohol vytvoriť phishing-firmu napr. "vianema-fake", podstrčiť obetiam, dostať
