@@ -19,7 +19,9 @@ const ALLOWED_URL_DOMAINS = [
   "boomreality.sk", "homefinder.sk", "ucto.sk",
 ];
 
-function assertSafeUrl(rawUrl: string): { ok: true; url: URL } | { ok: false; error: string } {
+type UrlSafetyResult = { ok: true; url: URL; error?: undefined } | { ok: false; url?: undefined; error: string };
+
+function assertSafeUrl(rawUrl: string): UrlSafetyResult {
   let parsed: URL;
   try { parsed = new URL(rawUrl); }
   catch { return { ok: false, error: "Neplatný URL formát" }; }
