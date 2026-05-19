@@ -36,8 +36,90 @@ export default function AuditDashboard() {
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState("");
+  const [pushStatus, setPushStatus] = useState<"unknown" | "granted" | "denied" | "subscribing" | "subscribed">("unknown");
+  const [pushError, setPushError] = useState("");
 
   const isAdmin = user?.role === "super_admin" || user?.role === "majitel";
+
+  // Check push permission on mount
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission === "granted") {
+      // Skontroluj či máme aktívnu subscription
+      navigator.serviceWorker?.ready?.then(reg => reg.pushManager.getSubscription()).then(sub => {
+        setPushStatus(sub ? "subscribed" : "granted");
+      }).catch(() => setPushStatus("granted"));
+    } else if (Notification.permission === "denied") {
+      setPushStatus("denied");
+    }
+  }, []);
+
+  async function enablePush() {
+    setPushError("");
+    if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) {
+      setPushError("Tento prehliadač nepodporuje push notifikácie");
+      return;
+    }
+    setPushStatus("subscribing");
+    try {
+      // 1) Permission
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") {
+        setPushStatus("denied");
+        setPushError("Povolenie zamietnuté. Otvor Nastavenia prehliadača → Notifikácie pre dev.amgd.sk");
+        return;
+      }
+
+      // 2) Service worker
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+
+      // 3) VAPID key z env (musí byť NEXT_PUBLIC_)
+      const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidPublic) {
+        setPushError("NEXT_PUBLIC_VAPID_PUBLIC_KEY chýba v env");
+        setPushStatus("granted");
+        return;
+      }
+
+      // 4) Subscribe
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublic),
+      });
+
+      // 5) Send to backend
+      const r = await fetch("/api/push/subscribe", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subscription: sub.toJSON(),
+          userId: user?.id,
+          userAgent: navigator.userAgent,
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setPushError(d.error || `HTTP ${r.status}`);
+        setPushStatus("granted");
+        return;
+      }
+      setPushStatus("subscribed");
+    } catch (e) {
+      setPushError(String(e).slice(0, 200));
+      setPushStatus("granted");
+    }
+  }
+
+  function urlBase64ToUint8Array(base64: string): Uint8Array {
+    const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+    const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(b64);
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
 
   async function loadRuns() {
     setLoading(true);
@@ -102,22 +184,52 @@ export default function AuditDashboard() {
             Inspector General (E023 Bc. Mária Hlavatá) — kontrolný orgán
           </div>
         </div>
-        <button
-          onClick={runNow}
-          disabled={triggering}
-          style={{
-            background: "#1F3864", color: "white", border: "none",
-            borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600,
-            cursor: triggering ? "wait" : "pointer", opacity: triggering ? 0.6 : 1,
-          }}
-        >
-          {triggering ? "Spúšťam audit…" : "▶ Spusti audit teraz"}
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {pushStatus !== "subscribed" && (
+            <button
+              onClick={enablePush}
+              disabled={pushStatus === "subscribing" || pushStatus === "denied"}
+              title={pushStatus === "denied" ? "Otvor Nastavenia prehliadača → Notifikácie → povol pre dev.amgd.sk" : ""}
+              style={{
+                background: pushStatus === "denied" ? "#888" : "#10B981", color: "white", border: "none",
+                borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 600,
+                cursor: pushStatus === "denied" ? "not-allowed" : "pointer",
+              }}
+            >
+              {pushStatus === "subscribing"
+                ? "Pripájam…"
+                : pushStatus === "denied"
+                ? "🔕 Blokované prehliadačom"
+                : "🔔 Zapnúť push notifikácie"}
+            </button>
+          )}
+          {pushStatus === "subscribed" && (
+            <div style={{ padding: "10px 16px", background: "#E2EFDA", color: "#1F5018", borderRadius: 10, fontSize: 13, fontWeight: 600 }}>
+              🔔 Push aktívne
+            </div>
+          )}
+          <button
+            onClick={runNow}
+            disabled={triggering}
+            style={{
+              background: "#1F3864", color: "white", border: "none",
+              borderRadius: 10, padding: "10px 20px", fontSize: 14, fontWeight: 600,
+              cursor: triggering ? "wait" : "pointer", opacity: triggering ? 0.6 : 1,
+            }}
+          >
+            {triggering ? "Spúšťam audit…" : "▶ Spusti audit teraz"}
+          </button>
+        </div>
       </div>
 
       {error && (
         <div style={{ padding: 12, background: "#FCE4D6", color: "#7F1818", borderRadius: 8, marginBottom: 16 }}>
           {error}
+        </div>
+      )}
+      {pushError && (
+        <div style={{ padding: 12, background: "#FFF2CC", color: "#7F6000", borderRadius: 8, marginBottom: 16 }}>
+          🔔 Push: {pushError}
         </div>
       )}
 
