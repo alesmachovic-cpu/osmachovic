@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
+import { assertFileSize, assertMime, ALLOWED_DOC_MIMES, UPLOAD_LIMITS } from "@/lib/uploadGuards";
 
 export async function POST(req: NextRequest) {
   try {
+    // 🚨 P1 fix: auth + size limit + MIME whitelist.
+    const auth = await requireUser(req);
+    if (auth.error) return auth.error;
+
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     if (!file) return NextResponse.json({ error: "Žiadny súbor" }, { status: 400 });
+
+    const sz = assertFileSize(file, UPLOAD_LIMITS.PARSE_DOC_MAX_BYTES);
+    if (!sz.ok) return NextResponse.json({ error: sz.error }, { status: sz.status });
+    const mi = assertMime(file, ALLOWED_DOC_MIMES);
+    if (!mi.ok) return NextResponse.json({ error: mi.error }, { status: mi.status });
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const base64 = buffer.toString("base64");

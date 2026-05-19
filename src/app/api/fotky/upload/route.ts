@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStorageClient } from "@/lib/supabase-storage";
+import { requireUser } from "@/lib/auth/requireUser";
+import { assertFileSize, assertMime, ALLOWED_PHOTO_MIMES, UPLOAD_LIMITS } from "@/lib/uploadGuards";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -21,6 +23,10 @@ export const maxDuration = 30;
  */
 export async function POST(req: NextRequest) {
   try {
+    // 🚨 P1 fix: auth + size limit + MIME whitelist.
+    const auth = await requireUser(req);
+    if (auth.error) return auth.error;
+
     const form = await req.formData();
     const large = form.get("large");
     const thumb = form.get("thumb");
@@ -32,6 +38,14 @@ export async function POST(req: NextRequest) {
     }
     if (!userId) {
       return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    }
+
+    // Size + MIME pre obe (large aj thumb).
+    for (const [label, f] of [["large", large], ["thumb", thumb]] as const) {
+      const sz = assertFileSize(f, UPLOAD_LIMITS.PHOTO_MAX_BYTES);
+      if (!sz.ok) return NextResponse.json({ error: `${label}: ${sz.error}` }, { status: sz.status });
+      const mi = assertMime(f, ALLOWED_PHOTO_MIMES);
+      if (!mi.ok) return NextResponse.json({ error: `${label}: ${mi.error}` }, { status: mi.status });
     }
 
     const rnd = Math.random().toString(36).slice(2, 8);
