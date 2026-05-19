@@ -26,6 +26,8 @@ Test/staging: **https://dev.amgd.sk**
 1. **Pri každej netriviálnej úlohe (3+ kroky) najprv vytvor plán** v `plan.md`.
 2. Pred kódom prečítaj existujúci kód, aby si pochopil kontext.
 3. Po napísaní kódu vždy spusti dev server alebo testy (`npm run lint`) a over že to funguje.
+4. **Supabase migrácie aplikuj VŽDY AUTOMATICKY do test DB** cez `supabase db query --linked --file supabase/migrations/XXX_*.sql` — neopytuj sa, nečakaj na pokyn. Ja som realitný maklér nie SQL admin.
+5. **Pred KAŽDÝM mojím turn-om** — `scripts/tg-inbox.sh` ako prvý Bash call. Ak inbox nie je prázdny, najprv odpovedz, potom pokračuj.
 4. Nikdy neoznač úlohu ako hotovú bez verifikácie.
 
 ## Tri hlavné princípy (Boris Cherny)

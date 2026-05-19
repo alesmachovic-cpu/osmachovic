@@ -18,10 +18,11 @@
 --      (samostatným explicit DELETE endpointom — TBD ak treba).
 -- ============================================================================
 
+-- users.id je `text` (nie uuid) — zrusena_by musí match.
 ALTER TABLE faktury
   ADD COLUMN IF NOT EXISTS zrusena_at timestamptz NULL,
   ADD COLUMN IF NOT EXISTS zrusena_dovod text NULL,
-  ADD COLUMN IF NOT EXISTS zrusena_by uuid NULL REFERENCES users(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS zrusena_by text NULL REFERENCES users(id) ON DELETE SET NULL;
 
 -- Index pre rýchle filtrovanie aktívnych faktúr (zrusena_at IS NULL).
 CREATE INDEX IF NOT EXISTS idx_faktury_active
