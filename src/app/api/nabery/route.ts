@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord, canEditNaber } from "@/lib/scope";
 import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -98,6 +99,14 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await sb.from("naberove_listy").insert(payload).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "naberovy_list.create",
+    actor_id: userId,
+    target_id: (data as { id: string }).id,
+    target_type: "naberovy_list",
+    detail: { owner_makler_id: ownerMakler, klient_id: body.klient_id ?? null },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ naber: data, owner_makler_id: ownerMakler });
 }
 
@@ -152,6 +161,14 @@ export async function PATCH(req: NextRequest) {
   const { user_id: _u, id: _id, ...rest } = body;
   const { data, error } = await sb.from("naberove_listy").update(rest).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: isSigning ? "naberovy_list.sign" : "naberovy_list.update",
+    actor_id: userId,
+    target_id: id,
+    target_type: "naberovy_list",
+    detail: { fields_changed: Object.keys(rest), is_signing: isSigning },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ naber: data });
 }
 
@@ -194,7 +211,16 @@ export async function DELETE(req: NextRequest) {
     if (!allowed) return NextResponse.json({ error: "Nemáš oprávnenie zmazať tento náber" }, { status: 403 });
   }
 
+  const wasSigned = !!existing.podpis_data;
   const { error } = await sb.from("naberove_listy").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "naberovy_list.delete",
+    actor_id: userId,
+    target_id: id,
+    target_type: "naberovy_list",
+    detail: { was_signed: wasSigned, klient_id: existing.klient_id ?? null },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ ok: true });
 }

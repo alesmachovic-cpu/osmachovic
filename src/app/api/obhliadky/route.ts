@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
 import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -231,6 +232,20 @@ export async function POST(req: NextRequest) {
     console.warn("[obhliadky POST] kupujúci upsert failed:", upsertErr);
   }
 
+  // Audit log — kto vytvoril (postSessionUserId môže byť null pre legacy klientov).
+  await logAudit({
+    action: "obhliadka.create",
+    actor_id: postSessionUserId || "system",
+    target_id: (data as { id: string }).id,
+    target_type: "obhliadka",
+    detail: {
+      predavajuci_klient_id: body.predavajuci_klient_id ?? null,
+      nehnutelnost_id: body.nehnutelnost_id ?? null,
+      datum: body.datum,
+    },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
+
   return NextResponse.json({ obhliadka: data, kupujuci: kupujuciInfo });
 }
 
@@ -285,6 +300,18 @@ export async function PATCH(req: NextRequest) {
 
   const { data, error } = await sb.from("obhliadky").update(patch).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "obhliadka.update",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: id,
+    target_type: "obhliadka",
+    detail: {
+      fields_changed: Object.keys(patch).filter(k => k !== "updated_at"),
+      podpis_signed: !!body.podpis_data,
+    },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ obhliadka: data });
 }
 
@@ -309,5 +336,13 @@ export async function DELETE(req: NextRequest) {
 
   const { error } = await sb.from("obhliadky").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "obhliadka.delete",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: id,
+    target_type: "obhliadka",
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ ok: true });
 }
