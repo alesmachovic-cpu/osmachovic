@@ -62,3 +62,4 @@ next-env.d.ts
 
 # Supabase CLI lokálna cache (link metadata)
 /supabase/.temp/
+.tg-inbox-cursor
