@@ -294,43 +294,54 @@ function buildEmail(diffed: DiffResult[]): { subject: string; html: string; shou
   return { subject, html, shouldSend: true };
 }
 
-type EmailResult = { sent: boolean; error?: string; debug?: Record<string, unknown> };
+// Web Push notifikácia (free, používa existujúce VAPID keys — žiadny API náklad)
+async function sendPushNotification(title: string, body: string, url: string = "/admin/audit"): Promise<{ sent: boolean; error?: string }> {
+  const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY;
+  const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return { sent: false, error: "VAPID keys missing" };
 
-async function sendEmail(subject: string, html: string): Promise<EmailResult> {
-  const RESEND_API_KEY = process.env.RESEND_API_KEY;
-  const MANAGER_EMAIL = process.env.MANAGER_EMAIL;
-  if (!RESEND_API_KEY) return { sent: false, error: "RESEND_API_KEY missing" };
-  if (!MANAGER_EMAIL) return { sent: false, error: "MANAGER_EMAIL missing" };
-
-  // Sender: Resend default doména (onboarding@resend.dev) — vždy funguje, nepotrebuje verify.
-  // Príjemca: process.env.MANAGER_EMAIL (= ales.machovic@gmail.com).
-  // Žiadny vianema.eu nepoužitý.
-  const fromAddr = "VIANEMA Audit <onboarding@resend.dev>";
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: fromAddr,
-        to: [MANAGER_EMAIL],
-        subject,
-        html,
-      }),
-    });
-    const respBody = await res.text();
-    if (!res.ok) {
-      return {
-        sent: false,
-        error: `Resend ${res.status}: ${respBody.slice(0, 300)}`,
-        debug: { from: fromAddr },
-      };
+    const sb = getSupabaseAdmin();
+    // Načítaj všetky aktívne subscriptions adminov
+    const { data: subs } = await sb
+      .from("push_subscriptions")
+      .select("subscription_json, user_id, users!inner(role)")
+      .in("users.role", ["super_admin", "majitel"]);
+
+    if (!subs || subs.length === 0) {
+      return { sent: false, error: "No admin push subscriptions registered" };
     }
-    return { sent: true, debug: { from: fromAddr, response: respBody.slice(0, 100) } };
+
+    // Web Push library import (dynamic — môže byť optional dep)
+    const webpush = (await import("web-push")).default;
+    webpush.setVapidDetails(
+      "mailto:ales.machovic@gmail.com",
+      VAPID_PUBLIC,
+      VAPID_PRIVATE
+    );
+
+    const payload = JSON.stringify({
+      title,
+      body,
+      icon: "/icon-192.png",
+      badge: "/icon-96.png",
+      data: { url },
+      tag: "audit-alert",  // dedup — nová notif nahradí staršiu
+    });
+
+    let success = 0;
+    for (const s of subs) {
+      try {
+        const subscription = typeof s.subscription_json === "string"
+          ? JSON.parse(s.subscription_json)
+          : s.subscription_json;
+        await webpush.sendNotification(subscription, payload);
+        success++;
+      } catch { /* expired subscription, ignore */ }
+    }
+    return { sent: success > 0 };
   } catch (e) {
-    return { sent: false, error: `Exception: ${String(e).slice(0, 300)}` };
+    return { sent: false, error: `Push exception: ${String(e).slice(0, 200)}` };
   }
 }
 
@@ -367,25 +378,39 @@ export async function GET(req: NextRequest) {
     unchanged_ok: diffed.filter(d => d.category === "UNCHANGED_OK").length,
   };
 
-  // 4) Email (len ak je čo nového)
-  const { subject, html, shouldSend } = buildEmail(diffed);
-  const email: EmailResult = shouldSend
-    ? await sendEmail(subject, html)
-    : { sent: false, error: "no changes (all unchanged_ok)" };
+  // 4) Push notifikácia (len ak NOVÝ fail — nie pri persistent, nie pri resolved)
+  let pushResult: { sent: boolean; error?: string } = { sent: false, error: "no new fails" };
+  if (diffCounts.new > 0) {
+    const newFailNames = diffed
+      .filter(d => d.category === "NEW" && d.status === "fail")
+      .map(d => d.name)
+      .slice(0, 3)
+      .join(", ");
+    if (newFailNames) {
+      pushResult = await sendPushNotification(
+        `🚨 VIANEMA audit: ${diffCounts.new} nový problém`,
+        newFailNames + ". Pozri /admin/audit",
+        "/admin/audit"
+      );
+    }
+  }
 
   // 5) Save snapshot do DB
   const { error: saveErr } = await sb.from("audit_runs").insert({
     source: req.headers.get("x-vercel-cron") === "1" ? "daily-cron" : "manual",
     counts,
     results: current,
-    email_summary: { sent: email.sent, error: email.error || null, diffCounts, subject },
+    email_summary: {
+      push: { sent: pushResult.sent, error: pushResult.error },
+      diffCounts,
+    },
   });
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
     counts,
     diff: diffCounts,
-    email: { sent: email.sent, error: email.error, subject },
+    push: pushResult,
     saved: !saveErr,
     saveError: saveErr?.message,
     diffed,
