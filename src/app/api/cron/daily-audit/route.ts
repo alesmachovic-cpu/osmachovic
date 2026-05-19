@@ -133,18 +133,17 @@ async function run(): Promise<{ results: CheckResult[]; counts: { ok: number; wa
   return { results, counts };
 }
 
-async function sendEmailReport(results: CheckResult[], counts: { ok: number; warn: number; fail: number }) {
+type EmailResult = { sent: boolean; error?: string; debug?: Record<string, unknown> };
+
+async function sendEmailReport(results: CheckResult[], counts: { ok: number; warn: number; fail: number }): Promise<EmailResult> {
   const RESEND_API_KEY = process.env.RESEND_API_KEY;
   const MANAGER_EMAIL = process.env.MANAGER_EMAIL;
-  if (!RESEND_API_KEY || !MANAGER_EMAIL) {
-    console.warn("[daily-audit] RESEND_API_KEY alebo MANAGER_EMAIL chýba — email skipnutý");
-    return false;
-  }
+  if (!RESEND_API_KEY) return { sent: false, error: "RESEND_API_KEY missing in env" };
+  if (!MANAGER_EMAIL) return { sent: false, error: "MANAGER_EMAIL missing in env" };
 
   // Pošli email LEN ak je nejaký fail alebo warn (žiadny "all green" spam)
   if (counts.fail === 0 && counts.warn === 0) {
-    console.info("[daily-audit] All green — žiadny email potrebný");
-    return false;
+    return { sent: false, error: "all green — no email needed (by design)" };
   }
 
   const subject = counts.fail > 0
@@ -187,6 +186,7 @@ async function sendEmailReport(results: CheckResult[], counts: { ok: number; war
     </div>
   `;
 
+  const fromAddr = process.env.RESEND_FROM || "VIANEMA Audit <noreply@vianema.eu>";
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -195,20 +195,23 @@ async function sendEmailReport(results: CheckResult[], counts: { ok: number; war
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM || "VIANEMA Audit <noreply@vianema.eu>",
+        from: fromAddr,
         to: [MANAGER_EMAIL],
         subject,
         html,
       }),
     });
+    const respBody = await res.text();
     if (!res.ok) {
-      console.error("[daily-audit] Resend send fail:", await res.text());
-      return false;
+      return {
+        sent: false,
+        error: `Resend ${res.status}: ${respBody.slice(0, 300)}`,
+        debug: { from: fromAddr, to: MANAGER_EMAIL.slice(0, 5) + "...", subject },
+      };
     }
-    return true;
+    return { sent: true, debug: { from: fromAddr, to: MANAGER_EMAIL, response: respBody.slice(0, 200) } };
   } catch (e) {
-    console.error("[daily-audit] Resend error:", e);
-    return false;
+    return { sent: false, error: `Exception: ${String(e).slice(0, 300)}` };
   }
 }
 
@@ -224,12 +227,12 @@ export async function GET(req: NextRequest) {
   }
 
   const { results, counts } = await run();
-  const emailSent = await sendEmailReport(results, counts);
+  const email = await sendEmailReport(results, counts);
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
     counts,
-    emailSent,
+    email,
     results,
   });
 }
