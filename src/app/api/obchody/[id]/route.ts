@@ -39,6 +39,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const sb = getSupabaseAdmin();
 
+  // 🚨 P1 cross-tenant guard — over že obchod patrí do firmy auth-usera.
+  const { data: obchodScope } = await sb.from("obchody").select("company_id").eq("id", id).maybeSingle();
+  if (!obchodScope) return NextResponse.json({ error: "Obchod nenájdený" }, { status: 404 });
+  if (obchodScope.company_id !== auth.user.company_id && auth.user.role !== "platform_admin") {
+    return NextResponse.json({ error: "Obchod patrí do inej firmy" }, { status: 403 });
+  }
+
   // 🔒 AML HARD BLOCKER — zákon 297/2008 § 10.
   const nextStatus = typeof patch.status === "string" ? (patch.status as string) : null;
   if (nextStatus && AML_GATED_STATUSES.has(nextStatus)) {
@@ -115,12 +122,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
 
   const sb = getSupabaseAdmin();
-  // Snapshot pred deleteom pre audit.
+  // Snapshot pred deleteom pre audit + cross-tenant guard.
   const { data: snapshot } = await sb
     .from("obchody")
-    .select("id, klient_id, status, cena, provizia")
+    .select("id, klient_id, status, cena, provizia, company_id")
     .eq("id", id)
     .maybeSingle();
+
+  if (!snapshot) return NextResponse.json({ error: "Obchod nenájdený" }, { status: 404 });
+  if (snapshot.company_id !== auth.user.company_id && auth.user.role !== "platform_admin") {
+    return NextResponse.json({ error: "Obchod patrí do inej firmy" }, { status: 403 });
+  }
 
   const { error } = await sb.from("obchody").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
