@@ -281,6 +281,7 @@ export default function NastaveniaPage() {
     { id: "ciele", label: "Ciele a kalkulácie", icon: "🎯" },
     { id: "integracie", label: "Integrácie", icon: "🔗" },
     { id: "faktury", label: "Faktúry", icon: "🧾", href: "/nastavenia/faktury" },
+    { id: "bezpecnost", label: "Bezpečnosť (2FA)", icon: "🔒", href: "/nastavenia/security" },
     ...(isAdmin ? [
       { id: "spolocnost", label: "Spoločnosť", icon: "🏢" },
       { id: "ucty", label: "Účty", icon: "👥", href: "/manazer?tab=tim" },
@@ -790,6 +791,36 @@ export default function NastaveniaPage() {
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={labelSt}>Zápis v OR</label>
               <input value={firma.registracia} onChange={e => setFirma(f => ({ ...f, registracia: e.target.value }))} style={inputSt} placeholder="Mestského súdu Bratislava III, oddiel Sro, vložka č. 123596/B" />
+            </div>
+          </div>
+
+          {/* Sekcia: DPH (zákon 222/2004) */}
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px", marginTop: "16px" }}>DPH</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }} className="naber-grid">
+            <div>
+              <label style={labelSt}>Platca DPH</label>
+              <select
+                value={firma.platca_dph ? "true" : "false"}
+                onChange={e => setFirma(f => ({ ...f, platca_dph: e.target.value === "true" }))}
+                style={inputSt}
+              >
+                <option value="false">Nie (faktúry bez DPH)</option>
+                <option value="true">Áno (faktúry s DPH)</option>
+              </select>
+            </div>
+            <div>
+              <label style={labelSt}>Platca od (dátum)</label>
+              <input
+                type="date"
+                value={firma.platca_dph_od || ""}
+                onChange={e => setFirma(f => ({ ...f, platca_dph_od: e.target.value || null }))}
+                style={inputSt}
+                disabled={!firma.platca_dph}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6 }}>
+              Sadzba DPH sa počíta automaticky podľa zákona 222/2004 a dátumu vystavenia faktúry.
+              Do 31.12.2025: 20 %. Od 1.1.2026: 23 % (novela schválená 2024).
             </div>
           </div>
 

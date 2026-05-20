@@ -4,6 +4,7 @@ import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
 import { getUserScope } from "@/lib/scope";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 import { logAudit } from "@/lib/audit";
+import { getDphRate, calcDph } from "@/lib/dphRates";
 
 export const runtime = "nodejs";
 
@@ -83,7 +84,17 @@ export async function POST(req: NextRequest) {
     if (scope) postCompanyId = scope.company_id;
   }
 
-  const sumaCelkom = polozky.reduce((s: number, p: { spolu?: number }) => s + (Number(p.spolu) || 0), 0);
+  const sumaCelkomBezDph = polozky.reduce((s: number, p: { spolu?: number }) => s + (Number(p.spolu) || 0), 0);
+
+  // 🆕 DPH výpočet podľa firma_info.platca_dph + dátum vystavenia.
+  // Pre neplatcu DPH → dph = 0, suma_celkom = suma_bez_dph.
+  // Pre platcu → dph = sadzba × suma_bez_dph (sadzba podľa zákona 222/2004 platná k dátumu).
+  const datumVystavenia = faktura.datum_vystavenia || new Date().toISOString().slice(0, 10);
+  const { data: firmaInfo } = await sb.from("firma_info").select("platca_dph, platca_dph_od").eq("id", 1).maybeSingle();
+  const isPlatca = !!firmaInfo?.platca_dph && (!firmaInfo?.platca_dph_od || datumVystavenia >= firmaInfo.platca_dph_od);
+  const dphSadzba = isPlatca ? getDphRate(datumVystavenia) : 0;
+  const dphSuma = isPlatca ? calcDph(sumaCelkomBezDph, dphSadzba) : 0;
+  const sumaCelkom = sumaCelkomBezDph + dphSuma;
 
   // Retry loop kvôli race condition pri paralelných POSToch s rovnakým user_id.
   // Unique index (user_id, cislo_faktury) zabezpečí, že druhý retry nájde nové max
@@ -108,12 +119,12 @@ export async function POST(req: NextRequest) {
       variabilny_symbol: vs,
       odberatel_id: faktura.odberatel_id ?? null,
       odberatel_snapshot: faktura.odberatel_snapshot ?? null,
-      datum_vystavenia: faktura.datum_vystavenia || new Date().toISOString().slice(0, 10),
+      datum_vystavenia: datumVystavenia,
       datum_dodania: faktura.datum_dodania ?? null,
       datum_splatnosti: faktura.datum_splatnosti ?? null,
       forma_uhrady: faktura.forma_uhrady || "Prevodom",
-      suma_bez_dph: faktura.suma_bez_dph ?? sumaCelkom,
-      dph: faktura.dph ?? 0,
+      suma_bez_dph: faktura.suma_bez_dph ?? sumaCelkomBezDph,
+      dph: faktura.dph ?? dphSuma,
       suma_celkom: sumaCelkom,
       zaplatene: false,
       poznamka: faktura.poznamka ?? null,

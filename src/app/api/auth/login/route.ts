@@ -247,6 +247,26 @@ export async function POST(request: Request) {
     const userAgent = request.headers.get("user-agent") || "";
     checkAndAlertNewIp(sb, String(user.id), String(user.name || ""), identifier, ip, userAgent).catch(() => {});
 
+    // 🔒 2FA gate — ak má user aktivované 2FA, NEVYSTAVUJ session cookie hneď.
+    // Vytvor 2FA challenge a vyžiadaj /api/auth/2fa/verify ako druhý krok.
+    if (user.totp_enabled_at) {
+      const crypto = await import("node:crypto");
+      const challenge = crypto.randomBytes(32).toString("base64url");
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 min
+      await sb.from("auth_2fa_challenges").insert({
+        user_id: String(user.id),
+        challenge,
+        ip,
+        user_agent: userAgent.slice(0, 500),
+        expires_at: expiresAt,
+      });
+      return NextResponse.json({
+        requires_2fa: true,
+        challenge,
+        message: "Zadaj 6-cifrový kód z autentifikátora alebo backup kód.",
+      });
+    }
+
     // Billing status — zisti is_active firmy pre crm_billing cookie
     let companyActive = true;
     const companyId = user.company_id as string | null;

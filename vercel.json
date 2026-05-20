@@ -38,7 +38,7 @@
     },
     {
       "path": "/api/cron/qa-smoke",
-      "schedule": "30 6 * * *"
+      "schedule": "30 4 * * *"
     }
   ]
 }

@@ -29,10 +29,16 @@ interface User {
   company_id?: string | null;
 }
 
+type LoginResult =
+  | { ok: true }
+  | { ok: false; error: string }
+  | { ok: "2fa"; challenge: string };
+
 interface AuthContextType {
   user: User | null;
   accounts: User[];
-  login: (userId: string, password: string, turnstileToken?: string) => Promise<string | null>;
+  login: (userId: string, password: string, turnstileToken?: string) => Promise<LoginResult>;
+  verify2fa: (challenge: string, code: string) => Promise<string | null>;
   loginWithGoogle: () => Promise<void>;
   linkGoogleToCurrent: () => Promise<void>;
   logout: () => void;
@@ -45,7 +51,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   accounts: [],
-  login: async () => null,
+  login: async () => ({ ok: false, error: "not initialized" }),
+  verify2fa: async () => null,
   loginWithGoogle: async () => {},
   linkGoogleToCurrent: async () => {},
   logout: () => {},
@@ -194,30 +201,52 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     setAccounts(accs);
   }
 
-  async function login(identifier: string, password: string, turnstileToken?: string): Promise<string | null> {
-    if (!identifier.trim()) return "Zadaj meno alebo email";
+  async function login(identifier: string, password: string, turnstileToken?: string): Promise<LoginResult> {
+    if (!identifier.trim()) return { ok: false, error: "Zadaj meno alebo email" };
 
-    // Cez server API — bcrypt hashovanie + rate limit + audit + HMAC session cookie
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // credentials: "include" — server set-cookie pre crm_session sa uchová
         credentials: "include",
         body: JSON.stringify({ identifier: identifier.trim(), password, turnstileToken }),
       });
       const body = await res.json();
-      if (!res.ok) return body.error || "Prihlásenie zlyhalo";
+      if (!res.ok) return { ok: false, error: body.error || "Prihlásenie zlyhalo" };
+
+      // 2FA gate — vráti challenge namiesto user-a
+      if (body.requires_2fa && body.challenge) {
+        return { ok: "2fa", challenge: String(body.challenge) };
+      }
 
       const acc = body.user as User;
       localStorage.setItem("crm_user", acc.id);
       setUser(acc);
-      // Audit log
       fetch("/api/audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: acc.id, action: "login", entity_type: "user", entity_id: acc.id }),
       }).catch(() => {});
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Chyba siete" };
+    }
+  }
+
+  async function verify2fa(challenge: string, code: string): Promise<string | null> {
+    try {
+      const res = await fetch("/api/auth/2fa/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ challenge, code }),
+      });
+      const body = await res.json();
+      if (!res.ok) return body.error || "2FA overenie zlyhalo";
+
+      const acc = body.user as User;
+      localStorage.setItem("crm_user", acc.id);
+      setUser(acc);
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : "Chyba siete";
@@ -328,14 +357,14 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   if (!user && !isAuthCallback) {
     return (
-      <AuthContext.Provider value={{ user, accounts, login, loginWithGoogle, linkGoogleToCurrent, logout, updateAccount, addAccount, deleteAccount, refreshAccounts }}>
-        <LoginScreen accounts={accounts} onLogin={login} onGoogleLogin={loginWithGoogle} />
+      <AuthContext.Provider value={{ user, accounts, login, verify2fa, loginWithGoogle, linkGoogleToCurrent, logout, updateAccount, addAccount, deleteAccount, refreshAccounts }}>
+        <LoginScreen accounts={accounts} onLogin={login} onVerify2fa={verify2fa} onGoogleLogin={loginWithGoogle} />
       </AuthContext.Provider>
     );
   }
 
   return (
-    <AuthContext.Provider value={{ user, accounts, login, loginWithGoogle, linkGoogleToCurrent, logout, updateAccount, addAccount, deleteAccount, refreshAccounts }}>
+    <AuthContext.Provider value={{ user, accounts, login, verify2fa, loginWithGoogle, linkGoogleToCurrent, logout, updateAccount, addAccount, deleteAccount, refreshAccounts }}>
       {children}
       {idleLogoutAt !== null && <IdleWarningModal logoutAt={idleLogoutAt} onStay={stayLoggedIn} />}
     </AuthContext.Provider>
@@ -431,7 +460,12 @@ function SlovakiaMap() {
   );
 }
 
-function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts: User[]; onLogin: (id: string, pw: string, token?: string) => Promise<string | null>; onGoogleLogin: () => Promise<void> }) {
+function LoginScreen({ accounts: _accounts, onLogin, onVerify2fa, onGoogleLogin }: {
+  accounts: User[];
+  onLogin: (id: string, pw: string, token?: string) => Promise<LoginResult>;
+  onVerify2fa: (challenge: string, code: string) => Promise<string | null>;
+  onGoogleLogin: () => Promise<void>;
+}) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -440,6 +474,10 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+
+  // 2FA flow state
+  const [twofaChallenge, setTwofaChallenge] = useState<string | null>(null);
+  const [twofaCode, setTwofaCode] = useState("");
 
   const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
@@ -483,15 +521,41 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
     if (!identifier.trim()) { setError("Zadaj meno alebo email"); return; }
     setSubmitting(true);
     setError("");
-    const err = await onLogin(identifier, password, turnstileToken ?? undefined);
-    if (err) {
-      setError(err);
+    const result = await onLogin(identifier, password, turnstileToken ?? undefined);
+    if (result.ok === "2fa") {
+      // 2FA gate — prepni UI do 6-digit code režimu.
+      setTwofaChallenge(result.challenge);
+      setSubmitting(false);
+      return;
+    }
+    if (result.ok === false) {
+      setError(result.error);
       setSubmitting(false);
       if (widgetIdRef.current && window.turnstile) {
         window.turnstile.reset(widgetIdRef.current);
         setTurnstileToken(null);
       }
     }
+    // ok === true → AuthProvider setUser už zafungoval, screen sa unmounuje.
+  }
+
+  async function handle2faSubmit(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!twofaChallenge || !twofaCode) return;
+    setSubmitting(true);
+    setError("");
+    const err = await onVerify2fa(twofaChallenge, twofaCode);
+    if (err) {
+      setError(err);
+      setSubmitting(false);
+    }
+  }
+
+  function cancel2fa() {
+    setTwofaChallenge(null);
+    setTwofaCode("");
+    setError("");
+    setSubmitting(false);
   }
 
   async function handleGoogle() {
@@ -530,7 +594,63 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
           </p>
         </div>
 
-        {/* Formulár */}
+        {/* 2FA prompt — zobrazí sa po úspešnom hesle ak má user zapnuté 2FA */}
+        {twofaChallenge && (
+          <form onSubmit={handle2faSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ color: "#fff", textAlign: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Druhý krok overenia</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 4 }}>Zadaj 6-cifrový kód z autentifikátora alebo backup kód</div>
+            </div>
+            <input
+              type="text"
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              value={twofaCode}
+              onChange={(e) => setTwofaCode(e.target.value.slice(0, 16))}
+              placeholder="000000"
+              autoFocus
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 12,
+                color: "#fff",
+                padding: "14px 16px",
+                fontSize: 22,
+                fontFamily: "ui-monospace, monospace",
+                letterSpacing: "0.2em",
+                textAlign: "center",
+                outline: "none",
+              }}
+            />
+            {error && <div style={{ color: "#fca5a5", fontSize: 13, textAlign: "center" }}>{error}</div>}
+            <button type="submit" disabled={submitting || !twofaCode} style={{
+              background: submitting ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.92)",
+              color: submitting ? "#fff" : "#0F172A",
+              padding: "14px",
+              borderRadius: 12,
+              border: 0,
+              fontWeight: 600,
+              fontSize: 15,
+              cursor: submitting ? "wait" : "pointer",
+              marginTop: 4,
+            }}>
+              {submitting ? "Overujem…" : "Overiť"}
+            </button>
+            <button type="button" onClick={cancel2fa} style={{
+              background: "transparent",
+              color: "rgba(255,255,255,0.5)",
+              padding: "8px",
+              border: 0,
+              cursor: "pointer",
+              fontSize: 12,
+            }}>
+              Zrušiť a prihlásiť znova
+            </button>
+          </form>
+        )}
+
+        {/* Formulár — skryť ak prebieha 2FA prompt */}
+        {!twofaChallenge && (
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <div>
             <label style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.7)", marginBottom: "6px", display: "block", textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -637,6 +757,7 @@ function LoginScreen({ accounts: _accounts, onLogin, onGoogleLogin }: { accounts
             </button>
           </div>
         </form>
+        )}
 
         {/* Divider */}
         <div style={{ display: "flex", alignItems: "center", gap: "12px", margin: "20px 0" }}>
