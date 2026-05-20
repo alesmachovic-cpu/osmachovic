@@ -6,6 +6,7 @@ import type { User } from "@/components/AuthProvider";
 import SlaPoruseni from "@/components/SlaPoruseni";
 import { isSuperAdmin } from "@/lib/auth/requireUser";
 import PasswordInput from "@/components/PasswordInput";
+import { useReAuth } from "@/components/ReAuthModal";
 import { ALL_FEATURES, loadFeatureToggles, saveFeatureToggles } from "@/lib/featureToggles";
 import type { FeatureId, FeatureToggles } from "@/lib/featureToggles";
 
@@ -640,6 +641,7 @@ function TabStatistiky({ isManagerOrAbove, userEmail }: { isManagerOrAbove: bool
 
 function TabTim() {
   const { user, accounts, addAccount, deleteAccount, refreshAccounts } = useAuth();
+  const reAuth = useReAuth();
   const isAdmin = isSuperAdmin(user?.role);
 
   const [klienti, setKlienti] = useState<Array<{ makler_id: string }>>([]);
@@ -698,11 +700,31 @@ function TabTim() {
     try {
       const parts = editState.name.trim().split(" ");
       const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
-      await fetch(`/api/users?id=${encodeURIComponent(acc.id)}`, {
+
+      // 🔒 M1 re-auth — ak sa mení role (privilege change), vyžadujeme heslo/2FA.
+      const roleChanged = editState.role !== acc.role;
+      let proof: Record<string, string> = {};
+      if (roleChanged) {
+        const result = await reAuth.prompt({
+          title: `Zmena role pre ${acc.name}`,
+          description: `Meníš rolu z "${acc.role}" na "${editState.role}". Toto je security-sensitive akcia — pre potvrdenie zadaj heslo alebo 2FA kód.`,
+          dangerLabel: "Potvrdiť zmenu",
+        });
+        if (!result) { setEditSaving(false); return; }
+        proof = result as Record<string, string>;
+      }
+
+      const res = await fetch(`/api/users?id=${encodeURIComponent(acc.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editState.name.trim(), initials, email: editState.email.trim(), role: editState.role }),
+        body: JSON.stringify({ name: editState.name.trim(), initials, email: editState.email.trim(), role: editState.role, ...proof }),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.error || "Chyba pri ukladaní");
+        setEditSaving(false);
+        return;
+      }
       const provRec = provizie.find(p => p.makler_id === acc.id || p.meno === acc.name);
       const pct = parseFloat(editState.percento.replace(",", ".")) || 0;
       const mdz = parseFloat(editState.medziprovizia.replace(",", ".")) || 0;

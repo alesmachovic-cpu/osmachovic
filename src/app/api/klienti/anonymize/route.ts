@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
+import { requireReAuth } from "@/lib/auth/reAuth";
 
 export const runtime = "nodejs";
 
@@ -21,9 +22,22 @@ export async function POST(req: NextRequest) {
   if (auth.error) return auth.error;
   if (!isSuperAdmin(auth.user.role)) return NextResponse.json({ error: "Anonymizáciu môže spustiť len admin" }, { status: 403 });
 
-  let body: { id?: string };
+  let body: { id?: string; confirm_password?: string; confirm_code?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
   if (!body.id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  // 🔒 M1 force re-auth — anonymizácia je nezvratná.
+  const reAuth = await requireReAuth({
+    userId: auth.user.id,
+    password: body.confirm_password,
+    code: body.confirm_code,
+  });
+  if (!reAuth.ok) {
+    return NextResponse.json({
+      error: reAuth.error,
+      code: "RE_AUTH_REQUIRED",
+    }, { status: reAuth.status });
+  }
 
   const sb = getSupabaseAdmin();
   const { data, error } = await sb.from("klienti").update({

@@ -10,6 +10,7 @@ import SlaTimer from "@/components/SlaTimer";
 import KlientHistoryTab from "@/components/KlientHistoryTab";
 import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
+import { useReAuth } from "@/components/ReAuthModal";
 import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
 import { createCalendarEvent, notifyCalendarFail } from "@/lib/calendar";
 import { klientUpdate } from "@/lib/klientApi";
@@ -292,6 +293,7 @@ export default function KlientDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const reAuth = useReAuth();
   const id = params.id as string;
   // Kam sa vrátiť tlačidlom "späť" — rešpektuje odkial používateľ prišiel
   // (z /kupujuci by sa mal vrátiť do /kupujuci, default je /klienti).
@@ -1115,18 +1117,22 @@ export default function KlientDetailPage() {
             )}
             {!(klient as { anonymized_at?: string | null }).anonymized_at && (
               <button onClick={async () => {
-                const ok = window.confirm(
-                  "Naozaj anonymizovať tohto klienta?\n\n" +
-                  "Meno, telefón, email a poznámky budú nenávratne zmazané (právo " +
-                  "na zabudnutie podľa GDPR čl. 17). Náberáky a obhliadky zostanú " +
-                  "evidované, ale bez identifikovateľných údajov.\n\nOperácia je nevratná."
-                );
-                if (!ok) return;
+                // 🔒 M1: re-auth modal namiesto blocking confirm()
+                const proof = await reAuth.prompt({
+                  title: `Anonymizovať klienta ${klient.meno || ""}?`,
+                  description: "Meno, telefón, email a poznámky budú nenávratne zmazané (GDPR čl. 17). Náberáky a obhliadky zostanú evidované bez identifikovateľných údajov. Operácia je nevratná — pre potvrdenie zadaj heslo alebo 2FA kód.",
+                  dangerLabel: "Anonymizovať",
+                });
+                if (!proof) return;
                 const r = await fetch("/api/klienti/anonymize", {
                   method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id: klient.id }),
+                  body: JSON.stringify({ id: klient.id, ...proof }),
                 });
-                if (!r.ok) { alert("Chyba pri anonymizácii"); return; }
+                if (!r.ok) {
+                  const body = await r.json().catch(() => ({}));
+                  alert(body.error || "Chyba pri anonymizácii");
+                  return;
+                }
                 window.location.reload();
               }} style={{
                 padding: "9px 14px", background: "var(--bg-surface)", color: "#B91C1C",
