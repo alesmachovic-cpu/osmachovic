@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -58,13 +59,14 @@ export async function POST(request: Request) {
       .eq("id", userId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // Audit log — actor_id zo session (nie hardcoded "ales")
-    await sb.from("audit_log").insert({
-      user_id: auth.user.id,
-      action: "admin_reset_password",
-      entity_type: "user",
-      entity_id: userId,
-      detail: { target_name: user.name, target_id: userId },
+    // Audit log cez logAudit helper (zachovať konzistenciu).
+    await logAudit({
+      action: "user.admin_reset_password",
+      actor_id: auth.user.id,
+      actor_name: auth.user.name,
+      target_id: userId,
+      target_type: "user",
+      target_name: String(user.name),
     });
 
     return NextResponse.json({
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
       message: `Heslo pre ${user.name} bolo resetované. Pošli dočasné heslo maklerovi (bezpečným kanálom).`,
     });
   } catch (e) {
-    console.error("[reset-password] error:", e);
+    console.error("[reset-password] error:", e); // safe-log
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }

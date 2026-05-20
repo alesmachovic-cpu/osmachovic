@@ -30,6 +30,17 @@ Test/staging: **https://dev.amgd.sk**
 5. **Pred KAŽDÝM mojím turn-om** — `scripts/tg-inbox.sh` ako prvý Bash call. Ak inbox nie je prázdny, najprv odpovedz, potom pokračuj.
 6. **Auth zmeny VŽDY** spusti `./scripts/audit-auth-paths.sh` PRED commitom. Lesson z 2026-05-20: 2FA bypass cez Google OAuth + invite/accept ktoré CEO sám našiel. Každý súbor čo vystavuje session musí mať 2FA gate alebo explicit allowlist.
 7. **Ja nemám kontrolovať každú blbosť cez oddelenia** — mám firmu s departments práve preto. Ak nájdem chybu ktorú malo zachytiť Security Auditor / Compliance / QA, **najprv oprav koreňovú príčinu** (proces / regression check / pravidlo do role súboru), potom oprav sám bug. Nikdy nie len bug bez procesnej zmeny.
+8. **Pred KAŽDÝM commitom** — spusti `./scripts/audit-all.sh` pre regression check 9 oblastí:
+   - audit-cross-tenant (multi-tenant scope)
+   - audit-write-audit-log (forenzný trail)
+   - audit-anon-rls (RLS policies)
+   - audit-upload-guards (file upload DoS)
+   - audit-pii-logs (sensitive data v console)
+   - audit-ts-any (TypeScript any types)
+   - audit-rate-limit (auth brute force)
+   - audit-secrets-in-code (leaked credentials)
+   - audit-auth-paths (2FA gate na session emitteroch)
+   Ak akýkoľvek `✗`, **NEROBí commit** — najprv oprav alebo pridaj do allowlist s odôvodnením. Žiadne "tváriť že robíme".
 4. Nikdy neoznač úlohu ako hotovú bez verifikácie.
 
 ## Tri hlavné princípy (Boris Cherny)

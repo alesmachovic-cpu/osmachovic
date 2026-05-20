@@ -4,6 +4,8 @@ import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { validatePasswordStrength } from "@/lib/auth/password";
 import { buildSessionCookieValue } from "@/lib/auth/session";
+import { logAudit } from "@/lib/audit";
+import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -31,6 +33,16 @@ export async function GET(request: NextRequest) {
 /** POST — uloží heslo, označí invite ako použitý, nastaví session */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit (brute-force token guess protection).
+    const ip = getRequestIp(request);
+    const rl = rateLimit({ key: `invite-accept:${ip}`, ...RATE_LIMITS.RESET });
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: rl.error, code: "RATE_LIMITED" },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      );
+    }
+
     const body = await request.json();
     const token = String(body.token || "").trim();
     const password = String(body.password || "");
@@ -92,6 +104,14 @@ export async function POST(request: NextRequest) {
         message: "Heslo bolo nastavené. Zadaj 6-cifrový kód z autentifikátora.",
       });
     }
+
+    await logAudit({
+      action: "user.invite_accepted",
+      actor_id: invite.user_id,
+      target_id: invite.user_id,
+      target_type: "user",
+      ip_address: request.headers.get("x-forwarded-for") || undefined,
+    });
 
     const res = NextResponse.json({ success: true, userId: invite.user_id });
     res.headers.set("Set-Cookie", buildSessionCookieValue(invite.user_id));

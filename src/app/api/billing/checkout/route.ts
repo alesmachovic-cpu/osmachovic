@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/requireUser";
 import { getStripe, PRICE_IDS } from "@/lib/stripe";
 import type { PlanKey } from "@/lib/stripe-plans";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -66,6 +67,16 @@ export async function POST(req: NextRequest) {
     },
     allow_promotion_codes: true,
     locale: "sk",
+  });
+
+  await logAudit({
+    action: "billing.checkout_started",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: String(company.id),
+    target_type: "company",
+    detail: { plan, stripe_session_id: session.id, stripe_customer_id: customerId },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
   });
 
   return NextResponse.json({ url: session.url });

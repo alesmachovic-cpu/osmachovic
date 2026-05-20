@@ -1,11 +1,12 @@
 'use client';
 import { useState, useCallback, useRef } from 'react';
+
+type Kolizia = { zavaznost?: string; [key: string]: unknown };
+
 export function useKoliziaCheck() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [kolize, setKolize] = useState<any[]>([]);
+  const [kolize, setKolize] = useState<Kolizia[]>([]);
   const [nacitava, setNacitava] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const debounceRef = useRef<any>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const check = useCallback(async (url: string, params: Record<string, unknown>) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
@@ -17,5 +18,5 @@ export function useKoliziaCheck() {
       } catch (e) { console.error(e); } finally { setNacitava(false); }
     }, 600);
   }, []);
-  return { kolize, nacitava, maKolize: kolize.length > 0, maKriticke: kolize.some((k: any) => k.zavaznost === 'high'), checkKlient: (p: Record<string, unknown>) => check('/api/kolize/check', p), checkNehnutelnost: (p: Record<string, unknown>) => check('/api/kolize/nehnutelnosti', p), vymazKolize: () => setKolize([]) };
+  return { kolize, nacitava, maKolize: kolize.length > 0, maKriticke: kolize.some((k: Kolizia) => k.zavaznost === 'high'), checkKlient: (p: Record<string, unknown>) => check('/api/kolize/check', p), checkNehnutelnost: (p: Record<string, unknown>) => check('/api/kolize/nehnutelnosti', p), vymazKolize: () => setKolize([]) };
 }

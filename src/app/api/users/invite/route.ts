@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -76,6 +77,17 @@ export async function POST(request: NextRequest) {
         }),
       });
     }
+
+    await logAudit({
+      action: "user.invite",
+      actor_id: auth.user.id,
+      actor_name: auth.user.name,
+      target_id: userId,
+      target_type: "user",
+      target_name: String(user.name || ""),
+      detail: { email_sent_to: recipientEmail, expires_at: expiresAt },
+      ip_address: request.headers.get("x-forwarded-for") || undefined,
+    });
 
     return NextResponse.json({ success: true, email: recipientEmail, invite_url: inviteUrl });
   } catch (e) {

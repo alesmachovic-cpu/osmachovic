@@ -233,12 +233,12 @@ export async function POST(request: Request) {
         try {
           const hashed = await bcrypt.hash(password, 10);
           await sb.from("users").update({ password: hashed }).eq("id", user.id);
-          console.log(`[login] auto-hashed password for ${user.id}`);
+          console.log(`[login] auto-hashed password for ${user.id}`); // safe-log
         } catch (e) { console.warn("[login] auto-hash failed:", e); }
       }
     } else {
       // Bez hesla = anybody can log in (staré správanie). Ale log to.
-      console.warn(`[login] no password set for ${user.id} — allowing login`);
+      console.warn(`[login] no password set for ${user.id} — allowing login`); // safe-log
     }
 
     await logAttempt(sb, ip, identifier, true);
