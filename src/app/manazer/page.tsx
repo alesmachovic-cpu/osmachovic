@@ -702,6 +702,9 @@ function TabTim() {
       const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
 
       // 🔒 M1 re-auth — ak sa mení role (privilege change), vyžadujeme heslo/2FA.
+      // 🐛 BUG FIX 2026-05-21: predtým sme posielali `role` v PATCH body VŽDY,
+      // aj keď sa nemenila. Backend pri `"role" in updates` spustí re-auth →
+      // 403 alert. Posielame role iba ak sa skutočne zmenila.
       const roleChanged = editState.role !== acc.role;
       let proof: Record<string, string> = {};
       if (roleChanged) {
@@ -714,10 +717,18 @@ function TabTim() {
         proof = result as Record<string, string>;
       }
 
+      const payload: Record<string, unknown> = {
+        name: editState.name.trim(),
+        initials,
+        email: editState.email.trim(),
+        ...proof,
+      };
+      if (roleChanged) payload.role = editState.role;
+
       const res = await fetch(`/api/users?id=${encodeURIComponent(acc.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editState.name.trim(), initials, email: editState.email.trim(), role: editState.role, ...proof }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
