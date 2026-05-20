@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   const { data: user } = await sb
     .from("users")
-    .select("totp_enabled_at, email, login_email, name")
+    .select("totp_enabled_at, totp_secret, email, login_email, name")
     .eq("id", auth.user.id)
     .single();
 
@@ -39,12 +39,18 @@ export async function POST(req: NextRequest) {
     }, { status: 409 });
   }
 
-  const secret = generateSecret(32);
+  // UX fix 2026-05-20: ak má user secret v DB ale enabled_at IS NULL
+  // (= rozrobený setup), VRÁTIME ten istý secret — Authenticator záznam
+  // z prvého pokusu stále funguje. Inak by user musel naskenovať novú QR
+  // pre každý refresh a starý záznam by ostal mŕtvy.
+  const secret = user.totp_secret || generateSecret(32);
   const account = user.login_email || user.email || user.name || auth.user.id;
 
-  // Ulož secret (ešte neaktivuj — to robí /enable po overení).
-  const { error } = await sb.from("users").update({ totp_secret: secret }).eq("id", auth.user.id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Ak nový secret, ulož ho. Ak existujúci, len audit log.
+  if (!user.totp_secret) {
+    const { error } = await sb.from("users").update({ totp_secret: secret }).eq("id", auth.user.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   const otpauth = buildOtpAuthUri({ secret, account: String(account), issuer: "VIANEMA Real" });
   const manualKeyGroups = secret.match(/.{1,4}/g) || [];
