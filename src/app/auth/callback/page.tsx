@@ -22,6 +22,15 @@ export default function AuthCallback() {
   const [twofaCode, setTwofaCode] = useState("");
   const [twofaSubmitting, setTwofaSubmitting] = useState(false);
 
+  // 🔒 BUG FIX 2026-05-20: počas 2FA challenge skry sidebar/navbar.
+  // Pôvodne ak user mal starú localStorage.crm_user session, sidebar
+  // zobrazil dáta (počty klientov, faktúr) PRED tým než dokončil 2FA.
+  // Body class `auth-callback-mode` → CSS skryje chrome (sidebar + navbar).
+  useEffect(() => {
+    document.body.classList.add("auth-callback-mode");
+    return () => { document.body.classList.remove("auth-callback-mode"); };
+  }, []);
+
   async function handle2faVerify(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (!twofaChallenge || !twofaCode) return;
