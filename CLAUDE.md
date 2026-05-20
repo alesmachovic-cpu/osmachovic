@@ -41,7 +41,8 @@ Test/staging: **https://dev.amgd.sk**
    - audit-secrets-in-code (leaked credentials)
    - audit-auth-paths (2FA gate na session emitteroch)
    Ak akýkoľvek `✗`, **NEROBí commit** — najprv oprav alebo pridaj do allowlist s odôvodnením. Žiadne "tváriť že robíme".
-4. Nikdy neoznač úlohu ako hotovú bez verifikácie.
+9. **NIKDY alias-swap** medzi Vercel preview a production deployment cez API. Lekcia z 20.5.2026: prepol som `vianema.amgd.sk` na preview deployment ktorý nemal `NEXT_PUBLIC_*` env vars (per-environment) → klient JS dostal undefined → 1h výpadok. Pre PROD deploy do `funny-stonebraker` projektu: VŽDY `vercel deploy --prod` (target=production) z fresh clone main, NIKDY alias swap.
+10. Nikdy neoznač úlohu ako hotovú bez verifikácie.
 
 ## Tri hlavné princípy (Boris Cherny)
 1. **Jednoduchosť** — minimálny kód. Ak vieš niečo zmazať namiesto pridať, sprav to.
