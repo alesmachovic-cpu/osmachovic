@@ -28,6 +28,8 @@ Test/staging: **https://dev.amgd.sk**
 3. Po napísaní kódu vždy spusti dev server alebo testy (`npm run lint`) a over že to funguje.
 4. **Supabase migrácie aplikuj VŽDY AUTOMATICKY do test DB** cez `supabase db query --linked --file supabase/migrations/XXX_*.sql` — neopytuj sa, nečakaj na pokyn. Ja som realitný maklér nie SQL admin.
 5. **Pred KAŽDÝM mojím turn-om** — `scripts/tg-inbox.sh` ako prvý Bash call. Ak inbox nie je prázdny, najprv odpovedz, potom pokračuj.
+6. **Auth zmeny VŽDY** spusti `./scripts/audit-auth-paths.sh` PRED commitom. Lesson z 2026-05-20: 2FA bypass cez Google OAuth + invite/accept ktoré CEO sám našiel. Každý súbor čo vystavuje session musí mať 2FA gate alebo explicit allowlist.
+7. **Ja nemám kontrolovať každú blbosť cez oddelenia** — mám firmu s departments práve preto. Ak nájdem chybu ktorú malo zachytiť Security Auditor / Compliance / QA, **najprv oprav koreňovú príčinu** (proces / regression check / pravidlo do role súboru), potom oprav sám bug. Nikdy nie len bug bez procesnej zmeny.
 4. Nikdy neoznač úlohu ako hotovú bez verifikácie.
 
 ## Tri hlavné princípy (Boris Cherny)
