@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { verifyTotp } from "@/lib/totp";
 import { logAudit } from "@/lib/audit";
+import { decryptDocString } from "@/lib/cryptoDocs";
 
 export const runtime = "nodejs";
 
@@ -56,8 +57,9 @@ export async function POST(req: NextRequest) {
       proofOk = await bcrypt.compare(password, target.password);
     }
     if (!proofOk && code && target.totp_secret) {
-      // Skús TOTP
-      const t = verifyTotp(target.totp_secret, code, { lastUsedCounter: target.totp_last_used_counter });
+      // Skús TOTP — C1: decrypt secret (backward compat)
+      const plainSecret = decryptDocString(target.totp_secret);
+      const t = verifyTotp(plainSecret, code, { lastUsedCounter: target.totp_last_used_counter });
       if (t.ok) proofOk = true;
 
       // Skús backup code

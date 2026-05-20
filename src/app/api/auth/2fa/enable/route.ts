@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { verifyTotp, generateBackupCodes } from "@/lib/totp";
 import { logAudit } from "@/lib/audit";
+import { decryptDocString } from "@/lib/cryptoDocs";
 
 export const runtime = "nodejs";
 
@@ -39,7 +40,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "2FA je už zapnuté", code: "ALREADY_ENABLED" }, { status: 409 });
   }
 
-  const verified = verifyTotp(user.totp_secret, code);
+  // C1: decrypt secret (backward compat — ak je plain, vráti as-is)
+  const plainSecret = decryptDocString(user.totp_secret);
+  const verified = verifyTotp(plainSecret, code);
   if (!verified.ok) {
     await logAudit({
       action: "2fa.enable_failed",

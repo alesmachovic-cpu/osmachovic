@@ -5,6 +5,7 @@ import { getUserScope } from "@/lib/scope";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 import { logAudit } from "@/lib/audit";
 import { getDphRate, calcDph } from "@/lib/dphRates";
+import { sanitizeText, sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
 
 export const runtime = "nodejs";
 
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
       dph: faktura.dph ?? dphSuma,
       suma_celkom: sumaCelkom,
       zaplatene: false,
-      poznamka: faktura.poznamka ?? null,
+      poznamka: sanitizeText(faktura.poznamka), // C4: XSS
     };
     const { data, error } = await sb.from("faktury").insert(payload).select().single();
     if (!error) { created = data as Created; break; }
@@ -144,9 +145,9 @@ export async function POST(req: NextRequest) {
     const rows = polozky.map((p: { popis?: string; mnozstvo?: number; jednotka?: string; cena_jednotka?: number; spolu?: number }, i: number) => ({
       faktura_id: created.id,
       company_id: postCompanyId,
-      popis: p.popis || "",
+      popis: sanitizeText(p.popis) || "", // C4: XSS na popise položky
       mnozstvo: Number(p.mnozstvo) || 1,
-      jednotka: p.jednotka || "ks",
+      jednotka: sanitizeText(p.jednotka) || "ks",
       cena_jednotka: Number(p.cena_jednotka) || 0,
       spolu: Number(p.spolu) || 0,
       poradie: i,
@@ -176,7 +177,9 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const { id, ...rest } = body;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-  const { data, error } = await sb.from("faktury").update(rest).eq("id", id).select().single();
+  // C4: XSS sanitize free-form fields
+  const cleanRest = sanitizeFields(rest as Record<string, unknown>, [...SANITIZE_FIELDS]);
+  const { data, error } = await sb.from("faktury").update(cleanRest).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   // sync prehlad
   if (rest.zaplatene !== undefined) {

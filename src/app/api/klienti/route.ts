@@ -4,6 +4,7 @@ import { getUserScope, canEditRecord } from "@/lib/scope";
 import { logAudit } from "@/lib/audit";
 import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
 
 export const runtime = "nodejs";
 
@@ -73,7 +74,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Užívateľ nemá priradeného makléra" }, { status: 400 });
   }
 
-  const payload = { ...rest, makler_id, company_id: scope.company_id };
+  // C4: XSS sanitize free-form text fields (poznamka, meno, lokalita, ...)
+  const cleanRest = sanitizeFields(rest as Record<string, unknown>, [...SANITIZE_FIELDS]);
+  const payload = { ...cleanRest, makler_id, company_id: scope.company_id };
   const { data, error } = await sb.from("klienti").insert(payload).select().single();
   if (error) {
     if (error.code === "23505") {
@@ -133,7 +136,9 @@ export async function PATCH(req: NextRequest) {
   if (!allowed) return NextResponse.json({ error: "Nemáš oprávnenie editovať tohto klienta" }, { status: 403 });
 
   const { user_id: _u, id: _id, makler_id: bodyMakler, ...rest } = body;
-  const patch: Record<string, unknown> = { ...rest };
+  // C4: XSS sanitize free-form text fields
+  const cleanRest = sanitizeFields(rest as Record<string, unknown>, [...SANITIZE_FIELDS]);
+  const patch: Record<string, unknown> = { ...cleanRest };
   if (scope.isAdmin && bodyMakler) patch.makler_id = bodyMakler; // delegate
 
   const { data, error } = await sb.from("klienti").update(patch).eq("id", id).select().single();

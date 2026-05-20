@@ -5,6 +5,7 @@ import { buildSessionCookieValue, buildBillingCookieValue } from "@/lib/auth/ses
 import { verifyTotp } from "@/lib/totp";
 import { logAudit } from "@/lib/audit";
 import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
+import { decryptDocString } from "@/lib/cryptoDocs";
 
 export const runtime = "nodejs";
 
@@ -73,7 +74,9 @@ export async function POST(req: NextRequest) {
   let usedBackupCodeIdx: number | null = null;
   let usedTotpCounter: number | null = null;
 
-  const totpResult = verifyTotp(user.totp_secret, code, { lastUsedCounter: user.totp_last_used_counter });
+  // C1: decrypt secret (backward compat — ak je plain, vráti as-is)
+  const plainSecret = decryptDocString(user.totp_secret);
+  const totpResult = verifyTotp(plainSecret, code, { lastUsedCounter: user.totp_last_used_counter });
   if (totpResult.ok) {
     proofOk = true;
     usedTotpCounter = totpResult.counter;

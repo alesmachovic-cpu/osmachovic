@@ -4,6 +4,7 @@ import { getUserScope, canEditRecord } from "@/lib/scope";
 import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 import { logAudit } from "@/lib/audit";
+import { sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
 
 export const runtime = "nodejs";
 
@@ -139,7 +140,9 @@ export async function POST(req: NextRequest) {
     calendar_event_id: body.calendar_event_id || null,
     company_id: postCompanyId,
   };
-  const { data, error } = await sb.from("obhliadky").insert(payload).select().single();
+  // C4: XSS sanitize free-form text (poznamka, miesto, kupujuci_meno, ...)
+  const safePayload = sanitizeFields(payload as Record<string, unknown>, [...SANITIZE_FIELDS]);
+  const { data, error } = await sb.from("obhliadky").insert(safePayload).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // 2) Auto-upsert kupujúci klient (best-effort, nezhasne obhliadku ak zlyhá)
@@ -298,7 +301,9 @@ export async function PATCH(req: NextRequest) {
     };
   }
 
-  const { data, error } = await sb.from("obhliadky").update(patch).eq("id", id).select().single();
+  // C4: XSS sanitize free-form fields v patch
+  const safePatch = sanitizeFields(patch, [...SANITIZE_FIELDS]);
+  const { data, error } = await sb.from("obhliadky").update(safePatch).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   await logAudit({
     action: "obhliadka.update",

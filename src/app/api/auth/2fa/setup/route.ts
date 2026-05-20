@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { generateSecret, buildOtpAuthUri } from "@/lib/totp";
 import { logAudit } from "@/lib/audit";
+import { encryptDocString, decryptDocString, isEncrypted } from "@/lib/cryptoDocs";
 
 export const runtime = "nodejs";
 
@@ -43,12 +44,21 @@ export async function POST(req: NextRequest) {
   // (= rozrobený setup), VRÁTIME ten istý secret — Authenticator záznam
   // z prvého pokusu stále funguje. Inak by user musel naskenovať novú QR
   // pre každý refresh a starý záznam by ostal mŕtvy.
-  const secret = user.totp_secret || generateSecret(32);
+  //
+  // 🚨 SECURITY FIX 2026-05-20 (pen-test C1):
+  //   Pôvodne sa secret ukladal plaintext do DB → service role compromise =
+  //   bypass 2FA všetkých adminov. Teraz: AES-256-GCM cez DOC_ENCRYPTION_KEY.
+  //   Backward compat — ak existujúci secret je plain (legacy), decryptDocString
+  //   ho vráti ako je.
+  const existingPlain = user.totp_secret ? decryptDocString(user.totp_secret) : null;
+  const secret = existingPlain || generateSecret(32);
   const account = user.login_email || user.email || user.name || auth.user.id;
 
-  // Ak nový secret, ulož ho. Ak existujúci, len audit log.
-  if (!user.totp_secret) {
-    const { error } = await sb.from("users").update({ totp_secret: secret }).eq("id", auth.user.id);
+  // Ak nový secret, ulož ENKRYPTOVANE. Ak existujúci a nie je ešte šifrovaný,
+  // re-encrypt aby sme po backfille mali všetko v "v1:..." formáte.
+  if (!user.totp_secret || !isEncrypted(user.totp_secret)) {
+    const encrypted = encryptDocString(secret);
+    const { error } = await sb.from("users").update({ totp_secret: encrypted }).eq("id", auth.user.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
