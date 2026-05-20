@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { getUserScope } from "@/lib/scope";
-import { readSessionUserId } from "@/lib/auth/requireUser";
+import { requireUser } from "@/lib/auth/requireUser";
 
 // Detail endpoint — vracia VŠETKY stĺpce vrátane podpis_data a podpis_meta,
 // ktoré sú vylúčené z list endpointu /api/obhliadky kvôli payload size.
 // Používa sa v /obhliadky/[id] detail page pre zobrazenie podpisu.
+//
+// 🚨 P0 FIX 2026-05-20 (Release Gate, Security Auditor):
+//   Pôvodne tento endpoint použil readSessionUserId (optional). Anon
+//   request → companyFilter = null → SELECT bez scope → anyone s UUID
+//   obhliadky dostane VŠETKY dáta vrátane podpis_data (base64), podpis_meta
+//   (IP), kontakt kupujucich. GDPR breach.
+//
+//   Teraz: requireUser(strict) + povinný company_id filter.
 
 export const runtime = "nodejs";
 
@@ -13,23 +20,20 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireUser(req, { strict: true });
+  if (auth.error) return auth.error;
+
   const { id } = await params;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
 
-  // Scope check — user musí mať prístup ku company tejto obhliadky
-  const sessionUserId = readSessionUserId(req);
-  let companyFilter: string | null = null;
-  if (sessionUserId) {
-    const scope = await getUserScope(sessionUserId);
-    if (scope) companyFilter = scope.company_id;
-  }
-
-  let q = sb.from("obhliadky").select("*").eq("id", id);
-  if (companyFilter) q = q.eq("company_id", companyFilter);
-
-  const { data, error } = await q.maybeSingle();
+  const { data, error } = await sb
+    .from("obhliadky")
+    .select("*")
+    .eq("id", id)
+    .eq("company_id", auth.user.company_id)
+    .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "Obhliadka nenájdená" }, { status: 404 });
 
