@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit";
 import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 import { sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
+import { requireReAuth } from "@/lib/auth/reAuth";
 
 export const runtime = "nodejs";
 
@@ -175,6 +176,20 @@ export async function DELETE(req: NextRequest) {
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
   if (!scope.isAdmin) {
     return NextResponse.json({ error: "Reálne mazanie len pre admin/majiteľa. Použi anonymize." }, { status: 403 });
+  }
+
+  // 🔒 M1 force re-auth — klient.delete je irreverzibilné.
+  // confirm_password / confirm_code v query string (lebo DELETE nemá body convention).
+  const reAuth = await requireReAuth({
+    userId,
+    password: searchParams.get("confirm_password") || undefined,
+    code: searchParams.get("confirm_code") || undefined,
+  });
+  if (!reAuth.ok) {
+    return NextResponse.json({
+      error: reAuth.error,
+      code: "RE_AUTH_REQUIRED",
+    }, { status: reAuth.status });
   }
 
   const { error } = await sb.from("klienti").delete().eq("id", id);

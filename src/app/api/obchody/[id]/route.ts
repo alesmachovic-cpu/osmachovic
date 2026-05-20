@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
+import { requireReAuth } from "@/lib/auth/reAuth";
 
 export const runtime = "nodejs";
+
+/**
+ * Statusy ktoré vyžadujú FORCE RE-AUTH (M1 pen-test fix).
+ * Tieto sú finančne / právne kritické — kompromitovaná session nemá vykonávať.
+ */
+const REAUTH_REQUIRED_STATUSES = new Set(["podpisane", "vklad", "ukoncene"]);
 
 /**
  * Statusy obchodu, ktoré vyžadujú dokončenú AML kontrolu PRED prechodom.
@@ -48,6 +55,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // 🔒 AML HARD BLOCKER — zákon 297/2008 § 10.
   const nextStatus = typeof patch.status === "string" ? (patch.status as string) : null;
+
+  // 🔒 M1 force re-auth pre kritické status zmeny (KZ podpis, vklad, ukoncenie)
+  // — financial / legal commit, nemôže byť cez stolen session.
+  if (nextStatus && REAUTH_REQUIRED_STATUSES.has(nextStatus)) {
+    const reAuth = await requireReAuth({
+      userId: auth.user.id,
+      password: typeof body.confirm_password === "string" ? body.confirm_password : undefined,
+      code: typeof body.confirm_code === "string" ? body.confirm_code : undefined,
+    });
+    if (!reAuth.ok) {
+      return NextResponse.json({
+        error: reAuth.error,
+        code: "RE_AUTH_REQUIRED",
+        action: `obchod.status → ${nextStatus}`,
+      }, { status: reAuth.status });
+    }
+  }
   if (nextStatus && AML_GATED_STATUSES.has(nextStatus)) {
     // Načítaj všetky AML úlohy pre tento obchod.
     const { data: amlUlohy, error: amlErr } = await sb

@@ -192,12 +192,23 @@ export async function POST(request: Request) {
       return r;
     }
 
-    // Cloudflare Turnstile — overenie iba ak je token prítomný (widget mohol byť neviditeľný)
-    if (process.env.TURNSTILE_SECRET_KEY && turnstileToken) {
+    // 🔒 M2 PEN-TEST FIX 2026-05-20:
+    //   Pôvodne sa Turnstile overoval IBA ak bol token prítomný — útočník
+    //   ho mohol vynechať v automatizovanom requeste (curl bez widgetu) a
+    //   prešiel bez bot challenge. Teraz: ak je TURNSTILE_SECRET_KEY set,
+    //   token JE POVINNÝ. Per-IP rate limit chráni proti distributed botnetu.
+    if (process.env.TURNSTILE_SECRET_KEY) {
+      if (!turnstileToken) {
+        await logAttempt(sb, ip, identifier, false);
+        return NextResponse.json({
+          error: "Captcha overenie je povinné. Obnov stránku a počkaj kým sa widget načíta.",
+          code: "TURNSTILE_REQUIRED",
+        }, { status: 403 });
+      }
       const ok = await verifyTurnstile(turnstileToken, ip);
       if (!ok) {
         await logAttempt(sb, ip, identifier, false);
-        return NextResponse.json({ error: "Overenie Turnstile zlyhalo. Obnovte stránku a skúste znova." }, { status: 403 });
+        return NextResponse.json({ error: "Overenie Turnstile zlyhalo. Obnov stránku a skús znova." }, { status: 403 });
       }
     }
 

@@ -4,6 +4,7 @@ import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
 import { CreateUserSchema } from "@/lib/schemas";
 import { validatePasswordStrength } from "@/lib/auth/password";
+import { requireReAuth } from "@/lib/auth/reAuth";
 
 export const runtime = "nodejs";
 
@@ -104,6 +105,24 @@ export async function PATCH(request: Request) {
     const allowedFields = ["name", "initials", "role", "email", "login_email", "password", "notification_prefs", "vzorove_inzeraty", "pobocka_id", "nav_prefs"];
     for (const key of allowedFields) {
       if (key in body) updates[key] = body[key] ?? null;
+    }
+
+    // 🔒 M1 force re-auth pre security-sensitive zmeny:
+    //   - role change (privilege escalation prevention)
+    //   - password reset (cudzí account hijack prevention)
+    if ("role" in updates || "password" in updates) {
+      const reAuth = await requireReAuth({
+        userId: auth.user.id,
+        password: typeof body.confirm_password === "string" ? body.confirm_password : undefined,
+        code: typeof body.confirm_code === "string" ? body.confirm_code : undefined,
+      });
+      if (!reAuth.ok) {
+        return NextResponse.json({
+          error: reAuth.error,
+          code: "RE_AUTH_REQUIRED",
+          action: "role" in updates ? "role_change" : "password_change",
+        }, { status: reAuth.status });
+      }
     }
 
     const sb = getSupabaseAdmin();

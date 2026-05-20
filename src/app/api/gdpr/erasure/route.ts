@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
+import { requireReAuth } from "@/lib/auth/reAuth";
 
 export const runtime = "nodejs";
 
@@ -34,12 +35,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "GDPR erasure môže spustiť len admin/majiteľ" }, { status: 403 });
   }
 
-  let body: { klient_id?: string; reason?: string };
+  let body: { klient_id?: string; reason?: string; confirm_password?: string; confirm_code?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 
   const klientId = body.klient_id;
   if (!klientId) return NextResponse.json({ error: "klient_id required" }, { status: 400 });
+
+  // 🔒 M1 force re-auth — GDPR erasure je irreverzibilná operácia.
+  // Vyžadujeme heslo ALEBO 6-cifrový kód aby sa zabránilo nechtenému kliku
+  // alebo stolen-session zneužitiu.
+  const reAuth = await requireReAuth({
+    userId: auth.user.id,
+    password: body.confirm_password,
+    code: body.confirm_code,
+  });
+  if (!reAuth.ok) {
+    return NextResponse.json({
+      error: reAuth.error,
+      code: "RE_AUTH_REQUIRED",
+      reason: reAuth.reason,
+    }, { status: reAuth.status });
+  }
 
   const sb = getSupabaseAdmin();
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
