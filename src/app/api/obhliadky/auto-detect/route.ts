@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getValidAccessToken } from "@/lib/google";
+import { requireUser, isSuperAdmin, isManagerOrAbove } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -14,10 +15,26 @@ export const runtime = "nodejs";
  *
  * Maklér ich uvidí v karte klienta / dashboarde a vie ich rýchlo zaradiť ako
  * obhliadku. Filter je heuristický — môže byť vyladený neskôr.
+ *
+ * 🚨 P0 FIX 2026-05-20 (Security Auditor, hotfix):
+ *   Pôvodne tento endpoint nemal `requireUser`. Anyone kto pozná `userId`
+ *   iného makléra (napr. cez logy, screen, leaky audit_log) si mohol prečítať
+ *   jeho Google Calendar (cez service-role token lookup). Privacy breach.
+ *
+ *   Teraz: requireUser + ownership check. Cudzí userId povolený len pre
+ *   admin/majiteľa/manažéra. Inak 403.
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireUser(req, { strict: true });
+  if (auth.error) return auth.error;
+
   const userId = req.nextUrl.searchParams.get("userId");
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
+
+  // Ownership check
+  if (userId !== auth.user.id && !isSuperAdmin(auth.user.role) && !isManagerOrAbove(auth.user.role)) {
+    return NextResponse.json({ error: "Môžeš vidieť len svoj Google Calendar" }, { status: 403 });
+  }
 
   const token = await getValidAccessToken(userId);
   if (!token) return NextResponse.json({ error: "not_connected" }, { status: 401 });
