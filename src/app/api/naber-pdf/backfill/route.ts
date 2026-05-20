@@ -113,7 +113,14 @@ export async function GET(request: Request) {
           continue;
         }
 
-        // 4. Vlož do klient_dokumenty
+        // 4. Vlož do klient_dokumenty.
+        // company_id NOT NULL — lookup cez klient záznam.
+        const { data: klientRow } = await sb
+          .from("klienti")
+          .select("company_id")
+          .eq("id", naber.klient_id)
+          .maybeSingle();
+
         const { error: insertErr } = await sb.from("klient_dokumenty").insert({
           klient_id: naber.klient_id,
           name,
@@ -122,6 +129,7 @@ export async function GET(request: Request) {
           source: "naber",
           mime: "application/pdf",
           data_base64: base64,
+          company_id: klientRow?.company_id ?? "a0000000-0000-0000-0000-000000000001",
         });
 
         if (insertErr) {
