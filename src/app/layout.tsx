@@ -9,6 +9,7 @@ import BottomTabs from "@/components/BottomTabs";
 import SidebarOverlay from "@/components/SidebarOverlay";
 import AuthProvider from "@/components/AuthProvider";
 import LegalFooter from "@/components/LegalFooter";
+import CalendarToast from "@/components/CalendarToast";
 
 // Inter ako primárny font — latin-ext potrebný pre slovenské diakritiky
 // (č, š, ž, ľ, ť, á, í, é). Brand komponenty (Logo, Wordmark, Monogram,
@@ -107,6 +108,7 @@ export default async function RootLayout({
             </div>
           </div>
           <BottomTabs />
+          <CalendarToast />
         </AuthProvider>
         </NextIntlClientProvider>
       </body>

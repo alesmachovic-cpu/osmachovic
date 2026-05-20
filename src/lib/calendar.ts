@@ -85,19 +85,51 @@ export async function deleteCalendarEvent(userId: string, eventId: string): Prom
 }
 
 /**
- * Ak result.notConnected → ukáže alert a navigovať do nastavení.
- * Vráti true ak treba prerušiť ďalší flow (napr. silent ignore nie).
+ * Notifikácia o Google Calendar chybe.
+ *
+ * 🚨 UX FIX 2026-05-20 (Aleš nahlásil):
+ *   Pôvodne táto funkcia volala `alert()` ktoré je blocking native dialog
+ *   ošklivého vzhľadu a otravne preruší flow. Pri každom pridaní pripomienky
+ *   bez Google connection sa zobrazil bodka.
+ *
+ *   Teraz: posiela CustomEvent ktorý odchytí globálny toast komponent
+ *   (`<CalendarToast>` v root layout). Plus localStorage "viac nezobrazovať"
+ *   prepínač — user vie potlačiť.
  */
+const SUPPRESS_KEY = "calendar_toast_suppressed";
+
+export function isCalendarToastSuppressed(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(SUPPRESS_KEY) === "1";
+}
+
+export function suppressCalendarToast(): void {
+  if (typeof window !== "undefined") localStorage.setItem(SUPPRESS_KEY, "1");
+}
+
 export function notifyCalendarFail(result: CalendarResult, klientMeno?: string): void {
   if (result.ok) return;
+  if (typeof window === "undefined") return;
+
+  let kind: "not_connected" | "error" = "error";
+  let message = "";
+
   if ("notConnected" in result && result.notConnected) {
-    const msg = klientMeno
-      ? `Pripomienka pre ${klientMeno} bola uložená do CRM, ale neuložila sa do Google Calendar — pripoj Google účet v Nastaveniach.`
-      : "Akcia uložená do CRM, ale neuložila sa do Google Calendar — pripoj Google účet v Nastaveniach.";
-    if (typeof window !== "undefined") alert("⚠️ " + msg);
-    return;
+    kind = "not_connected";
+    message = klientMeno
+      ? `Pripomienka pre ${klientMeno} bola uložená. Google Calendar event sa nevytvoril — pripoj Google v Nastaveniach.`
+      : "Akcia uložená. Google Calendar event sa nevytvoril — pripoj Google v Nastaveniach.";
+    // Ak user už "viac nezobrazovať" → silently skip
+    if (isCalendarToastSuppressed()) return;
+  } else if ("error" in result) {
+    kind = "error";
+    message = "Google Calendar chyba: " + result.error;
   }
-  if ("error" in result && typeof window !== "undefined") {
-    alert("Google Calendar chyba: " + result.error);
-  }
+
+  if (!message) return;
+
+  // Pošli event ktorý odchytí <CalendarToast> komponent
+  window.dispatchEvent(new CustomEvent("calendar:notify", {
+    detail: { kind, message, klientMeno },
+  }));
 }
