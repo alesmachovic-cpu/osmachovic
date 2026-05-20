@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
+import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 
 export const runtime = "nodejs";
 
@@ -62,17 +63,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ id: r.data[0].id, data: r.data[0] });
     }
 
-    // INSERT — ak je user_id, vyplň makler_id zo scope (anti-impersonácia)
+    // INSERT — ak je user_id, vyplň makler_id + company_id zo scope (anti-impersonácia)
+    //
+    // 🚨 PROD FIX 2026-05-20: Aleš nahlásil chybu na vianema.amgd.sk:
+    //   "null value in column company_id of relation nehnutelnosti violates NOT NULL"
+    //   Migrácia 061 pridala company_id NOT NULL, ale tento POST handler ho
+    //   nevyplnil. Insert spadol → maklér nevie pridať nehnuteľnosť.
+    //
+    // Fix: vyplň company_id zo scope; fallback VIANEMA pre legacy/test usery.
     const insertPayload: Record<string, unknown> = { ...payload };
     if (userId) {
       const scope = await getUserScope(userId);
       if (scope) {
+        if (scope.company_id) insertPayload.company_id = scope.company_id;
         if (!scope.isAdmin) {
           // bežný maklér — vlastníctvo zo scope, body sa ignoruje
           if (scope.makler_id) insertPayload.makler_id = scope.makler_id;
         }
       }
     }
+    // Fallback ak company_id nebol vyplnený (legacy klient bez user_id, alebo
+    // user bez company priradenia). Bez tohto by insert spadol na NOT NULL.
+    if (!insertPayload.company_id) insertPayload.company_id = VIANEMA_COMPANY_ID;
 
     const r = await admin.from("nehnutelnosti").insert(insertPayload).select();
     if (r.error) return NextResponse.json({ error: r.error.message, code: r.error.code, details: r.error.details }, { status: 500 });
