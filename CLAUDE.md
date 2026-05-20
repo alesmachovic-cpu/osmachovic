@@ -161,6 +161,10 @@ VAPID_PRIVATE_KEY                # web-push
 - Nevypisuj sensitive údaje (API keys, tokens, session secret) do logov ani do error response.
 - Žiadne commity priamo do `main` bez prečítania diffu — preferuj feature branch alebo worktree.
 
+## Lessons learned (2026-05-21)
+- **URL generátory:** Nikdy nepoužívaj `process.env.VERCEL_ENV === "production"` na rozhodnutie medzi `vianema.amgd.sk` vs `dev.amgd.sk`. Dev je samostatný Vercel projekt (`vianema-dev`) deployovaný ako `target=production` → `VERCEL_ENV === "production"` je `true` aj na dev. Vždy použi `request.headers.get("host")` + `x-forwarded-proto`. Whitelist hostov rieši `middleware.ts` (`ALLOWED_HOSTS`).
+- **PATCH endpointy s M1 re-auth gate:** Backend kontroluje `"role" in updates` (alebo iné sensitive pole) → spúšťa `requireReAuth`. Frontend MUSÍ posielať len **reálne zmenené polia**. Ak posielaš nezmenený `role` v body, spustí sa false-positive re-auth alert. Pattern: zostav `payload` postupne a sensitive polia pridávaj iba pri ich reálnej zmene.
+
 ## Self-improvement loop
 Po každej oprave alebo nedorozumení sa ma opýtaj: **"Mám to pridať do CLAUDE.md?"**
 Tento súbor je živý dokument — má sa zlepšovať každým týždňom.
