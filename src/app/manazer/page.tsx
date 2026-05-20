@@ -1002,9 +1002,19 @@ function TabTim() {
                   )}
                   {isAdmin && acc.id !== "ales" && (
                     <button onClick={async () => {
-                      if (!confirm(`Resetovať heslo pre ${acc.name}?`)) return;
+                      // 🔒 M1: re-auth namiesto blocking confirm
+                      const proof = await reAuth.prompt({
+                        title: `Resetovať heslo pre ${acc.name}`,
+                        description: "Vygeneruje sa dočasné heslo + skopíruje do schránky. Cudzí účet password reset je security-sensitive — pre potvrdenie zadaj heslo alebo 2FA kód.",
+                        dangerLabel: "Resetovať heslo",
+                      });
+                      if (!proof) return;
                       try {
-                        const res = await fetch("/api/users/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: acc.id }) });
+                        const res = await fetch("/api/users/reset-password", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ user_id: acc.id, ...proof }),
+                        });
                         const body = await res.json();
                         if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
                         try { await navigator.clipboard.writeText(body.temp_password); } catch { /* ignore */ }

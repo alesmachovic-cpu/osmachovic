@@ -6,6 +6,7 @@ import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 import { logAudit } from "@/lib/audit";
 import { getDphRate, calcDph } from "@/lib/dphRates";
 import { sanitizeText, sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
+import { requireReAuth } from "@/lib/auth/reAuth";
 
 export const runtime = "nodejs";
 
@@ -219,6 +220,19 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({
       error: "Dôvod zrušenia je povinný (min 3 znaky). Napr. 'storno', 'oprava', 'duplikát'.",
     }, { status: 400 });
+  }
+
+  // 🔒 M1 force re-auth — faktúra zrušenie je legal commit (DPH/účtovníctvo).
+  const reAuth = await requireReAuth({
+    userId: auth.user.id,
+    password: searchParams.get("confirm_password") || undefined,
+    code: searchParams.get("confirm_code") || undefined,
+  });
+  if (!reAuth.ok) {
+    return NextResponse.json({
+      error: reAuth.error,
+      code: "RE_AUTH_REQUIRED",
+    }, { status: reAuth.status });
   }
 
   // Načítaj faktúru pred zmenou pre audit a guardy.

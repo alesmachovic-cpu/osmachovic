@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
+import { requireReAuth } from "@/lib/auth/reAuth";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,19 @@ export async function POST(request: Request) {
     const body = await request.json();
     const userId = body.user_id;
     if (!userId) return NextResponse.json({ error: "Missing user_id" }, { status: 400 });
+
+    // 🔒 M1 force re-auth — admin password reset cudzieho účtu je vysoko sensitive.
+    const reAuth = await requireReAuth({
+      userId: auth.user.id,
+      password: body.confirm_password,
+      code: body.confirm_code,
+    });
+    if (!reAuth.ok) {
+      return NextResponse.json({
+        error: reAuth.error,
+        code: "RE_AUTH_REQUIRED",
+      }, { status: reAuth.status });
+    }
 
     const sb = getSupabaseAdmin();
 

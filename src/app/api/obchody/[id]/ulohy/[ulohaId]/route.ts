@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { computeObchodStatus } from "@/lib/obchodStatus";
+import { requireReAuth } from "@/lib/auth/reAuth";
 
 export const runtime = "nodejs";
+
+/**
+ * Statusy ktoré vyžadujú force re-auth (M1 pen-test, súlad s PATCH /api/obchody/[id]).
+ * Tieto sú financ./právne kritické (KZ podpis, vklad, ukoncenie).
+ */
+const REAUTH_REQUIRED_STATUSES = new Set(["podpisane", "vklad", "ukoncene"]);
 
 /** PATCH /api/obchody/[id]/ulohy/[ulohaId] — toggle done, edit polia, nastav drive_link */
 export async function PATCH(
@@ -49,7 +56,44 @@ export async function PATCH(
       .eq("obchod_id", obchodId);
 
     if (allUlohy) {
-      const newStatus = computeObchodStatus(allUlohy);
+      // Najprv vypočítaj NOVÝ status (čo by sa stalo po update).
+      // Pridáme aktuálnu úlohu s novou hodnotou do simulácie.
+      const simulated = allUlohy.map(u =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (u as any).id === ulohaId ? { ...u, done: patch.done } : u
+      );
+      const newStatus = computeObchodStatus(simulated);
+
+      // 🔒 M1 force re-auth — ak by úloha toggle viedla k posunu obchodu
+      // do statusu "podpisane"/"vklad"/"ukoncene" (KZ podpis / vklad / koniec),
+      // vyžadujeme heslo alebo 2FA. Toto zatvára obchvat M1 cez ulohu toggle.
+      const { data: currentObchod } = await sb
+        .from("obchody")
+        .select("status")
+        .eq("id", obchodId)
+        .maybeSingle();
+      const oldStatus = currentObchod?.status ?? "v_procese";
+
+      if (newStatus !== oldStatus && REAUTH_REQUIRED_STATUSES.has(newStatus)) {
+        const reAuth = await requireReAuth({
+          userId: auth.user.id,
+          password: typeof body.confirm_password === "string" ? body.confirm_password : undefined,
+          code: typeof body.confirm_code === "string" ? body.confirm_code : undefined,
+        });
+        if (!reAuth.ok) {
+          // Rollback uloha update (lebo sme už PATCH-li vyššie)
+          await sb.from("obchod_ulohy")
+            .update({ done: !patch.done, done_at: !patch.done ? new Date().toISOString() : null })
+            .eq("id", ulohaId)
+            .eq("obchod_id", obchodId);
+          return NextResponse.json({
+            error: reAuth.error,
+            code: "RE_AUTH_REQUIRED",
+            obchod_status_change: { from: oldStatus, to: newStatus },
+          }, { status: reAuth.status });
+        }
+      }
+
       await sb
         .from("obchody")
         .update({ status: newStatus, updated_at: new Date().toISOString() })

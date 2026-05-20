@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { useReAuth } from "@/components/ReAuthModal";
 import type { Klient } from "@/lib/database.types";
 import { OBCHOD_STATUS_LABELS, OBCHOD_STATUS_COLORS } from "@/lib/obchodStatus";
 
@@ -464,6 +465,7 @@ export default function ObchodTab({
   zmluvaInfo?: ZmluvaInfo;
 }) {
   const { user } = useAuth();
+  const reAuth = useReAuth();
   const isManazerOrAbove = user?.role === "super_admin" || user?.role === "majitel" || user?.role === "manazer";
   const [obchody, setObchody] = useState<Obchod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -506,12 +508,39 @@ export default function ObchodTab({
       }
     }
 
-    const res = await fetch(`/api/obchody/${obchodId}/ulohy/${ulohaId}`, {
+    let res = await fetch(`/api/obchody/${obchodId}/ulohy/${ulohaId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ done }),
     });
+
+    // 🔒 M1: ak server vyžaduje re-auth (úloha mení obchod status na podpisane/vklad/ukoncene)
+    if (!res.ok && res.status === 403) {
+      const errBody = await res.json().catch(() => ({}));
+      if (errBody.code === "RE_AUTH_REQUIRED") {
+        const change = errBody.obchod_status_change;
+        const proof = await reAuth.prompt({
+          title: change?.to === "podpisane" ? "Podpis KZ" : change?.to === "vklad" ? "Vklad do katastra" : "Ukončenie obchodu",
+          description: `Toto označenie zmení status obchodu z "${change?.from}" na "${change?.to}". Ide o finančne / právne kritickú akciu — pre potvrdenie zadaj heslo alebo 2FA kód.`,
+          dangerLabel: "Potvrdiť",
+        });
+        if (!proof) return;
+        res = await fetch(`/api/obchody/${obchodId}/ulohy/${ulohaId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ done, ...proof }),
+        });
+        if (!res.ok) {
+          const b = await res.json().catch(() => ({}));
+          alert(b.error || "Potvrdenie zlyhalo.");
+          return;
+        }
+      } else {
+        return;
+      }
+    }
     if (!res.ok) return;
     const { uloha } = await res.json();
 
