@@ -723,10 +723,15 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
     await klientApiUpdate(authUser.id, klient.id, klientPatch);
     // Log do timeline
     try {
-      await supabase.from("klient_udalosti").insert({
-        klient_id: klient.id, typ: "status_zmena",
-        popis: "Dohodnutý náber → Nabraný · Náberový list odovzdaný",
-        autor: authUser.id,
+      await fetch("/api/klient-udalosti", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          klient_id: klient.id,
+          typ: "status_zmena",
+          popis: "Dohodnutý náber → Nabraný · Náberový list odovzdaný",
+          autor: authUser.id,
+        }),
       });
     } catch { /* neblokuj */ }
 

@@ -55,7 +55,7 @@ export function middleware(request: NextRequest) {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     "connect-src 'self' https://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.resend.com https://*.googleapis.com https://api.openai.com https://accounts.google.com https://*.vercel-insights.com https://challenges.cloudflare.com",
-    "frame-src 'self' https://accounts.google.com https://challenges.cloudflare.com",
+    "frame-src 'self' blob: https://accounts.google.com https://challenges.cloudflare.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self' https://accounts.google.com",

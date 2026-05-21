@@ -122,18 +122,20 @@ export default function NastaveniaPage() {
         setMaklerEmail(authUser.email || "");
       }
 
-      // Load vzorové inzeráty z DB (cross-device). Fallback na localStorage pre legacy.
+      // Load vzorové inzeráty + makler profil (telefon) z DB.
       fetch("/api/users").then(r => r.json()).then(({ users }) => {
-        const userData = (users ?? []).find((u: { id: string; vzorove_inzeraty?: string[] }) => u.id === uid);
+        const userData = (users ?? []).find((u: { id: string; vzorove_inzeraty?: string[]; telefon?: string; name?: string; email?: string }) => u.id === uid);
         const dbVal = userData?.vzorove_inzeraty;
         if (Array.isArray(dbVal) && dbVal.length > 0) {
-          // Padding na 3 slots
           setVzorLinks([dbVal[0] || "", dbVal[1] || "", dbVal[2] || ""]);
         } else {
-          // Migrácia z localStorage pri prvej návšteve po deploy
           const vi = getUserItem(uid, "vzorove_inzeraty");
           if (vi) setVzorLinks(JSON.parse(vi));
         }
+        // Prepíš lokálne hodnoty z DB ak existujú (DB je single source of truth).
+        if (userData?.telefon) setMaklerTelefon(userData.telefon);
+        if (userData?.name) setMaklerMeno(userData.name);
+        if (userData?.email) setMaklerEmail(userData.email);
       });
 
       // Load company info (admin only)
@@ -200,11 +202,26 @@ export default function NastaveniaPage() {
     setTimeout(() => setCenoSaved(false), 2000);
   }
 
-  function handleSaveMakler() {
+  async function handleSaveMakler() {
     if (!uid) return;
-    setUserItem(uid, "makler_profile", JSON.stringify({ meno: maklerMeno, telefon: maklerTelefon, email: maklerEmail }));
-    setMaklerSaved(true);
-    setTimeout(() => setMaklerSaved(false), 2000);
+    try {
+      const res = await fetch(`/api/users?id=${encodeURIComponent(uid)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: maklerMeno, telefon: maklerTelefon, email: maklerEmail }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert("Chyba: " + (body.error || `HTTP ${res.status}`));
+        return;
+      }
+      // Lokálny cache pre rýchle načítanie pri opätovnom otvorení.
+      setUserItem(uid, "makler_profile", JSON.stringify({ meno: maklerMeno, telefon: maklerTelefon, email: maklerEmail }));
+      setMaklerSaved(true);
+      setTimeout(() => setMaklerSaved(false), 2000);
+    } catch (e) {
+      alert("Chyba: " + (e instanceof Error ? e.message : e));
+    }
   }
 
   async function handleSaveVzory() {

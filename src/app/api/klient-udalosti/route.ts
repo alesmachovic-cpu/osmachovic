@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const { data, error } = await sb
     .from("klient_udalosti")
-    .insert({ klient_id, typ, popis: popis.trim(), autor: autor || null })
+    .insert({ klient_id, typ, popis: popis.trim(), autor: autor || null, company_id: auth.user.company_id })
     .select("*")
     .single();
 

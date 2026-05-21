@@ -98,9 +98,11 @@ export async function POST(req: NextRequest) {
   const dphSuma = isPlatca ? calcDph(sumaCelkomBezDph, dphSadzba) : 0;
   const sumaCelkom = sumaCelkomBezDph + dphSuma;
 
-  // Retry loop kvôli race condition pri paralelných POSToch s rovnakým user_id.
-  // Unique index (user_id, cislo_faktury) zabezpečí, že druhý retry nájde nové max
-  // a inkrementuje od neho — čísla nebudú duplicitné.
+  // Retry loop kvôli race condition pri paralelných POSToch v rámci firmy.
+  // 🐛 BUG FIX 2026-05-21: predtým sa max číslo počítalo z `.eq("user_id", ...)`,
+  // ale unique constraint v DB je `(company_id, cislo_faktury)` — keď dvaja
+  // makléri tej istej firmy fakturovali, druhý videl 0 vlastných faktúr →
+  // navrhol FA0001 → kolízia s prvým. Teraz scope = company_id.
   type Created = { id: string; cislo_faktury: string };
   let created: Created | null = null;
   let cislo = "";
@@ -110,7 +112,7 @@ export async function POST(req: NextRequest) {
     const { data: all } = await sb
       .from("faktury")
       .select("cislo_faktury, variabilny_symbol")
-      .eq("user_id", faktura.user_id);
+      .eq("company_id", postCompanyId);
     cislo = faktura.cislo_faktury || nextNumber((all ?? []).map((x) => x.cislo_faktury), "FA");
     vs = faktura.variabilny_symbol || nextNumber((all ?? []).map((x) => x.variabilny_symbol), "VS");
 

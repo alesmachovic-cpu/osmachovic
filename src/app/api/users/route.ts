@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     if (auth.error) return auth.error;
 
     const sb = getSupabaseAdmin();
-    const select = "id, name, initials, role, email, login_email, pobocka_id, makler_id, company_id, notification_prefs, vzorove_inzeraty, nav_prefs, created_at";
+    const select = "id, name, initials, role, email, login_email, telefon, pobocka_id, makler_id, company_id, notification_prefs, vzorove_inzeraty, nav_prefs, created_at";
 
     const { searchParams } = new URL(req.url);
     const wantsAll = searchParams.get("all") === "1";
@@ -90,11 +90,17 @@ export async function PATCH(request: Request) {
   try {
     const auth = await requireUser(request as NextRequest);
     if (auth.error) return auth.error;
-    if (!isSuperAdmin(auth.user.role)) return NextResponse.json({ error: "Len admin môže upravovať účty" }, { status: 403 });
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+    // Self-update: každý maklér môže upraviť VLASTNÝ profil (telefon, meno, email).
+    // Cudzí účet (id !== auth.user.id) môže meniť iba super_admin.
+    const isSelf = id === auth.user.id;
+    if (!isSelf && !isSuperAdmin(auth.user.role)) {
+      return NextResponse.json({ error: "Len admin môže upravovať cudzie účty" }, { status: 403 });
+    }
 
     const body = await request.json();
     if (body.password) {
@@ -102,7 +108,13 @@ export async function PATCH(request: Request) {
       if (!pwCheck.valid) return NextResponse.json({ error: pwCheck.message }, { status: 400 });
     }
     const updates: Record<string, unknown> = {};
-    const allowedFields = ["name", "initials", "role", "email", "login_email", "password", "notification_prefs", "vzorove_inzeraty", "pobocka_id", "nav_prefs"];
+    // Polia ktoré ktokoľvek môže meniť na VLASTNOM účte.
+    const selfFields = ["name", "initials", "email", "telefon", "notification_prefs", "vzorove_inzeraty", "nav_prefs"];
+    // Polia ktoré môže meniť IBA admin (sensitive: role escalation, password reset, pobocka assignment).
+    const adminFields = ["role", "login_email", "password", "pobocka_id"];
+    const allowedFields = isSelf && !isSuperAdmin(auth.user.role)
+      ? selfFields
+      : [...selfFields, ...adminFields];
     for (const key of allowedFields) {
       if (key in body) updates[key] = body[key] ?? null;
     }

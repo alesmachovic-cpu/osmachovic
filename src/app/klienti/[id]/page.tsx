@@ -1106,7 +1106,13 @@ export default function KlientDetailPage() {
                   by_user_id: user?.id,
                   dovod: "Manuálne uvoľnenie maklerom",
                 });
-                window.location.reload();
+                // 🔥 #5 fix: in-place update namiesto full page reload (flicker)
+                setKlient(k => k ? ({
+                  ...k,
+                  je_volny: true,
+                  volny_at: new Date().toISOString(),
+                } as typeof k) : k);
+                await loadAll().catch(() => {});
               }} style={{
                 padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-secondary)",
                 border: "1px solid var(--border)", borderRadius: "10px", fontSize: "12px",
@@ -1133,7 +1139,18 @@ export default function KlientDetailPage() {
                   alert(body.error || "Chyba pri anonymizácii");
                   return;
                 }
-                window.location.reload();
+                // 🔥 #5 fix (2026-05-21): namiesto window.location.reload() (ktorý
+                // spôsobil flicker na LoginScreen počas re-bootstrap session),
+                // updateneme klient state in-place + reloadneme timeline.
+                setKlient(k => k ? ({
+                  ...k,
+                  meno: "Anonymizovaný klient",
+                  telefon: null,
+                  email: null,
+                  poznamka: null,
+                  anonymized_at: new Date().toISOString(),
+                } as typeof k) : k);
+                await loadAll().catch(() => {});
               }} style={{
                 padding: "9px 14px", background: "var(--bg-surface)", color: "#B91C1C",
                 border: "1px solid #FECACA", borderRadius: "10px", fontSize: "12px",
