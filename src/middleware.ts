@@ -28,25 +28,6 @@ function isAllowedHost(req: NextRequest): boolean {
   return candidates.every(h => ALLOWED_HOSTS.some(a => h.includes(a)));
 }
 
-// Cesty ktoré majú vlastnú autentifikáciu (CRON_SECRET, OAuth callback) a
-// nesmú byť za Basic Auth na dev.amgd.sk — inak by sa Vercel cron jobs ani
-// Google OAuth callback nedostali do appky.
-const DEV_BASIC_AUTH_EXEMPT = [
-  "/api/cron/",
-  "/api/auth/google/callback",
-  "/auth/callback",
-];
-
-function isDevBasicAuthExempt(pathname: string): boolean {
-  return DEV_BASIC_AUTH_EXEMPT.some(p => pathname.startsWith(p));
-}
-
-function isDevHost(req: NextRequest): boolean {
-  const host = req.headers.get("host") || "";
-  const forwarded = req.headers.get("x-forwarded-host") || "";
-  return host.includes("dev.amgd.sk") || forwarded.includes("dev.amgd.sk");
-}
-
 export function middleware(request: NextRequest) {
   // Blokuj Vercel preview URL (funny-stonebraker-*.vercel.app atď.)
   if (!isAllowedHost(request)) {
@@ -54,23 +35,6 @@ export function middleware(request: NextRequest) {
   }
 
   const { pathname } = request.nextUrl;
-
-  // 🔒 Dev environment Basic Auth — bráni botom skenovať dev.amgd.sk.
-  // Aktívne IBA na dev.amgd.sk, IBA ak je nastavený `DEV_BASIC_AUTH_PW` env var.
-  // Whitelist: cron jobs (CRON_SECRET) + OAuth callback (Google redirect).
-  if (isDevHost(request) && !isDevBasicAuthExempt(pathname)) {
-    const pw = process.env.DEV_BASIC_AUTH_PW;
-    if (pw) {
-      const authHeader = request.headers.get("authorization") || "";
-      const expected = `Basic ${Buffer.from(`dev:${pw}`).toString("base64")}`;
-      if (authHeader !== expected) {
-        return new NextResponse("Authentication required (dev environment)", {
-          status: 401,
-          headers: { "WWW-Authenticate": 'Basic realm="dev.amgd.sk"' },
-        });
-      }
-    }
-  }
 
   // Billing guard — ak firma má is_active=false, presmeruj na billing stránku.
   // Cookie crm_billing=suspended nastaví /api/auth/login a /api/auth/google/match.
