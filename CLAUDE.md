@@ -165,6 +165,37 @@ VAPID_PRIVATE_KEY                # web-push
 - **URL generátory:** Nikdy nepoužívaj `process.env.VERCEL_ENV === "production"` na rozhodnutie medzi `vianema.amgd.sk` vs `dev.amgd.sk`. Dev je samostatný Vercel projekt (`vianema-dev`) deployovaný ako `target=production` → `VERCEL_ENV === "production"` je `true` aj na dev. Vždy použi `request.headers.get("host")` + `x-forwarded-proto`. Whitelist hostov rieši `middleware.ts` (`ALLOWED_HOSTS`).
 - **PATCH endpointy s M1 re-auth gate:** Backend kontroluje `"role" in updates` (alebo iné sensitive pole) → spúšťa `requireReAuth`. Frontend MUSÍ posielať len **reálne zmenené polia**. Ak posielaš nezmenený `role` v body, spustí sa false-positive re-auth alert. Pattern: zostav `payload` postupne a sensitive polia pridávaj iba pri ich reálnej zmene.
 
+## 🔒 Security Regression Guardian Mode (active od 2026-05-21)
+
+CEO (Aleš) sa sústredí na nové features. Existujúci security baseline (**8/10 B+** podľa Opus 4.7 auditu, viď `security-audit/security-comparison-2026-05-21.jpg`) **NESMIE regresnúť** pri novom vývoji.
+
+**Pri každej zmene v repo (mandatórne):**
+
+1. **Ak meníš čokoľvek v `src/lib/auth/`, `src/middleware.ts`, `src/app/api/auth/`, `src/lib/audit.ts`, alebo `supabase/migrations/`:**
+   - PRED commitom spusti `./scripts/audit-security.sh`
+   - Porovnaj výsledok s `security-audit/baseline-2026-05-21.txt`
+   - Akákoľvek nová `WARN` alebo `FAIL` = neposúvaj merge. Upozorni CEO + spýtaj sa.
+
+2. **Pri akejkoľvek novej API route (POST/PATCH/DELETE):**
+   - MUSÍ mať `requireUser()` guard
+   - MUSÍ mať `logAudit()` call po úspešnej write operácii
+   - MUSÍ filtrovať podľa `company_id` (multi-tenancy)
+   - Sensitive akcia (privilege change, password reset, GDPR, status zmena, mazanie) → MUSÍ mať `requireReAuth()` gate
+   - Žiadny `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `SESSION_SECRET` v `src/components/**` alebo `src/hooks/**`
+
+3. **Pri novej DB migrácii:**
+   - Žiadny `USING (true) FOR anon` (public read leak)
+   - Tabuľka so sensitive dátami → RLS policies pre `authenticated` rolu
+   - Nemen audit_log triggers (block_audit_mutations) — append-only invariant
+
+4. **Pri akejkoľvek zmene v session emitteroch** (`grep -rln "buildSessionCookieValue"`):
+   - MUSÍ mať 2FA gate (`totp_enabled_at` check + `requires_2fa` branch)
+   - Spusti `./scripts/audit-auth-paths.sh` PRED commitom
+
+**3 known gaps (NETLAČIŤ aktívne, len evidovať):** HSTS, dev.amgd.sk password protect, CSP nonce. Plán v `security-audit/PROMPT-fix-missing-security.md`. Toto sú feature requests do `Active Hunting Mode`, nie regression.
+
+**Aktivácia späť do Active Hunting:** CEO musí explicitne povedať *"prepnime sa do active security work"*.
+
 ## Self-improvement loop
 Po každej oprave alebo nedorozumení sa ma opýtaj: **"Mám to pridať do CLAUDE.md?"**
 Tento súbor je živý dokument — má sa zlepšovať každým týždňom.

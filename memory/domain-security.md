@@ -4,6 +4,22 @@
 > `src/lib/audit.ts`, alebo akúkoľvek RLS policy v `supabase/migrations/`. **Pred zmenou
 > prečítaj tento dokument celý. Po zmene spusti `scripts/audit-security.sh`.**
 
+---
+
+## 🔒 PRIORITY DIRECTIVE — Regression Guardian Mode (2026-05-21)
+
+**Aktivované CEO (Aleš).** Platí do odvolania.
+
+CEO sa sústredí na nové features. Existujúci security baseline (8/10 B+) **nesmie regresnúť**. Detaily v `memory/role-security-auditor.md` (sekcia "PRIORITY DIRECTIVE").
+
+**TL;DR pre každého kto píše kód:**
+1. Pred merge spusti `scripts/audit-security.sh` a porovnaj výstup s `security-audit/baseline-2026-05-21.txt`.
+2. Nová `WARN` alebo `FAIL` v scripte = BLOCK merge.
+3. 3 known gaps (HSTS, dev access, CSP unsafe-inline) sú v backlogu — netriešiť aktívne, neutláčať CEO.
+4. Známe pen-test fixy z minulého týždňa (C1+C2+C4+M1+M2) sú TABU — žiadna zmena nesmie ich oslabiť.
+
+---
+
 ## Účel domény
 Chráni autentifikáciu, autorizáciu a integritu citlivých operácií. Ak sa táto doména rozbije,
 útočník môže prevziať konto makléra, vidieť dáta cudzej firmy, alebo manipulovať audit log.
