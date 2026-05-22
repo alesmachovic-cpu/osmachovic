@@ -1547,8 +1547,10 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {/* LV banner — dohodnutý náber bez LV — priamy upload */}
-      {klient.status === "dohodnuty_naber" && !klient.lv_data && (
+      {/* LV banner — dohodnutý náber bez LV — priamy upload.
+          Skrytý pre čistého kupujúceho (nehľadá svoju nehnuteľnosť, hľadá kde bývať)
+          a pre non-ownera (read-only). */}
+      {klient.status === "dohodnuty_naber" && !klient.lv_data && !isCistyKupujuci && isOwner && (
         <div style={{
           ...cardSt, marginBottom: "20px", padding: "14px 20px",
           background: "linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)",
@@ -1910,7 +1912,8 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {/* Rýchle akcie — Inzerát/Vyplniť náberák odstránené, pracujú sa cez Pipeline predávajúceho */}
+      {/* Rýchle akcie — iba pre ownerov (non-owner = read-only, nevidí akcie). */}
+      {isOwner && (
       <div style={{
         display: "grid", gridTemplateColumns: klient.typ === "kupujuci" ? "repeat(3, 1fr)" : "repeat(2, 1fr)",
         gap: "10px", marginBottom: "20px",
@@ -1954,6 +1957,7 @@ export default function KlientDetailPage() {
           <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-primary)" }}>Kalendár</div>
         </button>
       </div>
+      )}
 
       {/* Štatistiky klienta — kliknuteľné, presmerujú na príslušný tab */}
       {(() => {
@@ -2013,10 +2017,12 @@ export default function KlientDetailPage() {
                   Klient zatiaľ nemá objednávku — vytvor ju aby si vedel čo presne hľadá.
                 </div>
               </div>
+              {isOwner && (
               <button onClick={() => router.push(`/kupujuci?klient_id=${klient.id}`)} style={{
                 padding: "8px 16px", background: "#374151", color: "#fff", border: "none",
                 borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
               }}>+ Pridať preferencie</button>
+              )}
             </div>
           );
         }
@@ -2114,7 +2120,8 @@ export default function KlientDetailPage() {
             📅 Časová os
           </div>
 
-          {/* Quick-add bar */}
+          {/* Quick-add bar — iba pre ownerov (non-owner nevidí editovanie). */}
+          {isOwner && (
           <div style={{ marginBottom: "20px", background: "var(--bg-elevated)", borderRadius: "12px", border: "1px solid var(--border)", overflow: "hidden" }}>
             <div style={{ display: "flex", borderBottom: quickAddTyp ? "1px solid var(--border)" : "none" }}>
               {([
@@ -2174,6 +2181,7 @@ export default function KlientDetailPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Filter chips */}
           {timeline.length > 0 && (
@@ -2207,10 +2215,12 @@ export default function KlientDetailPage() {
               <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px" }}>
                 Začni pridaním náberového listu alebo objednávky.
               </div>
+              {isOwner && (
               <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
                 padding: "8px 20px", background: "#374151", color: "#fff", border: "none",
                 borderRadius: "8px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
               }}>+ Náberový list</button>
+              )}
             </div>
           ) : (
             (() => {
@@ -2285,7 +2295,7 @@ export default function KlientDetailPage() {
                                   <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
                                     {ev.title}
                                     {isClickable && <span style={{ fontSize: "11px", color: "var(--accent)", fontWeight: "500" }}>Zobraziť →</span>}
-                                    {ev.deletable && (
+                                    {ev.deletable && isOwner && (
                                       <button
                                         onClick={e => { e.stopPropagation(); if (confirm("Zmazať tento záznam?")) deleteUdalost(ev.id); }}
                                         style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", fontSize: "12px", color: "var(--text-muted)", padding: "0 4px", opacity: 0.5 }}
@@ -2324,10 +2334,12 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
               🏠 Nehnuteľnosti klienta
             </div>
+            {isOwner && (
             <button onClick={() => router.push(`/naber?klient_id=${klient.id}`)} style={{
               padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
             }}>+ Pridať nehnuteľnosť</button>
+            )}
           </div>
           {propertyCards.length === 0 ? (
             <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
@@ -2397,9 +2409,9 @@ export default function KlientDetailPage() {
                       <span>{hasInzerat ? "📰 Inzerát ✓" : "📰 Bez inzerátu"}</span>
                       {nInzDocs > 0 && <span>📎 {nInzDocs} dokumentov</span>}
                     </div>
-                    {/* Actions */}
+                    {/* Actions — iba pre owner */}
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      {naberakId && hasInzerat ? (
+                      {isOwner && (naberakId && hasInzerat ? (
                         <button onClick={() => router.push(`/naber?klient_id=${klient.id}&parent=${naberakId}`)}
                           title="Originálny náberák sa nedá editovať — vytvoríš dodatok"
                           style={{ padding: "6px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>
@@ -2415,7 +2427,7 @@ export default function KlientDetailPage() {
                           style={{ padding: "6px 12px", background: "#374151", color: "#fff", border: "none", borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}>
                           📝 Vyplniť náberák
                         </button>
-                      )}
+                      ))}
                       {hasInzerat ? (
                         <button onClick={() => router.push(`/inzerat?id=${inzId}`)}
                           style={{ padding: "6px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>
@@ -2538,10 +2550,12 @@ export default function KlientDetailPage() {
         <div style={cardSt}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>Obhliadky</div>
+            {isOwner && (
             <button onClick={() => setShowObhliadkaModal(true)} style={{
               padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
             }}>+ Nová obhliadka</button>
+            )}
           </div>
           {obhliadky.length === 0 ? (
             <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
@@ -2620,6 +2634,7 @@ export default function KlientDetailPage() {
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>
               📋 Objednávky
             </div>
+            {isOwner && (
             <button onClick={() => {
               const firstNehn = inzeraty[0] as Record<string, unknown> | undefined;
               if ((klient.typ === "predavajuci" || klient.typ === "oboje") && firstNehn?.id) {
@@ -2631,6 +2646,7 @@ export default function KlientDetailPage() {
               padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
             }}>+ Nová objednávka</button>
+            )}
           </div>
           {objednavky.length === 0 ? (
             <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
@@ -2788,8 +2804,11 @@ export default function KlientDetailPage() {
 
       {activeTab === "dokumenty" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {/* LV sekcia */}
-          <LVSection
+          {/* LV sekcia — IBA pre klientov ktorí niečo vlastnia (predávajúci alebo
+              kupujúci-predávajúci hybrid). Čistý kupujúci hľadá kde bývať, nemá LV.
+              Aleš 2026-05-22: "klient čo hľadá nemá LV". */}
+          {!isCistyKupujuci && (
+            <LVSection
             klientId={klient.id}
             userId={user?.id || ""}
             lvData={klient.lv_data}
@@ -2894,6 +2913,7 @@ export default function KlientDetailPage() {
               }
             }
           }} />
+          )}
           {/* Ostatné dokumenty — fotky idú do vlastnej kategórie (Supabase Storage), nie sem */}
           {(() => {
             const dokumentyBezFotiekVsetky = klientDokumenty.filter(d => d.type !== "Foto");
@@ -2974,6 +2994,7 @@ export default function KlientDetailPage() {
                       <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "500" }}>
                         {folder.docs.length} {folder.docs.length === 1 ? "súbor" : folder.docs.length < 5 ? "súbory" : "súborov"}
                       </span>
+                      {isOwner && (
                       <label onClick={e => e.stopPropagation()} style={{
                         padding: "4px 10px", background: "#374151", color: "#fff",
                         border: "none", borderRadius: "6px", fontSize: "11px", fontWeight: "600",
@@ -3009,6 +3030,7 @@ export default function KlientDetailPage() {
                           }}
                         />
                       </label>
+                      )}
                     </div>
                     {!isCollapsed && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "10px" }}>

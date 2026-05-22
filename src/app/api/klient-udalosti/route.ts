@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
+import { getUserScope, canEditRecord } from "@/lib/scope";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,15 @@ export async function POST(req: NextRequest) {
   if (!TYPY.includes(typ)) return NextResponse.json({ error: "neplatný typ" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
+
+  // 🔒 Read-only check (Aleš 2026-05-22): non-owner nemôže pridávať záznamy
+  // na cudzieho klienta. Admin/majiteľ a manažér pobočky výnimky.
+  const scope = await getUserScope(auth.user.id);
+  const { data: klient } = await sb.from("klienti").select("makler_id").eq("id", klient_id).maybeSingle();
+  if (!klient) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+  const allowed = await canEditRecord(scope, klient.makler_id);
+  if (!allowed) return NextResponse.json({ error: "Nemáš oprávnenie pridávať záznamy k tomuto klientovi" }, { status: 403 });
+
   const { data, error } = await sb
     .from("klient_udalosti")
     .insert({ klient_id, typ, popis: popis.trim(), autor: autor || null, company_id: auth.user.company_id })
@@ -60,6 +70,15 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
+
+  // 🔒 Read-only check (Aleš 2026-05-22): mazať záznamy môže iba owner alebo admin
+  const { data: udalost } = await sb.from("klient_udalosti").select("klient_id").eq("id", id).maybeSingle();
+  if (!udalost) return NextResponse.json({ error: "Záznam nenájdený" }, { status: 404 });
+  const { data: klient } = await sb.from("klienti").select("makler_id").eq("id", udalost.klient_id).maybeSingle();
+  const scope = await getUserScope(auth.user.id);
+  const allowed = await canEditRecord(scope, klient?.makler_id);
+  if (!allowed) return NextResponse.json({ error: "Nemáš oprávnenie mazať záznamy tohto klienta" }, { status: 403 });
+
   const { error } = await sb.from("klient_udalosti").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   await logAudit({
