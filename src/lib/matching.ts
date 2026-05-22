@@ -6,6 +6,8 @@ export type ObjednavkaForMatch = {
   lokalita: { kraje?: string[]; okresy?: string[]; obec?: string; okres?: string } | string[] | null;
   cena_od: number | null;
   cena_do: number | null;
+  lat?: number | null;
+  lng?: number | null;
 };
 
 export type NehnutelnostForMatch = {
@@ -19,6 +21,8 @@ export type NehnutelnostForMatch = {
   kraj: string | null;
   okres: string | null;
   status: string | null;
+  lat?: number | null;
+  lng?: number | null;
 };
 
 export type KlientForMatch = {
@@ -84,8 +88,44 @@ export function vypocitajSkore(
     ];
   }
 
+  // 🌍 GEO-AWARE matching (Aleš 2026-05-22): ak má objednávka aj nehnuteľnosť
+  // GPS súradnice, počítame haversine vzdialenosť. Bližšie = vyššie skóre.
+  // Toto rieši "Petržalka-Háje → Dvory 1km lepšie ako Dúbravka 7km lepšie ako Senec 20km".
+  let geoApplied = false;
+  if (o.lat != null && o.lng != null && n.lat != null && n.lng != null) {
+    const R = 6371;
+    const toRad = (deg: number) => deg * Math.PI / 180;
+    const dLat = toRad(n.lat - o.lat);
+    const dLng = toRad(n.lng - o.lng);
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(o.lat)) * Math.cos(toRad(n.lat)) * Math.sin(dLng / 2) ** 2;
+    const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    if (km <= 1) {
+      score += 25;
+      reasons.push(`Presne v lokalite (${km.toFixed(1)} km)`);
+    } else if (km <= 3) {
+      score += 18;
+      reasons.push(`Blízko (${km.toFixed(1)} km)`);
+    } else if (km <= 7) {
+      score += 10;
+      reasons.push(`V okolí (${km.toFixed(1)} km)`);
+    } else if (km <= 15) {
+      score += 2;
+      reasons.push(`V meste/okrese (${km.toFixed(0)} km)`);
+    } else if (km <= 50) {
+      score -= 30;
+      reasons.push(`Mimo mesta (${km.toFixed(0)} km od preferencie)`);
+    } else {
+      score -= 60;
+      reasons.push(`Iný región (${km.toFixed(0)} km od preferencie)`);
+    }
+    geoApplied = true;
+  }
+
+  // Fallback na text-based lokalita matching, ak GPS nie sú dostupné.
   const nLok = [n.lokalita, n.kraj, n.okres].filter(Boolean).join(" ").toLowerCase();
-  if (objLokality.length > 0 && nLok) {
+  if (!geoApplied && objLokality.length > 0 && nLok) {
     const match = objLokality.some(lok => {
       const ll = lok.toLowerCase().trim();
       if (!ll || ll.length < 2) return false;
@@ -100,7 +140,7 @@ export function vypocitajSkore(
       score -= 50;
       reasons.push(`Lokalita NEZODPOVEDÁ (klient chce ${objLokality.slice(0, 2).join(", ")})`);
     }
-  } else if (klient?.lokalita && nLok) {
+  } else if (!geoApplied && klient?.lokalita && nLok) {
     const kWords = klient.lokalita.toLowerCase().split(/[\s,]+/).filter(w => w.length > 2);
     const overlap = kWords.some(w => nLok.includes(w));
     if (overlap) {

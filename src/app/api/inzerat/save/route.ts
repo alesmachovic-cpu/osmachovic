@@ -2,8 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { geocodeAddress } from "@/lib/geocode";
 
 export const runtime = "nodejs";
+
+/**
+ * Auto-geocode pri save. Hľadá lat/lng pre kombináciu lokalita+obec+ulica+kraj+okres.
+ * Ak ich nenájde, ponecháva null (matching padne na text-based fallback).
+ */
+async function autoGeocodePayload(payload: Record<string, unknown>): Promise<void> {
+  if (payload.lat != null && payload.lng != null) return; // už geokódované
+  const parts = [
+    payload.ulica,
+    payload.lokalita,
+    payload.obec,
+    payload.okres,
+    payload.kraj,
+  ].filter(Boolean).map(String);
+  if (parts.length === 0) return;
+  // Nominatim funguje lepšie keď začneme s najšpecifickejšou časťou
+  const query = parts.join(", ");
+  const result = await geocodeAddress(query);
+  if (result) {
+    payload.lat = result.lat;
+    payload.lng = result.lng;
+  }
+}
 
 /**
  * POST /api/inzerat/save
@@ -54,6 +78,7 @@ export async function POST(req: NextRequest) {
       // makler_id v payload zachovať len pre admin (delegate); inak nedovolíme prepis
       const safePayload = { ...payload };
       if (!scope.isAdmin) delete safePayload.makler_id;
+      await autoGeocodePayload(safePayload);
 
       const r = await admin.from("nehnutelnosti").update(safePayload).eq("id", editId).select();
       if (r.error) return NextResponse.json({ error: r.error.message, code: r.error.code }, { status: 500 });
@@ -80,6 +105,7 @@ export async function POST(req: NextRequest) {
     // Fallback ak company_id ešte nie je v payloade ani sa nevyplnilo zo scope
     // (napr. legacy klient bez user_id, alebo user bez company priradenia).
     if (!insertPayload.company_id) insertPayload.company_id = VIANEMA_COMPANY_ID;
+    await autoGeocodePayload(insertPayload);
 
     const r = await admin.from("nehnutelnosti").insert(insertPayload).select();
     if (r.error) return NextResponse.json({ error: r.error.message, code: r.error.code, details: r.error.details }, { status: 500 });
