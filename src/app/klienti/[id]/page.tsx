@@ -1522,8 +1522,10 @@ export default function KlientDetailPage() {
         </div>
       )}
 
-      {/* Kupujúci pipeline (F1 plan-kupujuci) */}
-      {klient.typ === "kupujuci" && (
+      {/* Kupujúci pipeline (F1 plan-kupujuci).
+          Zobrazí sa pre typ='kupujuci' (samostatne) aj 'oboje' (paralelne
+          s predávajúcou pipeline). Per Aleš (2026-05-23). */}
+      {(klient.typ === "kupujuci" || klient.typ === "oboje") && (
         <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
           <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "16px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Pipeline kupujúceho
