@@ -39,7 +39,7 @@ function SellerCalc({ cena, klientId }: { cena: number; klientId: string }) {
       <Row label="Provízia 3 %" value={`${fmt(proviziaHruba)} €`} />
       <Row label="Čistá (× 0,8)" value={`${fmt(proviziaC)} €`} />
       <a href={`/klienti/${klientId}?tab=nehnutelnosti`}
-        style={{ display: "block", marginTop: "8px", fontSize: "11px", color: "#60a5fa", textDecoration: "none", textAlign: "right" }}>
+        style={{ display: "block", marginTop: "8px", fontSize: "11px", color: "var(--text-secondary)", textDecoration: "none", textAlign: "right" }}>
         Detail kalkulačky →
       </a>
     </div>
@@ -63,7 +63,7 @@ function BuyerCalc({ cenaDo, cenaOd, klientId }: { cenaDo: number; cenaOd?: numb
         * orientačne · 4,5 % p.a. · 30 rokov
       </div>
       <a href={`/nastroje?tab=kalkulator&cena=${cenaDo}${cenaOd ? `&cenaOd=${cenaOd}` : ""}`}
-        style={{ display: "block", marginTop: "6px", fontSize: "11px", color: "#60a5fa", textDecoration: "none", textAlign: "right" }}>
+        style={{ display: "block", marginTop: "6px", fontSize: "11px", color: "var(--text-secondary)", textDecoration: "none", textAlign: "right" }}>
         Plná kalkulačka →
       </a>
     </div>
@@ -90,7 +90,7 @@ export function CalculatorWidget({ klientTyp, klientId, predajnaCena, cenaDo, ce
         <div style={{ padding: "14px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
           Chýba predajná cena.
           <button onClick={() => router.push(`/naber?klient_id=${klientId}`)}
-            style={{ display: "block", margin: "6px auto 0", fontSize: "11px", color: "#60a5fa", background: "none", border: "none", cursor: "pointer" }}>
+            style={{ display: "block", margin: "6px auto 0", fontSize: "11px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer" }}>
             Vytvoriť náberový list →
           </button>
         </div>
@@ -102,7 +102,7 @@ export function CalculatorWidget({ klientTyp, klientId, predajnaCena, cenaDo, ce
         <div style={{ padding: "14px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
           Chýba objednávka s cenou.
           <button onClick={() => router.push(`/kupujuci?klient_id=${klientId}`)}
-            style={{ display: "block", margin: "6px auto 0", fontSize: "11px", color: "#60a5fa", background: "none", border: "none", cursor: "pointer" }}>
+            style={{ display: "block", margin: "6px auto 0", fontSize: "11px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer" }}>
             Vytvoriť objednávku →
           </button>
         </div>

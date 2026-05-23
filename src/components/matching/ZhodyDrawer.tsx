@@ -44,7 +44,7 @@ export function ZhodyDrawer({ objednavkaId, onClose, onPlanovatObhliadku }: Prop
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             <button
               onClick={() => router.push(`/nastroje?tab=matching&objednavka=${objednavkaId}`)}
-              style={{ fontSize: "12px", color: "#3B82F6", background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}
+              style={{ fontSize: "12px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}
             >
               Otvoriť plný matching →
             </button>
@@ -112,7 +112,7 @@ export function ZhodyDrawer({ objednavkaId, onClose, onPlanovatObhliadku }: Prop
                       )}
                       <button onClick={() => router.push(`/inzerat?id=${n.id}`)} style={{
                         padding: "5px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-                        borderRadius: "7px", fontSize: "12px", color: "#3B82F6", cursor: "pointer",
+                        borderRadius: "7px", fontSize: "12px", color: "var(--text-secondary)", cursor: "pointer",
                       }}>Inzerát →</button>
                     </div>
                   </li>

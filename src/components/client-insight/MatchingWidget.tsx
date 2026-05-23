@@ -14,9 +14,11 @@ type Props = {
 };
 
 function scoreBadge(score: number) {
-  if (score >= 85) return { bg: "#0f3a22", fg: "#86efac" };
-  if (score >= 70) return { bg: "#3a2d0e", fg: "#fde68a" };
-  return { bg: "#243044", fg: "#94a3b8" };
+  // Apple-style: minimum farieb. Zelená iba pre top match (≥85%), ostatné
+  // sú neutrálne tmavošedé. Lebo "tento match je výborný" je legit signal,
+  // ale 70% nie je dôvod na farebné štvorčeky.
+  if (score >= 85) return { bg: "#064E3B", fg: "#86efac" };
+  return { bg: "#374151", fg: "#D1D5DB" };
 }
 
 function SkeletonRow() {
@@ -49,7 +51,7 @@ function SellerWidget({ nehnutelnostId, onPlanovatObhliadku, klientId }: {
           🎯 Kupujúci — {loading ? "…" : `${totalCount} zhôd`}
         </span>
         <button onClick={() => router.push(`/nastroje?tab=matching&nehnutelnost=${nehnutelnostId}`)}
-          style={{ fontSize: "11px", color: "#60a5fa", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          style={{ fontSize: "11px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
           Všetky →
         </button>
       </div>
@@ -60,7 +62,7 @@ function SellerWidget({ nehnutelnostId, onPlanovatObhliadku, klientId }: {
         <div style={{ padding: "16px 14px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
           Zatiaľ žiadne zhody.<br />
           <button onClick={() => router.push(`/naber?klient_id=${klientId}`)}
-            style={{ marginTop: "6px", fontSize: "11px", color: "#60a5fa", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            style={{ marginTop: "6px", fontSize: "11px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             Doplniť inzerát →
           </button>
         </div>
@@ -95,7 +97,7 @@ function SellerWidget({ nehnutelnostId, onPlanovatObhliadku, klientId }: {
                 {m.score}%
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "12px", fontWeight: 600, color: rowHref ? "#60a5fa" : "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{meno}</div>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: rowHref ? "var(--text-secondary)" : "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{meno}</div>
                 <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{summary || "—"}</div>
               </div>
               <div style={{ display: "flex", gap: "4px", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
@@ -122,7 +124,7 @@ function SellerWidget({ nehnutelnostId, onPlanovatObhliadku, klientId }: {
           <button onClick={() => {
             const first = top3[0].objednavka.kupujuci;
             if (first) onPlanovatObhliadku(first.id, first.meno, first.telefon);
-          }} style={{ width: "100%", padding: "7px", background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "7px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+          }} style={{ width: "100%", padding: "7px", background: "#374151", color: "#fff", border: "none", borderRadius: "7px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
             📅 Naplánovať obhliadku
           </button>
         </div>
@@ -148,7 +150,7 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
           🎯 Ponuky — {loading ? "…" : `${top3.length} zhôd`}
         </span>
         <button onClick={() => router.push(`/nastroje?tab=matching&objednavka=${objednavkaId}`)}
-          style={{ fontSize: "11px", color: "#60a5fa", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          style={{ fontSize: "11px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
           Všetky →
         </button>
       </div>
@@ -159,7 +161,7 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
         <div style={{ padding: "16px 14px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
           Žiadne zhody.<br />
           <button onClick={() => router.push(`/kupujuci?klient_id=${klientId}`)}
-            style={{ marginTop: "6px", fontSize: "11px", color: "#60a5fa", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            style={{ marginTop: "6px", fontSize: "11px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             Upraviť kritériá →
           </button>
         </div>
@@ -184,7 +186,7 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
                 {m.score}%
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "12px", fontWeight: 600, color: rowHref ? "#60a5fa" : "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: "12px", fontWeight: 600, color: rowHref ? "var(--text-secondary)" : "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {summary || "Nehnuteľnosť"}
                 </div>
                 <div style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", gap: "4px", alignItems: "center" }}>
@@ -232,7 +234,7 @@ export function MatchingWidget({ klientTyp, nehnutelnostId, objednavkaId, klient
     <div style={{ padding: "16px 14px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
       🎯 Matching<br />
       <button onClick={() => window.location.href = isKupujuci ? `/kupujuci?klient_id=${klientId}` : `/naber?klient_id=${klientId}`}
-        style={{ marginTop: "6px", fontSize: "11px", color: "#60a5fa", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+        style={{ marginTop: "6px", fontSize: "11px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
         {isKupujuci ? "Vytvoriť objednávku →" : "Pridať inzerát →"}
       </button>
     </div>

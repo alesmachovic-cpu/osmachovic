@@ -2091,9 +2091,9 @@ export default function KlientDetailPage() {
         return (
           <div style={{
             marginBottom: "16px", padding: "16px 18px", borderRadius: "12px",
-            background: "#EFF6FF", border: "1px solid #BFDBFE",
+            background: "var(--bg-surface)", border: "1px solid var(--border)",
           }}>
-            <div style={{ fontSize: "13px", fontWeight: 700, color: "#1E3A8A", marginBottom: "10px" }}>
+            <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "10px" }}>
               🔎 Čo hľadá
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>

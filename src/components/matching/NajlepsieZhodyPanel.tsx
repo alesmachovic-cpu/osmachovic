@@ -46,7 +46,7 @@ export function NajlepsieZhodyPanel({ objednavkaId, onPlanovatObhliadku }: Props
         </span>
         <button
           onClick={() => router.push(`/nastroje?tab=matching&objednavka=${objednavkaId}`)}
-          style={{ fontSize: "12px", color: "#3B82F6", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          style={{ fontSize: "12px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
         >
           Plný matching →
         </button>
@@ -89,7 +89,7 @@ export function NajlepsieZhodyPanel({ objednavkaId, onPlanovatObhliadku }: Props
                 )}
                 <button onClick={() => router.push(`/inzerat?id=${n.id}`)} style={{
                   padding: "4px 8px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-                  borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#3B82F6",
+                  borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)",
                 }}>→</button>
               </div>
             </li>
