@@ -412,10 +412,21 @@ export default function KlientDetailPage() {
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
   const { scope } = useUserScope();
   const isAdmin = scope?.isAdmin ?? false;
-  // isOwner = admin/majiteľ vždy, vlastník vždy, manažér ak je z pobočky vlastníka,
+  // ownerStrict = admin/majiteľ vždy, vlastník vždy, manažér ak je z pobočky vlastníka,
   // alebo spolupracujúci maklér (FE-only check, backend canEditRecord to nepokrýva).
-  const isOwner = canEditRecord(scope, klient?.makler_id ?? null)
+  const ownerStrict = canEditRecord(scope, klient?.makler_id ?? null)
     || (!!myMaklerUuid && klient?.spolupracujuci_makler_id === myMaklerUuid);
+  // isOwner — plný prístup pre kupujúcich (každý môže editovať). Pre "oboje"
+  // necháme strict (lebo je aj predávajúci) ale predávajúce tab-y dodatočne
+  // zamkneme cez sellerSideLocked.
+  // Per Aleš (2026-05-23): "pri kupujúcich tieto pravidlá neplatia, s tými
+  // môže robiť každý, ale musí byť jasné kto klienta založil".
+  const klientTyp = klient?.typ;
+  const isOwner = ownerStrict || klientTyp === "kupujuci";
+  // sellerSideLocked = pre "oboje" cudzí maklér nesmie editovať predávajúce
+  // tab-y (Nehnuteľnosti, Obchod, Produkcia). Iné tab-y (Objednávky, Aktivita,
+  // Obhliadky, Dokumenty, CRM Log) sú otvorené.
+  const sellerSideLocked = !ownerStrict && klientTyp === "oboje";
 
   useEffect(() => {
     if (id) loadAll();
@@ -1031,6 +1042,17 @@ export default function KlientDetailPage() {
           <span>Tento klient nie je tvoj — len na čítanie. Akcie sú zakázané.</span>
         </div>
       )}
+      {sellerSideLocked && klient && (
+        <div style={{
+          marginBottom: "16px", padding: "10px 14px", borderRadius: "10px",
+          background: "#FFFBEB", border: "1px solid #FDE68A",
+          color: "#92400E", fontSize: "13px", fontWeight: "500",
+          display: "flex", alignItems: "center", gap: "8px",
+        }}>
+          <span style={{ fontSize: "16px" }}>ℹ️</span>
+          <span>Klient je oboje (predáva aj kupuje). <b>Predávajúce</b> tab-y (Nehnuteľnosti, Obchod, Produkcia) sú read-only — kupujúcu časť môžeš editovať normálne.</span>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "24px", flexWrap: "wrap" }}>
         <button onClick={() => router.push(backHref)} style={{
           width: "36px", height: "36px", borderRadius: "50%", border: "1px solid var(--border)",
@@ -1043,6 +1065,9 @@ export default function KlientDetailPage() {
           </h1>
           <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "2px 0 0" }}>
             Všetky informácie a história
+            {(klient as unknown as { created_by_makler_meno?: string | null } | null)?.created_by_makler_meno && (
+              <> · <span style={{ fontWeight: "500" }}>Založil: {(klient as unknown as { created_by_makler_meno: string }).created_by_makler_meno}</span></>
+            )}
           </p>
         </div>
         {(() => {
@@ -2124,10 +2149,19 @@ export default function KlientDetailPage() {
         ))}
       </div>
 
-      {/* Tab obsah — pre cudzí klient (!isOwner) všetko zablokované (pointer-events:none + opacity).
-          Disabled-pattern by inak vyžadoval pridať `disabled={!isOwner}` na desiatky tlačidiel
-          v podkomponentoch (ObchodTab, ProdukciaTab, …). Wrapper-style je 1 zmena vs 50+ edits. */}
-      <div style={!isOwner ? { opacity: 0.55, pointerEvents: "none", userSelect: "none" } : undefined}>
+      {/* Tab obsah — gating podľa typu klienta (per Aleš 2026-05-23):
+          - typ=predavajuci + cudzí maklér: VŠETKY tab-y zamknuté (sellerStyle aj sharedStyle non-null)
+          - typ=oboje + cudzí: len predávajúce tab-y zamknuté (sellerStyle), kupujúce a spoločné otvorené
+          - typ=kupujuci: nič nezamknuté (isOwner je vždy true)
+          Predávajúce tab-y: Nehnuteľnosti, Obchod, Produkcia
+          Buyer/shared tab-y: Aktivita, Obhliadky, Objednávky, Dokumenty, CRM Log */}
+      {(() => {
+        const lockStyleObj = { opacity: 0.55, pointerEvents: "none" as const, userSelect: "none" as const };
+        const sellerStyle = (!ownerStrict && (klientTyp === "predavajuci" || klientTyp === "oboje")) ? lockStyleObj : undefined;
+        const sharedStyle = (!ownerStrict && klientTyp === "predavajuci") ? lockStyleObj : undefined;
+        return (
+      <>
+      <div style={sharedStyle}>
       {activeTab === "timeline" && (
         <div style={cardSt}>
           <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
@@ -2342,6 +2376,8 @@ export default function KlientDetailPage() {
         </div>
       )}
 
+      </div>{/* /shared-style wrapper for timeline */}
+      <div style={sellerStyle}>
       {activeTab === "nehnutelnosti" && (
         <div style={cardSt}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
@@ -2560,6 +2596,8 @@ export default function KlientDetailPage() {
         <ObchodTab klient={klient} userId={user.id} zmluvaInfo={zmluvaInfo} />
       )}
 
+      </div>{/* /seller-style wrapper for nehnutelnosti + obchod */}
+      <div style={sharedStyle}>
       {activeTab === "obhliadky" && (
         <div style={cardSt}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
@@ -2801,6 +2839,8 @@ export default function KlientDetailPage() {
         </div>
       )}
 
+      </div>{/* /shared-style wrapper for obhliadky + objednavky */}
+      <div style={sellerStyle}>
       {!isCistyKupujuci && activeTab === "produkcia" && klient && user && (
         <div style={cardSt}>
           <ProdukciaTab
@@ -2816,6 +2856,8 @@ export default function KlientDetailPage() {
         </div>
       )}
 
+      </div>{/* /seller-style wrapper for produkcia */}
+      <div style={sharedStyle}>
       {activeTab === "dokumenty" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {/* LV sekcia — IBA pre klientov ktorí niečo vlastnia (predávajúci alebo
@@ -3157,7 +3199,10 @@ export default function KlientDetailPage() {
           <KlientHistoryTab klientId={klient.id} />
         </div>
       )}
-      </div>{/* /tab-obsah read-only wrapper */}
+      </div>{/* /shared-style wrapper for dokumenty + historia */}
+      </>
+      );
+      })()}
 
       {/* Poznámky */}
       {klient.poznamka && (

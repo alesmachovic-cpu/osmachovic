@@ -32,6 +32,11 @@ export async function GET(req: NextRequest) {
   if (id) {
     const { data, error } = await sb.from("klienti").select("*").eq("id", id).eq("company_id", companyId).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // Dopytaj meno makléra ktorý klienta založil (pre UI "Založil: X")
+    if (data && data.created_by_makler_id) {
+      const { data: m } = await sb.from("makleri").select("meno").eq("id", data.created_by_makler_id).maybeSingle();
+      (data as Record<string, unknown>).created_by_makler_meno = m?.meno ?? null;
+    }
     return NextResponse.json({ klient: data });
   }
   if (telefon) {
@@ -77,7 +82,15 @@ export async function POST(req: NextRequest) {
 
   // C4: XSS sanitize free-form text fields (poznamka, meno, lokalita, ...)
   const cleanRest = sanitizeFields(rest as Record<string, unknown>, [...SANITIZE_FIELDS]);
-  const payload = { ...cleanRest, makler_id, company_id: scope.company_id };
+  // created_by_makler_id = pôvodný autor klienta (immutable). Pre kupujúcich
+  // slúži ako "tento klient je môj kontakt" indikátor aj keď ho môže editovať
+  // hocikto. Pre predávajúcich je to dodatočný signál koho oslobiť.
+  const payload = {
+    ...cleanRest,
+    makler_id,
+    created_by_makler_id: makler_id,
+    company_id: scope.company_id,
+  };
   const { data, error } = await sb.from("klienti").insert(payload).select().single();
   if (error) {
     if (error.code === "23505") {
