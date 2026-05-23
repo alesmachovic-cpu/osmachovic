@@ -1134,8 +1134,13 @@ export default function KlientDetailPage() {
             }}>
               ✏️ Upraviť
             </button>
-            {/* Manuálne uvoľnenie klienta (vrátenie do voľného poolu) */}
-            {!klient.je_volny && (klient as { anonymized_at?: string | null }).anonymized_at == null && (
+            {/* Manuálne uvoľnenie klienta (vrátenie do voľného poolu).
+                Per Aleš (2026-05-23): kupujúceho bez objednávky nemá zmysel uvoľniť,
+                lebo nie je naviazaný na konkrétneho makléra žiadnym záväzkom. */}
+            {!klient.je_volny
+              && (klient as { anonymized_at?: string | null }).anonymized_at == null
+              && !(klient.typ === "kupujuci" && objednavky.length === 0)
+              && (
               <button disabled={!isOwner} onClick={async () => {
                 if (!confirm(`Uvoľniť klienta ${klient.meno}? Stane sa voľným pre celú kanceláriu.`)) return;
                 if (user?.id) await klientUpdate(user.id, klient.id, {
