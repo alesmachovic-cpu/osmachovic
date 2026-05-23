@@ -289,6 +289,20 @@ const COMBINED_STEPS = [
   { key: "predany",    label: "Predaný" },
 ];
 
+// Per Aleš plan-kupujuci F1 (2026-05-23): kupujúci workflow je úplne iný
+// než predávajúci. Nemá náber, chodí na obhliadky, dohodne si hypo poradcu,
+// pri záujme robí rezerváciu, potom KZ a vklad.
+const KUPUJUCI_STEPS = [
+  { key: "kontakt",          label: "Kontakt" },
+  { key: "hypo_konzultacia", label: "Hypo poradca" },
+  { key: "kapacita",         label: "Kapacita" },
+  { key: "obhliadky",        label: "Obhliadky" },
+  { key: "zaujem",           label: "Záujem" },
+  { key: "rezervacia",       label: "Rezervácia" },
+  { key: "podpis_kz",        label: "Podpis KZ" },
+  { key: "kupil",            label: "Kúpil" },
+];
+
 export default function KlientDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -853,9 +867,26 @@ export default function KlientDetailPage() {
     return 0;
   }
 
+  // Kupujuci workflow (F1 plan-kupujuci, per Aleš 2026-05-23)
+  // Mapuje klient.status na pozíciu v 8-krokovej kupujúcej pipeline (0-7).
+  function getKupujuciStep(): number {
+    if (!klient) return 0;
+    const s = klient.status as string;
+    if (s === "uz_kupil") return 7;
+    if (s === "podpis_kz") return 6;
+    if (s === "rezervacia") return 5;
+    if (s === "zaujem_konkretna_nasa" || s === "zaujem_konkretna_ina_rk" || s === "zaujem_o_konkretnu") return 4;
+    if (s === "kapacita_schvalena") return 2;
+    if (s === "hypo_konzultacia") return 1;
+    // aktivny s obhliadkami → "Hľadá / obhliadky", inak Kontakt
+    if (obhliadky.length > 0) return 3;
+    return 0;
+  }
+
   const initials = klient.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
   const statusColor = STATUS_COLORS[klient.status] || "#6B7280";
   const workflowStep = getWorkflowStep();
+  const kupujuciStep = getKupujuciStep();
 
   // Rýchle nahratie LV priamo z banneru/promptu
   async function handleQuickLvUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1486,6 +1517,73 @@ export default function KlientDetailPage() {
           ) : (
             <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "8px" }}>
               Žiadna spolupráca. Pridajte maklera a nastavte podiel z provízie.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Kupujúci pipeline (F1 plan-kupujuci) */}
+      {klient.typ === "kupujuci" && (
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "16px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Pipeline kupujúceho
+          </div>
+          <div style={{ overflowX: "auto", overflowY: "visible", paddingBottom: "6px", scrollbarWidth: "thin", scrollbarColor: "#374151 var(--border)" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", minWidth: "max-content", gap: "0", paddingBottom: "2px" }}>
+              {KUPUJUCI_STEPS.map((step, i) => {
+                const isCompleted = kupujuciStep > i;
+                const isCurrent = kupujuciStep === i;
+                // Krok 1, 2, 5, 6 zatiaľ "placeholder" — entity (hypo poradca, rezervácia)
+                // sú v F2-F3. Užívateľ ich vie nastaviť cez status dropdown.
+                const isPlaceholder = !isCurrent && !isCompleted && (i === 1 || i === 2 || i === 5 || i === 6);
+                return (
+                  <div key={step.key} style={{ display: "flex", alignItems: "center" }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", width: "90px" }}>
+                      <div style={{
+                        width: isCurrent ? "56px" : "48px",
+                        height: isCurrent ? "56px" : "48px",
+                        borderRadius: "50%",
+                        background: isCurrent ? "rgba(55,65,81,0.08)" : "transparent",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        transition: "all 0.2s",
+                      }}>
+                        <div style={{
+                          width: "40px", height: "40px", borderRadius: "50%",
+                          background: isCompleted || isCurrent ? "#374151" : "var(--bg-elevated)",
+                          color: isCompleted || isCurrent ? "#fff" : "var(--text-muted)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: isCompleted ? "16px" : "14px", fontWeight: "700",
+                          border: isCompleted || isCurrent ? "none" : (isPlaceholder ? "1.5px dashed var(--border)" : "1.5px solid var(--border)"),
+                          opacity: isPlaceholder ? 0.5 : 1,
+                          transition: "all 0.2s",
+                          flexShrink: 0,
+                        }}>
+                          {isCompleted ? "✓" : i + 1}
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: "11px", fontWeight: isCurrent ? "700" : "500",
+                        color: isCurrent ? "var(--text-primary)" : "var(--text-muted)",
+                        textAlign: "center", lineHeight: "1.3",
+                        opacity: isPlaceholder ? 0.6 : 1,
+                        whiteSpace: "nowrap",
+                      }}>{step.label}</span>
+                    </div>
+                    {i < KUPUJUCI_STEPS.length - 1 && (
+                      <div style={{
+                        height: "1.5px", width: "32px", flexShrink: 0,
+                        background: isCompleted ? "#374151" : "var(--border)",
+                        marginBottom: "28px", borderRadius: "1px",
+                      }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {kupujuciStep < 3 && objednavky.length === 0 && (
+            <div style={{ marginTop: "12px", padding: "10px 14px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px", fontSize: "12px", color: "var(--text-secondary)" }}>
+              💡 Tip: vyplň <b>objednávku</b> (čo hľadá) aby sa spustil matching
             </div>
           )}
         </div>
