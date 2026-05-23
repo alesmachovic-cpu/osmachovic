@@ -1036,28 +1036,8 @@ export default function KlientDetailPage() {
         <span style={{ color: "var(--text-primary)", fontWeight: "600" }}>{klient.meno}</span>
       </div>
 
-      {!isOwner && klient && (
-        <div style={{
-          marginBottom: "16px", padding: "10px 14px", borderRadius: "10px",
-          background: "#FFFBEB", border: "1px solid #FDE68A",
-          color: "#92400E", fontSize: "13px", fontWeight: "500",
-          display: "flex", alignItems: "center", gap: "8px",
-        }}>
-          <span style={{ fontSize: "16px" }}>🔒</span>
-          <span>Tento klient nie je tvoj — len na čítanie. Akcie sú zakázané.</span>
-        </div>
-      )}
-      {sellerSideLocked && klient && (
-        <div style={{
-          marginBottom: "16px", padding: "10px 14px", borderRadius: "10px",
-          background: "#FFFBEB", border: "1px solid #FDE68A",
-          color: "#92400E", fontSize: "13px", fontWeight: "500",
-          display: "flex", alignItems: "center", gap: "8px",
-        }}>
-          <span style={{ fontSize: "16px" }}>ℹ️</span>
-          <span>Klient je oboje (predáva aj kupuje). <b>Predávajúce</b> tab-y (Nehnuteľnosti, Obchod, Produkcia) sú read-only — kupujúcu časť môžeš editovať normálne.</span>
-        </div>
-      )}
+      {/* Read-only stav je signalizovaný len jemne — sivý chip pri mene + sivé tlačidlá akcií.
+          Žiadne farebné bannery (Apple-style: minimum farieb, maximum prehľadnosti). */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "24px", flexWrap: "wrap" }}>
         <button onClick={() => router.push(backHref)} style={{
           width: "36px", height: "36px", borderRadius: "50%", border: "1px solid var(--border)",
@@ -1065,9 +1045,25 @@ export default function KlientDetailPage() {
           display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
         }}>←</button>
         <div style={{ flex: 1, minWidth: "160px" }}>
-          <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>
-            Karta klienta
-          </h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <h1 style={{ fontSize: "22px", fontWeight: "700", color: "var(--text-primary)", margin: 0 }}>
+              Karta klienta
+            </h1>
+            {!isOwner && klient && (
+              <span style={{
+                fontSize: "11px", fontWeight: "600", color: "var(--text-muted)",
+                background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                padding: "3px 9px", borderRadius: "999px", letterSpacing: "0.02em",
+              }}>Len na čítanie</span>
+            )}
+            {sellerSideLocked && klient && (
+              <span style={{
+                fontSize: "11px", fontWeight: "600", color: "var(--text-muted)",
+                background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                padding: "3px 9px", borderRadius: "999px", letterSpacing: "0.02em",
+              }}>Predávajúca časť: read-only</span>
+            )}
+          </div>
           <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "2px 0 0" }}>
             Všetky informácie a história
             {(klient as unknown as { created_by_makler_meno?: string | null } | null)?.created_by_makler_meno && (
@@ -1089,8 +1085,8 @@ export default function KlientDetailPage() {
                 if (user?.id) await klientUpdate(user.id, klient.id, { typ: "oboje" });
                 loadAll();
               }} style={{
-                padding: "9px 14px", background: "#ECFDF5", color: "#065F46",
-                border: "1px solid #A7F3D0", borderRadius: "10px", fontSize: "13px",
+                padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
                 fontWeight: "600", cursor: "pointer", ...lockSt,
               }} title="Klient sa doplní aj ako kupujúci (zostane aj predávajúcim)">
                 + aj kupujúci
@@ -1102,8 +1098,8 @@ export default function KlientDetailPage() {
                 if (user?.id) await klientUpdate(user.id, klient.id, { typ: "oboje" });
                 loadAll();
               }} style={{
-                padding: "9px 14px", background: "#EFF6FF", color: "#1E40AF",
-                border: "1px solid #BFDBFE", borderRadius: "10px", fontSize: "13px",
+                padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
                 fontWeight: "600", cursor: "pointer", ...lockSt,
               }} title="Klient sa doplní aj ako predávajúci (zostane aj kupujúcim)">
                 + aj predávajúci
@@ -1116,8 +1112,8 @@ export default function KlientDetailPage() {
                   if (user?.id) await klientUpdate(user.id, klient.id, { typ: "kupujuci" });
                   loadAll();
                 }} style={{
-                  padding: "9px 14px", background: "#ECFDF5", color: "#065F46",
-                  border: "1px solid #A7F3D0", borderRadius: "10px", fontSize: "13px",
+                  padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
+                  border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
                   fontWeight: "600", cursor: "pointer", ...lockSt,
                 }}>iba kupujúci</button>
                 <button disabled={!isOwner} onClick={async () => {
@@ -1125,8 +1121,8 @@ export default function KlientDetailPage() {
                   if (user?.id) await klientUpdate(user.id, klient.id, { typ: "predavajuci" });
                   loadAll();
                 }} style={{
-                  padding: "9px 14px", background: "#EFF6FF", color: "#1E40AF",
-                  border: "1px solid #BFDBFE", borderRadius: "10px", fontSize: "13px",
+                  padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
+                  border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
                   fontWeight: "600", cursor: "pointer", ...lockSt,
                 }}>iba predávajúci</button>
               </>
@@ -2520,7 +2516,7 @@ export default function KlientDetailPage() {
                           defaultEmail={klient.email || ""}
                           userId={user?.id}
                           buttonStyle={{
-                            padding: "6px 12px", background: "#1d4ed8", color: "#fff",
+                            padding: "6px 12px", background: "#374151", color: "#fff",
                             border: "none", borderRadius: "8px",
                             fontSize: "12px", fontWeight: 600, cursor: "pointer",
                           }}
@@ -2765,7 +2761,7 @@ export default function KlientDetailPage() {
                         defaultEmail={klient.email || ""}
                         userId={user?.id}
                         buttonStyle={{
-                          padding: "6px 12px", background: "#1d4ed8", color: "#fff",
+                          padding: "6px 12px", background: "#374151", color: "#fff",
                           border: "none", borderRadius: "8px",
                           fontSize: "11px", fontWeight: 600, cursor: "pointer",
                         }}

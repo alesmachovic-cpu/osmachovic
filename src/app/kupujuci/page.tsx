@@ -222,22 +222,29 @@ function KupujuciInner() {
                   return (
                     <div key={k.id} style={{
                       display: "flex", alignItems: "center", gap: "12px",
-                      padding: "14px 16px", background: "#F8FBFF",
-                      border: "1px solid #DBEAFE", borderLeft: "3px solid #3B82F6",
+                      padding: "14px 16px", background: "var(--bg-surface)",
+                      border: "1px solid var(--border)",
                       borderRadius: "12px", cursor: "pointer", transition: "border-color 0.15s",
                     }}
                       onClick={() => router.push(`/klienti/${k.id}?from=kupujuci`)}
-                      onMouseEnter={e => e.currentTarget.style.borderColor = "#3B82F6"}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = "#DBEAFE"; e.currentTarget.style.borderLeftColor = "#3B82F6"; }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = "#374151"}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}
                     >
                       <div style={{
                         width: "40px", height: "40px", borderRadius: "50%",
-                        background: "#3B82F6", color: "#fff",
+                        background: "#E5E7EB", color: "#374151",
                         display: "flex", alignItems: "center", justifyContent: "center",
                         fontSize: "13px", fontWeight: "700", flexShrink: 0,
                       }}>{makeInitials(k.meno)}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>{k.meno}</div>
+                        <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                          {k.meno}
+                          <span style={{
+                            fontSize: "10px", fontWeight: "600", color: "var(--text-muted)",
+                            background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                            padding: "2px 8px", borderRadius: "999px",
+                          }}>objednávka</span>
+                        </div>
                         <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                           {[k.telefon, meta].filter(Boolean).join(" · ") || "—"}
                         </div>
