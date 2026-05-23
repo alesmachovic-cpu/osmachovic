@@ -1096,7 +1096,10 @@ export default function KlientDetailPage() {
               <button disabled={!isOwner} onClick={async () => {
                 if (!confirm(`Doplniť ${klient.meno} aj ako predávajúceho?\n\nObjaví sa aj v sekcii Klienti.`)) return;
                 if (user?.id) await klientUpdate(user.id, klient.id, { typ: "oboje" });
-                loadAll();
+                await loadAll();
+                // Per Aleš (2026-05-23): keď sa kupujúci pridá aj ako predávajúci,
+                // pred náberom treba LV. Spustíme prompt ak ešte LV nemá.
+                if (!klient.lv_data) setShowLVPrompt(true);
               }} style={{
                 padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
                 border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
@@ -1372,17 +1375,26 @@ export default function KlientDetailPage() {
               outline: "none",
             }}
           >
-            {[
-              { value: "aktivny", label: "Aktívny" },
-              { value: "novy_kontakt", label: "Nový kontakt" },
-              { value: "dohodnuty_naber", label: "Dohodnutý náber" },
-              ...(klient.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
-              { value: "volat_neskor", label: "Volať neskôr" },
-              { value: "nedovolal", label: "Nedovolal" },
-              { value: "nechce_rk", label: "Nechce RK" },
-              { value: "uz_predal", label: "Už predal" },
-              { value: "realitna_kancelaria", label: "Realitná kancelária" },
-            ].map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {(klient.typ === "kupujuci"
+              // Per Aleš (2026-05-23): kupujúci má len 3 statusy — netreba mu
+              // pipeline kroky predávajúceho (dohodnutý náber, nabraný, atď).
+              ? [
+                  { value: "aktivny", label: "Aktívny" },
+                  { value: "realitna_kancelaria", label: "Realitná kancelária" },
+                  { value: "uz_predal", label: "Už predal" },
+                ]
+              : [
+                  { value: "aktivny", label: "Aktívny" },
+                  { value: "novy_kontakt", label: "Nový kontakt" },
+                  { value: "dohodnuty_naber", label: "Dohodnutý náber" },
+                  ...(klient.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
+                  { value: "volat_neskor", label: "Volať neskôr" },
+                  { value: "nedovolal", label: "Nedovolal" },
+                  { value: "nechce_rk", label: "Nechce RK" },
+                  { value: "uz_predal", label: "Už predal" },
+                  { value: "realitna_kancelaria", label: "Realitná kancelária" },
+                ]
+            ).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
           <span style={{
             padding: "4px 12px", borderRadius: "20px", fontSize: "11px", fontWeight: "600",
