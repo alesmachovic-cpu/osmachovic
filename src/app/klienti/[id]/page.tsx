@@ -1375,31 +1375,41 @@ export default function KlientDetailPage() {
               outline: "none",
             }}
           >
-            {(klient.typ === "kupujuci"
-              // Per Aleš (2026-05-23): kupujúci má vlastný set statusov — bez
-              // pipeline krokov predávajúceho (dohodnutý náber, nabraný, atď).
-              // Hľadanie → záujem o konkrétnu → hypotéka → odložené/uz_predal.
-              ? [
-                  { value: "aktivny", label: "Aktívny" },
-                  { value: "zaujem_o_konkretnu", label: "Záujem o konkrétnu" },
-                  { value: "caka_na_hypoteku", label: "Čaká na hypotéku" },
-                  { value: "odlozene", label: "Odložené" },
-                  { value: "nereaguje", label: "Nereaguje" },
-                  { value: "realitna_kancelaria", label: "Realitná kancelária" },
-                  { value: "uz_predal", label: "Už predal" },
-                ]
-              : [
-                  { value: "aktivny", label: "Aktívny" },
-                  { value: "novy_kontakt", label: "Nový kontakt" },
-                  { value: "dohodnuty_naber", label: "Dohodnutý náber" },
-                  ...(klient.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
-                  { value: "volat_neskor", label: "Volať neskôr" },
-                  { value: "nedovolal", label: "Nedovolal" },
-                  { value: "nechce_rk", label: "Nechce RK" },
-                  { value: "uz_predal", label: "Už predal" },
-                  { value: "realitna_kancelaria", label: "Realitná kancelária" },
-                ]
-            ).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {(() => {
+              const kupujuciStatusy = [
+                { value: "aktivny", label: "Aktívny" },
+                { value: "zaujem_o_konkretnu", label: "Záujem o konkrétnu" },
+                { value: "caka_na_hypoteku", label: "Čaká na hypotéku" },
+                { value: "odlozene", label: "Odložené" },
+                { value: "nereaguje", label: "Nereaguje" },
+                { value: "realitna_kancelaria", label: "Realitná kancelária" },
+                { value: "uz_predal", label: "Už predal" },
+              ];
+              const predavajuciStatusy = [
+                { value: "aktivny", label: "Aktívny" },
+                { value: "novy_kontakt", label: "Nový kontakt" },
+                { value: "dohodnuty_naber", label: "Dohodnutý náber" },
+                ...(klient.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
+                { value: "volat_neskor", label: "Volať neskôr" },
+                { value: "nedovolal", label: "Nedovolal" },
+                { value: "nechce_rk", label: "Nechce RK" },
+                { value: "uz_predal", label: "Už predal" },
+                { value: "realitna_kancelaria", label: "Realitná kancelária" },
+              ];
+              // Per Aleš (2026-05-23): kupujuci → kupujúce statusy; predavajuci →
+              // predávajúca pipeline; oboje → SPOJENÉ (deduplicated by value).
+              let options;
+              if (klient.typ === "kupujuci") options = kupujuciStatusy;
+              else if (klient.typ === "oboje") {
+                const seen = new Set<string>();
+                options = [...predavajuciStatusy, ...kupujuciStatusy].filter(o => {
+                  if (seen.has(o.value)) return false;
+                  seen.add(o.value);
+                  return true;
+                });
+              } else options = predavajuciStatusy;
+              return options.map(o => <option key={o.value} value={o.value}>{o.label}</option>);
+            })()}
           </select>
           <span style={{
             padding: "4px 12px", borderRadius: "20px", fontSize: "11px", fontWeight: "600",
