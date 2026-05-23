@@ -10,6 +10,9 @@ export const runtime = "nodejs";
  * Vráti všetky dokumenty klienta, text_content a data_base64 odšifrované.
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const klientId = req.nextUrl.searchParams.get("klientId");
   if (!klientId) return NextResponse.json({ error: "klientId required" }, { status: 400 });
 
