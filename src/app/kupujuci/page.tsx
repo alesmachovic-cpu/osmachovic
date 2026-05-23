@@ -54,7 +54,6 @@ function KupujuciInner() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"objednavky" | "klienti">("objednavky");
   const [filterMakler, setFilterMakler] = useState<string>("mine");
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
@@ -128,11 +127,6 @@ function KupujuciInner() {
   const [drawerObjId, setDrawerObjId] = useState<string | null>(null);
   const { data: matchingSummary } = useMatchingSummary(objednavky.map(o => o.id as string));
 
-  const cardSt: React.CSSProperties = {
-    background: "var(--bg-surface)", border: "1px solid var(--border)",
-    borderRadius: "14px", padding: "20px",
-  };
-
   async function deleteObjednavka(id: string) {
     if (!confirm("Naozaj zmazať objednávku?")) return;
     const r = await fetch(`/api/objednavky?id=${id}`, { method: "DELETE" });
@@ -155,8 +149,6 @@ function KupujuciInner() {
 
   // ZOZNAM — prehľad objednávok + tlačidlo novej
   if (step === "zoznam") {
-    const bezObjednavky = kupujuciKlienti.filter(k => !objKlientIds.has(k.id));
-
     return (
       <div style={{ maxWidth: "1050px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
@@ -180,27 +172,6 @@ function KupujuciInner() {
           </div>
         </div>
 
-        {/* Taby */}
-        <div style={{
-          display: "flex", gap: "4px", marginBottom: "20px", padding: "4px",
-          background: "var(--bg-elevated)", borderRadius: "12px", border: "1px solid var(--border)",
-        }}>
-          {[
-            { key: "objednavky", label: `Objednávky (${objednavky.length})` },
-            { key: "klienti", label: `Bez objednávky (${bezObjednavky.length})` },
-          ].map(t => (
-            <button key={t.key} onClick={() => setTab(t.key as typeof tab)} style={{
-              flex: 1, padding: "10px 12px", borderRadius: "8px", cursor: "pointer",
-              background: tab === t.key ? "var(--bg-surface)" : "transparent",
-              border: tab === t.key ? "1px solid var(--border)" : "1px solid transparent",
-              fontSize: "13px", fontWeight: tab === t.key ? "700" : "500",
-              color: tab === t.key ? "var(--text-primary)" : "var(--text-muted)",
-              boxShadow: tab === t.key ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-              transition: "all 0.15s",
-            }}>{t.label}</button>
-          ))}
-        </div>
-
         {loading && <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Načítavam...</div>}
         {!loading && loadError && (
           <div style={{ padding: "60px", textAlign: "center" }}>
@@ -213,165 +184,93 @@ function KupujuciInner() {
           </div>
         )}
 
-        {/* TAB: Objednávky */}
-        {!loading && tab === "objednavky" && (
-          <>
-            {objednavky.length === 0 ? (
-              <div style={{
-                padding: "60px", textAlign: "center", color: "var(--text-muted)",
-                background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px",
-              }}>
-                <div style={{ fontSize: "48px", marginBottom: "16px" }}>🔍</div>
-                <div style={{ fontSize: "16px", fontWeight: "600", marginBottom: "6px" }}>Žiadne objednávky</div>
-                <div style={{ fontSize: "13px", marginBottom: "20px" }}>Vytvor prvú záväznú objednávku pre kupujúceho klienta</div>
-                <button onClick={() => setStep("klient")} style={{
-                  padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
-                  borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
-                }}>
-                  + Nová objednávka
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "14px" }}>
-                {objednavky.map((obj: Record<string, unknown>) => {
-                  const klient = klienti.find(k => k.id === obj.klient_id);
+        {/* ZLÚČENÝ ZOZNAM: kupujúci s objednávkou (modrastí, hore) + bez objednávky (biele, dole) */}
+        {!loading && kupujuciKlienti.length === 0 && (
+          <div style={{
+            padding: "60px", textAlign: "center", color: "var(--text-muted)",
+            background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px",
+          }}>
+            <div style={{ fontSize: "48px", marginBottom: "16px" }}>👥</div>
+            <div style={{ fontSize: "16px", fontWeight: "600", marginBottom: "6px" }}>Žiadni kupujúci</div>
+            <div style={{ fontSize: "13px", marginBottom: "20px" }}>Pridaj prvého kupujúceho klienta alebo klienta s objednávkou</div>
+            <button onClick={() => setStep("klient")} style={{
+              padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
+              borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
+            }}>
+              + Nová objednávka
+            </button>
+          </div>
+        )}
+        {!loading && kupujuciKlienti.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {kupujuciKlienti
+              .map(k => ({ klient: k, obj: objednavky.find(o => o.klient_id === k.id) || null }))
+              .sort((a, b) => (a.obj ? 0 : 1) - (b.obj ? 0 : 1))
+              .map(({ klient: k, obj }) => {
+                if (obj) {
+                  // === KUPUJÚCI S OBJEDNÁVKOU (modrastý) ===
                   const poziadavky = (obj.poziadavky || {}) as Record<string, unknown>;
                   const lokalita = (obj.lokalita || {}) as Record<string, unknown>;
-                  const druhRaw = (obj.druh as string | string[] | null) || "";
-                  const druhArr = Array.isArray(druhRaw) ? druhRaw : String(druhRaw).split(/[,/]/).map(s => s.trim()).filter(Boolean);
-                  const druhLabel = druhArr.map(d => DRUHY_NEHNUTELNOSTI_MAP[d] || d).join(", ") || "—";
+                  const cenaOd = obj.cena_od ? Number(obj.cena_od).toLocaleString("sk") : null;
+                  const cenaDo = obj.cena_do ? Number(obj.cena_do).toLocaleString("sk") : null;
+                  const cenaText = cenaOd && cenaDo ? `${cenaOd} – ${cenaDo} €` : cenaOd ? `od ${cenaOd} €` : cenaDo ? `do ${cenaDo} €` : null;
+                  const lokalitaText = lokalita.obec ? [String(lokalita.obec), lokalita.okres ? String(lokalita.okres) : null].filter(Boolean).join(", ") : null;
+                  const izby = poziadavky.pocet_izieb ? `${String(poziadavky.pocet_izieb)} izieb` : null;
+                  const meta = [lokalitaText, izby, cenaText].filter(Boolean).join(" · ");
                   return (
-                    <div key={obj.id as string} style={cardSt}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "14px" }}>
-                        <div style={{
-                          width: "42px", height: "42px", borderRadius: "50%",
-                          background: "#374151", color: "#fff",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: "14px", fontWeight: "700", flexShrink: 0,
-                        }}>
-                          {makeInitials(klient?.meno)}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)" }}>
-                            {klient?.meno || "Neznámy"}
-                          </div>
-                          <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                            {klient?.telefon || "—"}
-                          </div>
-                        </div>
-                        <span style={{
-                          fontSize: "10px", fontWeight: "700", padding: "4px 10px", borderRadius: "10px",
-                          background: "#EFF6FF", color: "#1D4ED8",
-                        }}>
-                          {druhLabel}
-                        </span>
-                      </div>
-
-                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12.5px" }}>
-                        {lokalita.obec ? (
-                          <div style={{ display: "flex", gap: "6px" }}>
-                            <span style={{ color: "var(--text-muted)", minWidth: "80px" }}>📍 Lokalita:</span>
-                            <span style={{ color: "var(--text-primary)", fontWeight: "500" }}>
-                              {[String(lokalita.obec), lokalita.okres ? String(lokalita.okres) : null].filter(Boolean).join(", ")}
-                            </span>
-                          </div>
-                        ) : null}
-                        {poziadavky.pocet_izieb ? (
-                          <div style={{ display: "flex", gap: "6px" }}>
-                            <span style={{ color: "var(--text-muted)", minWidth: "80px" }}>🛏️ Izby:</span>
-                            <span style={{ color: "var(--text-primary)", fontWeight: "500" }}>{String(poziadavky.pocet_izieb)}</span>
-                          </div>
-                        ) : null}
-                        {(obj.cena_od || obj.cena_do) ? (
-                          <div style={{ display: "flex", gap: "6px" }}>
-                            <span style={{ color: "var(--text-muted)", minWidth: "80px" }}>💰 Cena:</span>
-                            <span style={{ color: "var(--text-primary)", fontWeight: "500" }}>
-                              {obj.cena_od ? `${Number(obj.cena_od).toLocaleString("sk")} – ` : "do "}
-                              {obj.cena_do ? Number(obj.cena_do).toLocaleString("sk") : "?"} €
-                            </span>
-                          </div>
-                        ) : null}
-                      </div>
-
+                    <div key={k.id} style={{
+                      display: "flex", alignItems: "center", gap: "12px",
+                      padding: "14px 16px", background: "#F8FBFF",
+                      border: "1px solid #DBEAFE", borderLeft: "3px solid #3B82F6",
+                      borderRadius: "12px", cursor: "pointer", transition: "border-color 0.15s",
+                    }}
+                      onClick={() => router.push(`/klienti/${k.id}?from=kupujuci`)}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = "#3B82F6"}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "#DBEAFE"; e.currentTarget.style.borderLeftColor = "#3B82F6"; }}
+                    >
                       <div style={{
-                        display: "flex", justifyContent: "space-between", alignItems: "center",
-                        marginTop: "14px", paddingTop: "12px", borderTop: "1px solid var(--border)",
-                        gap: "6px",
-                      }}>
-                        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                          {new Date(obj.created_at as string).toLocaleDateString("sk")}
-                        </span>
-                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                          <button onClick={() => startEdit(obj)} style={{
-                            padding: "5px 10px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
-                            background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)", cursor: "pointer",
-                          }} title="Upraviť objednávku">
-                            ✎
-                          </button>
-                          <button onClick={() => deleteObjednavka(obj.id as string)} style={{
-                            padding: "5px 10px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
-                            background: "var(--bg-elevated)", color: "var(--danger)", border: "1px solid var(--border)", cursor: "pointer",
-                          }} title="Zmazať objednávku">
-                            🗑
-                          </button>
-                          {klient && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                router.push(`/klienti/${klient.id}?from=kupujuci`);
-                              }}
-                              style={{
-                                padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
-                                background: "var(--bg-elevated)", color: "var(--text-secondary)",
-                                border: "1px solid var(--border)", cursor: "pointer",
-                              }}
-                            >
-                              Karta
-                            </button>
-                          )}
-                          {matchingSummary?.[obj.id as string] ? (
-                            <MatchChip
-                              totalMatches={matchingSummary[obj.id as string].totalMatches}
-                              topScore={matchingSummary[obj.id as string].topScore}
-                              daysSinceCreated={matchingSummary[obj.id as string].daysSinceCreated}
-                              onClick={() => setDrawerObjId(obj.id as string)}
-                            />
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); router.push(`/nastroje?tab=matching&objednavka=${obj.id}`); }}
-                              style={{ padding: "5px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: "#F3F4F6", color: "#374151", border: "none", cursor: "pointer" }}
-                            >
-                              🎯 Zhody →
-                            </button>
-                          )}
+                        width: "40px", height: "40px", borderRadius: "50%",
+                        background: "#3B82F6", color: "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "13px", fontWeight: "700", flexShrink: 0,
+                      }}>{makeInitials(k.meno)}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>{k.meno}</div>
+                        <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                          {[k.telefon, meta].filter(Boolean).join(" · ") || "—"}
                         </div>
+                      </div>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }} onClick={e => e.stopPropagation()}>
+                        {matchingSummary?.[obj.id as string] ? (
+                          <MatchChip
+                            totalMatches={matchingSummary[obj.id as string].totalMatches}
+                            topScore={matchingSummary[obj.id as string].topScore}
+                            daysSinceCreated={matchingSummary[obj.id as string].daysSinceCreated}
+                            onClick={() => setDrawerObjId(obj.id as string)}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/nastroje?tab=matching&objednavka=${obj.id}`)}
+                            style={{ padding: "5px 10px", borderRadius: "8px", fontSize: "11px", fontWeight: "600", background: "#F3F4F6", color: "#374151", border: "none", cursor: "pointer" }}
+                          >
+                            🎯 Zhody
+                          </button>
+                        )}
+                        <button onClick={() => startEdit(obj)} style={{
+                          padding: "5px 9px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                          background: "var(--bg-surface)", color: "var(--text-secondary)", border: "1px solid var(--border)", cursor: "pointer",
+                        }} title="Upraviť objednávku">✎</button>
+                        <button onClick={() => deleteObjednavka(obj.id as string)} style={{
+                          padding: "5px 9px", borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                          background: "var(--bg-surface)", color: "var(--danger)", border: "1px solid var(--border)", cursor: "pointer",
+                        }} title="Zmazať objednávku">🗑</button>
                       </div>
                     </div>
                   );
-                })}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* TAB: Klienti bez objednávky */}
-        {!loading && tab === "klienti" && (
-          <>
-            {bezObjednavky.length === 0 ? (
-              <div style={{
-                padding: "60px", textAlign: "center", color: "var(--text-muted)",
-                background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px",
-              }}>
-                <div style={{ fontSize: "48px", marginBottom: "16px" }}>👥</div>
-                <div style={{ fontSize: "16px", fontWeight: "600", marginBottom: "6px" }}>Všetci kupujúci majú objednávku</div>
-                <div style={{ fontSize: "13px" }}>Pridaj nového kupujúceho klienta</div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                {bezObjednavky.map(k => (
+                }
+                // === KUPUJÚCI BEZ OBJEDNÁVKY (biele) ===
+                return (
                   <div key={k.id} style={{
                     display: "flex", alignItems: "center", gap: "12px",
                     padding: "14px 16px", background: "var(--bg-surface)",
@@ -413,12 +312,10 @@ function KupujuciInner() {
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </>
+                );
+              })}
+          </div>
         )}
-
         {modal && <NewKlientModal open defaultTyp="kupujuci" showTypKlienta onClose={() => setModal(false)} onSaved={() => { loadData(); setModal(false); }} />}
         {drawerObjId && <ZhodyDrawer objednavkaId={drawerObjId} onClose={() => setDrawerObjId(null)} />}
       </div>
@@ -634,11 +531,3 @@ function KupujuciInner() {
   );
 }
 
-const DRUHY_NEHNUTELNOSTI_MAP: Record<string, string> = {
-  byt: "Byt",
-  rodinny_dom: "Rodinný dom",
-  pozemok: "Pozemok",
-  komercny: "Komerčná nehnuteľnosť",
-  komercne: "Komerčný",
-  ine: "Iné",
-};
