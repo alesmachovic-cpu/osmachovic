@@ -22,6 +22,20 @@ Test/staging: **https://dev.amgd.sk**
 - Keď niečo neviem alebo si neistý, povedz to priamo. Žiadne "isto budeš zvládať".
 - Som realitný maklér, nie programátor — vysvetľuj rozhodnutia rečou ktorá dáva zmysel realiťákovi.
 
+## 🔒 ZLATÉ PRAVIDLO: Bezpečnosť 100%, vždy, bez výnimky
+
+**Bezpečnostný baseline NESMIE klesnúť ani o jeden bod, ani na minútu.** Nie len pri security-súvisiacich commitoch — pri **každom** commite, **každej** zmene, **každej** novej feature. UI refactor, drobný fix, kozmetika — všetko prechádza tým istým gate-om.
+
+**Konkrétne to znamená:**
+- `./scripts/audit-all.sh` pred **každým** push-om (nie len pred merge-om).
+- Ak audit ukáže nový `✗` ktorý nie je v baseline → **commit/push sa NEUSKUTOČNÍ**. Stash zmeny, oprav root cause, audit znova, až potom push.
+- Nikdy nepoužívať `--no-verify`, `--no-gpg-sign`, `git commit --amend` na obídenie hooku alebo audit-u — ani keď je neskoro v noci, ani keď je to "len kozmetika".
+- Nikdy si nepovedz "tento failed audit je pre-existing, takže môj nový tiež môže projsť". Pre-existing fails sú TODO ktoré budeme riešiť, **nové fails sú zákaz commitu**.
+- Tri known gaps (HSTS, dev password protect, CSP nonce) sú evidované, ale **nepribúdajú** ďalšie gaps — to je pevný limit.
+- Pri novej API route / DB migrácii / session emitteri: vyžadované checks z "Security Regression Guardian Mode" sekcie sú **nezjednateľné**, nie nice-to-have.
+
+**Prečo:** Vianema má reálnych klientov, reálne osobné údaje (AML/KYC, OP, listy vlastníctva), reálne peniaze (provízie, faktúry). Jeden security breach = okamžitý koniec firmy + GDPR pokuty + osobná zodpovednosť Aleša ako CEO. Žiadna feature, žiadna deadline, žiadny "rýchly fix" toto neprebije.
+
 ## Workflow — DÔLEŽITÉ
 1. **Pri každej netriviálnej úlohe (3+ kroky) najprv vytvor plán** v `plan.md`.
 2. Pred kódom prečítaj existujúci kód, aby si pochopil kontext.
