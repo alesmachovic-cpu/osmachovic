@@ -91,13 +91,27 @@ const canEdit = useCanEdit(klient.makler_id);
 - analýzy trhu (read-only pre všetkých)
 
 ## Fázovanie (odporúčam tak)
-| Fáza | Čo | Čas | Risk |
-|------|-----|-----|------|
-| **F1** | Migrácia 087 + scope.ts update | 30 min | nízky |
-| **F2** | `/api/user-scope` + `useUserScope()` hook | 30 min | nízky |
-| **F3** | Migrácia 9 hardcoded "ales" | 1 h | stredný (testovať každý súbor) |
-| **F4** | Disabled-pattern na write tlačidlá | 1-2 h | stredný |
-| **F5** | Cross-tenant audit + manuál test 4 roly | 30 min | overenie |
+| Fáza | Čo | Čas | Risk | Stav |
+|------|-----|-----|------|------|
+| **F1** | Migrácia 087 + scope.ts update | 30 min | nízky | ✅ commit 9ec26e8 |
+| **F2** | `/api/user-scope` + `useUserScope()` hook | 30 min | nízky | ✅ commit 2e31fa9 |
+| **F3** | Migrácia 9 hardcoded "ales" | 1 h | stredný (testovať každý súbor) | ✅ commit bdd2259 |
+| **F4** | Disabled-pattern na write tlačidlá | 1-2 h | stredný | ✅ commit 20a81d7 |
+| **F5** | Cross-tenant audit + manuál test 4 roly | 30 min | overenie | ✅ 26/26 pass |
+
+## ✅ HOTOVÉ — Aleš teraz manuálne testuje
+Test plán (4 roly × scénáre):
+1. **Ako admin (ty / super_admin):** otvor klienta iného makléra → musí vidieť VŠETKY akcie, žiadny banner
+2. **Ako makler bez priradenia:** otvor klienta iného makléra → musí vidieť **žltý banner** + akcie sú **sivé/disabled**
+3. **Ako manager:** otvor klienta z TVOJEJ pobočky → musí vidieť všetky akcie. Otvor klienta z **inej pobočky** → banner + disabled
+4. **Vlastné kvitne stále:** otvor vlastného klienta → všetko ako predtým (žiadny banner, akcie aktívne)
+
+Kde testovať: **https://dev.amgd.sk/klienti/{id}**
+
+## Známe obmedzenia (mimo F1-F5 scope)
+- **Ostatné `{isOwner && ...}` sekcie** v klienti/[id] (status zmeny, poznámky, obhliadky, nábery) — banner ich vysvetľuje, ale ostávajú **skryté** namiesto disabled. Funkčne je to ekvivalent (cudzí maklér nemôže nič kliknúť), len UX je miernejší. Ak chceš všade plne disabled-pattern, povedz a urobím F6.
+- **Nehnuteľnosti / náberové listy / obhliadky / faktúry** detail pages — backend gating (canEditRecord) funguje, ale FE banner a disabled-pattern ešte nemajú. Ak chceš, F7.
+- **UI v Nastaveniach** na priradenie maklérov k pobočke (manažér 1:N) — endpoint a tabuľka pripravené, ale CRUD UI chýba. Ak chceš, F8.
 
 ## Otvorené otázky
 - [ ] **Súčasní manažéri:** Sú nejakí v DB? Ak áno, treba im pridať záznamy do `user_pobocky` ručne (skript v migrácii)?
