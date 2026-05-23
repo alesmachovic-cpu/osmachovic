@@ -37,7 +37,7 @@ export function HypotekaMiniCalc({ cena }: Props) {
 
   return (
     <section style={{
-      border: "1px solid #BFDBFE", background: "#EFF6FF",
+      border: "1px solid var(--border)", background: "var(--bg-elevated)",
       borderRadius: "12px", padding: "14px 16px",
     }}>
       <div style={{ fontSize: "13px", fontWeight: "700", color: "#1E3A5F", marginBottom: "12px" }}>

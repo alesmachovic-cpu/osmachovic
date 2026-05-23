@@ -146,7 +146,7 @@ export default function PridatHesloPage() {
               </div>
 
               {error && (
-                <div style={{ padding: "10px 12px", borderRadius: 10, background: "#FEF2F2", border: "1px solid #FECACA", color: "#DC2626", fontSize: 12 }}>
+                <div style={{ padding: "10px 12px", borderRadius: 10, background: "#FEF2F2", border: "1px solid var(--border)", color: "#DC2626", fontSize: 12 }}>
                   {error}
                 </div>
               )}

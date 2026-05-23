@@ -915,7 +915,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
             {checked && myMaklerUuid && duplicates.some(d => d.makler_id === myMaklerUuid) && (() => {
               const myHits = duplicates.filter(d => d.makler_id === myMaklerUuid);
               return (
-                <div style={{ marginTop: "8px", padding: "12px 14px", background: "#DBEAFE", borderRadius: "10px", border: "1px solid #60A5FA" }}>
+                <div style={{ marginTop: "8px", padding: "12px 14px", background: "var(--bg-elevated)", borderRadius: "10px", border: "1px solid #60A5FA" }}>
                   <div style={{ fontSize: "12px", fontWeight: "700", color: "#1E40AF", marginBottom: "6px" }}>
                     ℹ️ Toto je {myHits.length === 1 ? "tvoj existujúci klient" : "tvoj existujúci klient (viac zhôd)"}
                   </div>
@@ -944,7 +944,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
               );
             })()}
             {checked && duplicates.some(d => d.status === "realitna_kancelaria" || d.status === "nechce_rk") && (
-              <div style={{ marginTop: "8px", padding: "10px 12px", background: "#FEE2E2", borderRadius: "8px", border: "1px solid #EF4444", display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ marginTop: "8px", padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: "8px", border: "1px solid #EF4444", display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{ fontSize: "20px" }}>⚠️</span>
                 <div style={{ fontSize: "12px", color: "#991B1B", fontWeight: 600, lineHeight: 1.4 }}>
                   Pozor: toto číslo patrí <strong>realitnej kancelárii</strong>, nie súkromnému predajcovi.
@@ -952,7 +952,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
               </div>
             )}
             {checked && dupLevel === "warning" && (
-              <div style={{ marginTop: "8px", padding: "10px 12px", background: "#FEF3C7", borderRadius: "8px", border: "1px solid #F59E0B" }}>
+              <div style={{ marginTop: "8px", padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: "8px", border: "1px solid var(--border)" }}>
                 <div style={{ fontSize: "12px", fontWeight: "600", color: "#92400E", marginBottom: "6px" }}>⚠️ Rovnaké číslo, iné údaje</div>
                 {duplicates.map(d => (
                   <div key={d.id} style={{ fontSize: "12px", color: "#92400E", padding: "4px 8px", background: "rgba(245,158,11,0.08)", borderRadius: "6px", marginBottom: "3px" }}>
@@ -962,7 +962,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
               </div>
             )}
             {checked && dupLevel === "critical" && (
-              <div style={{ marginTop: "8px", padding: "10px 12px", background: "#FEE2E2", borderRadius: "8px", border: "1px solid #EF4444" }}>
+              <div style={{ marginTop: "8px", padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: "8px", border: "1px solid #EF4444" }}>
                 <div style={{ fontSize: "12px", fontWeight: "700", color: "#991B1B", marginBottom: "4px" }}>🚨 ÚPLNÁ DUPLICITA</div>
                 <div style={{ fontSize: "11px", color: "#991B1B", marginBottom: "6px" }}>Klient bude <strong>neaktívny</strong> kým ho manažér neschváli.</div>
                 {duplicates.map(d => (
@@ -998,7 +998,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
               {emailWarning && (
                 <div style={{
                   marginTop: "6px", padding: "6px 10px", borderRadius: "6px",
-                  background: "#FEF3C7", border: "1px solid #FDE68A", color: "#92400E",
+                  background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "#92400E",
                   fontSize: "11px", lineHeight: 1.4,
                 }}>
                   ⚠️ {emailWarning}
@@ -1038,7 +1038,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
             const hasOdkaz = odkaz.trim().length > 0;
             return (
               <div style={{
-                background: "#FFFBEB", border: "1px solid #F59E0B", borderRadius: "10px",
+                background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px",
                 padding: "12px 14px", display: "flex", flexDirection: "column", gap: "8px",
               }}>
                 <div style={{ fontWeight: "600", fontSize: "13px", color: "#92400E" }}>
@@ -1237,7 +1237,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
 
         {/* Error */}
         {saveError && (
-          <div style={{ marginTop: "16px", padding: "10px 14px", background: "#FEE2E2", borderRadius: "8px", fontSize: "13px", color: "#991B1B", fontWeight: "500" }}>
+          <div style={{ marginTop: "16px", padding: "10px 14px", background: "var(--bg-elevated)", borderRadius: "8px", fontSize: "13px", color: "#991B1B", fontWeight: "500" }}>
             ❌ {saveError}
           </div>
         )}
@@ -1245,7 +1245,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
         {/* Confirm — existujúci klient z lokalita autocomplete */}
         {lokalitaKlientConfirm && (
           <div style={{
-            marginTop: "16px", padding: "16px", background: "#EFF6FF",
+            marginTop: "16px", padding: "16px", background: "var(--bg-elevated)",
             border: "1px solid #3B82F6", borderRadius: "12px",
           }}>
             <div style={{ fontSize: "14px", fontWeight: "600", color: "#1E40AF", marginBottom: "6px" }}>

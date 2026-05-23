@@ -159,7 +159,7 @@ export default function SecuritySettingsPage() {
             <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 12, lineHeight: 1.6 }}>
               <strong>Ulož tieto backup kódy.</strong> Každý funguje raz. Použiješ ich ak stratíš telefón. Po zatvorení tejto stránky ich už neuvidíš.
             </p>
-            <div style={{ background: "#FFF8E1", border: "1px solid #FCD34D", borderRadius: 10, padding: 16, marginBottom: 16 }}>
+            <div style={{ background: "#FFF8E1", border: "1px solid var(--border)", borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, fontFamily: "ui-monospace, monospace", fontSize: 14 }}>
                 {backupCodes.map((c) => <div key={c}>{c}</div>)}
               </div>

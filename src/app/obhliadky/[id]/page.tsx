@@ -190,7 +190,7 @@ export default function ObhliadkaDetailPage() {
           </div>
         )}
 
-        <div style={{ padding: "14px 16px", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: "10px", marginBottom: "16px", fontSize: "12px", color: "#92400E", lineHeight: 1.5 }}>
+        <div style={{ padding: "14px 16px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px", marginBottom: "16px", fontSize: "12px", color: "#92400E", lineHeight: 1.5 }}>
           <strong>Vyhlásenie kupujúceho:</strong> Týmto potvrdzujem, že nehnuteľnosť som obhliadol/a v sprievode realitného makléra
           spoločnosti VIANEMA. Beriem na vedomie, že akékoľvek ďalšie rokovanie ohľadom predaja tejto nehnuteľnosti budem viesť výhradne
           prostredníctvom tejto realitnej kancelárie.
@@ -230,7 +230,7 @@ export default function ObhliadkaDetailPage() {
         )}
         {isPodpisana && obhliadka.gdpr_consent && (
           <div style={{
-            padding: "10px 14px", background: "#ECFDF5", border: "1px solid #A7F3D0",
+            padding: "10px 14px", background: "var(--bg-elevated)", border: "1px solid var(--border)",
             borderRadius: "10px", marginBottom: "16px", fontSize: "11px", color: "#065F46",
           }}>
             ✓ GDPR súhlas udelený {obhliadka.gdpr_consent_at ? new Date(obhliadka.gdpr_consent_at).toLocaleString("sk") : ""} ·
@@ -298,7 +298,7 @@ export default function ObhliadkaDetailPage() {
         </div>
       )}
 
-      {error && <div style={{ padding: "12px 16px", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "10px", fontSize: "13px", color: "#B91C1C", marginBottom: "12px" }}>⚠️ {error}</div>}
+      {error && <div style={{ padding: "12px 16px", background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "10px", fontSize: "13px", color: "#B91C1C", marginBottom: "12px" }}>⚠️ {error}</div>}
       {sentMsg && <div style={{ padding: "12px 16px", background: "#DCFCE7", border: "1px solid #86EFAC", borderRadius: "10px", fontSize: "13px", color: "#166534", marginBottom: "12px" }}>{sentMsg}</div>}
     </div>
   );

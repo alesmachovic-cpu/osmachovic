@@ -493,7 +493,7 @@ function KupujuciInner() {
         padding: "48px 32px", textAlign: "center",
       }}>
         <div style={{
-          width: "80px", height: "80px", borderRadius: "50%", background: "#F0FDF4",
+          width: "80px", height: "80px", borderRadius: "50%", background: "var(--bg-elevated)",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: "36px", margin: "0 auto 24px", border: "3px solid #BBF7D0",
         }}>✓</div>

@@ -142,7 +142,7 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
 
 
       {lv && canEdit && (!nameMatches || !locMatches) && (
-        <div style={{ marginTop: "12px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "10px", padding: "14px" }}>
+        <div style={{ marginTop: "12px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px" }}>
           <div style={{ fontSize: "13px", fontWeight: 700, color: "#92400E", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
             ⚠️ Údaje klienta sa nezhodujú s LV
           </div>
@@ -152,7 +152,7 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
                 Meno: <strong>{klientMeno}</strong> → vlastník z LV:
               </span>
               <select value={selectedOwner} onChange={(e) => setSelectedOwner(e.target.value)}
-                style={{ padding: "4px 8px", fontSize: "12px", borderRadius: "6px", border: "1px solid #FDE68A", background: "#fff", color: "#92400E" }}>
+                style={{ padding: "4px 8px", fontSize: "12px", borderRadius: "6px", border: "1px solid var(--border)", background: "#fff", color: "#92400E" }}>
                 {ownerNames.map((n, i) => <option key={i} value={n}>{n}</option>)}
               </select>
               <button
@@ -1197,7 +1197,7 @@ export default function KlientDetailPage() {
                 await loadAll().catch(() => {});
               }} style={{
                 padding: "9px 14px", background: "var(--bg-surface)", color: "#B91C1C",
-                border: "1px solid #FECACA", borderRadius: "10px", fontSize: "12px",
+                border: "1px solid var(--border)", borderRadius: "10px", fontSize: "12px",
                 fontWeight: "600", cursor: "pointer", ...lockSt,
               }} title="Právo na zabudnutie podľa GDPR čl. 17">
                 Anonymizovať (GDPR)
@@ -1241,7 +1241,7 @@ export default function KlientDetailPage() {
         return (
           <div style={{
             marginBottom: "16px", padding: "14px 18px",
-            background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "12px",
+            background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "12px",
             display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap",
           }}>
             <span style={{ fontSize: "20px" }}>⚠️</span>
@@ -1445,7 +1445,7 @@ export default function KlientDetailPage() {
                   loadAll();
                 }} style={{
                   padding: "4px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "700",
-                  background: "#FEE2E2", color: "#991B1B", border: "none", cursor: "pointer",
+                  background: "var(--bg-elevated)", color: "#991B1B", border: "none", cursor: "pointer",
                 }}>Odstrániť</button>
               )}
             </div>
@@ -1606,7 +1606,7 @@ export default function KlientDetailPage() {
         <div style={{
           ...cardSt, marginBottom: "20px", padding: "14px 20px",
           background: "linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)",
-          border: "1px solid #F59E0B",
+          border: "1px solid var(--border)",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <span style={{ fontSize: "20px" }}>📄</span>
@@ -2593,7 +2593,7 @@ export default function KlientDetailPage() {
                             body: JSON.stringify({ user_id: user?.id }),
                           });
                           await loadAll();
-                        }} style={{ padding: "6px 12px", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "#991B1B", cursor: "pointer" }}>
+                        }} style={{ padding: "6px 12px", background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "12px", fontWeight: "600", color: "#991B1B", cursor: "pointer" }}>
                           🗑 Zmazať
                         </button>
                       )}
@@ -2743,7 +2743,7 @@ export default function KlientDetailPage() {
                   }}>
                     <div style={{
                       width: "40px", height: "40px", borderRadius: "10px",
-                      background: "#ECFDF5", display: "flex", alignItems: "center",
+                      background: "var(--bg-elevated)", display: "flex", alignItems: "center",
                       justifyContent: "center", fontSize: "18px", flexShrink: 0,
                     }}>📋</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -3442,7 +3442,7 @@ export default function KlientDetailPage() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
           onClick={() => setShowSpolupracaModal(false)}>
           <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-surface)", borderRadius: "20px", padding: "32px", maxWidth: "400px", width: "100%", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
-            <div style={{ width: "56px", height: "56px", borderRadius: "50%", background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", margin: "0 auto 16px", border: "2px solid #BFDBFE" }}>🤝</div>
+            <div style={{ width: "56px", height: "56px", borderRadius: "50%", background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", margin: "0 auto 16px", border: "2px solid #BFDBFE" }}>🤝</div>
             <h2 style={{ fontSize: "18px", fontWeight: "700", color: "var(--text-primary)", margin: "0 0 4px" }}>Pridať spoluprácu</h2>
             <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 20px" }}>
               Vyberte maklera a nastavte jeho podiel z provízie
@@ -3890,7 +3890,7 @@ function ObhliadkaModal({
         </label>
 
         {error && (
-          <div style={{ marginBottom: "12px", padding: "10px 12px", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "13px", color: "#B91C1C" }}>
+          <div style={{ marginBottom: "12px", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "13px", color: "#B91C1C" }}>
             ⚠️ {error}
           </div>
         )}

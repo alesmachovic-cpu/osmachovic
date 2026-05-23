@@ -236,12 +236,12 @@ function GoogleNotConnectedBanner({ userId }: { userId?: string | null }) {
   return (
     <Link href="/nastavenia" prefetch={false} style={{
       display: "block", margin: "0 12px 8px", padding: "10px 12px",
-      borderRadius: "8px", background: "var(--warning-light)",
-      border: "1px solid var(--warning)", color: "var(--warning)",
+      borderRadius: "8px", background: "var(--bg-elevated)",
+      border: "1px solid var(--border)", color: "var(--text-secondary)",
       fontSize: "11px", fontWeight: 600, lineHeight: 1.4, textDecoration: "none",
     }}>
-      ⚠️ Google nepripojený<br />
-      <span style={{ fontWeight: 400, color: "var(--text-secondary)" }}>
+      Google nepripojený<br />
+      <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>
         Pripomienky a obhliadky sa nepridajú do kalendára. Kliknutím prejdi do Nastavení.
       </span>
     </Link>

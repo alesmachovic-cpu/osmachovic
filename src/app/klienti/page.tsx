@@ -533,12 +533,12 @@ function KlientiContent() {
                     <div style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                       <span>{k.lokalita || "—"} · {new Date(k.created_at).toLocaleDateString("sk")}</span>
                       {(klientCounts[k.id]?.obhliadky ?? 0) > 0 && (
-                        <span style={{ background: "#EFF6FF", color: "#2563EB", borderRadius: "99px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>
+                        <span style={{ background: "var(--bg-elevated)", color: "#2563EB", borderRadius: "99px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>
                           {klientCounts[k.id].obhliadky} obl.
                         </span>
                       )}
                       {(klientCounts[k.id]?.nabery ?? 0) > 0 && (
-                        <span style={{ background: "#F0FDF4", color: "#16A34A", borderRadius: "99px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>
+                        <span style={{ background: "var(--bg-elevated)", color: "#16A34A", borderRadius: "99px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>
                           {klientCounts[k.id].nabery} náb.
                         </span>
                       )}
@@ -645,7 +645,7 @@ function KlientiContent() {
                       fetchKlienti();
                     }} style={{
                       padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
-                      background: "#FEE2E2", color: "#991B1B", border: "none", cursor: "pointer",
+                      background: "var(--bg-elevated)", color: "#991B1B", border: "none", cursor: "pointer",
                     }}>🗑</button>
                   )}
                 </div>

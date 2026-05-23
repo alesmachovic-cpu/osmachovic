@@ -170,7 +170,7 @@ function EventDetailModal({ event, onClose, onDelete, obhliadkaIdByEvent }: {
           {/* Location */}
           {event.location && (
             <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", marginBottom: "16px" }}>
-              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#FEF3C7", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", flexShrink: 0 }}>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "var(--bg-elevated)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", flexShrink: 0 }}>
                 📍
               </div>
               <div>
@@ -215,8 +215,8 @@ function EventDetailModal({ event, onClose, onDelete, obhliadkaIdByEvent }: {
             <a
               href={`/obhliadky/${obhliadkaId}`}
               style={{
-                display: "block", padding: "12px 16px", background: "#EFF6FF",
-                border: "1px solid #BFDBFE", borderRadius: "10px", marginBottom: "12px",
+                display: "block", padding: "12px 16px", background: "var(--bg-elevated)",
+                border: "1px solid var(--border)", borderRadius: "10px", marginBottom: "12px",
                 fontSize: "13px", fontWeight: "600", color: "#1D4ED8",
                 textAlign: "center", textDecoration: "none",
               }}
@@ -242,7 +242,7 @@ function EventDetailModal({ event, onClose, onDelete, obhliadkaIdByEvent }: {
             ) : (
               <>
                 <button onClick={() => { onDelete(event.id); onClose(); }} style={{
-                  padding: "10px 16px", background: "#FEE2E2", color: "#DC2626",
+                  padding: "10px 16px", background: "var(--bg-elevated)", color: "#DC2626",
                   border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
                 }}>
                   Zmazať

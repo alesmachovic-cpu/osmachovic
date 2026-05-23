@@ -186,8 +186,8 @@ export default function MatchingPage() {
 
       {(focusObjednavkaId || focusKlientId) && (
         <div style={{
-          marginBottom: "16px", padding: "10px 14px", background: "#EFF6FF",
-          border: "1px solid #BFDBFE", borderRadius: "10px",
+          marginBottom: "16px", padding: "10px 14px", background: "var(--bg-elevated)",
+          border: "1px solid var(--border)", borderRadius: "10px",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
         }}>
           <span style={{ fontSize: "13px", color: "#1D4ED8" }}>
@@ -201,7 +201,7 @@ export default function MatchingPage() {
             }
           }} style={{
             padding: "5px 12px", fontSize: "12px", fontWeight: "600",
-            background: "#fff", color: "#1D4ED8", border: "1px solid #BFDBFE",
+            background: "#fff", color: "#1D4ED8", border: "1px solid var(--border)",
             borderRadius: "8px", cursor: "pointer",
           }}>
             Zrušiť filter

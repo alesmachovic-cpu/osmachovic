@@ -54,7 +54,7 @@ export function BillingPanel({ currentPlan, isSuspended, hasStripeCustomer }: Pr
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       {isSuspended && (
         <div style={{
-          background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "10px",
+          background: "#FEF2F2", border: "1px solid var(--border)", borderRadius: "10px",
           padding: "14px 16px", fontSize: "13px", color: "#991B1B",
         }}>
           Váš účet je pozastavený z dôvodu neúspešnej platby. Obnovte predplatné nižšie.
@@ -63,7 +63,7 @@ export function BillingPanel({ currentPlan, isSuspended, hasStripeCustomer }: Pr
 
       {error && (
         <div style={{
-          background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "10px",
+          background: "#FEF2F2", border: "1px solid var(--border)", borderRadius: "10px",
           padding: "12px 16px", fontSize: "13px", color: "#991B1B",
         }}>
           {error}

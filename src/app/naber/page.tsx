@@ -664,8 +664,8 @@ function NaberPageContent() {
         {parentNaberakId && (
           <div style={{
             maxWidth: "720px", marginBottom: "16px",
-            padding: "12px 16px", background: "#FEF3C7",
-            border: "1px solid #F59E0B", borderRadius: "12px",
+            padding: "12px 16px", background: "var(--bg-elevated)",
+            border: "1px solid var(--border)", borderRadius: "12px",
             fontSize: "13px", color: "#92400E",
           }}>
             <strong>📝 Dodatok k náberáku</strong><br />
@@ -729,7 +729,7 @@ function NaberPageContent() {
         padding: "48px 32px", textAlign: "center",
       }}>
         <div style={{
-          width: "80px", height: "80px", borderRadius: "50%", background: "#F0FDF4",
+          width: "80px", height: "80px", borderRadius: "50%", background: "var(--bg-elevated)",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: "36px", margin: "0 auto 24px", border: "3px solid #BBF7D0",
         }}>✓</div>

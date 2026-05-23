@@ -92,7 +92,7 @@ export default function LinkGoogleBanner() {
     <div style={{
       margin: "0 0 20px",
       background: "linear-gradient(135deg, #EFF6FF 0%, #F0F9FF 100%)",
-      border: "1px solid #BFDBFE",
+      border: "1px solid var(--border)",
       borderRadius: "16px",
       padding: "20px 24px",
       display: "flex", gap: "18px", alignItems: "flex-start",

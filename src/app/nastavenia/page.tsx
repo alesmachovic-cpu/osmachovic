@@ -688,7 +688,7 @@ export default function NastaveniaPage() {
           ) : googleStatus.connected ? (
             <div style={{
               padding: "20px", borderRadius: "12px",
-              background: "#F0FDF4", border: "1px solid #BBF7D0",
+              background: "var(--bg-elevated)", border: "1px solid #BBF7D0",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
                 <div style={{
@@ -723,7 +723,7 @@ export default function NastaveniaPage() {
 
               <button onClick={handleDisconnectGoogle} style={{
                 padding: "8px 16px", background: "transparent", color: "#DC2626",
-                border: "1px solid #FECACA", borderRadius: "8px",
+                border: "1px solid var(--border)", borderRadius: "8px",
                 fontSize: "12px", fontWeight: "600", cursor: "pointer",
               }}>
                 Odpojiť Google účet

@@ -35,7 +35,7 @@ export default function SlaTimer({ klient, hasInzerat }: { klient: KlientLike; h
     return (
       <div style={{
         marginBottom: "16px", padding: "12px 16px",
-        background: "#ECFDF5", border: "1px solid #A7F3D0", borderRadius: "10px",
+        background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px",
         fontSize: "13px", color: "#065F46",
       }}>
         Klient je <strong>voľný</strong> — ktorýkoľvek maklér ho môže prebrať v sekcii „Voľní klienti".
@@ -48,7 +48,7 @@ export default function SlaTimer({ klient, hasInzerat }: { klient: KlientLike; h
     return (
       <div style={{
         marginBottom: "16px", padding: "12px 16px",
-        background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "10px",
+        background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "10px",
         fontSize: "13px", color: "#991B1B",
       }}>
         SLA prekročené 72h — manažér rozhoduje (presunutie / napomenutie).
@@ -61,7 +61,7 @@ export default function SlaTimer({ klient, hasInzerat }: { klient: KlientLike; h
     return (
       <div style={{
         marginBottom: "16px", padding: "12px 16px",
-        background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: "10px",
+        background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px",
         fontSize: "13px", color: "#92400E",
       }}>
         Pozor: SLA prekročené 48h bez inzerátu. Vytvor inzerát do 24h, inak rozhoduje manažér.

@@ -70,8 +70,8 @@ export default function KlientskaZonaPage() {
       <div
         style={{
           padding: "12px 20px",
-          background: "#FEF3C7",
-          border: "1px solid #FDE68A",
+          background: "var(--bg-elevated)",
+          border: "1px solid var(--border)",
           borderRadius: "10px",
           marginBottom: "20px",
           display: "flex",
@@ -170,7 +170,7 @@ export default function KlientskaZonaPage() {
                     fontSize: "12px",
                     fontWeight: "600",
                     color: "#059669",
-                    background: "#F0FDF4",
+                    background: "var(--bg-elevated)",
                     border: "1px solid #BBF7D0",
                   }}
                 >

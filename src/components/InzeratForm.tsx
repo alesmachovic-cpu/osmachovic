@@ -35,7 +35,7 @@ function Tog({ on, set, label }: { on: boolean; set: (v: boolean) => void; label
 function Progress({ active, text }: { active: boolean; text: string }) {
   if (!active) return null;
   return (
-    <div style={{ padding: "12px 20px", background: "#EFF6FF", borderRadius: "10px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "10px" }}>
+    <div style={{ padding: "12px 20px", background: "var(--bg-elevated)", borderRadius: "10px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "10px" }}>
       <div style={{ width: "16px", height: "16px", border: "2px solid #93C5FD", borderTopColor: "#3B82F6", borderRadius: "50%", animation: "spin 0.6s linear infinite", flexShrink: 0 }} />
       <span style={{ fontSize: "13px", fontWeight: "500", color: "#1D4ED8" }}>{text}</span>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes bounce{0%,60%,100%{transform:translateY(0) scale(.85);opacity:.3}30%{transform:translateY(-6px) scale(1);opacity:1}}@keyframes wiggle{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}@keyframes fade{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}`}</style>
@@ -2237,7 +2237,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
       {saved && (
         <div style={{
           position: "fixed", top: "20px", right: "20px", zIndex: 9999,
-          padding: "14px 18px", background: "#F0FDF4",
+          padding: "14px 18px", background: "var(--bg-elevated)",
           border: "1px solid #86EFAC", borderRadius: "12px", fontSize: "13px",
           color: "#166534", boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
         }}>

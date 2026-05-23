@@ -18,7 +18,7 @@ export function ProviziaMiniCalc({ cena, defaultSadzba = 3, defaultNaklady = 500
 
   return (
     <section style={{
-      border: "1px solid #A7F3D0", background: "#ECFDF5",
+      border: "1px solid var(--border)", background: "var(--bg-elevated)",
       borderRadius: "12px", padding: "14px 16px",
     }}>
       <div style={{ fontSize: "13px", fontWeight: "700", color: "#065F46", marginBottom: "12px" }}>
