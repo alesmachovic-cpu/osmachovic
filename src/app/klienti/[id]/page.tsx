@@ -1382,8 +1382,9 @@ export default function KlientDetailPage() {
                 { value: "caka_na_hypoteku", label: "Čaká na hypotéku" },
                 { value: "odlozene", label: "Odložené" },
                 { value: "nereaguje", label: "Nereaguje" },
+                { value: "turista", label: "Turista" },
                 { value: "realitna_kancelaria", label: "Realitná kancelária" },
-                { value: "uz_predal", label: "Už predal" },
+                { value: "uz_kupil", label: "Už kúpil" },
               ];
               const predavajuciStatusy = [
                 { value: "aktivny", label: "Aktívny" },
