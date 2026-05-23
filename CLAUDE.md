@@ -165,6 +165,11 @@ VAPID_PRIVATE_KEY                # web-push
 - **URL generátory:** Nikdy nepoužívaj `process.env.VERCEL_ENV === "production"` na rozhodnutie medzi `vianema.amgd.sk` vs `dev.amgd.sk`. Dev je samostatný Vercel projekt (`vianema-dev`) deployovaný ako `target=production` → `VERCEL_ENV === "production"` je `true` aj na dev. Vždy použi `request.headers.get("host")` + `x-forwarded-proto`. Whitelist hostov rieši `middleware.ts` (`ALLOWED_HOSTS`).
 - **PATCH endpointy s M1 re-auth gate:** Backend kontroluje `"role" in updates` (alebo iné sensitive pole) → spúšťa `requireReAuth`. Frontend MUSÍ posielať len **reálne zmenené polia**. Ak posielaš nezmenený `role` v body, spustí sa false-positive re-auth alert. Pattern: zostav `payload` postupne a sensitive polia pridávaj iba pri ich reálnej zmene.
 
+## Lessons learned (2026-05-22)
+- **Pracovný adresár NIE je Desktop.** Aktívny projekt žije v `/Users/alesmachovic/Code/os-machovic` (mimo iCloud). Desktop sync sa vypol 2026-05-22 a `~/Desktop/os-machovic` zmizla. Adresár `/Users/alesmachovic/os-machovic` je marcový boilerplate (11-bajtový CLAUDE.md, prázdne `src/`) — **NIE** je to projekt, nezamieňať. Po reset session: `cd /Users/alesmachovic/Code/os-machovic`, prečítaj `CLAUDE.md`, `ls plan*.md`, `git status`, `git log -5 --oneline` — neopytuj sa "kde je projekt".
+- **Plány rozdeľuj podľa domény, nie chronologicky.** Keď sa rieši viac súvisiacich vecí naraz (matching + kupujúci), maj **samostatný `plan-<doména>.md`** pre každú. `plan.md` je len pre aktuálny bug sweep. Zachová to fokus pri resetoch — pri otázke "kde sme skončili" stačí otvoriť relevantný plan-*.md a pokračovať. Spájať sa to dá až keď je každá doména hotová.
+- **Audit fails ≠ blocked commit ak sú pre-existing.** CLAUDE.md pravidlo 8 ("ak akýkoľvek ✗, NEROBí commit") platí len pre **regression**. Pred commitom: stash zmeny → spusti `audit-all.sh` na čistom stave (baseline) → unstash → spusti znova → porovnaj počty failov. Ak nepribudol nový fail, commit je OK. Vždy uveď baseline vs current počty fail-ov v commit message.
+
 ## 🔒 Security Regression Guardian Mode (active od 2026-05-21)
 
 CEO (Aleš) sa sústredí na nové features. Existujúci security baseline (**8/10 B+** podľa Opus 4.7 auditu, viď `security-audit/security-comparison-2026-05-21.jpg`) **NESMIE regresnúť** pri novom vývoji.
