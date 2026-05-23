@@ -1378,7 +1378,8 @@ export default function KlientDetailPage() {
             {(() => {
               const kupujuciStatusy = [
                 { value: "aktivny", label: "Aktívny" },
-                { value: "zaujem_o_konkretnu", label: "Záujem o konkrétnu" },
+                { value: "zaujem_konkretna_nasa", label: "Záujem — naša nehnuteľnosť" },
+                { value: "zaujem_konkretna_ina_rk", label: "Záujem — v inej RK" },
                 { value: "caka_na_hypoteku", label: "Čaká na hypotéku" },
                 { value: "odlozene", label: "Odložené" },
                 { value: "nereaguje", label: "Nereaguje" },
