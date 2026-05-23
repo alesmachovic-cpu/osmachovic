@@ -1569,12 +1569,27 @@ export default function KlientDetailPage() {
               }}>📰 Vytvoriť inzerát</button>
             )
           )}
-          {workflowStep === 3 && (
-            <button onClick={() => setShowObhliadkaModal(true)} style={{
-              marginTop: "14px", width: "100%", padding: "11px", background: "#374151", color: "#fff",
-              border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer",
-            }}>📅 Pridať obhliadku</button>
-          )}
+          {/* Pridať obhliadku — vždy viditeľné aby cudzí maklér vedel že obhliadka
+              je možná akcia (aj keď je disabled). Aktívne pre vlastníka pri workflowStep>=3. */}
+          {(klient.status as string) !== "uzavrety" && (() => {
+            const obhliadkaEnabled = isOwner && workflowStep >= 3;
+            return (
+              <button
+                disabled={!obhliadkaEnabled}
+                onClick={() => obhliadkaEnabled && setShowObhliadkaModal(true)}
+                title={!isOwner ? "Klient nie je tvoj — akcia je zakázaná" : (workflowStep < 3 ? "Najprv treba publikovať inzerát (workflowStep 3)" : "Naplánovať obhliadku")}
+                style={{
+                  marginTop: "14px", width: "100%", padding: "11px",
+                  background: obhliadkaEnabled ? "#374151" : "var(--bg-surface)",
+                  color: obhliadkaEnabled ? "#fff" : "var(--text-muted)",
+                  border: obhliadkaEnabled ? "none" : "1px solid var(--border)",
+                  borderRadius: "10px", fontSize: "13px", fontWeight: "600",
+                  cursor: obhliadkaEnabled ? "pointer" : "not-allowed",
+                  opacity: obhliadkaEnabled ? 1 : 0.5,
+                }}
+              >📅 Pridať obhliadku</button>
+            );
+          })()}
           {klient.datum_naberu && (
             <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
               📅 Termín náberu: {new Date(klient.datum_naberu).toLocaleString("sk", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
