@@ -1020,6 +1020,17 @@ export default function KlientDetailPage() {
         <span style={{ color: "var(--text-primary)", fontWeight: "600" }}>{klient.meno}</span>
       </div>
 
+      {!isOwner && klient && (
+        <div style={{
+          marginBottom: "16px", padding: "10px 14px", borderRadius: "10px",
+          background: "#FFFBEB", border: "1px solid #FDE68A",
+          color: "#92400E", fontSize: "13px", fontWeight: "500",
+          display: "flex", alignItems: "center", gap: "8px",
+        }}>
+          <span style={{ fontSize: "16px" }}>🔒</span>
+          <span>Tento klient nie je tvoj — len na čítanie. Akcie sú zakázané.</span>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "24px", flexWrap: "wrap" }}>
         <button onClick={() => router.push(backHref)} style={{
           width: "36px", height: "36px", borderRadius: "50%", border: "1px solid var(--border)",
@@ -1034,70 +1045,72 @@ export default function KlientDetailPage() {
             Všetky informácie a história
           </p>
         </div>
-        {isOwner ? (
+        {(() => {
+          const lockSt = isOwner ? {} : { opacity: 0.4, cursor: "not-allowed" as const, pointerEvents: "none" as const };
+          return (
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
             {/* Toggle typu klienta — predavajuci/kupujuci/oboje. Maklér môže
                 jednoducho doplniť alebo zúžiť rolu klienta bez nutnosti otvárať
                 úpravu. Tlačidlá sa menia podľa aktuálneho typu (jeden klik =
                 jedna logická akcia). */}
             {klient.typ === "predavajuci" && (
-              <button onClick={async () => {
+              <button disabled={!isOwner} onClick={async () => {
                 if (!confirm(`Doplniť ${klient.meno} aj ako kupujúceho?\n\nObjaví sa aj v sekcii Kupujúci.`)) return;
                 if (user?.id) await klientUpdate(user.id, klient.id, { typ: "oboje" });
                 loadAll();
               }} style={{
                 padding: "9px 14px", background: "#ECFDF5", color: "#065F46",
                 border: "1px solid #A7F3D0", borderRadius: "10px", fontSize: "13px",
-                fontWeight: "600", cursor: "pointer",
+                fontWeight: "600", cursor: "pointer", ...lockSt,
               }} title="Klient sa doplní aj ako kupujúci (zostane aj predávajúcim)">
                 + aj kupujúci
               </button>
             )}
             {klient.typ === "kupujuci" && (
-              <button onClick={async () => {
+              <button disabled={!isOwner} onClick={async () => {
                 if (!confirm(`Doplniť ${klient.meno} aj ako predávajúceho?\n\nObjaví sa aj v sekcii Klienti.`)) return;
                 if (user?.id) await klientUpdate(user.id, klient.id, { typ: "oboje" });
                 loadAll();
               }} style={{
                 padding: "9px 14px", background: "#EFF6FF", color: "#1E40AF",
                 border: "1px solid #BFDBFE", borderRadius: "10px", fontSize: "13px",
-                fontWeight: "600", cursor: "pointer",
+                fontWeight: "600", cursor: "pointer", ...lockSt,
               }} title="Klient sa doplní aj ako predávajúci (zostane aj kupujúcim)">
                 + aj predávajúci
               </button>
             )}
             {klient.typ === "oboje" && (
               <>
-                <button onClick={async () => {
+                <button disabled={!isOwner} onClick={async () => {
                   if (!confirm(`Nechať ${klient.meno} iba ako kupujúceho?\n\nZmizne zo sekcie Klienti.`)) return;
                   if (user?.id) await klientUpdate(user.id, klient.id, { typ: "kupujuci" });
                   loadAll();
                 }} style={{
                   padding: "9px 14px", background: "#ECFDF5", color: "#065F46",
                   border: "1px solid #A7F3D0", borderRadius: "10px", fontSize: "13px",
-                  fontWeight: "600", cursor: "pointer",
+                  fontWeight: "600", cursor: "pointer", ...lockSt,
                 }}>iba kupujúci</button>
-                <button onClick={async () => {
+                <button disabled={!isOwner} onClick={async () => {
                   if (!confirm(`Nechať ${klient.meno} iba ako predávajúceho?\n\nZmizne zo sekcie Kupujúci.`)) return;
                   if (user?.id) await klientUpdate(user.id, klient.id, { typ: "predavajuci" });
                   loadAll();
                 }} style={{
                   padding: "9px 14px", background: "#EFF6FF", color: "#1E40AF",
                   border: "1px solid #BFDBFE", borderRadius: "10px", fontSize: "13px",
-                  fontWeight: "600", cursor: "pointer",
+                  fontWeight: "600", cursor: "pointer", ...lockSt,
                 }}>iba predávajúci</button>
               </>
             )}
-            <button onClick={() => setEditModal(true)} style={{
+            <button disabled={!isOwner} onClick={() => setEditModal(true)} style={{
               padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)",
               border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px",
-              fontWeight: "600", cursor: "pointer",
+              fontWeight: "600", cursor: "pointer", ...lockSt,
             }}>
               ✏️ Upraviť
             </button>
             {/* Manuálne uvoľnenie klienta (vrátenie do voľného poolu) */}
             {!klient.je_volny && (klient as { anonymized_at?: string | null }).anonymized_at == null && (
-              <button onClick={async () => {
+              <button disabled={!isOwner} onClick={async () => {
                 if (!confirm(`Uvoľniť klienta ${klient.meno}? Stane sa voľným pre celú kanceláriu.`)) return;
                 if (user?.id) await klientUpdate(user.id, klient.id, {
                   je_volny: true,
@@ -1121,13 +1134,13 @@ export default function KlientDetailPage() {
               }} style={{
                 padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-secondary)",
                 border: "1px solid var(--border)", borderRadius: "10px", fontSize: "12px",
-                fontWeight: "600", cursor: "pointer",
+                fontWeight: "600", cursor: "pointer", ...lockSt,
               }} title="Vráti klienta do voľného poolu (môže si ho prebrať iný maklér)">
                 Uvoľniť klienta
               </button>
             )}
             {!(klient as { anonymized_at?: string | null }).anonymized_at && (
-              <button onClick={async () => {
+              <button disabled={!isOwner} onClick={async () => {
                 // 🔒 M1: re-auth modal namiesto blocking confirm()
                 const proof = await reAuth.prompt({
                   title: `Anonymizovať klienta ${klient.meno || ""}?`,
@@ -1159,7 +1172,7 @@ export default function KlientDetailPage() {
               }} style={{
                 padding: "9px 14px", background: "var(--bg-surface)", color: "#B91C1C",
                 border: "1px solid #FECACA", borderRadius: "10px", fontSize: "12px",
-                fontWeight: "600", cursor: "pointer",
+                fontWeight: "600", cursor: "pointer", ...lockSt,
               }} title="Právo na zabudnutie podľa GDPR čl. 17">
                 Anonymizovať (GDPR)
               </button>
@@ -1172,15 +1185,8 @@ export default function KlientDetailPage() {
               }}>Anonymizovaný {new Date((klient as { anonymized_at: string }).anonymized_at).toLocaleDateString("sk")}</span>
             )}
           </div>
-        ) : (
-          <div style={{
-            padding: "9px 14px", background: "#FEF3C7", color: "#92400E",
-            border: "1px solid #FDE68A", borderRadius: "10px", fontSize: "12px",
-            fontWeight: "600", display: "flex", alignItems: "center", gap: "6px",
-          }}>
-            🔒 Len na čítanie — klient iného makléra
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* SLA Timer banner — odpočítava do uvolnenia / SLA warningu */}
