@@ -62,7 +62,7 @@ export function HypotekaMiniCalc({ cena }: Props) {
         background: "var(--bg-surface)", borderRadius: "8px", padding: "10px 14px",
         fontSize: "13px", color: "var(--text-primary)",
       }}>
-        <span>📊 Mesačná splátka: <strong style={{ color: "#1D4ED8" }}>{fmt(mesacna)} €</strong></span>
+        <span>📊 Mesačná splátka: <strong style={{ color: "var(--text-secondary)" }}>{fmt(mesacna)} €</strong></span>
         <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
           Celkom: {fmt(celkom)} € · Úroky: {fmt(uroky)} €
         </span>

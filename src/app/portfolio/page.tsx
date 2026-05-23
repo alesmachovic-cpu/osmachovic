@@ -304,8 +304,8 @@ export default function Portfolio() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px", marginBottom: "20px" }} className="cards-grid">
         {([
           { key: "", label: "Celkovo", value: stats.celkovo, color: "#374151" },
-          { key: "aktivny", label: "Aktívne", value: stats.aktivne, color: "#16A34A" },
-          { key: "koncept", label: "Koncepty", value: stats.koncepty, color: "#D97706" },
+          { key: "aktivny", label: "Aktívne", value: stats.aktivne, color: "var(--text-primary)" },
+          { key: "koncept", label: "Koncepty", value: stats.koncepty, color: "var(--text-secondary)" },
           { key: "predany", label: "Predané", value: stats.predane, color: "#6B7280" },
           { key: "archivovany", label: "Archív", value: stats.archiv, color: "#9CA3AF" },
         ] as const).map(s => {

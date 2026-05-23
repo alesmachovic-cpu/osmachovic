@@ -190,7 +190,7 @@ export default function ObhliadkaDetailPage() {
           </div>
         )}
 
-        <div style={{ padding: "14px 16px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px", marginBottom: "16px", fontSize: "12px", color: "#92400E", lineHeight: 1.5 }}>
+        <div style={{ padding: "14px 16px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px", marginBottom: "16px", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
           <strong>Vyhlásenie kupujúceho:</strong> Týmto potvrdzujem, že nehnuteľnosť som obhliadol/a v sprievode realitného makléra
           spoločnosti VIANEMA. Beriem na vedomie, že akékoľvek ďalšie rokovanie ohľadom predaja tejto nehnuteľnosti budem viesť výhradne
           prostredníctvom tejto realitnej kancelárie.
@@ -216,7 +216,7 @@ export default function ObhliadkaDetailPage() {
               style={{ marginTop: "2px", cursor: gdprConsent ? "default" : "pointer", flexShrink: 0 }}
             />
             <span>
-              {gdprConsent && <strong style={{ color: "#065F46" }}>✓ Súhlas udelený · </strong>}
+              {gdprConsent && <strong style={{ color: "var(--text-primary)" }}>✓ Súhlas udelený · </strong>}
               Súhlasím so spracovaním mojich osobných údajov spoločnosťou Vianema s. r. o.
               v zmysle GDPR pre účely evidencie obhliadok. Plné znenie zásad spracovania
               nájdete v dokumente{" "}
@@ -231,11 +231,11 @@ export default function ObhliadkaDetailPage() {
         {isPodpisana && obhliadka.gdpr_consent && (
           <div style={{
             padding: "10px 14px", background: "var(--bg-elevated)", border: "1px solid var(--border)",
-            borderRadius: "10px", marginBottom: "16px", fontSize: "11px", color: "#065F46",
+            borderRadius: "10px", marginBottom: "16px", fontSize: "11px", color: "var(--text-primary)",
           }}>
             ✓ GDPR súhlas udelený {obhliadka.gdpr_consent_at ? new Date(obhliadka.gdpr_consent_at).toLocaleString("sk") : ""} ·
             {" "}<a href="/gdpr" target="_blank" rel="noopener noreferrer"
-              style={{ color: "#065F46", textDecoration: "underline" }}>Zásady spracovania</a>
+              style={{ color: "var(--text-primary)", textDecoration: "underline" }}>Zásady spracovania</a>
           </div>
         )}
 
@@ -298,7 +298,7 @@ export default function ObhliadkaDetailPage() {
         </div>
       )}
 
-      {error && <div style={{ padding: "12px 16px", background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "10px", fontSize: "13px", color: "#B91C1C", marginBottom: "12px" }}>⚠️ {error}</div>}
+      {error && <div style={{ padding: "12px 16px", background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "10px", fontSize: "13px", color: "var(--danger)", marginBottom: "12px" }}>⚠️ {error}</div>}
       {sentMsg && <div style={{ padding: "12px 16px", background: "#DCFCE7", border: "1px solid #86EFAC", borderRadius: "10px", fontSize: "13px", color: "#166534", marginBottom: "12px" }}>{sentMsg}</div>}
     </div>
   );

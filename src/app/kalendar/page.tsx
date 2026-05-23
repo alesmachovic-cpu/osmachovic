@@ -217,7 +217,7 @@ function EventDetailModal({ event, onClose, onDelete, obhliadkaIdByEvent }: {
               style={{
                 display: "block", padding: "12px 16px", background: "var(--bg-elevated)",
                 border: "1px solid var(--border)", borderRadius: "10px", marginBottom: "12px",
-                fontSize: "13px", fontWeight: "600", color: "#1D4ED8",
+                fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)",
                 textAlign: "center", textDecoration: "none",
               }}
             >

@@ -373,7 +373,7 @@ export default function NastaveniaPage() {
                 Uložiť profil
               </button>
               {maklerSaved && (
-                <span style={{ fontSize: "13px", color: "#065F46", fontWeight: "500" }}>Uložené</span>
+                <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: "500" }}>Uložené</span>
               )}
             </div>
           </div>
@@ -518,7 +518,7 @@ export default function NastaveniaPage() {
                 Uložiť vzory
               </button>
               {vzorSaved && (
-                <span style={{ fontSize: "13px", color: "#065F46", fontWeight: "500" }}>Uložené</span>
+                <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: "500" }}>Uložené</span>
               )}
             </div>
           </div>
@@ -599,7 +599,7 @@ export default function NastaveniaPage() {
               }}>
                 Uložiť ciele
               </button>
-              {saved && <span style={{ fontSize: "13px", color: "#065F46", fontWeight: "500" }}>Uložené</span>}
+              {saved && <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: "500" }}>Uložené</span>}
             </div>
           </div>
 
@@ -656,7 +656,7 @@ export default function NastaveniaPage() {
               }}>
                 Uložiť ceny
               </button>
-              {cenoSaved && <span style={{ fontSize: "13px", color: "#065F46", fontWeight: "500" }}>Uložené</span>}
+              {cenoSaved && <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: "500" }}>Uložené</span>}
             </div>
           </div>
           )}
@@ -698,7 +698,7 @@ export default function NastaveniaPage() {
                   fontSize: "18px",
                 }}>&#10003;</div>
                 <div>
-                  <div style={{ fontSize: "14px", fontWeight: "700", color: "#065F46" }}>Google účet pripojený</div>
+                  <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)" }}>Google účet pripojený</div>
                   <div style={{ fontSize: "12px", color: "#047857", marginTop: "2px" }}>{googleStatus.email || "Pripojený"}</div>
                 </div>
               </div>
@@ -715,7 +715,7 @@ export default function NastaveniaPage() {
                     textAlign: "center",
                   }}>
                     <div style={{ fontSize: "20px", marginBottom: "4px" }} dangerouslySetInnerHTML={{ __html: s.icon }} />
-                    <div style={{ fontSize: "12px", fontWeight: "700", color: "#065F46" }}>{s.label}</div>
+                    <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-primary)" }}>{s.label}</div>
                     <div style={{ fontSize: "10px", color: "#047857", marginTop: "2px" }}>{s.desc}</div>
                   </div>
                 ))}

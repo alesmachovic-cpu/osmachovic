@@ -15,8 +15,8 @@ interface Notif {
 }
 
 const TYPE_CONFIG: Record<string, { bg: string; border: string; color: string; icon: string }> = {
-  info: { bg: "#EFF6FF", border: "#BFDBFE", color: "#2563EB", icon: "ℹ️" },
-  warning: { bg: "#FEF3C7", border: "#FDE68A", color: "#D97706", icon: "⚠️" },
+  info: { bg: "#EFF6FF", border: "#BFDBFE", color: "var(--text-secondary)", icon: "ℹ️" },
+  warning: { bg: "#FEF3C7", border: "#FDE68A", color: "var(--text-secondary)", icon: "⚠️" },
   success: { bg: "#F0FDF4", border: "#BBF7D0", color: "#059669", icon: "✓" },
   action: { bg: "#FEF2F2", border: "#FECACA", color: "#DC2626", icon: "❗" },
   match: { bg: "#F5F3FF", border: "#DDD6FE", color: "#7C3AED", icon: "🔗" },

@@ -76,8 +76,8 @@ function deadlineChipStyle(deadline: string | null | undefined): React.CSSProper
   const d = new Date(deadline);
   const now = new Date();
   const diff = (d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-  if (diff < 0)   return { background: "var(--bg-elevated)", color: "#B91C1C", border: "1px solid #FCA5A5" };
-  if (diff <= 3)  return { background: "var(--bg-elevated)", color: "#92400E", border: "1px solid var(--border)" };
+  if (diff < 0)   return { background: "var(--bg-elevated)", color: "var(--danger)", border: "1px solid #FCA5A5" };
+  if (diff <= 3)  return { background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)" };
   return { background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" };
 }
 
@@ -172,7 +172,7 @@ function UlohaRow({
               href={uloha.drive_link}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ ...chipSt, background: "var(--bg-elevated)", color: "#1D4ED8", border: "1px solid var(--border)", textDecoration: "none" }}
+              style={{ ...chipSt, background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)", textDecoration: "none" }}
             >
               📁 Drive
             </a>
@@ -350,7 +350,7 @@ function NovyObchodModal({
         </div>
 
         {err && (
-          <div style={{ marginTop: "14px", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "13px", color: "#B91C1C" }}>
+          <div style={{ marginTop: "14px", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "13px", color: "var(--danger)" }}>
             ⚠️ {err}
           </div>
         )}

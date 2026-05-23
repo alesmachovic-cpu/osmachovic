@@ -113,10 +113,10 @@ export default function LinkGoogleBanner() {
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: "15px", fontWeight: 700, color: "#1E3A8A", marginBottom: "4px" }}>
+        <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
           Prepoj si Google účet
         </div>
-        <div style={{ fontSize: "13px", color: "#1E40AF", lineHeight: 1.55, marginBottom: "12px" }}>
+        <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.55, marginBottom: "12px" }}>
           Aby si mohol naplno využívať CRM, prepoj svoj Gmail účet. Získaš:
           <ul style={{ margin: "6px 0 0 16px", paddingLeft: 0, listStyle: "disc" }}>
             <li><strong>Synchronizáciu s Google Kalendárom</strong> — náberové stretnutia automaticky v kalendári</li>
@@ -152,7 +152,7 @@ export default function LinkGoogleBanner() {
             onClick={handleSkip}
             style={{
               height: "36px", padding: "0 14px",
-              background: "transparent", color: "#1E40AF",
+              background: "transparent", color: "var(--text-secondary)",
               border: "none", borderRadius: "10px",
               fontSize: "13px", fontWeight: 500, cursor: "pointer",
             }}

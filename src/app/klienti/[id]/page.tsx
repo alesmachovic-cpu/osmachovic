@@ -143,16 +143,16 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
 
       {lv && canEdit && (!nameMatches || !locMatches) && (
         <div style={{ marginTop: "12px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px", padding: "14px" }}>
-          <div style={{ fontSize: "13px", fontWeight: 700, color: "#92400E", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-secondary)", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
             ⚠️ Údaje klienta sa nezhodujú s LV
           </div>
           {!nameMatches && ownerNames.length > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
-              <span style={{ fontSize: "12px", color: "#92400E" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                 Meno: <strong>{klientMeno}</strong> → vlastník z LV:
               </span>
               <select value={selectedOwner} onChange={(e) => setSelectedOwner(e.target.value)}
-                style={{ padding: "4px 8px", fontSize: "12px", borderRadius: "6px", border: "1px solid var(--border)", background: "#fff", color: "#92400E" }}>
+                style={{ padding: "4px 8px", fontSize: "12px", borderRadius: "6px", border: "1px solid var(--border)", background: "#fff", color: "var(--text-secondary)" }}>
                 {ownerNames.map((n, i) => <option key={i} value={n}>{n}</option>)}
               </select>
               <button
@@ -169,7 +169,7 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
           )}
           {!locMatches && lvObec && (
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "12px", color: "#92400E" }}>
+              <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                 Lokalita: <strong>{klientLokalita}</strong> → z LV: <strong>{lvObec}</strong>
               </span>
               <button
@@ -226,7 +226,7 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
           {lvPravneVady && (
             <div style={{ fontSize: "13px", display: "flex", gap: "6px", alignItems: "flex-start" }}>
               <span style={{ color: "var(--text-muted)", minWidth: "80px", fontSize: "11px", fontWeight: "600", paddingTop: "2px" }}>ŤARCHY</span>
-              <span style={{ color: "#D97706" }}>{lvPravneVady}</span>
+              <span style={{ color: "var(--text-secondary)" }}>{lvPravneVady}</span>
             </div>
           )}
         </div>
@@ -1196,7 +1196,7 @@ export default function KlientDetailPage() {
                 } as typeof k) : k);
                 await loadAll().catch(() => {});
               }} style={{
-                padding: "9px 14px", background: "var(--bg-surface)", color: "#B91C1C",
+                padding: "9px 14px", background: "var(--bg-surface)", color: "var(--danger)",
                 border: "1px solid var(--border)", borderRadius: "10px", fontSize: "12px",
                 fontWeight: "600", cursor: "pointer", ...lockSt,
               }} title="Právo na zabudnutie podľa GDPR čl. 17">
@@ -1246,10 +1246,10 @@ export default function KlientDetailPage() {
           }}>
             <span style={{ fontSize: "20px" }}>⚠️</span>
             <div style={{ flex: 1, minWidth: "250px" }}>
-              <div style={{ fontSize: "13px", fontWeight: 700, color: "#92400E", marginBottom: "2px" }}>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-secondary)", marginBottom: "2px" }}>
                 Údaje klienta sa nezhodujú s LV
               </div>
-              <div style={{ fontSize: "12px", color: "#92400E" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
                 {!nameOk && <>Meno: <strong>{klient.meno}</strong> vs LV: <strong>{owners[0]}</strong>{owners.length > 1 ? ` (+${owners.length - 1})` : ""}</>}
                 {!nameOk && !locOk && <> · </>}
                 {!locOk && <>Lokalita: <strong>{klient.lokalita || "—"}</strong> vs LV: <strong>{obecLv}</strong></>}
@@ -1611,8 +1611,8 @@ export default function KlientDetailPage() {
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <span style={{ fontSize: "20px" }}>📄</span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: "#92400E" }}>List vlastníctva chýba</div>
-              <div style={{ fontSize: "12px", color: "#A16207" }}>
+              <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>List vlastníctva chýba</div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                 {lvUploading ? "Analyzujem LV..." : "Nahraj PDF alebo fotku LV"}
               </div>
             </div>
@@ -2099,26 +2099,26 @@ export default function KlientDetailPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
               {lokalitaText && (
                 <div>
-                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Lokalita</div>
-                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{lokalitaText}</div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Lokalita</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", marginTop: "2px" }}>{lokalitaText}</div>
                 </div>
               )}
               {druh && (
                 <div>
-                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Typ</div>
-                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{druh}</div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Typ</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", marginTop: "2px" }}>{druh}</div>
                 </div>
               )}
               {cenaDo != null && (
                 <div>
-                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Cena do</div>
-                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{Number(cenaDo).toLocaleString("sk")} €</div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Cena do</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", marginTop: "2px" }}>{Number(cenaDo).toLocaleString("sk")} €</div>
                 </div>
               )}
               {izby != null && (
                 <div>
-                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#1E40AF", textTransform: "uppercase", letterSpacing: "0.04em" }}>Izby</div>
-                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#1E3A8A", marginTop: "2px" }}>{String(izby)}</div>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Izby</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", marginTop: "2px" }}>{String(izby)}</div>
                 </div>
               )}
             </div>
@@ -2644,12 +2644,14 @@ export default function KlientDetailPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {obhliadky.map(o => {
                 const status = String(o.status || "planovana");
+                // Status chip-y neutralizované — len "Zrušená" má jemne červený akcent
+                // (legit negative signal). Ostatné rovnaké neutrálne sivé.
                 const statusCfg: Record<string, { bg: string; text: string; label: string }> = {
-                  planovana: { bg: "#FEF3C7", text: "#92400E", label: "Plánovaná" },
-                  prebehla: { bg: "#DBEAFE", text: "#1E40AF", label: "Prebehla" },
-                  obhliadka_zaujem: { bg: "#DCFCE7", text: "#16A34A", label: "Záujem" },
-                  obhliadka_bez_zaujmu: { bg: "#F3F4F6", text: "#6B7280", label: "Bez záujmu" },
-                  zrusena: { bg: "#FEE2E2", text: "#991B1B", label: "Zrušená" },
+                  planovana: { bg: "var(--bg-elevated)", text: "var(--text-secondary)", label: "Plánovaná" },
+                  prebehla: { bg: "var(--bg-elevated)", text: "var(--text-secondary)", label: "Prebehla" },
+                  obhliadka_zaujem: { bg: "var(--bg-elevated)", text: "var(--text-primary)", label: "Záujem" },
+                  obhliadka_bez_zaujmu: { bg: "var(--bg-elevated)", text: "var(--text-muted)", label: "Bez záujmu" },
+                  zrusena: { bg: "var(--danger-light)", text: "var(--danger)", label: "Zrušená" },
                 };
                 const sc = statusCfg[status] || statusCfg.planovana;
                 const dt = new Date(String(o.datum));
@@ -3890,7 +3892,7 @@ function ObhliadkaModal({
         </label>
 
         {error && (
-          <div style={{ marginBottom: "12px", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "13px", color: "#B91C1C" }}>
+          <div style={{ marginBottom: "12px", padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "8px", fontSize: "13px", color: "var(--danger)" }}>
             ⚠️ {error}
           </div>
         )}

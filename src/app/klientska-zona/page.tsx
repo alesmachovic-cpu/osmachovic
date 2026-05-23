@@ -81,10 +81,10 @@ export default function KlientskaZonaPage() {
       >
         <span style={{ fontSize: "16px" }}>&#9888;</span>
         <div>
-          <div style={{ fontSize: "13px", fontWeight: "600", color: "#92400E" }}>
+          <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>
             Toto je ukážka klientskej zóny
           </div>
-          <div style={{ fontSize: "12px", color: "#A16207" }}>
+          <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
             Náhľad toho, čo uvidí váš klient po prihlásení do portálu.
           </div>
         </div>

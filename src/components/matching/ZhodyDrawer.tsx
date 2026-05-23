@@ -11,8 +11,8 @@ type Props = {
 };
 
 function scoreStyle(score: number) {
-  if (score >= 80) return { color: "#065F46", bg: "#F0FDF4", dot: "🟢" };
-  if (score >= 50) return { color: "#92400E", bg: "#FFFBEB", dot: "🟡" };
+  if (score >= 80) return { color: "var(--text-primary)", bg: "#F0FDF4", dot: "🟢" };
+  if (score >= 50) return { color: "var(--text-secondary)", bg: "#FFFBEB", dot: "🟡" };
   return { color: "#374151", bg: "#F9FAFB", dot: "⚪" };
 }
 

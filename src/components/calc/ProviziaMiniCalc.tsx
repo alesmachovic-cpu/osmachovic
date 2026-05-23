@@ -21,7 +21,7 @@ export function ProviziaMiniCalc({ cena, defaultSadzba = 3, defaultNaklady = 500
       border: "1px solid var(--border)", background: "var(--bg-elevated)",
       borderRadius: "12px", padding: "14px 16px",
     }}>
-      <div style={{ fontSize: "13px", fontWeight: "700", color: "#065F46", marginBottom: "12px" }}>
+      <div style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "12px" }}>
         💰 Provízia z predaja ({fmt(cena)} €)
       </div>
       <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "10px", flexWrap: "wrap" }}>
@@ -55,7 +55,7 @@ export function ProviziaMiniCalc({ cena, defaultSadzba = 3, defaultNaklady = 500
       }}>
         <div style={{ color: "var(--text-secondary)" }}>Hrubá:<br /><strong style={{ color: "var(--text-primary)" }}>{fmt(hruba)} €</strong></div>
         <div style={{ color: "var(--text-muted)" }}>Náklady:<br /><span>−{fmt(naklady)} €</span></div>
-        <div style={{ color: "#065F46" }}>🟢 Čistá:<br /><strong>{fmt(cista)} €</strong></div>
+        <div style={{ color: "var(--text-primary)" }}>🟢 Čistá:<br /><strong>{fmt(cista)} €</strong></div>
       </div>
       <div style={{ textAlign: "right", fontSize: "11px", color: "var(--text-muted)", marginTop: "6px" }}>
         {pct.toFixed(2)} % z predajnej ceny

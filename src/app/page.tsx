@@ -533,8 +533,8 @@ export default function Dashboard() {
                 <div style={{ marginTop: "10px", padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: "8px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
-                      <div style={{ fontSize: "12px", color: "#92400E", fontWeight: "600" }}>{(found as Klient).meno}</div>
-                      <div style={{ fontSize: "11px", color: "#A16207", marginTop: "2px" }}>
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>{(found as Klient).meno}</div>
+                      <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
                         {(found as Klient).telefon} · {STATUS_LABELS[(found as Klient).status]}
                       </div>
                     </div>

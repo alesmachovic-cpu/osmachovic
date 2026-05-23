@@ -666,7 +666,7 @@ function NaberPageContent() {
             maxWidth: "720px", marginBottom: "16px",
             padding: "12px 16px", background: "var(--bg-elevated)",
             border: "1px solid var(--border)", borderRadius: "12px",
-            fontSize: "13px", color: "#92400E",
+            fontSize: "13px", color: "var(--text-secondary)",
           }}>
             <strong>📝 Dodatok k náberáku</strong><br />
             Originál náberáka sa nedá prepisovať — uloží sa samostatne ako dodatok ku existujúcej nehnuteľnosti.

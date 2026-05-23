@@ -704,7 +704,7 @@ function MonitorContent() {
                 </span>
                 <button
                   onClick={deleteSelected}
-                  style={{ ...S.btnSecondary, background: "var(--bg-elevated)", color: "#B91C1C", borderColor: "#FCA5A5", fontWeight: 600 }}
+                  style={{ ...S.btnSecondary, background: "var(--bg-elevated)", color: "var(--danger)", borderColor: "#FCA5A5", fontWeight: 600 }}
                 >
                   🗑️ Zmazať vybrané
                 </button>

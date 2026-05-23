@@ -902,11 +902,11 @@ function TabTim() {
       {/* Bulk invite toolbar */}
       {isAdmin && selectedInvites.size > 0 && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", marginBottom: "8px", borderRadius: "10px", background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
-          <span style={{ fontSize: "13px", color: "#1D4ED8", fontWeight: 600 }}>
+          <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: 600 }}>
             {selectedInvites.size} {selectedInvites.size === 1 ? "maklér vybraný" : "makléri vybraní"}
           </span>
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={() => setSelectedInvites(new Set())} style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#1D4ED8" }}>
+            <button onClick={() => setSelectedInvites(new Set())} style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)" }}>
               Zrušiť výber
             </button>
             <button disabled={bulkSending} onClick={async () => {
@@ -968,12 +968,12 @@ function TabTim() {
                   return (
                     <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                       {provRec?.percento != null && (
-                        <div title="Provízne %" style={{ padding: "3px 9px", borderRadius: 20, background: "var(--bg-elevated)", border: "1px solid #BBF7D0", fontSize: 12, fontWeight: 700, color: "#065F46" }}>
+                        <div title="Provízne %" style={{ padding: "3px 9px", borderRadius: 20, background: "var(--bg-elevated)", border: "1px solid #BBF7D0", fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>
                           {provRec.percento} %
                         </div>
                       )}
                       {provRec?.medziprovizia != null && provRec.medziprovizia > 0 && (
-                        <div title="Medziprovizia" style={{ padding: "3px 9px", borderRadius: 20, background: "var(--bg-elevated)", border: "1px solid var(--border)", fontSize: 12, fontWeight: 700, color: "#1D4ED8" }}>
+                        <div title="Medziprovizia" style={{ padding: "3px 9px", borderRadius: 20, background: "var(--bg-elevated)", border: "1px solid var(--border)", fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>
                           {provRec.medziprovizia} % ∑
                         </div>
                       )}
@@ -1040,7 +1040,7 @@ function TabTim() {
                         try { await navigator.clipboard.writeText(body.temp_password); } catch { /* ignore */ }
                         alert(`✅ Heslo resetované pre ${acc.name}\n\nDočasné heslo (skopírované do schránky):\n\n${body.temp_password}\n\nPošli ho maklerovi bezpečným kanálom.`);
                       } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
-                    }} style={{ padding: "5px 10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#92400E" }}>
+                    }} style={{ padding: "5px 10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)" }}>
                       🔑 Reset
                     </button>
                   )}
@@ -1055,7 +1055,7 @@ function TabTim() {
               {/* Pozvánkový odkaz */}
               {inviteLink?.userId === acc.id && (
                 <div style={{ padding: "12px 14px", borderTop: "1px solid #BBF7D0", background: "var(--bg-elevated)" }}>
-                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#065F46", marginBottom: "6px" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "6px" }}>
                     Odkaz na nastavenie hesla — skopíruj a pošli maklerovi (WhatsApp / SMS)
                   </div>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -1067,11 +1067,11 @@ function TabTim() {
                     }} disabled={inviteCopied} style={{ padding: "6px 12px", background: inviteCopied ? "#059669" : "#16A34A", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: inviteCopied ? "default" : "pointer", whiteSpace: "nowrap", transition: "background 0.2s" }}>
                       {inviteCopied ? "✓ Skopírované" : "Kopírovať"}
                     </button>
-                    <button onClick={() => setInviteLink(null)} style={{ padding: "6px 8px", background: "transparent", border: "1px solid #86EFAC", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#065F46" }}>
+                    <button onClick={() => setInviteLink(null)} style={{ padding: "6px 8px", background: "transparent", border: "1px solid #86EFAC", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-primary)" }}>
                       ✕
                     </button>
                   </div>
-                  <div style={{ fontSize: "11px", color: "#16A34A", marginTop: "4px" }}>Platí 7 dní.</div>
+                  <div style={{ fontSize: "11px", color: "var(--text-primary)", marginTop: "4px" }}>Platí 7 dní.</div>
                 </div>
               )}
 
