@@ -6,24 +6,40 @@ export const runtime = "nodejs";
 
 /**
  * POST /api/auth/google/match
- * Body: { email: string }
+ * Body: { supabase_jwt: string }
  *
- * Nájde CRM usera podľa Google emailu (login_email alebo email).
- * Volané z /auth/callback po Google OAuth — pred tým ako existuje session cookie.
- * Vracia len minimálne dáta + nastaví session cookie.
+ * Volané z /auth/callback po Google OAuth.
+ * Overí Supabase JWT (podpísaný Supabase Auth, nepodvrhuteľný),
+ * extrahuje verifikovaný email a nájde CRM usera (login_email alebo email).
+ * Nastaví crm_session cookie.
+ *
+ * BEZPEČNOSŤ: Predtým endpoint dôveroval body.email — útočník mohol POST
+ * {email: "victim@x.com"} a dostať platnú session. Teraz JWT verifikácia
+ * zaručuje že email naozaj pochádza z Google OAuth flow.
  */
 export async function POST(req: NextRequest) {
-  let email: string;
+  let supabaseJwt: string;
   try {
     const body = await req.json();
-    email = String(body.email || "").trim().toLowerCase();
+    supabaseJwt = String(body.supabase_jwt || "");
   } catch {
     return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 });
   }
 
-  if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
+  if (!supabaseJwt) {
+    return NextResponse.json({ error: "supabase_jwt required" }, { status: 400 });
+  }
 
   const sb = getSupabaseAdmin();
+
+  // Verifikácia JWT proti Supabase Auth — ak je platný, vráti usera
+  // s overeným emailom z Google OAuth. Neplatný JWT → 401.
+  const { data: supabaseUser, error: jwtErr } = await sb.auth.getUser(supabaseJwt);
+  if (jwtErr || !supabaseUser?.user?.email) {
+    return NextResponse.json({ error: "invalid_token" }, { status: 401 });
+  }
+  const email = supabaseUser.user.email.toLowerCase();
+
   const { data: users, error } = await sb
     .from("users")
     .select("id, name, initials, role, company_id")
@@ -34,7 +50,6 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!users) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  // Billing status pre crm_billing cookie
   let companyActive = true;
   const companyId = (users as Record<string, unknown>).company_id as string | null;
   if (companyId) {
