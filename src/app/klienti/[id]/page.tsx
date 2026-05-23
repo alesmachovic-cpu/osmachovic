@@ -2124,7 +2124,10 @@ export default function KlientDetailPage() {
         ))}
       </div>
 
-      {/* Tab obsah */}
+      {/* Tab obsah — pre cudzí klient (!isOwner) všetko zablokované (pointer-events:none + opacity).
+          Disabled-pattern by inak vyžadoval pridať `disabled={!isOwner}` na desiatky tlačidiel
+          v podkomponentoch (ObchodTab, ProdukciaTab, …). Wrapper-style je 1 zmena vs 50+ edits. */}
+      <div style={!isOwner ? { opacity: 0.55, pointerEvents: "none", userSelect: "none" } : undefined}>
       {activeTab === "timeline" && (
         <div style={cardSt}>
           <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>
@@ -3154,6 +3157,7 @@ export default function KlientDetailPage() {
           <KlientHistoryTab klientId={klient.id} />
         </div>
       )}
+      </div>{/* /tab-obsah read-only wrapper */}
 
       {/* Poznámky */}
       {klient.poznamka && (
