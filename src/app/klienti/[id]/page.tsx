@@ -1376,10 +1376,15 @@ export default function KlientDetailPage() {
             }}
           >
             {(klient.typ === "kupujuci"
-              // Per Aleš (2026-05-23): kupujúci má len 3 statusy — netreba mu
-              // pipeline kroky predávajúceho (dohodnutý náber, nabraný, atď).
+              // Per Aleš (2026-05-23): kupujúci má vlastný set statusov — bez
+              // pipeline krokov predávajúceho (dohodnutý náber, nabraný, atď).
+              // Hľadanie → záujem o konkrétnu → hypotéka → odložené/uz_predal.
               ? [
                   { value: "aktivny", label: "Aktívny" },
+                  { value: "zaujem_o_konkretnu", label: "Záujem o konkrétnu" },
+                  { value: "caka_na_hypoteku", label: "Čaká na hypotéku" },
+                  { value: "odlozene", label: "Odložené" },
+                  { value: "nereaguje", label: "Nereaguje" },
                   { value: "realitna_kancelaria", label: "Realitná kancelária" },
                   { value: "uz_predal", label: "Už predal" },
                 ]
