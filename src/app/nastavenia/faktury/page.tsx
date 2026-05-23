@@ -71,7 +71,7 @@ export async function fetchDodavatel(userId: string): Promise<DodavatelSettings>
         await saveDodavatel(userId, parsed);
         // legacy kľúče: per-user a global ("ales" fallback)
         try { localStorage.removeItem(`${STORAGE_KEY}__${userId}`); } catch {}
-        try { if (userId === "ales") localStorage.removeItem(STORAGE_KEY); } catch {}
+        try { localStorage.removeItem(STORAGE_KEY); } catch {}
         return parsed;
       } catch { /* zlá JSON — ignoruj */ }
     }

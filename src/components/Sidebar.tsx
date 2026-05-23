@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/AuthProvider";
+import { useUserScope } from "@/hooks/useUserScope";
 import { PoweredByAMGD } from "@/components/brand";
 import { isFeatureEnabled } from "@/lib/featureToggles";
 import { useGoogleConnected } from "@/lib/useGoogleConnected";
@@ -68,6 +69,8 @@ function SectionLabel({ label }: { label: string }) {
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { scope } = useUserScope();
+  const isAdmin = scope?.isAdmin ?? false;
   const tNav = useTranslations("nav");
   const [counts, setCounts] = useState<{ portfolio?: number; klienti?: number; kupujuci?: number; naber?: number }>({});
   const [devOpen, setDevOpen] = useState(false);
@@ -122,13 +125,13 @@ export default function Sidebar() {
   const filterNav = (items: NavItem[]) =>
     user ? items.filter(item => {
       if (!canSeeMinRole(item.minRole)) return false;
-      if (item.href === "/inzerat" && user.id !== "ales") return false;
-      if (user.id !== "ales") {
+      if (item.href === "/inzerat" && !isAdmin) return false;
+      if (!isAdmin) {
         const hidden = user.nav_prefs ?? [];
         if (hidden.includes(item.href)) return false;
       }
       const feat = ROUTE_FEATURE_MAP[item.href];
-      return !feat || isFeatureEnabled(user.id, feat);
+      return !feat || isFeatureEnabled(user.id, feat, isAdmin);
     }) : items;
 
   return (
@@ -177,7 +180,7 @@ export default function Sidebar() {
         {filterNav(operativaNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
         <SectionLabel label={tNav("sections.system")} />
         {filterNav(systemNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
-        {user?.id === "ales" && (
+        {isAdmin && (
           <>
             <button onClick={() => setDevOpen(o => !o)} style={{
               width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",

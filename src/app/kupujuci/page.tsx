@@ -9,6 +9,7 @@ import ObjednavkaForm from "@/components/ObjednavkaForm";
 import NewKlientModal from "@/components/NewKlientModal";
 import Stepper from "@/components/Stepper";
 import { useAuth } from "@/components/AuthProvider";
+import { useUserScope } from "@/hooks/useUserScope";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { makeInitials } from "@/lib/initials";
 import { MatchChip } from "@/components/matching/MatchChip";
@@ -40,7 +41,8 @@ function KupujuciInner() {
   const router = useRouter();
   const search_params = useSearchParams();
   const { user } = useAuth();
-  const isAdmin = user?.role === "super_admin" || user?.id === "ales";
+  const { scope } = useUserScope();
+  const isAdmin = scope?.isAdmin ?? false;
   const [step, setStep] = useState<Step>("zoznam");
   const [selectedKlient, setSelectedKlient] = useState<Klient | null>(null);
   const [editingObjednavka, setEditingObjednavka] = useState<Record<string, unknown> | null>(null);

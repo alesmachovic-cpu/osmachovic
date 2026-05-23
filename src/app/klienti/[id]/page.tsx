@@ -9,6 +9,7 @@ import NewKlientModal from "@/components/NewKlientModal";
 import SlaTimer from "@/components/SlaTimer";
 import KlientHistoryTab from "@/components/KlientHistoryTab";
 import { useAuth } from "@/components/AuthProvider";
+import { useUserScope, canEditRecord } from "@/hooks/useUserScope";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { useReAuth } from "@/components/ReAuthModal";
 import { listKlientDokumenty, deleteKlientDokument, saveKlientDokument, type KlientDokument } from "@/lib/klientDokumenty";
@@ -409,8 +410,12 @@ export default function KlientDetailPage() {
   const [calendarSyncing, setCalendarSyncing] = useState(false);
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
-  const isAdmin = user?.id === "ales";
-  const isOwner = isAdmin || (myMaklerUuid && (klient?.makler_id === myMaklerUuid || klient?.spolupracujuci_makler_id === myMaklerUuid));
+  const { scope } = useUserScope();
+  const isAdmin = scope?.isAdmin ?? false;
+  // isOwner = admin/majiteľ vždy, vlastník vždy, manažér ak je z pobočky vlastníka,
+  // alebo spolupracujúci maklér (FE-only check, backend canEditRecord to nepokrýva).
+  const isOwner = canEditRecord(scope, klient?.makler_id ?? null)
+    || (!!myMaklerUuid && klient?.spolupracujuci_makler_id === myMaklerUuid);
 
   useEffect(() => {
     if (id) loadAll();

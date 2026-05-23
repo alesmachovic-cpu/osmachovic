@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
+import { useUserScope } from "@/hooks/useUserScope";
 import PricingEstimateModal from "@/components/PricingEstimateModal";
 import PropertyStoryModal from "@/components/PropertyStoryModal";
 import { ZaujemcoviaChip } from "@/components/matching/ZaujemcoviaChip";
@@ -75,8 +76,9 @@ function typLabel(typ: string): string {
 
 export default function Portfolio() {
   const { user } = useAuth();
+  const { scope } = useUserScope();
   const router = useRouter();
-  const isAdmin = user?.id === "ales" || user?.role === "super_admin";
+  const isAdmin = scope?.isAdmin ?? false;
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
   // "all" (default pre všetkých — vidí celé portfólio firmy) | "mine" | meno makléra
   // Predtým sme bežnému maklérovi auto-zaplo "mine" — to spôsobovalo prázdne

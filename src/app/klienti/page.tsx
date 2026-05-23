@@ -7,6 +7,7 @@ import type { Klient } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import { useAuth } from "@/components/AuthProvider";
+import { useUserScope } from "@/hooks/useUserScope";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { klientUpdate, klientDelete } from "@/lib/klientApi";
 
@@ -94,7 +95,8 @@ function KlientiWrapper() {
 
 function KlientiContent() {
   const { user, accounts } = useAuth();
-  const isAdmin = user?.id === "ales";
+  const { scope } = useUserScope();
+  const isAdmin = scope?.isAdmin ?? false;
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);

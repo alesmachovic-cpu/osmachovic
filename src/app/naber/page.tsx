@@ -8,6 +8,7 @@ import { STATUS_LABELS } from "@/lib/database.types";
 import NaberyForm from "@/components/NaberyForm";
 import Stepper from "@/components/Stepper";
 import { useAuth } from "@/components/AuthProvider";
+import { useUserScope } from "@/hooks/useUserScope";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { getUserItem } from "@/lib/userStorage";
 import { klientUpdate, naberUpdate } from "@/lib/klientApi";
@@ -66,7 +67,8 @@ function NaberPageContent() {
   const preselectedKlientId = searchParams.get("klient_id");
   const parentNaberakId = searchParams.get("parent");
   const { user } = useAuth();
-  const isAdmin = user?.id === "ales";
+  const { scope } = useUserScope();
+  const isAdmin = scope?.isAdmin ?? false;
   const [filterMakler, setFilterMakler] = useState<string>(isAdmin ? "all" : "mine");
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);

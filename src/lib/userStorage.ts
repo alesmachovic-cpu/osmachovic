@@ -9,11 +9,7 @@ export function userKey(userId: string, key: string): string {
 
 export function getUserItem(userId: string, key: string): string | null {
   if (typeof window === "undefined") return null;
-  const perUser = localStorage.getItem(userKey(userId, key));
-  if (perUser !== null) return perUser;
-  // Only fall back to legacy global key for admin (ales) — the original user
-  if (userId === "ales") return localStorage.getItem(key);
-  return null;
+  return localStorage.getItem(userKey(userId, key));
 }
 
 export function setUserItem(userId: string, key: string, value: string): void {
