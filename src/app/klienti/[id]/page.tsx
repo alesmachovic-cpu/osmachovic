@@ -2125,9 +2125,12 @@ export default function KlientDetailPage() {
         );
       })()}
 
-      {/* Mobile insight panel — accordion pred tabmi */}
+      {/* Mobile insight panel — accordion pred tabmi.
+          Pre cudzieho makléra (!isOwner) je info plne čitateľné, ale akcie
+          v paneli (Naplánovať obhliadku, klik na kartu kupujúceho) sú
+          zablokované cez pointer-events:none. */}
       {showInsightPanel && !wideLayout && (
-        <div style={{ marginBottom: "16px" }}>
+        <div style={{ marginBottom: "16px", ...(isOwner ? null : { pointerEvents: "none" as const }) }}>
           <ClientInsightPanel
             klient={{ id: klient.id, typ: klient.typ ?? "predavajuci" }}
             nehnutelnostId={nehnutelnostIdForPanel}
@@ -3511,7 +3514,7 @@ export default function KlientDetailPage() {
       </div>{/* END left col */}
 
       {showInsightPanel && wideLayout && (
-        <div style={{ width: "300px", flexShrink: 0, position: "sticky", top: "24px", alignSelf: "flex-start" }}>
+        <div style={{ width: "300px", flexShrink: 0, position: "sticky", top: "24px", alignSelf: "flex-start", ...(isOwner ? null : { pointerEvents: "none" as const }) }}>
           <ClientInsightPanel
             klient={{ id: klient.id, typ: klient.typ ?? "predavajuci" }}
             nehnutelnostId={nehnutelnostIdForPanel}
