@@ -1010,8 +1010,13 @@ export default function KlientDetailPage() {
   const objednavkaIdForPanel = prvaObj?.id as string | null ?? null;
   const cenaDo = prvaObj?.cena_do as number | null ?? null;
   const cenaOd = prvaObj?.cena_od as number | null ?? null;
+  // Panel sa vždy zobrazí pre predávajúceho/oboje aj keď nemá nehnuteľnosti —
+  // pre cudzieho makléra je read-only a slúži ako prehľad "ktorí kupujúci by
+  // sa mohli hodiť" (per Aleš 2026-05-23). Bez nehnutelnostId panel zobrazí
+  // placeholder "Pridaj inzerát aby si videl matching".
   const showInsightPanel = !!nehnutelnostIdForPanel || !!objednavkaIdForPanel
-    || klient.typ === "kupujuci" || klient.typ === "oboje";
+    || klient.typ === "kupujuci" || klient.typ === "oboje"
+    || klient.typ === "predavajuci";
 
   return (
     <div style={{ maxWidth: "1280px" }}>
@@ -2620,12 +2625,20 @@ export default function KlientDetailPage() {
         <div style={cardSt}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)" }}>Obhliadky</div>
-            {isOwner && (
-            <button onClick={() => setShowObhliadkaModal(true)} style={{
-              padding: "6px 14px", background: "#374151", color: "#fff", border: "none",
-              borderRadius: "8px", fontSize: "12px", fontWeight: "600", cursor: "pointer",
-            }}>+ Nová obhliadka</button>
-            )}
+            <button
+              disabled={!isOwner}
+              onClick={() => isOwner && setShowObhliadkaModal(true)}
+              title={isOwner ? "Naplánovať obhliadku" : "Klient nie je tvoj — akcia je zakázaná"}
+              style={{
+                padding: "6px 14px",
+                background: isOwner ? "#374151" : "var(--bg-surface)",
+                color: isOwner ? "#fff" : "var(--text-muted)",
+                border: isOwner ? "none" : "1px solid var(--border)",
+                borderRadius: "8px", fontSize: "12px", fontWeight: "600",
+                cursor: isOwner ? "pointer" : "not-allowed",
+                opacity: isOwner ? 1 : 0.5,
+              }}
+            >+ Nová obhliadka</button>
           </div>
           {obhliadky.length === 0 ? (
             <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "14px" }}>
