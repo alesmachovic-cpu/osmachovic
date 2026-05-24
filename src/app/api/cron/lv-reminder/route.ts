@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendPushToAll } from "@/lib/monitor";
 
@@ -7,7 +7,14 @@ export const maxDuration = 30;
 
 // Cron: beží ráno o 7:00, kontroluje klientov s dohodnutým náberom DNES bez LV
 // Pošle email maklerovi ako rannú pripomienku
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  const queryKey = request.nextUrl.searchParams.get("key");
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && queryKey !== cronSecret) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const resendKey = process.env.RESEND_API_KEY;
