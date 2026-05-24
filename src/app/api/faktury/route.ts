@@ -11,15 +11,16 @@ import { requireReAuth } from "@/lib/auth/reAuth";
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  // P0 fix 2026-05-24: strict auth.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   const { searchParams } = new URL(req.url);
 
-  const sessionUserId = readSessionUserId(req);
-  let companyId = VIANEMA_COMPANY_ID;
-  if (sessionUserId) {
-    const scope = await getUserScope(sessionUserId);
-    if (scope) companyId = scope.company_id;
-  }
+  const scope = await getUserScope(auth.user.id);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const companyId = scope.company_id;
 
   // includeZrusene=1 ukáže aj soft-deleted (pre archív / kontrolu DPH).
   const includeZrusene = searchParams.get("includeZrusene") === "1";
