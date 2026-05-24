@@ -47,10 +47,21 @@ export async function POST(req: NextRequest) {
 
   const sb = getSupabaseAdmin();
 
+  // P0 fix 2026-05-24: obchody.company_id je NOT NULL, derive z klienta
+  // (authoritative source — obchod patrí do firmy svojho klienta).
+  const { data: klient, error: klientErr } = await sb
+    .from("klienti")
+    .select("company_id")
+    .eq("id", body.klient_id)
+    .single();
+  if (klientErr || !klient) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+  if (!klient.company_id) return NextResponse.json({ error: "Klient bez company_id (legacy záznam)" }, { status: 500 });
+
   const { data: obchod, error: obchodErr } = await sb
     .from("obchody")
     .insert({
       klient_id:       body.klient_id,
+      company_id:      klient.company_id,
       nehnutelnost_id: body.nehnutelnost_id ?? null,
       cena:            body.cena ?? null,
       provizia:        body.provizia ?? null,
