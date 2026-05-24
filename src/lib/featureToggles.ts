@@ -26,8 +26,8 @@ function saveFeatureToggles(toggles: FeatureToggles) {
   localStorage.setItem("feature_toggles", JSON.stringify(toggles));
 }
 
-function isFeatureEnabled(userId: string, featureId: string): boolean {
-  if (userId === "ales") return true; // admin always has all features
+function isFeatureEnabled(userId: string, featureId: string, isAdmin = false): boolean {
+  if (isAdmin) return true; // admin/majiteľ always has all features
   const toggles = loadFeatureToggles();
   const userToggles = toggles[userId];
   if (!userToggles) return true; // default: all enabled

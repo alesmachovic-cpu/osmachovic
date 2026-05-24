@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -19,12 +20,29 @@ function hashToken(token: string): string {
 
 export async function POST(request: Request) {
   try {
+    // 🚨 P2 rate limit — bráni brute-force token guessing.
+    const ip = getRequestIp(request);
+    const rl = rateLimit({ key: `reset:${ip}`, ...RATE_LIMITS.RESET });
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: rl.error, code: "RATE_LIMITED" },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      );
+    }
+
     const body = await request.json();
     const token = String(body.token || "").trim();
     const password = String(body.password || "");
 
     if (!token) return NextResponse.json({ error: "Chýba token" }, { status: 400 });
-    if (password.length < 8) return NextResponse.json({ error: "Heslo musí mať aspoň 8 znakov" }, { status: 400 });
+    // Min 12 znakov — konzistentné s register.
+    if (password.length < 12) return NextResponse.json({ error: "Heslo musí mať aspoň 12 znakov" }, { status: 400 });
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasDigit = /[0-9]/.test(password);
+    if (!hasUpper || !hasLower || !hasDigit) {
+      return NextResponse.json({ error: "Heslo musí obsahovať veľké aj malé písmená a číslicu" }, { status: 400 });
+    }
 
     const sb = getSupabaseAdmin();
     const tokenHash = hashToken(token);

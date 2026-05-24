@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -39,11 +40,15 @@ export async function POST(request: NextRequest) {
     });
     if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
 
-    const baseUrl = process.env.VERCEL_ENV === "production"
-      ? "https://vianema.amgd.sk"
-      : process.env.VERCEL_ENV === "preview"
-      ? "https://test.amgd.sk"
-      : "http://localhost:3000";
+    // 🐛 BUG FIX 2026-05-21: VERCEL_ENV === "production" je TRUE aj pre
+    // dev.amgd.sk (samostatný Vercel projekt vianema-dev deployovaný ako
+    // production). Predtým: token sa uložil do dev DB, ale URL viedla na
+    // vianema.amgd.sk → tá má vlastnú PROD DB → "Odkaz nie je platný".
+    // Fix: použiť origin z requestu (host header). Whitelist hostov je
+    // riadený middleware.ts (ALLOWED_HOSTS).
+    const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+    const host = request.headers.get("host") || "localhost:3000";
+    const baseUrl = `${forwardedProto}://${host}`;
     const inviteUrl = `${baseUrl}/pridat-heslo/${token}`;
 
     // Email je len bonus — link funguje vždy
@@ -76,6 +81,17 @@ export async function POST(request: NextRequest) {
         }),
       });
     }
+
+    await logAudit({
+      action: "user.invite",
+      actor_id: auth.user.id,
+      actor_name: auth.user.name,
+      target_id: userId,
+      target_type: "user",
+      target_name: String(user.name || ""),
+      detail: { email_sent_to: recipientEmail, expires_at: expiresAt },
+      ip_address: request.headers.get("x-forwarded-for") || undefined,
+    });
 
     return NextResponse.json({ success: true, email: recipientEmail, invite_url: inviteUrl });
   } catch (e) {

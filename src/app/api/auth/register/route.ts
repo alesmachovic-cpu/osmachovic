@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { buildSessionCookieValue, buildBillingCookieValue } from "@/lib/auth/session";
+import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,32 @@ function slugify(name: string): string {
 
 export async function POST(request: Request) {
   try {
+    // 🚨 Rate limit — defence-in-depth pre prípad keď SIGNUP_ENABLED bude true.
+    const ip = getRequestIp(request);
+    const rl = rateLimit({ key: `register:${ip}`, ...RATE_LIMITS.REGISTER });
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: rl.error, code: "RATE_LIMITED" },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      );
+    }
+
+    // 🚨 FIX 2026-05-20 (Security Auditor P0):
+    // Pôvodne tento endpoint umožnil KOMUKOĽVEK z internetu vytvoriť novú firmu + admin účet.
+    // Útočník mohol vytvoriť phishing-firmu napr. "vianema-fake", podstrčiť obetiam, dostať
+    // sa do multi-tenant clusteru ako admin.
+    // Teraz: signup je VYPNUTÝ default-ne. Pre nového maklera používaj invite flow
+    // (/api/users/invite — len admin). Pre novú firmu zatial manuálny onboarding cez CEO.
+    if (process.env.SIGNUP_ENABLED !== "true") {
+      return NextResponse.json(
+        {
+          error: "Verejná registrácia je vypnutá. Kontaktuj VIANEMA admin pre prístup.",
+          code: "SIGNUP_DISABLED",
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json() as {
       companyName?: string;
       name?: string;
@@ -29,7 +56,16 @@ export async function POST(request: Request) {
     if (!companyName?.trim()) return NextResponse.json({ error: "Názov kancelárie je povinný" }, { status: 400 });
     if (!name?.trim()) return NextResponse.json({ error: "Meno je povinné" }, { status: 400 });
     if (!email?.trim()) return NextResponse.json({ error: "Email je povinný" }, { status: 400 });
-    if (!password || password.length < 8) return NextResponse.json({ error: "Heslo musí mať aspoň 8 znakov" }, { status: 400 });
+    // Min 12 znakov + complexity (per memory/domain-security.md invariants, P0 finding QA)
+    if (!password || password.length < 12) {
+      return NextResponse.json({ error: "Heslo musí mať aspoň 12 znakov" }, { status: 400 });
+    }
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasDigit = /[0-9]/.test(password);
+    if (!hasUpper || !hasLower || !hasDigit) {
+      return NextResponse.json({ error: "Heslo musí obsahovať veľké aj malé písmená a číslicu" }, { status: 400 });
+    }
 
     const sb = getSupabaseAdmin();
 

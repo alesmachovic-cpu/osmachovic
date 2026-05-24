@@ -2,7 +2,7 @@
 
 export type TypNehnutelnosti = string; // Dynamic - all Vianema categories
 export type StavNehnutelnosti = "novostavba" | "rekonstruovana" | "povodny_stav";
-export type KlientStatus = "novy" | "novy_kontakt" | "aktivny" | "dohodnuty_naber" | "nabrany" | "inzerovany" | "pasivny" | "volat_neskor" | "nedovolal" | "nechce_rk" | "uz_predal" | "realitna_kancelaria" | "uzavrety" | "caka_na_schvalenie";
+export type KlientStatus = "novy" | "novy_kontakt" | "aktivny" | "dohodnuty_naber" | "nabrany" | "inzerovany" | "pasivny" | "volat_neskor" | "nedovolal" | "nechce_rk" | "uz_predal" | "uz_kupil" | "realitna_kancelaria" | "uzavrety" | "caka_na_schvalenie" | "caka_na_hypoteku" | "zaujem_o_konkretnu" | "zaujem_konkretna_nasa" | "zaujem_konkretna_ina_rk" | "odlozene" | "nereaguje" | "turista" | "hypo_konzultacia" | "kapacita_schvalena" | "rezervacia" | "podpis_kz";
 
 export type TypInzercie = "inkognito" | "online_web" | "online" | "vyhradne";
 
@@ -109,6 +109,20 @@ export const STATUS_LABELS: Record<KlientStatus, string> = {
   realitna_kancelaria: "Realitná kancelária",
   uzavrety: "Uzavretý",
   caka_na_schvalenie: "Čaká na schválenie",
+  // Nové statusy pre kupujúcich (per Aleš 2026-05-23)
+  caka_na_hypoteku: "Čaká na hypotéku",
+  zaujem_o_konkretnu: "Záujem o konkrétnu",
+  odlozene: "Odložené",
+  nereaguje: "Nereaguje",
+  uz_kupil: "Už kúpil",
+  turista: "Turista",
+  zaujem_konkretna_nasa: "Záujem — naša",
+  zaujem_konkretna_ina_rk: "Záujem — iná RK",
+  // F1 kupujuci pipeline (per Aleš plan-kupujuci 2026-05-23)
+  hypo_konzultacia: "Hypo konzultácia",
+  kapacita_schvalena: "Kapacita schválená",
+  rezervacia: "Rezervácia",
+  podpis_kz: "Podpis KZ",
 };
 
 export const KRAJE = [

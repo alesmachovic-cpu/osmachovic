@@ -37,7 +37,7 @@ interface StoryResult {
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   approved_first_pass: { label: "Schválené hneď", color: "#15803d", bg: "#dcfce7" },
-  approved_after_revision: { label: "Schválené po korektúre", color: "#1d4ed8", bg: "#dbeafe" },
+  approved_after_revision: { label: "Schválené po korektúre", color: "var(--text-secondary)", bg: "#dbeafe" },
   requires_human_review: { label: "Vyžaduje kontrolu", color: "#b91c1c", bg: "#fee2e2" },
 };
 

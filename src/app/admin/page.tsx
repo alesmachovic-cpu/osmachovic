@@ -105,7 +105,7 @@ export default function AdminPage() {
         </div>
 
         {error && (
-          <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "10px", padding: "12px 16px", color: "#991B1B", fontSize: "13px", marginBottom: "20px" }}>
+          <div style={{ background: "#FEF2F2", border: "1px solid var(--border)", borderRadius: "10px", padding: "12px 16px", color: "#991B1B", fontSize: "13px", marginBottom: "20px" }}>
             {error}
           </div>
         )}

@@ -252,7 +252,7 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
           {!loading && !error && result?.ai_failed && !manualMode && (
             <div style={{
               padding: "16px", borderRadius: "10px",
-              background: "#FEF3C7", border: "1px solid #FDE68A", color: "#92400E",
+              background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)",
               marginBottom: "16px",
             }}>
               <div style={{ fontWeight: 700, marginBottom: "4px" }}>⚠️ AI extrakcia zlyhala</div>
@@ -268,7 +268,7 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
                 onClick={() => setManualMode(true)}
                 style={{
                   padding: "8px 14px", borderRadius: "8px",
-                  background: "#92400E", color: "#fff", border: "none",
+                  background: "#374151", color: "#fff", border: "none",
                   fontSize: "12px", fontWeight: 700, cursor: "pointer",
                 }}
               >📝 Vyplniť údaje ručne</button>
@@ -541,7 +541,7 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
                   )}
                   {result.analysis.ai.vyjednavacie_argumenty && result.analysis.ai.vyjednavacie_argumenty.length > 0 && (
                     <div>
-                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "6px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "6px" }}>
                         💼 Vyjednávacie argumenty
                       </div>
                       <ul style={{ margin: 0, paddingLeft: "20px", color: "var(--text-primary)", fontSize: "13px", lineHeight: "1.6" }}>
@@ -603,7 +603,7 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                     {result.analysis.okolie.plusy && result.analysis.okolie.plusy.length > 0 && (
-                      <div style={{ padding: "10px 12px", background: "#F0FDF4", borderRadius: "8px", border: "1px solid #BBF7D0" }}>
+                      <div style={{ padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: "8px", border: "1px solid #BBF7D0" }}>
                         <div style={{ fontSize: "11px", fontWeight: 700, color: "#15803D", marginBottom: "6px" }}>✓ PLUSY</div>
                         <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "12px", color: "#14532D", lineHeight: 1.5 }}>
                           {result.analysis.okolie.plusy.map((p, i) => <li key={i}>{p}</li>)}
@@ -611,7 +611,7 @@ export default function UrlAnalyzeModal({ url, onClose }: { url: string; onClose
                       </div>
                     )}
                     {result.analysis.okolie.minusy && result.analysis.okolie.minusy.length > 0 && (
-                      <div style={{ padding: "10px 12px", background: "#FEF2F2", borderRadius: "8px", border: "1px solid #FECACA" }}>
+                      <div style={{ padding: "10px 12px", background: "#FEF2F2", borderRadius: "8px", border: "1px solid var(--border)" }}>
                         <div style={{ fontSize: "11px", fontWeight: 700, color: "#991B1B", marginBottom: "6px" }}>✗ MÍNUSY</div>
                         <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "12px", color: "#7F1D1D", lineHeight: 1.5 }}>
                           {result.analysis.okolie.minusy.map((p, i) => <li key={i}>{p}</li>)}

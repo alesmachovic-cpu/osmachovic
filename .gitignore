@@ -59,3 +59,11 @@ next-env.d.ts
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Supabase CLI lokálna cache (link metadata)
+/supabase/.temp/
+.tg-inbox-cursor
+
+# Playwright MCP cache + dev test screenshots
+.playwright-mcp/
+dev-login-*.png

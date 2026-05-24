@@ -4,6 +4,8 @@ import { getUserScope, canEditRecord } from "@/lib/scope";
 import { logAudit } from "@/lib/audit";
 import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
+import { requireReAuth } from "@/lib/auth/reAuth";
 
 export const runtime = "nodejs";
 
@@ -30,6 +32,11 @@ export async function GET(req: NextRequest) {
   if (id) {
     const { data, error } = await sb.from("klienti").select("*").eq("id", id).eq("company_id", companyId).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // Dopytaj meno makléra ktorý klienta založil (pre UI "Založil: X")
+    if (data && data.created_by_makler_id) {
+      const { data: m } = await sb.from("makleri").select("meno").eq("id", data.created_by_makler_id).maybeSingle();
+      (data as Record<string, unknown>).created_by_makler_meno = m?.meno ?? null;
+    }
     return NextResponse.json({ klient: data });
   }
   if (telefon) {
@@ -73,7 +80,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Užívateľ nemá priradeného makléra" }, { status: 400 });
   }
 
-  const payload = { ...rest, makler_id, company_id: scope.company_id };
+  // C4: XSS sanitize free-form text fields (poznamka, meno, lokalita, ...)
+  const cleanRest = sanitizeFields(rest as Record<string, unknown>, [...SANITIZE_FIELDS]);
+  // created_by_makler_id = pôvodný autor klienta (immutable). Pre kupujúcich
+  // slúži ako "tento klient je môj kontakt" indikátor aj keď ho môže editovať
+  // hocikto. Pre predávajúcich je to dodatočný signál koho oslobiť.
+  const payload = {
+    ...cleanRest,
+    makler_id,
+    created_by_makler_id: makler_id,
+    company_id: scope.company_id,
+  };
   const { data, error } = await sb.from("klienti").insert(payload).select().single();
   if (error) {
     if (error.code === "23505") {
@@ -81,6 +98,15 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: error.message, code: error.code }, { status: 500 });
   }
+  await logAudit({
+    action: "klient.create",
+    actor_id: userId,
+    target_id: data.id,
+    target_type: "klient",
+    target_name: typeof data.meno === "string" ? data.meno : undefined,
+    detail: { makler_id, company_id: scope.company_id },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ klient: data });
 }
 
@@ -104,7 +130,10 @@ export async function PATCH(req: NextRequest) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 
   const userId = auth.user.id;
-  const id = String(body.id || "");
+  // P0 fix 2026-05-24: niektoré UI flow posielajú id v query stringu (?id=...),
+  // nie v body. Accept oboje aby sa nedalo zlyhať na "id required" 400.
+  const idFromQuery = new URL(req.url).searchParams.get("id");
+  const id = String(body.id || idFromQuery || "");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const scope = await getUserScope(userId);
@@ -124,11 +153,46 @@ export async function PATCH(req: NextRequest) {
   if (!allowed) return NextResponse.json({ error: "Nemáš oprávnenie editovať tohto klienta" }, { status: 403 });
 
   const { user_id: _u, id: _id, makler_id: bodyMakler, ...rest } = body;
-  const patch: Record<string, unknown> = { ...rest };
+  // C4: XSS sanitize free-form text fields
+  const cleanRest = sanitizeFields(rest as Record<string, unknown>, [...SANITIZE_FIELDS]);
+  const patch: Record<string, unknown> = { ...cleanRest };
   if (scope.isAdmin && bodyMakler) patch.makler_id = bodyMakler; // delegate
 
   const { data, error } = await sb.from("klienti").update(patch).eq("id", id).select().single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // P0 fix 2026-05-24a: schema cache miss → 400 namiesto 500.
+    if (error.code === "PGRST204" || /column|schema cache/i.test(error.message)) {
+      console.warn("[/api/klienti PATCH] schema mismatch:", {
+        attempted_fields: Object.keys(patch),
+        supabase_error: error.message,
+      });
+      return NextResponse.json({
+        error: `Niektoré polia neexistujú v klienti schéme (${error.message}). UI bug — refresh stránku alebo pošli sken Network tabu.`,
+        code: "SCHEMA_MISMATCH",
+      }, { status: 400 });
+    }
+    // P0 fix 2026-05-24b: DB check constraint violation (napr. invalid status) → 400.
+    if (error.code === "23514") {
+      console.warn("[/api/klienti PATCH] constraint violation:", {
+        attempted_fields: Object.keys(patch),
+        supabase_error: error.message,
+      });
+      return NextResponse.json({
+        error: `Neplatná hodnota poľa (${error.message})`,
+        code: "INVALID_VALUE",
+      }, { status: 400 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  await logAudit({
+    action: "klient.update",
+    actor_id: userId,
+    target_id: id,
+    target_type: "klient",
+    target_name: typeof data.meno === "string" ? data.meno : undefined,
+    detail: { fields_changed: Object.keys(patch) },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ klient: data });
 }
 
@@ -152,6 +216,20 @@ export async function DELETE(req: NextRequest) {
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
   if (!scope.isAdmin) {
     return NextResponse.json({ error: "Reálne mazanie len pre admin/majiteľa. Použi anonymize." }, { status: 403 });
+  }
+
+  // 🔒 M1 force re-auth — klient.delete je irreverzibilné.
+  // confirm_password / confirm_code v query string (lebo DELETE nemá body convention).
+  const reAuth = await requireReAuth({
+    userId,
+    password: searchParams.get("confirm_password") || undefined,
+    code: searchParams.get("confirm_code") || undefined,
+  });
+  if (!reAuth.ok) {
+    return NextResponse.json({
+      error: reAuth.error,
+      code: "RE_AUTH_REQUIRED",
+    }, { status: reAuth.status });
   }
 
   const { error } = await sb.from("klienti").delete().eq("id", id);

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useAuth } from "@/components/AuthProvider";
+import { useUserScope } from "@/hooks/useUserScope";
 import { PoweredByAMGD } from "@/components/brand";
 import { isFeatureEnabled } from "@/lib/featureToggles";
 import { useGoogleConnected } from "@/lib/useGoogleConnected";
@@ -25,8 +26,10 @@ const ROUTE_FEATURE_MAP: Record<string, string> = {
 const toolsNav: NavItem[] = []; // zrušená sekcia — všetko v hlavnom menu
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+  // prefetch={false} pre nav linky — Next.js inak prefetuje VŠETKÝCH ~23 položiek
+  // pri otvorení sidebar = bandwidth burst. User-driven nav je dosť rýchla aj bez toho.
   return (
-    <Link href={item.href} onClick={() => document.body.classList.remove("sidebar-open")} style={{
+    <Link href={item.href} prefetch={false} onClick={() => document.body.classList.remove("sidebar-open")} style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
       padding: "8px 12px", borderRadius: "8px", fontSize: "13px",
       fontWeight: active ? "600" : "400",
@@ -66,36 +69,48 @@ function SectionLabel({ label }: { label: string }) {
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { scope } = useUserScope();
+  const isAdmin = scope?.isAdmin ?? false;
   const tNav = useTranslations("nav");
-  const [counts, setCounts] = useState<{ portfolio?: number; klienti?: number; kupujuci?: number }>({});
+  const [counts, setCounts] = useState<{ portfolio?: number; klienti?: number; kupujuci?: number; naber?: number }>({});
   const [devOpen, setDevOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const [pfRes, klRes] = await Promise.all([
+        const [pfRes, klRes, nbRes] = await Promise.all([
           fetch("/api/nehnutelnosti", { credentials: "include" }),
           fetch("/api/klienti", { credentials: "include" }),
+          fetch("/api/nabery?mine=1", { credentials: "include" }),
         ]);
-        const [pf, kl]: [unknown[], { typ?: string }[]] = await Promise.all([
+        const [pf, kl, nb]: [{ makler_id?: string | null }[], { typ?: string; makler_id?: string | null }[], { nabery?: unknown[] } | unknown[]] = await Promise.all([
           pfRes.ok ? pfRes.json() : Promise.resolve([]),
           klRes.ok ? klRes.json() : Promise.resolve([]),
+          nbRes.ok ? nbRes.json() : Promise.resolve([]),
         ]);
         const predavajuciTypy = new Set(["predavajuci", "oboje", "prenajimatel"]);
         const kupujuciTypy = new Set(["kupujuci", "oboje"]);
+        // Filter podľa makler_id current usera; ak user nemá makler_id (super_admin/owner),
+        // ukáž total (vidí všetkých)
+        const mid = (user as { makler_id?: string | null } | null)?.makler_id ?? null;
+        const pfMine = Array.isArray(pf) ? (mid ? pf.filter(x => x.makler_id === mid) : pf) : [];
+        const klMine = Array.isArray(kl) ? (mid ? kl.filter(x => x.makler_id === mid) : kl) : [];
+        const nbArr = Array.isArray(nb) ? nb : (nb && Array.isArray((nb as { nabery?: unknown[] }).nabery) ? (nb as { nabery: unknown[] }).nabery : []);
         setCounts({
-          portfolio: Array.isArray(pf) ? pf.length : 0,
-          klienti: Array.isArray(kl) ? kl.filter(k => predavajuciTypy.has(k.typ ?? "")).length : 0,
-          kupujuci: Array.isArray(kl) ? kl.filter(k => kupujuciTypy.has(k.typ ?? "")).length : 0,
+          portfolio: pfMine.length,
+          klienti: klMine.filter(k => predavajuciTypy.has(k.typ ?? "")).length,
+          kupujuci: klMine.filter(k => kupujuciTypy.has(k.typ ?? "")).length,
+          naber: nbArr.length,
         });
       } catch { /* ignore */ }
     })();
-  }, [pathname, user?.id]);
+  }, [pathname, user?.id, (user as { makler_id?: string | null } | null)?.makler_id]);
 
   const mainNav: NavItem[] = mainNavBase.map((it) => {
     if (it.href === "/portfolio") return { ...it, badge: counts.portfolio };
     // Klienti zlúčuje Predávajúci + Kupujúci → badge = súčet všetkých klientov
     if (it.matchPrefix === "/klienti") return { ...it, badge: (counts.klienti || 0) + (counts.kupujuci || 0) };
+    if (it.href === "/naber") return { ...it, badge: counts.naber };
     return it;
   });
 
@@ -110,13 +125,13 @@ export default function Sidebar() {
   const filterNav = (items: NavItem[]) =>
     user ? items.filter(item => {
       if (!canSeeMinRole(item.minRole)) return false;
-      if (item.href === "/inzerat" && user.id !== "ales") return false;
-      if (user.id !== "ales") {
+      if (item.href === "/inzerat" && !isAdmin) return false;
+      if (!isAdmin) {
         const hidden = user.nav_prefs ?? [];
         if (hidden.includes(item.href)) return false;
       }
       const feat = ROUTE_FEATURE_MAP[item.href];
-      return !feat || isFeatureEnabled(user.id, feat);
+      return !feat || isFeatureEnabled(user.id, feat, isAdmin);
     }) : items;
 
   return (
@@ -165,7 +180,7 @@ export default function Sidebar() {
         {filterNav(operativaNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
         <SectionLabel label={tNav("sections.system")} />
         {filterNav(systemNav).map(item => <NavLink key={item.href} item={item} active={pathname.startsWith(item.href)} />)}
-        {user?.id === "ales" && (
+        {isAdmin && (
           <>
             <button onClick={() => setDevOpen(o => !o)} style={{
               width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -219,14 +234,14 @@ function GoogleNotConnectedBanner({ userId }: { userId?: string | null }) {
   const connected = useGoogleConnected(userId);
   if (connected !== false) return null; // loading alebo OK → nezobraz
   return (
-    <Link href="/nastavenia" style={{
+    <Link href="/nastavenia" prefetch={false} style={{
       display: "block", margin: "0 12px 8px", padding: "10px 12px",
-      borderRadius: "8px", background: "var(--warning-light)",
-      border: "1px solid var(--warning)", color: "var(--warning)",
+      borderRadius: "8px", background: "var(--bg-elevated)",
+      border: "1px solid var(--border)", color: "var(--text-secondary)",
       fontSize: "11px", fontWeight: 600, lineHeight: 1.4, textDecoration: "none",
     }}>
-      ⚠️ Google nepripojený<br />
-      <span style={{ fontWeight: 400, color: "var(--text-secondary)" }}>
+      Google nepripojený<br />
+      <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>
         Pripomienky a obhliadky sa nepridajú do kalendára. Kliknutím prejdi do Nastavení.
       </span>
     </Link>

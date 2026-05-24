@@ -151,6 +151,13 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
 
   async function handleSubmit() {
     if (druhy.length === 0) { alert("Vyber aspoň jeden druh nehnuteľnosti"); return; }
+    // 🐛 BUG FIX 2026-05-22: lokalita povinná, inak matching algoritmus
+    // dostáva prázdnu objednávku a dáva nezmyselné zhody (Žilina kupujúci
+    // dostával 55% na Bratislavu lebo lokalita check bol skipnutý).
+    if (kraje.length === 0) {
+      alert("Vyber aspoň jeden kraj — bez lokality matching nedá zmysluplné zhody.");
+      return;
+    }
     setSaving(true);
     const payload: Record<string, unknown> = {
       klient_id: klient.id,
@@ -251,8 +258,8 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
       </div>
 
       <div style={sectionSt}>
-        <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>📍 Požadovaná lokalita</div>
-        <MultiSelect options={KRAJE} selected={kraje} onChange={(v) => { setKraje(v); setOkresy(okresy.filter(o => v.flatMap(k => OKRESY_MAP[k] || []).includes(o))); }} label="Kraje" />
+        <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--text-primary)", marginBottom: "16px" }}>📍 Požadovaná lokalita <span style={{ color: "#EF4444" }}>*</span></div>
+        <MultiSelect options={KRAJE} selected={kraje} onChange={(v) => { setKraje(v); setOkresy(okresy.filter(o => v.flatMap(k => OKRESY_MAP[k] || []).includes(o))); }} label="Kraje (povinné pre matching)" />
         {availableOkresy.length > 0 && (
           <div style={{ marginTop: "14px" }}>
             <MultiSelect options={availableOkresy} selected={okresy} onChange={setOkresy} label="Okresy" />
@@ -376,7 +383,7 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
         </div>
       )}
 
-      <button onClick={handleSubmit} disabled={saving || druhy.length === 0 || !!savedId} style={{
+      <button onClick={handleSubmit} disabled={saving || druhy.length === 0 || kraje.length === 0 || !!savedId} style={{
         width: "100%", padding: "16px", borderRadius: "12px", border: "none",
         background: druhy.length === 0 ? "#D1D5DB" : remoteSignMode ? "#1d4ed8" : "#374151",
         color: "#fff", fontSize: "15px", fontWeight: "700",

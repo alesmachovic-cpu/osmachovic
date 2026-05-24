@@ -1,13 +1,19 @@
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
+// Audit akcie — známe akcie cez union pre IDE autocomplete, fallback `string`
+// dovolí pridať nové bez zmeny typu (gdpr.erasure.*, faktura.soft_delete, …).
 export type AuditAction =
   | "login" | "logout"
   | "klient.view" | "klient.create" | "klient.update" | "klient.delete" | "klient.gdpr_erase" | "klient.gdpr_export"
   | "naberovy_list.create" | "naberovy_list.sign" | "naberovy_list.delete"
-  | "faktura.create" | "faktura.delete"
+  | "faktura.create" | "faktura.delete" | "faktura.soft_delete" | "faktura.update"
   | "obhliadka.create" | "obhliadka.update" | "obhliadka.delete"
   | "user.create" | "user.update" | "user.delete" | "user.invite"
-  | "nehnutelnost.create" | "nehnutelnost.update" | "nehnutelnost.delete";
+  | "nehnutelnost.create" | "nehnutelnost.update" | "nehnutelnost.delete"
+  | "gdpr.erasure.started" | "gdpr.erasure.completed" | "gdpr.erasure.partial"
+  | "obchod.create" | "obchod.update" | "obchod.delete"
+  | "kz.generate" | "kz.aml_blocked"
+  | (string & {}); // fallback — povolí nové akcie bez zmeny typu, ale IDE stále autocompletne známe.
 
 export async function logAudit(entry: {
   action: AuditAction;
@@ -17,6 +23,8 @@ export async function logAudit(entry: {
   target_type?: string;
   target_name?: string;
   ip_address?: string;
+  // Akceptujeme `detail` (nový name) aj `metadata` (legacy) pre spätnú kompatibilitu.
+  detail?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   try {
@@ -30,6 +38,7 @@ export async function logAudit(entry: {
         target_name: entry.target_name,
         ip: entry.ip_address,
         ...entry.metadata,
+        ...entry.detail,
       },
       ip: entry.ip_address,
       created_at: new Date().toISOString(),

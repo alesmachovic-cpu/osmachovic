@@ -17,6 +17,47 @@ export default function AuthCallback() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("Prihlasujem...");
 
+  // 2FA state pre Google OAuth login
+  const [twofaChallenge, setTwofaChallenge] = useState<string | null>(null);
+  const [twofaCode, setTwofaCode] = useState("");
+  const [twofaSubmitting, setTwofaSubmitting] = useState(false);
+
+  // 🔒 BUG FIX 2026-05-20: počas 2FA challenge skry sidebar/navbar.
+  // Pôvodne ak user mal starú localStorage.crm_user session, sidebar
+  // zobrazil dáta (počty klientov, faktúr) PRED tým než dokončil 2FA.
+  // Body class `auth-callback-mode` → CSS skryje chrome (sidebar + navbar).
+  useEffect(() => {
+    document.body.classList.add("auth-callback-mode");
+    return () => { document.body.classList.remove("auth-callback-mode"); };
+  }, []);
+
+  async function handle2faVerify(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!twofaChallenge || !twofaCode) return;
+    setTwofaSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/2fa/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ challenge: twofaChallenge, code: twofaCode }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error || "2FA overenie zlyhalo");
+        setTwofaSubmitting(false);
+        return;
+      }
+      localStorage.setItem("crm_user", String(body.user.id));
+      setStatus("Hotovo! Presmerovávam...");
+      setTimeout(() => { window.location.href = "/"; }, 200);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setTwofaSubmitting(false);
+    }
+  }
+
   useEffect(() => {
     (async () => {
       try {
@@ -83,7 +124,18 @@ export default function AuthCallback() {
           return;
         }
 
-        const { user: matched } = await matchRes.json();
+        const matchBody = await matchRes.json();
+
+        // 🔒 2FA gate — ak má user 2FA, prepni UI do 6-digit promptu.
+        if (matchBody.requires_2fa && matchBody.challenge) {
+          // Odhlás Supabase session aby sa Google OAuth nepamätal "automaticky" pri ďalšom pokuse.
+          await supabase.auth.signOut();
+          setTwofaChallenge(String(matchBody.challenge));
+          setStatus("Druhý krok overenia");
+          return;
+        }
+
+        const matched = matchBody.user;
         // session cookie je už nastavený z /api/auth/google/match odpovede
 
         localStorage.setItem("crm_user", matched.id);
@@ -102,8 +154,63 @@ export default function AuthCallback() {
       minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
       background: "#F5F5F7",
     }}>
-      <div style={{ textAlign: "center" }}>
-        {error ? (
+      <div style={{ textAlign: "center", width: "100%", maxWidth: 380, padding: 24 }}>
+        {twofaChallenge ? (
+          <>
+            <div style={{ fontSize: "32px", marginBottom: "12px" }}>🔒</div>
+            <h2 style={{ fontSize: "18px", fontWeight: 600, color: "#0F172A", margin: "0 0 8px" }}>
+              Druhý krok overenia
+            </h2>
+            <p style={{ fontSize: "13px", color: "#6b7280", margin: "0 0 16px" }}>
+              Zadaj 6-cifrový kód z autentifikátora alebo backup kód.
+            </p>
+            <form onSubmit={handle2faVerify} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                type="text"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                value={twofaCode}
+                onChange={(e) => setTwofaCode(e.target.value.slice(0, 16))}
+                placeholder="000000"
+                autoFocus
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 12,
+                  padding: "14px 16px",
+                  fontSize: 22,
+                  fontFamily: "ui-monospace, monospace",
+                  letterSpacing: "0.2em",
+                  textAlign: "center",
+                  outline: "none",
+                }}
+              />
+              {error && <div style={{ color: "#b91c1c", fontSize: 13 }}>{error}</div>}
+              <button type="submit" disabled={twofaSubmitting || !twofaCode} style={{
+                background: twofaSubmitting ? "#e5e7eb" : "#374151",
+                color: twofaSubmitting ? "#6b7280" : "#fff",
+                padding: "12px",
+                borderRadius: 12,
+                border: 0,
+                fontWeight: 600,
+                fontSize: 14,
+                cursor: twofaSubmitting ? "wait" : "pointer",
+              }}>
+                {twofaSubmitting ? "Overujem…" : "Overiť"}
+              </button>
+              <button type="button" onClick={() => { window.location.href = "/"; }} style={{
+                background: "transparent",
+                color: "#6b7280",
+                padding: "8px",
+                border: 0,
+                cursor: "pointer",
+                fontSize: 12,
+              }}>
+                Zrušiť a späť na prihlásenie
+              </button>
+            </form>
+          </>
+        ) : error ? (
           <>
             <div style={{ fontSize: "48px", marginBottom: "16px" }}>⚠️</div>
             <h2 style={{ fontSize: "18px", fontWeight: 600, color: "#991B1B", margin: "0 0 8px" }}>

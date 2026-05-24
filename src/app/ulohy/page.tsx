@@ -12,7 +12,7 @@ interface Uloha {
 
 const PRIORITY_CFG = {
   vysoka: { label: "Vysoká", color: "#991B1B", bg: "#FEE2E2", dot: "#EF4444" },
-  stredna: { label: "Stredná", color: "#92400E", bg: "#FEF3C7", dot: "#F59E0B" },
+  stredna: { label: "Stredná", color: "var(--text-secondary)", bg: "#FEF3C7", dot: "#F59E0B" },
   nizka: { label: "Nízka", color: "#374151", bg: "#F3F4F6", dot: "#9CA3AF" },
 };
 

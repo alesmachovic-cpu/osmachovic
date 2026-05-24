@@ -7,6 +7,7 @@ import type { Klient } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
 import NewKlientModal from "@/components/NewKlientModal";
 import { useAuth } from "@/components/AuthProvider";
+import { useUserScope } from "@/hooks/useUserScope";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { klientUpdate, klientDelete } from "@/lib/klientApi";
 
@@ -94,7 +95,8 @@ function KlientiWrapper() {
 
 function KlientiContent() {
   const { user, accounts } = useAuth();
-  const isAdmin = user?.id === "ales";
+  const { scope } = useUserScope();
+  const isAdmin = scope?.isAdmin ?? false;
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
@@ -225,7 +227,12 @@ function KlientiContent() {
     }
   }, [searchParams, klienti]);
 
+  // Predávajúci tab ukazuje len predávajúcich a "oboje"/prenajímateľov.
+  // Čistí kupujúci patria do tabu Kupujúci, kde majú vlastné statusy.
+  const PREDAVAJUCI_TYPY = new Set(["predavajuci", "oboje", "prenajimatel"]);
+
   const filtered = klienti.filter(k => {
+    if (!PREDAVAJUCI_TYPY.has(k.typ ?? "")) return false;
     // Makler filter
     if (filterMakler === "mine") {
       if (!myMaklerUuid) return false;
@@ -250,6 +257,7 @@ function KlientiContent() {
 
   // Counts based on ALL klienti (with makler filter but without status filter)
   const allForCounts = klienti.filter(k => {
+    if (!PREDAVAJUCI_TYPY.has(k.typ ?? "")) return false;
     if (filterMakler === "mine") {
       if (!myMaklerUuid) return false;
       if (k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
@@ -446,7 +454,6 @@ function KlientiContent() {
         </select>
         <select value={filterTyp} onChange={e => setFilterTyp(e.target.value as FilterTyp)} style={selectSt}>
           <option value="">Všetky typy</option>
-          <option value="kupujuci">Kupujúci</option>
           <option value="predavajuci">Predávajúci</option>
           <option value="oboje">Oboje</option>
           <option value="prenajimatel">Prenajímateľ</option>
@@ -526,12 +533,12 @@ function KlientiContent() {
                     <div style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                       <span>{k.lokalita || "—"} · {new Date(k.created_at).toLocaleDateString("sk")}</span>
                       {(klientCounts[k.id]?.obhliadky ?? 0) > 0 && (
-                        <span style={{ background: "#EFF6FF", color: "#2563EB", borderRadius: "99px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>
+                        <span style={{ background: "var(--bg-elevated)", color: "var(--text-secondary)", borderRadius: "99px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>
                           {klientCounts[k.id].obhliadky} obl.
                         </span>
                       )}
                       {(klientCounts[k.id]?.nabery ?? 0) > 0 && (
-                        <span style={{ background: "#F0FDF4", color: "#16A34A", borderRadius: "99px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>
+                        <span style={{ background: "var(--bg-elevated)", color: "var(--text-primary)", borderRadius: "99px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>
                           {klientCounts[k.id].nabery} náb.
                         </span>
                       )}
@@ -614,7 +621,7 @@ function KlientiContent() {
                       fetchKlienti();
                     }} style={{
                       padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
-                      background: "#D1FAE5", color: "#065F46", border: "none", cursor: "pointer",
+                      background: "#D1FAE5", color: "var(--text-primary)", border: "none", cursor: "pointer",
                     }}>✓</button>
                   )}
                   {canEdit && (
@@ -638,7 +645,7 @@ function KlientiContent() {
                       fetchKlienti();
                     }} style={{
                       padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
-                      background: "#FEE2E2", color: "#991B1B", border: "none", cursor: "pointer",
+                      background: "var(--bg-elevated)", color: "#991B1B", border: "none", cursor: "pointer",
                     }}>🗑</button>
                   )}
                 </div>

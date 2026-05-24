@@ -1,0 +1,82 @@
+name: VIANEMA Engineering Audit
+
+# Audit aggregator. REPORT-ONLY mód — neblokuje merge (continue-on-error: true).
+# Cieľ: vidíš stav v každom PR, ale rapid development nezdržuje.
+# Po stabilizácii P0 ticktov môžeme prepnúť na strict mode (odstrániť continue-on-error).
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    # Daily o 02:00 UTC (04:00 SK) — Inspector General report
+    - cron: "0 2 * * *"
+
+jobs:
+  audit-all:
+    name: Run all 18 audits (report-only, nezhadzuje merge)
+    runs-on: ubuntu-latest
+    continue-on-error: true  # ← REPORT-ONLY: audit findings sú info, nie blocker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Make audit scripts executable
+        run: chmod +x scripts/*.sh
+
+      - name: Run audit-all aggregator
+        id: audits
+        env:
+          # Live DB checks need these (read-only)
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_KEY }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.DEV_SUPABASE_ANON_KEY }}
+        run: |
+          # Create dummy .env.local for audit scripts
+          cat > .env.local <<EOF
+          NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+          SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+          EOF
+
+          # Run aggregator
+          ./scripts/audit-all.sh
+
+      - name: Generate JSON report (for daily cron)
+        if: github.event_name == 'schedule'
+        run: ./scripts/audit-all.sh --json > audit-report.json
+
+      - name: Upload audit report
+        if: github.event_name == 'schedule'
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-report-${{ github.run_id }}
+          path: audit-report.json
+          retention-days: 90
+
+  meta-audit:
+    name: Meta audit (Inspector General)
+    runs-on: ubuntu-latest
+    needs: audit-all
+    if: github.event_name == 'schedule'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run meta audit
+        run: |
+          chmod +x scripts/audit-meta.sh
+          ./scripts/audit-meta.sh
+
+      - name: Notify Slack/Email if memory rot detected
+        if: failure()
+        run: |
+          # TODO: send notification (Slack webhook alebo Resend email)
+          echo "Meta audit failed — Inspector General report potrebný"

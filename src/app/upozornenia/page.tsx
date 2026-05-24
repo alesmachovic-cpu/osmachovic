@@ -16,7 +16,7 @@ interface Alert {
 
 const PRIORITY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   high: { label: "Urgentné", color: "#DC2626", bg: "#FEF2F2", border: "#FECACA" },
-  medium: { label: "Bežné", color: "#D97706", bg: "#FEF3C7", border: "#FDE68A" },
+  medium: { label: "Bežné", color: "var(--text-secondary)", bg: "#FEF3C7", border: "#FDE68A" },
   low: { label: "Informačné", color: "#6B7280", bg: "#F3F4F6", border: "#E5E7EB" },
 };
 
@@ -161,7 +161,7 @@ export default function UpozorneniaPage() {
         {[
           { label: "Celkom", value: alerts.length, color: "#374151", filterVal: "" as const },
           { label: "Urgentné", value: highCount, color: "#DC2626", filterVal: "high" as const },
-          { label: "Bežné", value: mediumCount, color: "#D97706", filterVal: "medium" as const },
+          { label: "Bežné", value: mediumCount, color: "var(--text-secondary)", filterVal: "medium" as const },
           { label: "Informačné", value: lowCount, color: "#6B7280", filterVal: "low" as const },
         ].map((s) => (
           <div

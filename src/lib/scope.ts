@@ -6,7 +6,12 @@ export interface UserScope {
   user_id: string;
   role: Role;
   makler_id: string | null;
+  /** Default pobočka (z users.pobocka_id). Pre maklérov 1:1, pre manažérov je
+   *  toto len primárna — full zoznam je v pobocka_ids. */
   pobocka_id: string | null;
+  /** Všetky pobočky ktoré užívateľ spravuje. Pre maklérov obsahuje len jednu
+   *  (alebo nič), pre manažérov môže byť viac (z user_pobocky). */
+  pobocka_ids: string[];
   company_id: string;
   isAdmin: boolean;
   isManager: boolean;
@@ -22,21 +27,25 @@ export async function getUserScope(userId: string | null | undefined): Promise<U
   if (cached && cached.expires > now) return cached.scope;
 
   const sb = getSupabaseAdmin();
-  const { data: u } = await sb
-    .from("users")
-    .select("id, role, makler_id, pobocka_id, company_id")
-    .eq("id", userId)
-    .single();
+  const [{ data: u }, { data: pobocky }] = await Promise.all([
+    sb.from("users").select("id, role, makler_id, pobocka_id, company_id").eq("id", userId).single(),
+    sb.from("user_pobocky").select("pobocka_id").eq("user_id", userId),
+  ]);
   if (!u) {
     adminCache.set(userId, { scope: null, expires: now + TTL_MS });
     return null;
   }
   const role = (u.role || "makler") as Role;
+  const pobocka_ids = Array.from(new Set([
+    ...(u.pobocka_id ? [String(u.pobocka_id)] : []),
+    ...((pobocky || []).map(p => String(p.pobocka_id))),
+  ]));
   const scope: UserScope = {
     user_id: u.id,
     role,
     makler_id: (u.makler_id as string | null) ?? null,
     pobocka_id: (u.pobocka_id as string | null) ?? null,
+    pobocka_ids,
     company_id: (u.company_id as string | null) ?? "a0000000-0000-0000-0000-000000000001",
     isAdmin: role === "super_admin" || role === "majitel",
     isManager: role === "super_admin" || role === "majitel" || role === "manazer",
@@ -61,14 +70,15 @@ export async function canEditRecord(
   if (!scope) return false;
   if (scope.isAdmin) return true;
   if (recordMaklerId && scope.makler_id && recordMaklerId === scope.makler_id) return true;
-  if (scope.role === "manazer" && recordMaklerId && scope.pobocka_id) {
+  if (scope.role === "manazer" && recordMaklerId && scope.pobocka_ids.length > 0) {
     const sb = getSupabaseAdmin();
     const { data: ownerUser } = await sb
       .from("users")
       .select("pobocka_id")
       .eq("makler_id", recordMaklerId)
       .single();
-    return (ownerUser?.pobocka_id ?? null) === scope.pobocka_id;
+    const ownerPobocka = ownerUser?.pobocka_id ?? null;
+    return ownerPobocka != null && scope.pobocka_ids.includes(String(ownerPobocka));
   }
   return false;
 }
@@ -98,12 +108,12 @@ export async function canEditNaber(
 export async function getReadFilter(scope: UserScope | null): Promise<{ makler_ids: string[] | null }> {
   if (!scope) return { makler_ids: [] };
   if (scope.isAdmin) return { makler_ids: null };
-  if (scope.role === "manazer" && scope.pobocka_id) {
+  if (scope.role === "manazer" && scope.pobocka_ids.length > 0) {
     const sb = getSupabaseAdmin();
     const { data: peers } = await sb
       .from("users")
       .select("makler_id")
-      .eq("pobocka_id", scope.pobocka_id)
+      .in("pobocka_id", scope.pobocka_ids)
       .not("makler_id", "is", null);
     return { makler_ids: (peers || []).map(p => String(p.makler_id)) };
   }

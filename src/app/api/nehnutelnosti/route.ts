@@ -67,6 +67,14 @@ export async function PATCH(req: NextRequest) {
 
   const { error } = await sb.from("nehnutelnosti").update({ status }).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "nehnutelnost.update",
+    actor_id: auth.user.id,
+    target_id: id,
+    target_type: "nehnutelnost",
+    detail: { status },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ ok: true });
 }
 

@@ -145,6 +145,19 @@ input:focus, select:focus, textarea:focus {
   background: rgba(0,122,255,0.2);
 }
 
+/* 🔒 SECURITY UX: pri /auth/callback (2FA challenge alebo OAuth processing)
+   skry sidebar + navbar + bottom tabs. Inak by užívateľ videl dáta zo starej
+   localStorage session pred dokončením re-overenia. */
+body.auth-callback-mode .sidebar-desktop,
+body.auth-callback-mode .sidebar-mobile,
+body.auth-callback-mode nav,
+body.auth-callback-mode footer {
+  display: none !important;
+}
+body.auth-callback-mode main {
+  padding: 0 !important;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   /* Sidebar: hidden by default, shown as overlay when .sidebar-open is on body */

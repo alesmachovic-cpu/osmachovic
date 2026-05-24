@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -8,6 +9,7 @@ const FIELDS = [
   "nazov", "sidlo", "ico", "dic", "ic_dph", "registracia", "konatel",
   "telefon", "email", "web", "prevadzkarena", "region",
   "historia", "cislo_licencie", "poistovna", "narks",
+  "platca_dph", "platca_dph_od",
 ] as const;
 
 function pickFields(input: Record<string, unknown>) {
@@ -39,5 +41,14 @@ export async function PUT(req: NextRequest) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "firma_info.update",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: "1",
+    target_type: "firma_info",
+    detail: { fields_changed: Object.keys(pickFields(body)) },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json(data);
 }

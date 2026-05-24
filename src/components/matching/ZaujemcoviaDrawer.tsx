@@ -100,7 +100,7 @@ export function ZaujemcoviaDrawer({ nehnutelnostId, nehnutelnostNazov, onClose }
                         )}
                         <button onClick={() => router.push(`/klienti/${o.klient_id}`)} style={{
                           padding: "5px 9px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-                          borderRadius: "7px", fontSize: "12px", cursor: "pointer", color: "#3B82F6",
+                          borderRadius: "7px", fontSize: "12px", cursor: "pointer", color: "var(--text-secondary)",
                         }}>→</button>
                       </div>
                     </div>

@@ -15,7 +15,7 @@ function isBillingExempt(pathname: string): boolean {
   return BILLING_EXEMPT.some(p => pathname.startsWith(p));
 }
 
-const ALLOWED_HOSTS = ["vianema.amgd.sk", "test.amgd.sk", "localhost:3000", "localhost:3001"];
+const ALLOWED_HOSTS = ["vianema.amgd.sk", "dev.amgd.sk", "localhost:3000", "localhost:3001"];
 
 // Vercel nastavuje x-forwarded-host na skutočný host požiadavky (aj pri internom
 // routingu), zatiaľ čo `host` header môže byť prepísaný na kanonickú doménu.
@@ -29,16 +29,30 @@ function isAllowedHost(req: NextRequest): boolean {
 }
 
 export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const isApi = pathname.startsWith("/api/");
+
   // Blokuj Vercel preview URL (funny-stonebraker-*.vercel.app atď.)
   if (!isAllowedHost(request)) {
+    // P1 fix 2026-05-24: API musí vždy JSON, nie HTML.
+    if (isApi) {
+      return NextResponse.json({ error: "Access denied", code: "FORBIDDEN_HOST" }, { status: 403 });
+    }
     return new NextResponse("Access denied", { status: 403 });
   }
 
   // Billing guard — ak firma má is_active=false, presmeruj na billing stránku.
   // Cookie crm_billing=suspended nastaví /api/auth/login a /api/auth/google/match.
   const billing = request.cookies.get("crm_billing")?.value;
-  const { pathname } = request.nextUrl;
   if (billing === "suspended" && !isBillingExempt(pathname)) {
+    // P1 fix 2026-05-24: API musí vrátiť JSON 402 (Payment Required), nie HTML redirect.
+    // Inak API klienti / monitoring dostane HTML login page namiesto strukturovaného erroru.
+    if (isApi) {
+      return NextResponse.json({
+        error: "Účet je pozastavený (billing)",
+        code: "ACCOUNT_SUSPENDED",
+      }, { status: 402 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/nastavenia";
     url.search = "?tab=billing&suspended=1";
@@ -55,7 +69,7 @@ export function middleware(request: NextRequest) {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
     "connect-src 'self' https://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.resend.com https://*.googleapis.com https://api.openai.com https://accounts.google.com https://*.vercel-insights.com https://challenges.cloudflare.com",
-    "frame-src 'self' https://accounts.google.com https://challenges.cloudflare.com",
+    "frame-src 'self' blob: https://accounts.google.com https://challenges.cloudflare.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self' https://accounts.google.com",

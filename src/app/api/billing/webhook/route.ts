@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,20 @@ export async function POST(req: NextRequest) {
 
   const sb = getSupabaseAdmin();
   const obj = event.data.object;
+
+  // Audit log KAŽDÝ Stripe event (peniaze = forenzný dôkaz).
+  await logAudit({
+    action: `billing.stripe.${event.type}`,
+    actor_id: "stripe-webhook",
+    target_id: (obj.id as string) ?? undefined,
+    target_type: "stripe_event",
+    detail: {
+      event_type: event.type,
+      object_type: obj.object as string ?? null,
+      company_id: (obj.metadata as Record<string, string> | null)?.company_id ?? null,
+    },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
 
   switch (event.type) {
     case "checkout.session.completed": {

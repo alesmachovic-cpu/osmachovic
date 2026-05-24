@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { OBCHOD_PRESET } from "@/lib/obchodPreset";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -46,10 +47,21 @@ export async function POST(req: NextRequest) {
 
   const sb = getSupabaseAdmin();
 
+  // P0 fix 2026-05-24: obchody.company_id je NOT NULL, derive z klienta
+  // (authoritative source — obchod patrí do firmy svojho klienta).
+  const { data: klient, error: klientErr } = await sb
+    .from("klienti")
+    .select("company_id")
+    .eq("id", body.klient_id)
+    .single();
+  if (klientErr || !klient) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+  if (!klient.company_id) return NextResponse.json({ error: "Klient bez company_id (legacy záznam)" }, { status: 500 });
+
   const { data: obchod, error: obchodErr } = await sb
     .from("obchody")
     .insert({
       klient_id:       body.klient_id,
+      company_id:      klient.company_id,
       nehnutelnost_id: body.nehnutelnost_id ?? null,
       cena:            body.cena ?? null,
       provizia:        body.provizia ?? null,
@@ -62,13 +74,14 @@ export async function POST(req: NextRequest) {
 
   if (obchodErr) return NextResponse.json({ error: obchodErr.message }, { status: 500 });
 
-  // Naseeduj preset úlohy
+  // Naseeduj preset úlohy — company_id musí byť NOT NULL (P0 fix 2026-05-24).
   const seedRows = OBCHOD_PRESET.map(u => ({
-    obchod_id: obchod.id,
-    kategoria: u.kategoria,
-    nazov:     u.nazov,
-    popis:     u.popis ?? null,
-    priorita:  u.priorita,
+    obchod_id:  obchod.id,
+    company_id: klient.company_id,
+    kategoria:  u.kategoria,
+    nazov:      u.nazov,
+    popis:      u.popis ?? null,
+    priorita:   u.priorita,
   }));
 
   const { error: seedErr } = await sb.from("obchod_ulohy").insert(seedRows);
@@ -80,6 +93,21 @@ export async function POST(req: NextRequest) {
     .select("*, obchod_ulohy(*)")
     .eq("id", obchod.id)
     .single();
+
+  await logAudit({
+    action: "obchod.create",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: obchod.id,
+    target_type: "obchod",
+    detail: {
+      klient_id: body.klient_id,
+      nehnutelnost_id: body.nehnutelnost_id ?? null,
+      cena: body.cena ?? null,
+      provizia: body.provizia ?? null,
+    },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
 
   return NextResponse.json({ obchod: full }, { status: 201 });
 }

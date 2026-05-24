@@ -122,18 +122,20 @@ export default function NastaveniaPage() {
         setMaklerEmail(authUser.email || "");
       }
 
-      // Load vzorové inzeráty z DB (cross-device). Fallback na localStorage pre legacy.
+      // Load vzorové inzeráty + makler profil (telefon) z DB.
       fetch("/api/users").then(r => r.json()).then(({ users }) => {
-        const userData = (users ?? []).find((u: { id: string; vzorove_inzeraty?: string[] }) => u.id === uid);
+        const userData = (users ?? []).find((u: { id: string; vzorove_inzeraty?: string[]; telefon?: string; name?: string; email?: string }) => u.id === uid);
         const dbVal = userData?.vzorove_inzeraty;
         if (Array.isArray(dbVal) && dbVal.length > 0) {
-          // Padding na 3 slots
           setVzorLinks([dbVal[0] || "", dbVal[1] || "", dbVal[2] || ""]);
         } else {
-          // Migrácia z localStorage pri prvej návšteve po deploy
           const vi = getUserItem(uid, "vzorove_inzeraty");
           if (vi) setVzorLinks(JSON.parse(vi));
         }
+        // Prepíš lokálne hodnoty z DB ak existujú (DB je single source of truth).
+        if (userData?.telefon) setMaklerTelefon(userData.telefon);
+        if (userData?.name) setMaklerMeno(userData.name);
+        if (userData?.email) setMaklerEmail(userData.email);
       });
 
       // Load company info (admin only)
@@ -200,11 +202,26 @@ export default function NastaveniaPage() {
     setTimeout(() => setCenoSaved(false), 2000);
   }
 
-  function handleSaveMakler() {
+  async function handleSaveMakler() {
     if (!uid) return;
-    setUserItem(uid, "makler_profile", JSON.stringify({ meno: maklerMeno, telefon: maklerTelefon, email: maklerEmail }));
-    setMaklerSaved(true);
-    setTimeout(() => setMaklerSaved(false), 2000);
+    try {
+      const res = await fetch(`/api/users?id=${encodeURIComponent(uid)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: maklerMeno, telefon: maklerTelefon, email: maklerEmail }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert("Chyba: " + (body.error || `HTTP ${res.status}`));
+        return;
+      }
+      // Lokálny cache pre rýchle načítanie pri opätovnom otvorení.
+      setUserItem(uid, "makler_profile", JSON.stringify({ meno: maklerMeno, telefon: maklerTelefon, email: maklerEmail }));
+      setMaklerSaved(true);
+      setTimeout(() => setMaklerSaved(false), 2000);
+    } catch (e) {
+      alert("Chyba: " + (e instanceof Error ? e.message : e));
+    }
   }
 
   async function handleSaveVzory() {
@@ -281,6 +298,7 @@ export default function NastaveniaPage() {
     { id: "ciele", label: "Ciele a kalkulácie", icon: "🎯" },
     { id: "integracie", label: "Integrácie", icon: "🔗" },
     { id: "faktury", label: "Faktúry", icon: "🧾", href: "/nastavenia/faktury" },
+    { id: "bezpecnost", label: "Bezpečnosť (2FA)", icon: "🔒", href: "/nastavenia/security" },
     ...(isAdmin ? [
       { id: "spolocnost", label: "Spoločnosť", icon: "🏢" },
       { id: "ucty", label: "Účty", icon: "👥", href: "/manazer?tab=tim" },
@@ -355,7 +373,7 @@ export default function NastaveniaPage() {
                 Uložiť profil
               </button>
               {maklerSaved && (
-                <span style={{ fontSize: "13px", color: "#065F46", fontWeight: "500" }}>Uložené</span>
+                <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: "500" }}>Uložené</span>
               )}
             </div>
           </div>
@@ -500,7 +518,7 @@ export default function NastaveniaPage() {
                 Uložiť vzory
               </button>
               {vzorSaved && (
-                <span style={{ fontSize: "13px", color: "#065F46", fontWeight: "500" }}>Uložené</span>
+                <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: "500" }}>Uložené</span>
               )}
             </div>
           </div>
@@ -581,7 +599,7 @@ export default function NastaveniaPage() {
               }}>
                 Uložiť ciele
               </button>
-              {saved && <span style={{ fontSize: "13px", color: "#065F46", fontWeight: "500" }}>Uložené</span>}
+              {saved && <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: "500" }}>Uložené</span>}
             </div>
           </div>
 
@@ -638,7 +656,7 @@ export default function NastaveniaPage() {
               }}>
                 Uložiť ceny
               </button>
-              {cenoSaved && <span style={{ fontSize: "13px", color: "#065F46", fontWeight: "500" }}>Uložené</span>}
+              {cenoSaved && <span style={{ fontSize: "13px", color: "var(--text-primary)", fontWeight: "500" }}>Uložené</span>}
             </div>
           </div>
           )}
@@ -670,7 +688,7 @@ export default function NastaveniaPage() {
           ) : googleStatus.connected ? (
             <div style={{
               padding: "20px", borderRadius: "12px",
-              background: "#F0FDF4", border: "1px solid #BBF7D0",
+              background: "var(--bg-elevated)", border: "1px solid #BBF7D0",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
                 <div style={{
@@ -680,7 +698,7 @@ export default function NastaveniaPage() {
                   fontSize: "18px",
                 }}>&#10003;</div>
                 <div>
-                  <div style={{ fontSize: "14px", fontWeight: "700", color: "#065F46" }}>Google účet pripojený</div>
+                  <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)" }}>Google účet pripojený</div>
                   <div style={{ fontSize: "12px", color: "#047857", marginTop: "2px" }}>{googleStatus.email || "Pripojený"}</div>
                 </div>
               </div>
@@ -697,7 +715,7 @@ export default function NastaveniaPage() {
                     textAlign: "center",
                   }}>
                     <div style={{ fontSize: "20px", marginBottom: "4px" }} dangerouslySetInnerHTML={{ __html: s.icon }} />
-                    <div style={{ fontSize: "12px", fontWeight: "700", color: "#065F46" }}>{s.label}</div>
+                    <div style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-primary)" }}>{s.label}</div>
                     <div style={{ fontSize: "10px", color: "#047857", marginTop: "2px" }}>{s.desc}</div>
                   </div>
                 ))}
@@ -705,7 +723,7 @@ export default function NastaveniaPage() {
 
               <button onClick={handleDisconnectGoogle} style={{
                 padding: "8px 16px", background: "transparent", color: "#DC2626",
-                border: "1px solid #FECACA", borderRadius: "8px",
+                border: "1px solid var(--border)", borderRadius: "8px",
                 fontSize: "12px", fontWeight: "600", cursor: "pointer",
               }}>
                 Odpojiť Google účet
@@ -790,6 +808,36 @@ export default function NastaveniaPage() {
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={labelSt}>Zápis v OR</label>
               <input value={firma.registracia} onChange={e => setFirma(f => ({ ...f, registracia: e.target.value }))} style={inputSt} placeholder="Mestského súdu Bratislava III, oddiel Sro, vložka č. 123596/B" />
+            </div>
+          </div>
+
+          {/* Sekcia: DPH (zákon 222/2004) */}
+          <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px", marginTop: "16px" }}>DPH</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }} className="naber-grid">
+            <div>
+              <label style={labelSt}>Platca DPH</label>
+              <select
+                value={firma.platca_dph ? "true" : "false"}
+                onChange={e => setFirma(f => ({ ...f, platca_dph: e.target.value === "true" }))}
+                style={inputSt}
+              >
+                <option value="false">Nie (faktúry bez DPH)</option>
+                <option value="true">Áno (faktúry s DPH)</option>
+              </select>
+            </div>
+            <div>
+              <label style={labelSt}>Platca od (dátum)</label>
+              <input
+                type="date"
+                value={firma.platca_dph_od || ""}
+                onChange={e => setFirma(f => ({ ...f, platca_dph_od: e.target.value || null }))}
+                style={inputSt}
+                disabled={!firma.platca_dph}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6 }}>
+              Sadzba DPH sa počíta automaticky podľa zákona 222/2004 a dátumu vystavenia faktúry.
+              Do 31.12.2025: 20 %. Od 1.1.2026: 23 % (novela schválená 2024).
             </div>
           </div>
 

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
+import { useUserScope } from "@/hooks/useUserScope";
 import PricingEstimateModal from "@/components/PricingEstimateModal";
 import PropertyStoryModal from "@/components/PropertyStoryModal";
 import { ZaujemcoviaChip } from "@/components/matching/ZaujemcoviaChip";
@@ -75,8 +76,9 @@ function typLabel(typ: string): string {
 
 export default function Portfolio() {
   const { user } = useAuth();
+  const { scope } = useUserScope();
   const router = useRouter();
-  const isAdmin = user?.id === "ales" || user?.role === "super_admin";
+  const isAdmin = scope?.isAdmin ?? false;
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
   // "all" (default pre všetkých — vidí celé portfólio firmy) | "mine" | meno makléra
   // Predtým sme bežnému maklérovi auto-zaplo "mine" — to spôsobovalo prázdne
@@ -302,8 +304,8 @@ export default function Portfolio() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "12px", marginBottom: "20px" }} className="cards-grid">
         {([
           { key: "", label: "Celkovo", value: stats.celkovo, color: "#374151" },
-          { key: "aktivny", label: "Aktívne", value: stats.aktivne, color: "#16A34A" },
-          { key: "koncept", label: "Koncepty", value: stats.koncepty, color: "#D97706" },
+          { key: "aktivny", label: "Aktívne", value: stats.aktivne, color: "var(--text-primary)" },
+          { key: "koncept", label: "Koncepty", value: stats.koncepty, color: "var(--text-secondary)" },
           { key: "predany", label: "Predané", value: stats.predane, color: "#6B7280" },
           { key: "archivovany", label: "Archív", value: stats.archiv, color: "#9CA3AF" },
         ] as const).map(s => {

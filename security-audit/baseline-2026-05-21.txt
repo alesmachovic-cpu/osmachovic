@@ -1,0 +1,43 @@
+═══════════════════════════════════════════════
+   AUDIT: Security & Auth doména
+   Spustené: 2026-05-21 22:27
+═══════════════════════════════════════════════
+
+─── Rate limit na login ───
+  ✓ Login route má rate limit logiku (login_attempts tabuľka)
+
+─── Middleware — host allowlist + billing guard ───
+  ✓ Middleware má host allowlist
+  ✓ Billing guard aktívny (suspended účty redirect na /nastavenia)
+
+─── Session HMAC + secret ───
+  ✓ Session používa SESSION_SECRET env
+
+─── 30-day device verification ───
+  ⚠ Device 30-day verify NIE JE IMPLEMENTOVANÉ (známy gap, ticket P1 v memory)
+
+─── 2FA / TOTP ───
+  ✓ 2FA infrastructure existuje
+
+─── Audit log coverage ───
+  Audit users: 35 routes | Write routes: 90
+  ✓ Audit log používaný v ≥8 routes
+
+─── RLS — anonné policy check ───
+  RLS migrácie:
+    21
+  ⚠ 27 anon RLS policy nájdených — over že žiadny USING(true)
+
+─── Sensitive env vars (nesmie byť v klientovi) ───
+  ✓ Žiadne sensitive env vars priamo v komponentoch/hookoch
+
+─── Heslá — strength validation ───
+  ✗ Niektoré auth endpointy NEvalidujú silu hesla
+
+─── Anon RLS — sample table check ───
+  ✓ Anon kľúč nečíta users tabuľku (správne RLS)
+
+═══════════════════════════════════════════════
+VÝSLEDOK: ✓ 8 pass | ⚠ 2 warn | ✗ 1 fail
+═══════════════════════════════════════════════
+❌ AUDIT FAILED — sú KRITICKÉ problémy. Pozri memory/domain-security.md.

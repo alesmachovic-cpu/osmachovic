@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { validatePasswordStrength } from "@/lib/auth/password";
 import { buildSessionCookieValue } from "@/lib/auth/session";
+import { logAudit } from "@/lib/audit";
+import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -30,6 +33,16 @@ export async function GET(request: NextRequest) {
 /** POST — uloží heslo, označí invite ako použitý, nastaví session */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit (brute-force token guess protection).
+    const ip = getRequestIp(request);
+    const rl = rateLimit({ key: `invite-accept:${ip}`, ...RATE_LIMITS.RESET });
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: rl.error, code: "RATE_LIMITED" },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      );
+    }
+
     const body = await request.json();
     const token = String(body.token || "").trim();
     const password = String(body.password || "");
@@ -64,6 +77,41 @@ export async function POST(request: NextRequest) {
       .from("user_invites")
       .update({ used_at: new Date().toISOString() })
       .eq("id", invite.id);
+
+    // 🔒 2FA gate — ak má user 2FA aktivované (napr. re-invite scenár),
+    // NEVYSTAVUJ session rovno. Vyžaduj 6-cifrový kód cez /api/auth/2fa/verify.
+    const { data: user } = await sb
+      .from("users")
+      .select("totp_enabled_at")
+      .eq("id", invite.user_id)
+      .maybeSingle();
+    if (user?.totp_enabled_at) {
+      const challenge = crypto.randomBytes(32).toString("base64url");
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+      await sb.from("auth_2fa_challenges").insert({
+        user_id: invite.user_id,
+        challenge,
+        ip,
+        user_agent: (request.headers.get("user-agent") || "").slice(0, 500),
+        expires_at: expiresAt,
+      });
+      return NextResponse.json({
+        success: true,
+        userId: invite.user_id,
+        requires_2fa: true,
+        challenge,
+        message: "Heslo bolo nastavené. Zadaj 6-cifrový kód z autentifikátora.",
+      });
+    }
+
+    await logAudit({
+      action: "user.invite_accepted",
+      actor_id: invite.user_id,
+      target_id: invite.user_id,
+      target_type: "user",
+      ip_address: request.headers.get("x-forwarded-for") || undefined,
+    });
 
     const res = NextResponse.json({ success: true, userId: invite.user_id });
     res.headers.set("Set-Cookie", buildSessionCookieValue(invite.user_id));

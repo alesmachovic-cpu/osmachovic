@@ -192,12 +192,23 @@ export async function POST(request: Request) {
       return r;
     }
 
-    // Cloudflare Turnstile — overenie iba ak je token prítomný (widget mohol byť neviditeľný)
-    if (process.env.TURNSTILE_SECRET_KEY && turnstileToken) {
+    // 🔒 M2 PEN-TEST FIX 2026-05-20:
+    //   Pôvodne sa Turnstile overoval IBA ak bol token prítomný — útočník
+    //   ho mohol vynechať v automatizovanom requeste (curl bez widgetu) a
+    //   prešiel bez bot challenge. Teraz: ak je TURNSTILE_SECRET_KEY set,
+    //   token JE POVINNÝ. Per-IP rate limit chráni proti distributed botnetu.
+    if (process.env.TURNSTILE_SECRET_KEY) {
+      if (!turnstileToken) {
+        await logAttempt(sb, ip, identifier, false);
+        return NextResponse.json({
+          error: "Captcha overenie je povinné. Obnov stránku a počkaj kým sa widget načíta.",
+          code: "TURNSTILE_REQUIRED",
+        }, { status: 403 });
+      }
       const ok = await verifyTurnstile(turnstileToken, ip);
       if (!ok) {
         await logAttempt(sb, ip, identifier, false);
-        return NextResponse.json({ error: "Overenie Turnstile zlyhalo. Obnovte stránku a skúste znova." }, { status: 403 });
+        return NextResponse.json({ error: "Overenie Turnstile zlyhalo. Obnov stránku a skús znova." }, { status: 403 });
       }
     }
 
@@ -233,12 +244,12 @@ export async function POST(request: Request) {
         try {
           const hashed = await bcrypt.hash(password, 10);
           await sb.from("users").update({ password: hashed }).eq("id", user.id);
-          console.log(`[login] auto-hashed password for ${user.id}`);
+          console.log(`[login] auto-hashed password for ${user.id}`); // safe-log
         } catch (e) { console.warn("[login] auto-hash failed:", e); }
       }
     } else {
       // Bez hesla = anybody can log in (staré správanie). Ale log to.
-      console.warn(`[login] no password set for ${user.id} — allowing login`);
+      console.warn(`[login] no password set for ${user.id} — allowing login`); // safe-log
     }
 
     await logAttempt(sb, ip, identifier, true);
@@ -246,6 +257,26 @@ export async function POST(request: Request) {
     // Fire-and-forget: alert pri prihlásení z novej IP (neblokuje odpoveď)
     const userAgent = request.headers.get("user-agent") || "";
     checkAndAlertNewIp(sb, String(user.id), String(user.name || ""), identifier, ip, userAgent).catch(() => {});
+
+    // 🔒 2FA gate — ak má user aktivované 2FA, NEVYSTAVUJ session cookie hneď.
+    // Vytvor 2FA challenge a vyžiadaj /api/auth/2fa/verify ako druhý krok.
+    if (user.totp_enabled_at) {
+      const crypto = await import("node:crypto");
+      const challenge = crypto.randomBytes(32).toString("base64url");
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 min
+      await sb.from("auth_2fa_challenges").insert({
+        user_id: String(user.id),
+        challenge,
+        ip,
+        user_agent: userAgent.slice(0, 500),
+        expires_at: expiresAt,
+      });
+      return NextResponse.json({
+        requires_2fa: true,
+        challenge,
+        message: "Zadaj 6-cifrový kód z autentifikátora alebo backup kód.",
+      });
+    }
 
     // Billing status — zisti is_active firmy pre crm_billing cookie
     let companyActive = true;

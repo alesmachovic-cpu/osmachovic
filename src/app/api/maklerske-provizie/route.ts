@@ -1,8 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin, isManagerOrAbove } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
+
+// Helper — provízia zmena = financial impact, MUSÍ byť v audite (forenzný dôkaz).
+async function auditProvizie(action: string, auth: { user: { id: string; name: string } }, targetId: string | null, detail: Record<string, unknown>, ip: string | null) {
+  await logAudit({
+    action: `provizie.${action}`,
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: targetId ?? undefined,
+    target_type: "makler_provizie_pct",
+    detail,
+    ip_address: ip || undefined,
+  });
+}
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);
@@ -47,6 +61,7 @@ export async function POST(req: NextRequest) {
     ...(body.makler_id ? { makler_id: body.makler_id } : {}),
   }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await auditProvizie("create", auth, data.id, { meno: body.meno, percento: body.percento, makler_id: body.makler_id ?? null }, req.headers.get("x-forwarded-for"));
   return NextResponse.json(data);
 }
 
@@ -61,6 +76,7 @@ export async function PATCH(req: NextRequest) {
   if (rest.percento !== undefined) rest.percento = Number(rest.percento);
   const { data, error } = await getSupabaseAdmin().from("makler_provizie_pct").update(rest).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await auditProvizie("update", auth, id, { fields_changed: Object.keys(rest), new_values: rest }, req.headers.get("x-forwarded-for"));
   return NextResponse.json(data);
 }
 
@@ -74,5 +90,6 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const { error } = await getSupabaseAdmin().from("makler_provizie_pct").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await auditProvizie("delete", auth, id, {}, req.headers.get("x-forwarded-for"));
   return NextResponse.json({ ok: true });
 }

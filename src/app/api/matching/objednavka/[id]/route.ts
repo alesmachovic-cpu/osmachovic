@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { vypocitajSkore } from "@/lib/matching";
-import type { ObjednavkaForMatch, NehnutelnostForMatch } from "@/lib/matching";
+import type { ObjednavkaForMatch, NehnutelnostForMatch, KlientForMatch } from "@/lib/matching";
 
 export const runtime = "nodejs";
 
@@ -29,6 +29,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   ]);
 
   if (!obj) return NextResponse.json({ error: "Objednávka nenájdená" }, { status: 404 });
+
+  // 🐛 BUG FIX 2026-05-22: niektoré objednávky majú prázdnu lokalita (kraje:[], okresy:[])
+  // → matching ignoroval lokalitu úplne (klient čo chce Žilinu dostával 55% na Bratislavu).
+  // Fallback: keď obj.lokalita je prázdne, použijeme klient.lokalita ("Vlčince, Žilina").
+  let klientForMatch: KlientForMatch | undefined;
+  if (obj.klient_id) {
+    const { data: k } = await sb.from("klienti").select("id,lokalita").eq("id", obj.klient_id).maybeSingle();
+    if (k) klientForMatch = { id: k.id, lokalita: k.lokalita, rozpocet_max: null };
+  }
 
   // Interné nehnuteľnosti
   const neh = (nehnutelnosti ?? []) as unknown as NehWithMeta[];
@@ -67,7 +76,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }));
 
   const matches = [...neh, ...monitorNeh]
-    .map(n => ({ nehnutelnost: n, score: vypocitajSkore(obj as ObjednavkaForMatch, n).score }))
+    .map(n => ({ nehnutelnost: n, score: vypocitajSkore(obj as ObjednavkaForMatch, n, klientForMatch).score }))
     .filter(m => m.score >= 30)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);

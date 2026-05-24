@@ -107,8 +107,8 @@ const PHASES: Phase[] = [
 
 const STATUS_CONFIG = {
   done: { label: "Hotové", bg: "#F0FDF4", color: "#059669", border: "#BBF7D0", icon: "✓" },
-  wip: { label: "Pracuje sa", bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE", icon: "⏳" },
-  planned: { label: "Plánované", bg: "#FEF3C7", color: "#D97706", border: "#FDE68A", icon: "📋" },
+  wip: { label: "Pracuje sa", bg: "#EFF6FF", color: "var(--text-secondary)", border: "#BFDBFE", icon: "⏳" },
+  planned: { label: "Plánované", bg: "#FEF3C7", color: "var(--text-secondary)", border: "#FDE68A", icon: "📋" },
   future: { label: "Vízia", bg: "#F3F4F6", color: "#6B7280", border: "#E5E7EB", icon: "💡" },
 };
 
@@ -151,8 +151,8 @@ export default function PlanPage() {
         </div>
         <div style={{ display: "flex", gap: "20px", marginTop: "14px", fontSize: "12px" }}>
           <span style={{ color: "#059669", fontWeight: "600" }}>✓ {doneFeatures} hotových</span>
-          <span style={{ color: "#2563EB", fontWeight: "600" }}>⏳ {wipFeatures} rozpracovaných</span>
-          <span style={{ color: "#D97706", fontWeight: "600" }}>📋 {totalFeatures - doneFeatures - wipFeatures} plánovaných</span>
+          <span style={{ color: "var(--text-secondary)", fontWeight: "600" }}>⏳ {wipFeatures} rozpracovaných</span>
+          <span style={{ color: "var(--text-secondary)", fontWeight: "600" }}>📋 {totalFeatures - doneFeatures - wipFeatures} plánovaných</span>
         </div>
       </div>
 

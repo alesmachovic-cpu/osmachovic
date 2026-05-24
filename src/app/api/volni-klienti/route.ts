@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -12,14 +13,18 @@ export const runtime = "nodejs";
  */
 export async function GET(request: Request) {
   try {
+    const auth = await requireUser(request as NextRequest);
+    if (auth.error) return auth.error;
     const sb = getSupabaseAdmin();
+    const companyId = auth.user.company_id;
     const { searchParams } = new URL(request.url);
     const filter = searchParams.get("filter") || "all";
 
-    // 1) Voľní klienti
+    // 1) Voľní klienti (multi-tenant scope)
     let query = sb
       .from("klienti")
       .select("id, meno, telefon, email, lokalita, typ, status, volny_dovod, volny_at, datum_naberu, makler_id, poznamka", { count: "exact" })
+      .eq("company_id", companyId)
       .eq("je_volny", true)
       .order("volny_at", { ascending: false });
 
@@ -36,12 +41,14 @@ export async function GET(request: Request) {
     const [{ data: slaWarnings }, { data: slaCritical }] = await Promise.all([
       sb.from("klienti")
         .select("id, meno, telefon, status, datum_naberu, makler_id, sla_warning_at, sla_critical_at")
+        .eq("company_id", companyId)
         .not("sla_warning_at", "is", null)
         .is("sla_critical_at", null)
         .eq("je_volny", false)
         .order("sla_warning_at", { ascending: false }),
       sb.from("klienti")
         .select("id, meno, telefon, status, datum_naberu, makler_id, sla_critical_at, napomenutia_count, manager_action_type, manager_action_at")
+        .eq("company_id", companyId)
         .not("sla_critical_at", "is", null)
         .eq("je_volny", false)
         .order("sla_critical_at", { ascending: false }),

@@ -17,6 +17,8 @@ export type FirmaInfo = {
   cislo_licencie: string;
   poistovna: string;
   narks: string;
+  platca_dph: boolean;
+  platca_dph_od: string | null;
 };
 
 export const DEFAULT_FIRMA: FirmaInfo = {
@@ -36,6 +38,8 @@ export const DEFAULT_FIRMA: FirmaInfo = {
   cislo_licencie: "",
   poistovna: "",
   narks: "",
+  platca_dph: false,
+  platca_dph_od: null,
 };
 
 export async function getFirmaInfo(): Promise<FirmaInfo> {

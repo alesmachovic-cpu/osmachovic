@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { encryptDocString, decryptDocString, isEncrypted } from "@/lib/cryptoDocs";
 import { requireUser } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -108,6 +109,15 @@ export async function POST(req: NextRequest) {
     .select("id")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "klient_dokumenty.create",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: data?.id,
+    target_type: "klient_dokument",
+    detail: { klient_id, typ: (payload as { typ?: string }).typ ?? null },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ id: data?.id });
 }
 
@@ -143,5 +153,13 @@ export async function DELETE(req: NextRequest) {
   const sb = getSupabaseAdmin();
   const { error } = await sb.from("klient_dokumenty").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "klient_dokumenty.delete",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: id,
+    target_type: "klient_dokument",
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ ok: true });
 }

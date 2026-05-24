@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { getStripe } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,15 @@ export async function POST(req: NextRequest) {
   const session = await stripe.billingPortal.sessions.create({
     customer: String(company.stripe_customer_id),
     return_url: `${origin}/nastavenia?tab=billing`,
+  });
+
+  await logAudit({
+    action: "billing.portal_opened",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: String(auth.user.company_id),
+    target_type: "company",
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
   });
 
   return NextResponse.json({ url: session.url });

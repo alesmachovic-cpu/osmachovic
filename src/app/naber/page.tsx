@@ -8,6 +8,7 @@ import { STATUS_LABELS } from "@/lib/database.types";
 import NaberyForm from "@/components/NaberyForm";
 import Stepper from "@/components/Stepper";
 import { useAuth } from "@/components/AuthProvider";
+import { useUserScope } from "@/hooks/useUserScope";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { getUserItem } from "@/lib/userStorage";
 import { klientUpdate, naberUpdate } from "@/lib/klientApi";
@@ -66,7 +67,8 @@ function NaberPageContent() {
   const preselectedKlientId = searchParams.get("klient_id");
   const parentNaberakId = searchParams.get("parent");
   const { user } = useAuth();
-  const isAdmin = user?.id === "ales";
+  const { scope } = useUserScope();
+  const isAdmin = scope?.isAdmin ?? false;
   const [filterMakler, setFilterMakler] = useState<string>(isAdmin ? "all" : "mine");
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
@@ -662,9 +664,9 @@ function NaberPageContent() {
         {parentNaberakId && (
           <div style={{
             maxWidth: "720px", marginBottom: "16px",
-            padding: "12px 16px", background: "#FEF3C7",
-            border: "1px solid #F59E0B", borderRadius: "12px",
-            fontSize: "13px", color: "#92400E",
+            padding: "12px 16px", background: "var(--bg-elevated)",
+            border: "1px solid var(--border)", borderRadius: "12px",
+            fontSize: "13px", color: "var(--text-secondary)",
           }}>
             <strong>📝 Dodatok k náberáku</strong><br />
             Originál náberáka sa nedá prepisovať — uloží sa samostatne ako dodatok ku existujúcej nehnuteľnosti.
@@ -727,7 +729,7 @@ function NaberPageContent() {
         padding: "48px 32px", textAlign: "center",
       }}>
         <div style={{
-          width: "80px", height: "80px", borderRadius: "50%", background: "#F0FDF4",
+          width: "80px", height: "80px", borderRadius: "50%", background: "var(--bg-elevated)",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: "36px", margin: "0 auto 24px", border: "3px solid #BBF7D0",
         }}>✓</div>

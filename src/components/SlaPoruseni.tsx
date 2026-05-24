@@ -91,7 +91,7 @@ export default function SlaPoruseni({ byUserId, onUpdated }: { byUserId: string 
           </p>
         </div>
         <span style={{
-          padding: "4px 10px", background: "#FEE2E2", color: "#991B1B",
+          padding: "4px 10px", background: "var(--bg-elevated)", color: "#991B1B",
           borderRadius: "8px", fontSize: "12px", fontWeight: 600,
         }}>{list.length}</span>
       </div>

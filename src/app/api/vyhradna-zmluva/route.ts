@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,15 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "vyhradna_zmluva.create",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: data.id,
+    target_type: "vyhradna_zmluva",
+    detail: { klient_id: body.klient_id ?? null, naber_id: body.naber_id ?? null },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json(data);
 }
 
@@ -61,5 +71,14 @@ export async function PATCH(req: NextRequest) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "vyhradna_zmluva.update",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: id,
+    target_type: "vyhradna_zmluva",
+    detail: { fields_changed: Object.keys(rest) },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json(data);
 }

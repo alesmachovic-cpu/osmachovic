@@ -312,7 +312,7 @@ export default function SystemSearch() {
                 <span style={{ fontSize: "10px", color: "var(--text-muted)", background: "var(--bg-elevated)", padding: "2px 6px", borderRadius: "4px", flexShrink: 0 }}>Funkcia</span>
               )}
               {r.type === "calendar" && (
-                <span style={{ fontSize: "10px", color: "#92400E", background: "#FEF3C7", padding: "2px 8px", borderRadius: "4px", flexShrink: 0, fontWeight: "600" }}>
+                <span style={{ fontSize: "10px", color: "var(--text-secondary)", background: "var(--bg-elevated)", padding: "2px 8px", borderRadius: "4px", flexShrink: 0, fontWeight: "600" }}>
                   {calendarCreating ? "..." : "+ Kalendár"}
                 </span>
               )}

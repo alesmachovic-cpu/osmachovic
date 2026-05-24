@@ -14,7 +14,7 @@
 - **Operatíva** — produkcia tímu, vyťaženosť, štatistiky, push notifikácie
 
 Produkcia: **https://vianema.amgd.sk**
-Test/staging: **https://test.amgd.sk**
+Test/staging: **https://dev.amgd.sk**
 
 ## Jazyk a štýl komunikácie
 - **Komunikuj so mnou v slovenčine.**
@@ -22,11 +22,41 @@ Test/staging: **https://test.amgd.sk**
 - Keď niečo neviem alebo si neistý, povedz to priamo. Žiadne "isto budeš zvládať".
 - Som realitný maklér, nie programátor — vysvetľuj rozhodnutia rečou ktorá dáva zmysel realiťákovi.
 
+## 🔒 ZLATÉ PRAVIDLO: Bezpečnosť 100%, vždy, bez výnimky
+
+**Bezpečnostný baseline NESMIE klesnúť ani o jeden bod, ani na minútu.** Nie len pri security-súvisiacich commitoch — pri **každom** commite, **každej** zmene, **každej** novej feature. UI refactor, drobný fix, kozmetika — všetko prechádza tým istým gate-om.
+
+**Konkrétne to znamená:**
+- `./scripts/audit-all.sh` pred **každým** push-om (nie len pred merge-om).
+- Ak audit ukáže nový `✗` ktorý nie je v baseline → **commit/push sa NEUSKUTOČNÍ**. Stash zmeny, oprav root cause, audit znova, až potom push.
+- Nikdy nepoužívať `--no-verify`, `--no-gpg-sign`, `git commit --amend` na obídenie hooku alebo audit-u — ani keď je neskoro v noci, ani keď je to "len kozmetika".
+- Nikdy si nepovedz "tento failed audit je pre-existing, takže môj nový tiež môže projsť". Pre-existing fails sú TODO ktoré budeme riešiť, **nové fails sú zákaz commitu**.
+- Tri known gaps (HSTS, dev password protect, CSP nonce) sú evidované, ale **nepribúdajú** ďalšie gaps — to je pevný limit.
+- Pri novej API route / DB migrácii / session emitteri: vyžadované checks z "Security Regression Guardian Mode" sekcie sú **nezjednateľné**, nie nice-to-have.
+
+**Prečo:** Vianema má reálnych klientov, reálne osobné údaje (AML/KYC, OP, listy vlastníctva), reálne peniaze (provízie, faktúry). Jeden security breach = okamžitý koniec firmy + GDPR pokuty + osobná zodpovednosť Aleša ako CEO. Žiadna feature, žiadna deadline, žiadny "rýchly fix" toto neprebije.
+
 ## Workflow — DÔLEŽITÉ
 1. **Pri každej netriviálnej úlohe (3+ kroky) najprv vytvor plán** v `plan.md`.
 2. Pred kódom prečítaj existujúci kód, aby si pochopil kontext.
 3. Po napísaní kódu vždy spusti dev server alebo testy (`npm run lint`) a over že to funguje.
-4. Nikdy neoznač úlohu ako hotovú bez verifikácie.
+4. **Supabase migrácie aplikuj VŽDY AUTOMATICKY do test DB** cez `supabase db query --linked --file supabase/migrations/XXX_*.sql` — neopytuj sa, nečakaj na pokyn. Ja som realitný maklér nie SQL admin.
+5. **Pred KAŽDÝM mojím turn-om** — `scripts/tg-inbox.sh` ako prvý Bash call. Ak inbox nie je prázdny, najprv odpovedz, potom pokračuj.
+6. **Auth zmeny VŽDY** spusti `./scripts/audit-auth-paths.sh` PRED commitom. Lesson z 2026-05-20: 2FA bypass cez Google OAuth + invite/accept ktoré CEO sám našiel. Každý súbor čo vystavuje session musí mať 2FA gate alebo explicit allowlist.
+7. **Ja nemám kontrolovať každú blbosť cez oddelenia** — mám firmu s departments práve preto. Ak nájdem chybu ktorú malo zachytiť Security Auditor / Compliance / QA, **najprv oprav koreňovú príčinu** (proces / regression check / pravidlo do role súboru), potom oprav sám bug. Nikdy nie len bug bez procesnej zmeny.
+8. **Pred KAŽDÝM commitom** — spusti `./scripts/audit-all.sh` pre regression check 9 oblastí:
+   - audit-cross-tenant (multi-tenant scope)
+   - audit-write-audit-log (forenzný trail)
+   - audit-anon-rls (RLS policies)
+   - audit-upload-guards (file upload DoS)
+   - audit-pii-logs (sensitive data v console)
+   - audit-ts-any (TypeScript any types)
+   - audit-rate-limit (auth brute force)
+   - audit-secrets-in-code (leaked credentials)
+   - audit-auth-paths (2FA gate na session emitteroch)
+   Ak akýkoľvek `✗`, **NEROBí commit** — najprv oprav alebo pridaj do allowlist s odôvodnením. Žiadne "tváriť že robíme".
+9. **NIKDY alias-swap** medzi Vercel preview a production deployment cez API. Lekcia z 20.5.2026: prepol som `vianema.amgd.sk` na preview deployment ktorý nemal `NEXT_PUBLIC_*` env vars (per-environment) → klient JS dostal undefined → 1h výpadok. Pre PROD deploy do `funny-stonebraker` projektu: VŽDY `vercel deploy --prod` (target=production) z fresh clone main, NIKDY alias swap.
+10. Nikdy neoznač úlohu ako hotovú bez verifikácie.
 
 ## Tri hlavné princípy (Boris Cherny)
 1. **Jednoduchosť** — minimálny kód. Ak vieš niečo zmazať namiesto pridať, sprav to.
@@ -144,6 +174,49 @@ VAPID_PRIVATE_KEY                # web-push
 - Nepúšťaj testy ktoré niečo posielajú von (mail, push notifikácie, AI volania platené) bez potvrdenia.
 - Nevypisuj sensitive údaje (API keys, tokens, session secret) do logov ani do error response.
 - Žiadne commity priamo do `main` bez prečítania diffu — preferuj feature branch alebo worktree.
+
+## Lessons learned (2026-05-21)
+- **URL generátory:** Nikdy nepoužívaj `process.env.VERCEL_ENV === "production"` na rozhodnutie medzi `vianema.amgd.sk` vs `dev.amgd.sk`. Dev je samostatný Vercel projekt (`vianema-dev`) deployovaný ako `target=production` → `VERCEL_ENV === "production"` je `true` aj na dev. Vždy použi `request.headers.get("host")` + `x-forwarded-proto`. Whitelist hostov rieši `middleware.ts` (`ALLOWED_HOSTS`).
+- **PATCH endpointy s M1 re-auth gate:** Backend kontroluje `"role" in updates` (alebo iné sensitive pole) → spúšťa `requireReAuth`. Frontend MUSÍ posielať len **reálne zmenené polia**. Ak posielaš nezmenený `role` v body, spustí sa false-positive re-auth alert. Pattern: zostav `payload` postupne a sensitive polia pridávaj iba pri ich reálnej zmene.
+
+## Lessons learned (2026-05-23)
+- **Vercel auto-deploy z `dev` branch FUNGUJE** (pôvodne som si myslel že je rozbitý — bola to moja chyba pozorovania). Production Branch v Vercel je nastavený na `dev`, GitHub webhook beží, každý `git push` automaticky spustí deploy (source: "git"). **NIKDY nerob `vercel deploy --prod --yes` po pushe** — to robí 2× deploy (jeden git, jeden cli) a vyčerpá 100/day limit free tier. Sám push stačí. Ako overiť: `curl api.vercel.com/v6/deployments` cez Vercel API token → `source: "git"` = auto-deploy beží.
+
+## Lessons learned (2026-05-22)
+- **Pracovný adresár NIE je Desktop.** Aktívny projekt žije v `/Users/alesmachovic/Code/os-machovic` (mimo iCloud). Desktop sync sa vypol 2026-05-22 a `~/Desktop/os-machovic` zmizla. Adresár `/Users/alesmachovic/os-machovic` je marcový boilerplate (11-bajtový CLAUDE.md, prázdne `src/`) — **NIE** je to projekt, nezamieňať. Po reset session: `cd /Users/alesmachovic/Code/os-machovic`, prečítaj `CLAUDE.md`, `ls plan*.md`, `git status`, `git log -5 --oneline` — neopytuj sa "kde je projekt".
+- **Plány rozdeľuj podľa domény, nie chronologicky.** Keď sa rieši viac súvisiacich vecí naraz (matching + kupujúci), maj **samostatný `plan-<doména>.md`** pre každú. `plan.md` je len pre aktuálny bug sweep. Zachová to fokus pri resetoch — pri otázke "kde sme skončili" stačí otvoriť relevantný plan-*.md a pokračovať. Spájať sa to dá až keď je každá doména hotová.
+- **Audit fails ≠ blocked commit ak sú pre-existing.** CLAUDE.md pravidlo 8 ("ak akýkoľvek ✗, NEROBí commit") platí len pre **regression**. Pred commitom: stash zmeny → spusti `audit-all.sh` na čistom stave (baseline) → unstash → spusti znova → porovnaj počty failov. Ak nepribudol nový fail, commit je OK. Vždy uveď baseline vs current počty fail-ov v commit message.
+
+## 🔒 Security Regression Guardian Mode (active od 2026-05-21)
+
+CEO (Aleš) sa sústredí na nové features. Existujúci security baseline (**8/10 B+** podľa Opus 4.7 auditu, viď `security-audit/security-comparison-2026-05-21.jpg`) **NESMIE regresnúť** pri novom vývoji.
+
+**Pri každej zmene v repo (mandatórne):**
+
+1. **Ak meníš čokoľvek v `src/lib/auth/`, `src/middleware.ts`, `src/app/api/auth/`, `src/lib/audit.ts`, alebo `supabase/migrations/`:**
+   - PRED commitom spusti `./scripts/audit-security.sh`
+   - Porovnaj výsledok s `security-audit/baseline-2026-05-21.txt`
+   - Akákoľvek nová `WARN` alebo `FAIL` = neposúvaj merge. Upozorni CEO + spýtaj sa.
+
+2. **Pri akejkoľvek novej API route (POST/PATCH/DELETE):**
+   - MUSÍ mať `requireUser()` guard
+   - MUSÍ mať `logAudit()` call po úspešnej write operácii
+   - MUSÍ filtrovať podľa `company_id` (multi-tenancy)
+   - Sensitive akcia (privilege change, password reset, GDPR, status zmena, mazanie) → MUSÍ mať `requireReAuth()` gate
+   - Žiadny `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `SESSION_SECRET` v `src/components/**` alebo `src/hooks/**`
+
+3. **Pri novej DB migrácii:**
+   - Žiadny `USING (true) FOR anon` (public read leak)
+   - Tabuľka so sensitive dátami → RLS policies pre `authenticated` rolu
+   - Nemen audit_log triggers (block_audit_mutations) — append-only invariant
+
+4. **Pri akejkoľvek zmene v session emitteroch** (`grep -rln "buildSessionCookieValue"`):
+   - MUSÍ mať 2FA gate (`totp_enabled_at` check + `requires_2fa` branch)
+   - Spusti `./scripts/audit-auth-paths.sh` PRED commitom
+
+**3 known gaps (NETLAČIŤ aktívne, len evidovať):** HSTS, dev.amgd.sk password protect, CSP nonce. Plán v `security-audit/PROMPT-fix-missing-security.md`. Toto sú feature requests do `Active Hunting Mode`, nie regression.
+
+**Aktivácia späť do Active Hunting:** CEO musí explicitne povedať *"prepnime sa do active security work"*.
 
 ## Self-improvement loop
 Po každej oprave alebo nedorozumení sa ma opýtaj: **"Mám to pridať do CLAUDE.md?"**

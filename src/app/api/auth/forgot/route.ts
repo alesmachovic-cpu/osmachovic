@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -25,9 +26,19 @@ function hashToken(token: string): string {
 
 export async function POST(request: Request) {
   try {
+    // 🚨 P2 rate limit — bez neho útočník mohol spočítať existujúce účty
+    // (timing oracle) a spamovať obetí emailmi cez Resend (cost + reputácia).
+    const ip = getRequestIp(request);
     const body = await request.json();
     const identifier = String(body.identifier || "").trim().toLowerCase();
-    if (!identifier) return NextResponse.json({ ok: true });  // nemýliť
+    if (!identifier) return NextResponse.json({ ok: true });
+
+    const rl = rateLimit({ key: `forgot:${ip}:${identifier}`, ...RATE_LIMITS.FORGOT });
+    if (!rl.ok) {
+      // Vraciame 200 (anti-enumeration), ale internal log + neposielame ďalší email.
+      console.warn(`[forgot] rate limit hit: ${ip} ${identifier}`);
+      return NextResponse.json({ ok: true });
+    }
 
     const sb = getSupabaseAdmin();
 

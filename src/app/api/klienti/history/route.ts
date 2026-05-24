@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -8,12 +9,29 @@ export const runtime = "nodejs";
  *
  * Vráti audit history konkrétneho klienta z `klienti_history` + JOIN na
  * makléra (z/do) + JOIN na user (kto vykonal akciu).
+ *
+ * 🚨 FIX 2026-05-20 (P1 cross-tenant leak): requireUser + over že klient
+ * patrí do company auth-usera. Inak 403.
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const klient_id = req.nextUrl.searchParams.get("klient_id");
   if (!klient_id) return NextResponse.json({ error: "klient_id required" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
+
+  // P1 cross-tenant guard.
+  const { data: kl } = await sb
+    .from("klienti")
+    .select("company_id")
+    .eq("id", klient_id)
+    .maybeSingle();
+  if (!kl) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+  if (kl.company_id !== auth.user.company_id && auth.user.role !== "platform_admin") {
+    return NextResponse.json({ error: "Klient patrí do inej firmy" }, { status: 403 });
+  }
   const { data, error } = await sb
     .from("klienti_history")
     .select("id, action, dovod, from_makler_id, to_makler_id, by_user_id, meta, created_at")

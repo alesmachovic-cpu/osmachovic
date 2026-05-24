@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { getUserScope } from "@/lib/scope";
+import { readSessionUserId } from "@/lib/auth/requireUser";
 
+// PDF generuje sa cez service role (anon role nemá RLS policy na naberove_listy,
+// takže anon SELECT vždy vracia prázdny výsledok → 404). Scope check zaisťuje
+// že PDF vidí len user z tej istej firmy ako náber.
 const getSb = () => getSupabaseAdmin();
+
+async function assertCanReadNaber(req: NextRequest, naberCompanyId: string | null): Promise<NextResponse | null> {
+  const userId = readSessionUserId(req);
+  if (!userId) return NextResponse.json({ error: "Neautorizovaný — chýba session" }, { status: 401 });
+  const scope = await getUserScope(userId);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  if (naberCompanyId && scope.company_id !== naberCompanyId) {
+    return NextResponse.json({ error: "Nemáš prístup k tomuto náberu" }, { status: 403 });
+  }
+  return null;
+}
 
 const TYP_LABELS: Record<string, string> = {
   byt: "Byt", rodinny_dom: "Rodinny dom", pozemok: "Pozemok",
@@ -455,6 +471,9 @@ export async function GET(req: NextRequest) {
   const { data: naber } = await getSb().from("naberove_listy").select("*").eq("id", naberId).single();
   if (!naber) return NextResponse.json({ error: "Naber not found" }, { status: 404 });
 
+  const authErr = await assertCanReadNaber(req, (naber as { company_id?: string }).company_id ?? null);
+  if (authErr) return authErr;
+
   const [{ data: klient }, company] = await Promise.all([
     naber.klient_id
       ? getSb().from("klienti").select("*").eq("id", naber.klient_id).single()
@@ -484,6 +503,9 @@ export async function POST(req: NextRequest) {
 
     const { data: naber } = await getSb().from("naberove_listy").select("*").eq("id", naberId).single();
     if (!naber) return NextResponse.json({ error: "Naber not found" }, { status: 404 });
+
+    const authErr = await assertCanReadNaber(req, (naber as { company_id?: string }).company_id ?? null);
+    if (authErr) return authErr;
 
     const [{ data: klient }, company] = await Promise.all([
       naber.klient_id

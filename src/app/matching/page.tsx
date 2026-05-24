@@ -160,9 +160,9 @@ export default function MatchingPage() {
     : (focusKlientId ? klienti.find(k => k.id === focusKlientId)?.meno : null);
 
   function scoreColor(s: number) {
-    if (s >= 80) return { color: "#065F46", bg: "#D1FAE5", ring: "#10B981" };
-    if (s >= 50) return { color: "#1D4ED8", bg: "#DBEAFE", ring: "#3B82F6" };
-    return { color: "#92400E", bg: "#FEF3C7", ring: "#F59E0B" };
+    if (s >= 80) return { color: "var(--text-primary)", bg: "#D1FAE5", ring: "#10B981" };
+    if (s >= 50) return { color: "var(--text-secondary)", bg: "#DBEAFE", ring: "#3B82F6" };
+    return { color: "var(--text-secondary)", bg: "#FEF3C7", ring: "#F59E0B" };
   }
 
   const filters = [
@@ -186,11 +186,11 @@ export default function MatchingPage() {
 
       {(focusObjednavkaId || focusKlientId) && (
         <div style={{
-          marginBottom: "16px", padding: "10px 14px", background: "#EFF6FF",
-          border: "1px solid #BFDBFE", borderRadius: "10px",
+          marginBottom: "16px", padding: "10px 14px", background: "var(--bg-elevated)",
+          border: "1px solid var(--border)", borderRadius: "10px",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px",
         }}>
-          <span style={{ fontSize: "13px", color: "#1D4ED8" }}>
+          <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
             🔎 Filtrované na: <strong>{focusKlientName || "konkrétnu objednávku"}</strong>
           </span>
           <button onClick={() => {
@@ -201,7 +201,7 @@ export default function MatchingPage() {
             }
           }} style={{
             padding: "5px 12px", fontSize: "12px", fontWeight: "600",
-            background: "#fff", color: "#1D4ED8", border: "1px solid #BFDBFE",
+            background: "#fff", color: "var(--text-secondary)", border: "1px solid var(--border)",
             borderRadius: "8px", cursor: "pointer",
           }}>
             Zrušiť filter
@@ -346,7 +346,7 @@ export default function MatchingPage() {
                       <span key={r} style={{
                         fontSize: "11.5px", fontWeight: "500",
                         padding: "4px 10px", borderRadius: "8px",
-                        background: "#D1FAE5", color: "#065F46",
+                        background: "#D1FAE5", color: "var(--text-primary)",
                       }}>
                         ✓ {r}
                       </span>

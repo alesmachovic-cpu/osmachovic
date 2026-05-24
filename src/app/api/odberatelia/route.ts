@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
+
+export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get("user_id");
@@ -16,6 +20,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
   const body = await req.json();
   if (!body.user_id) return NextResponse.json({ error: "user_id required" }, { status: 400 });
   const sb = getSupabaseAdmin();
@@ -38,23 +44,47 @@ export async function POST(req: NextRequest) {
   if (!payload.nazov) return NextResponse.json({ error: "nazov required" }, { status: 400 });
   const { data, error } = await sb.from("odberatelia").insert(payload).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "odberatel.create",
+    actor_id: auth.user.id, actor_name: auth.user.name,
+    target_id: data.id, target_type: "odberatel",
+    detail: { nazov: body.nazov, ico: body.ico ?? null },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json(data);
 }
 
 export async function PATCH(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
   const body = await req.json();
   const { id, ...rest } = body;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const { data, error } = await getSupabaseAdmin().from("odberatelia").update(rest).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "odberatel.update",
+    actor_id: auth.user.id, actor_name: auth.user.name,
+    target_id: id, target_type: "odberatel",
+    detail: { fields_changed: Object.keys(rest) },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json(data);
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const { error } = await getSupabaseAdmin().from("odberatelia").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "odberatel.delete",
+    actor_id: auth.user.id, actor_name: auth.user.name,
+    target_id: id, target_type: "odberatel",
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ ok: true });
 }

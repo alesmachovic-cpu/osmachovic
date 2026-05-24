@@ -35,9 +35,9 @@ function Tog({ on, set, label }: { on: boolean; set: (v: boolean) => void; label
 function Progress({ active, text }: { active: boolean; text: string }) {
   if (!active) return null;
   return (
-    <div style={{ padding: "12px 20px", background: "#EFF6FF", borderRadius: "10px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "10px" }}>
+    <div style={{ padding: "12px 20px", background: "var(--bg-elevated)", borderRadius: "10px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "10px" }}>
       <div style={{ width: "16px", height: "16px", border: "2px solid #93C5FD", borderTopColor: "#3B82F6", borderRadius: "50%", animation: "spin 0.6s linear infinite", flexShrink: 0 }} />
-      <span style={{ fontSize: "13px", fontWeight: "500", color: "#1D4ED8" }}>{text}</span>
+      <span style={{ fontSize: "13px", fontWeight: "500", color: "var(--text-secondary)" }}>{text}</span>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}@keyframes bounce{0%,60%,100%{transform:translateY(0) scale(.85);opacity:.3}30%{transform:translateY(-6px) scale(1);opacity:1}}@keyframes wiggle{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}@keyframes fade{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}`}</style>
     </div>
   );
@@ -2039,7 +2039,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
               <div><label style={s.label}>Cena za energie (€/mes)</label><input style={s.input} type="number" value={f.cena_za_energie} onChange={e => set("cena_za_energie", e.target.value)} /></div>
             </div>
             {f.naklady_detail && (
-              <div style={{ padding: "8px 12px", background: "#F0F9FF", borderRadius: "8px", fontSize: "12px", color: "#1D4ED8" }}>
+              <div style={{ padding: "8px 12px", background: "#F0F9FF", borderRadius: "8px", fontSize: "12px", color: "var(--text-secondary)" }}>
                 <span style={{ fontWeight: "600" }}>Rozpis:</span> {f.naklady_detail}
               </div>
             )}
@@ -2048,7 +2048,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
           {/* ⚠️ Právne vady */}
           {f.pravne_vady && (
             <div style={{ ...s.card, borderLeft: "3px solid #F59E0B" }}>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: "#D97706", marginBottom: "8px" }}>⚠ Právne vady a ťarchy</div>
+              <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)", marginBottom: "8px" }}>⚠ Právne vady a ťarchy</div>
               <textarea style={{ ...s.input, resize: "vertical", minHeight: "60px", fontSize: "13px" }} value={f.pravne_vady} onChange={e => set("pravne_vady", e.target.value)} />
             </div>
           )}
@@ -2227,17 +2227,17 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
           position: "fixed", top: "20px", right: "20px", zIndex: 9999,
           maxWidth: "420px", padding: "14px 18px", background: "#FEF2F2",
           border: "1px solid #FCA5A5", borderRadius: "12px", fontSize: "13px",
-          color: "#B91C1C", display: "flex", alignItems: "flex-start", gap: "10px",
+          color: "var(--danger)", display: "flex", alignItems: "flex-start", gap: "10px",
           boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
         }}>
           <span style={{ flex: 1, lineHeight: 1.4 }}>⚠️ {error}</span>
-          <button onClick={() => setError("")} style={{ background: "none", border: "none", color: "#B91C1C", cursor: "pointer", fontWeight: "600", fontSize: "16px", padding: 0, lineHeight: 1 }}>×</button>
+          <button onClick={() => setError("")} style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontWeight: "600", fontSize: "16px", padding: 0, lineHeight: 1 }}>×</button>
         </div>
       )}
       {saved && (
         <div style={{
           position: "fixed", top: "20px", right: "20px", zIndex: 9999,
-          padding: "14px 18px", background: "#F0FDF4",
+          padding: "14px 18px", background: "var(--bg-elevated)",
           border: "1px solid #86EFAC", borderRadius: "12px", fontSize: "13px",
           color: "#166534", boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
         }}>

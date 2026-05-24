@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   if (!accessToken) {
     // Fallback — uložíme do logy tabuľky ako pending calendar event
-    console.log("[calendar-sync] Žiadny Google token, ukladám ako pending event");
+    console.log("[calendar-sync] Žiadny Google token, ukladám ako pending event"); // safe-log
 
     const { getSupabaseAdmin } = await import("@/lib/supabase-admin");
     const supabase = getSupabaseAdmin();

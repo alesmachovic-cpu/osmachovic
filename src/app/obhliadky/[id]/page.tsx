@@ -45,9 +45,14 @@ export default function ObhliadkaDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    fetch(`/api/obhliadky?klient_id=`).then(r => r.json()).then(async d => {
-      const all = (d.obhliadky || []) as Obhliadka[];
-      const found = all.find(o => o.id === id);
+    // Detail endpoint vracia plnú obhliadku vrátane podpis_data (list endpoint
+    // tieto veľké stĺpce neposiela kvôli payload size)
+    fetch(`/api/obhliadky/${id}`).then(r => r.json()).then(async d => {
+      if (d.error) {
+        setError(d.error);
+        return;
+      }
+      const found = d.obhliadka as Obhliadka | undefined;
       if (found) {
         setObhliadka(found);
         setEmailOverride(found.kupujuci_email || "");
@@ -120,11 +125,10 @@ export default function ObhliadkaDetailPage() {
       const d = await r.json();
       if (!r.ok) { setError(d.error || "Email zlyhal"); setSaving(false); return; }
       setSentMsg(`✓ Email odoslaný na ${to}`);
-      // Refresh obhliadka
-      const refreshR = await fetch(`/api/obhliadky?klient_id=`);
+      // Refresh obhliadka cez detail endpoint
+      const refreshR = await fetch(`/api/obhliadky/${obhliadka.id}`);
       const refreshD = await refreshR.json();
-      const found = (refreshD.obhliadky || []).find((o: Obhliadka) => o.id === obhliadka.id);
-      if (found) setObhliadka(found);
+      if (refreshD.obhliadka) setObhliadka(refreshD.obhliadka);
     } catch (e) {
       setError(String(e).slice(0, 200));
     }
@@ -186,7 +190,7 @@ export default function ObhliadkaDetailPage() {
           </div>
         )}
 
-        <div style={{ padding: "14px 16px", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: "10px", marginBottom: "16px", fontSize: "12px", color: "#92400E", lineHeight: 1.5 }}>
+        <div style={{ padding: "14px 16px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px", marginBottom: "16px", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
           <strong>Vyhlásenie kupujúceho:</strong> Týmto potvrdzujem, že nehnuteľnosť som obhliadol/a v sprievode realitného makléra
           spoločnosti VIANEMA. Beriem na vedomie, že akékoľvek ďalšie rokovanie ohľadom predaja tejto nehnuteľnosti budem viesť výhradne
           prostredníctvom tejto realitnej kancelárie.
@@ -212,7 +216,7 @@ export default function ObhliadkaDetailPage() {
               style={{ marginTop: "2px", cursor: gdprConsent ? "default" : "pointer", flexShrink: 0 }}
             />
             <span>
-              {gdprConsent && <strong style={{ color: "#065F46" }}>✓ Súhlas udelený · </strong>}
+              {gdprConsent && <strong style={{ color: "var(--text-primary)" }}>✓ Súhlas udelený · </strong>}
               Súhlasím so spracovaním mojich osobných údajov spoločnosťou Vianema s. r. o.
               v zmysle GDPR pre účely evidencie obhliadok. Plné znenie zásad spracovania
               nájdete v dokumente{" "}
@@ -226,12 +230,12 @@ export default function ObhliadkaDetailPage() {
         )}
         {isPodpisana && obhliadka.gdpr_consent && (
           <div style={{
-            padding: "10px 14px", background: "#ECFDF5", border: "1px solid #A7F3D0",
-            borderRadius: "10px", marginBottom: "16px", fontSize: "11px", color: "#065F46",
+            padding: "10px 14px", background: "var(--bg-elevated)", border: "1px solid var(--border)",
+            borderRadius: "10px", marginBottom: "16px", fontSize: "11px", color: "var(--text-primary)",
           }}>
             ✓ GDPR súhlas udelený {obhliadka.gdpr_consent_at ? new Date(obhliadka.gdpr_consent_at).toLocaleString("sk") : ""} ·
             {" "}<a href="/gdpr" target="_blank" rel="noopener noreferrer"
-              style={{ color: "#065F46", textDecoration: "underline" }}>Zásady spracovania</a>
+              style={{ color: "var(--text-primary)", textDecoration: "underline" }}>Zásady spracovania</a>
           </div>
         )}
 
@@ -294,7 +298,7 @@ export default function ObhliadkaDetailPage() {
         </div>
       )}
 
-      {error && <div style={{ padding: "12px 16px", background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: "10px", fontSize: "13px", color: "#B91C1C", marginBottom: "12px" }}>⚠️ {error}</div>}
+      {error && <div style={{ padding: "12px 16px", background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: "10px", fontSize: "13px", color: "var(--danger)", marginBottom: "12px" }}>⚠️ {error}</div>}
       {sentMsg && <div style={{ padding: "12px 16px", background: "#DCFCE7", border: "1px solid #86EFAC", borderRadius: "10px", fontSize: "13px", color: "#166534", marginBottom: "12px" }}>{sentMsg}</div>}
     </div>
   );

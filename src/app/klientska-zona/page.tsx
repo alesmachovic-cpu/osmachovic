@@ -70,8 +70,8 @@ export default function KlientskaZonaPage() {
       <div
         style={{
           padding: "12px 20px",
-          background: "#FEF3C7",
-          border: "1px solid #FDE68A",
+          background: "var(--bg-elevated)",
+          border: "1px solid var(--border)",
           borderRadius: "10px",
           marginBottom: "20px",
           display: "flex",
@@ -81,10 +81,10 @@ export default function KlientskaZonaPage() {
       >
         <span style={{ fontSize: "16px" }}>&#9888;</span>
         <div>
-          <div style={{ fontSize: "13px", fontWeight: "600", color: "#92400E" }}>
+          <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>
             Toto je ukážka klientskej zóny
           </div>
-          <div style={{ fontSize: "12px", color: "#A16207" }}>
+          <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
             Náhľad toho, čo uvidí váš klient po prihlásení do portálu.
           </div>
         </div>
@@ -170,7 +170,7 @@ export default function KlientskaZonaPage() {
                     fontSize: "12px",
                     fontWeight: "600",
                     color: "#059669",
-                    background: "#F0FDF4",
+                    background: "var(--bg-elevated)",
                     border: "1px solid #BBF7D0",
                   }}
                 >

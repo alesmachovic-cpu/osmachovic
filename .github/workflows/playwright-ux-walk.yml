@@ -1,0 +1,67 @@
+name: Playwright UX walk
+
+# Weekly headless prechod cez reálne UI (Chromium klikať tlačidlá) na DEV.
+# Doplnok k denného API-only QA smoke. Pokryje UX regresie ktoré API nezachytí.
+#
+# Beží Pondelok 5:00 UTC (= 7:00 Bratislava) — pred týmem sa zobudí.
+#
+# Schedule + on-demand via workflow_dispatch.
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+jobs:
+  ux-walk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Playwright inštalujeme inline — nepribúda do package.json
+      # (CLAUDE.md zakazuje nové npm dependencies bez OK)
+      - name: Install Playwright (inline)
+        run: |
+          npm install --no-save @playwright/test@1.50.0
+          npx playwright install --with-deps chromium
+
+      - name: Run UX walk
+        id: ux
+        env:
+          BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL || 'https://dev.amgd.sk' }}
+          UX_USER: ${{ secrets.PLAYWRIGHT_USER }}
+          UX_PASS: ${{ secrets.PLAYWRIGHT_PASS }}
+        run: |
+          npx playwright test --config tests/playwright/playwright.config.ts --reporter=line
+        continue-on-error: true
+
+      - name: Telegram alert on failure
+        if: steps.ux.outcome == 'failure'
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT:  ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
+            echo "Telegram secrets not set — skipping alert"
+            exit 0
+          fi
+          MSG="🚨 VIANEMA Playwright UX walk FAIL%0A%0ARun: ${{ github.run_id }}%0ABranch: ${{ github.ref_name }}%0A%0AOtvor GitHub Actions log:%0Ahttps://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d "chat_id=${TG_CHAT}" \
+            -d "text=${MSG}"
+          exit 1
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14

@@ -6,6 +6,7 @@ import type { User } from "@/components/AuthProvider";
 import SlaPoruseni from "@/components/SlaPoruseni";
 import { isSuperAdmin } from "@/lib/auth/requireUser";
 import PasswordInput from "@/components/PasswordInput";
+import { useReAuth } from "@/components/ReAuthModal";
 import { ALL_FEATURES, loadFeatureToggles, saveFeatureToggles } from "@/lib/featureToggles";
 import type { FeatureId, FeatureToggles } from "@/lib/featureToggles";
 
@@ -345,7 +346,7 @@ function TabPrehlad() {
       {criticalCount > 0 && (
         <div style={{
           marginBottom: 20, padding: "14px 16px",
-          background: "#FEE2E2", border: "1px solid #FCA5A5", borderRadius: 10,
+          background: "var(--bg-elevated)", border: "1px solid #FCA5A5", borderRadius: 10,
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
         }}>
           <div style={{ fontSize: 13, color: "#991B1B" }}>
@@ -640,6 +641,7 @@ function TabStatistiky({ isManagerOrAbove, userEmail }: { isManagerOrAbove: bool
 
 function TabTim() {
   const { user, accounts, addAccount, deleteAccount, refreshAccounts } = useAuth();
+  const reAuth = useReAuth();
   const isAdmin = isSuperAdmin(user?.role);
 
   const [klienti, setKlienti] = useState<Array<{ makler_id: string }>>([]);
@@ -671,6 +673,8 @@ function TabTim() {
   const [inviteSending, setInviteSending]   = useState<string | null>(null);
   const [inviteSentFor, setInviteSentFor]   = useState<string | null>(null);
   const [inviteLink, setInviteLink]         = useState<{ userId: string; url: string } | null>(null);
+  const [inviteCopied, setInviteCopied]     = useState(false);
+  const [editSavedFor, setEditSavedFor]     = useState<string | null>(null);
   const [selectedInvites, setSelectedInvites] = useState<Set<string>>(new Set());
   const [bulkSending, setBulkSending]       = useState(false);
   const [bulkDone, setBulkDone]             = useState<string[]>([]);
@@ -682,7 +686,7 @@ function TabTim() {
 
   function openEdit(acc: User) {
     if (editingId === acc.id) { setEditingId(null); return; }
-    const provRec = provizie.find(p => p.makler_id === acc.id || p.meno === acc.name);
+    const provRec = provizie.find(p => p.makler_id === acc.id || (p.meno || "").trim().toLowerCase() === (acc.name || "").trim().toLowerCase());
     setEditState({
       name: acc.name || "",
       email: acc.email || "",
@@ -698,21 +702,59 @@ function TabTim() {
     try {
       const parts = editState.name.trim().split(" ");
       const initials = `${(parts[0] || "")[0] || ""}${(parts[1] || "")[0] || ""}`.toUpperCase();
-      await fetch(`/api/users?id=${encodeURIComponent(acc.id)}`, {
+
+      const roleChanged = editState.role !== acc.role;
+      let proof: Record<string, string> = {};
+      if (roleChanged) {
+        const result = await reAuth.prompt({
+          title: `Zmena role pre ${acc.name}`,
+          description: `Meníš rolu z "${acc.role}" na "${editState.role}". Toto je security-sensitive akcia — pre potvrdenie zadaj heslo alebo 2FA kód.`,
+          dangerLabel: "Potvrdiť zmenu",
+        });
+        if (!result) { setEditSaving(false); return; }
+        proof = result as Record<string, string>;
+      }
+
+      const payload: Record<string, unknown> = {
+        name: editState.name.trim(),
+        initials,
+        email: editState.email.trim(),
+        ...proof,
+      };
+      if (roleChanged) payload.role = editState.role;
+
+      // 1) Uloženie základných údajov (meno, email, rola)
+      const res = await fetch(`/api/users?id=${encodeURIComponent(acc.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editState.name.trim(), initials, email: editState.email.trim(), role: editState.role }),
+        body: JSON.stringify(payload),
       });
-      const provRec = provizie.find(p => p.makler_id === acc.id || p.meno === acc.name);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert("Chyba pri ukladaní profilu: " + (body.error || `HTTP ${res.status}`));
+        return;
+      }
+
+      // 2) Uloženie provízneho nastavenia (separátne — ak padne, profil je uložený)
+      const provRec = provizie.find(p => p.makler_id === acc.id || (p.meno || "").trim().toLowerCase() === (acc.name || "").trim().toLowerCase());
       const pct = parseFloat(editState.percento.replace(",", ".")) || 0;
       const mdz = parseFloat(editState.medziprovizia.replace(",", ".")) || 0;
-      if (provRec) {
-        await fetch("/api/maklerske-provizie", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: provRec.id, percento: pct, medziprovizia: mdz }) });
-      } else {
-        await fetch("/api/maklerske-provizie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meno: editState.name.trim(), percento: pct, medziprovizia: mdz, makler_id: acc.id }) });
+      const provRes = provRec
+        ? await fetch("/api/maklerske-provizie", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: provRec.id, percento: pct, medziprovizia: mdz }) })
+        : await fetch("/api/maklerske-provizie", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ meno: editState.name.trim(), percento: pct, medziprovizia: mdz, makler_id: acc.id }) });
+
+      if (!provRes.ok) {
+        const provBody = await provRes.json().catch(() => ({}));
+        alert("Profil uložený, ale provízne nastavenie zlyhalo: " + (provBody.error || `HTTP ${provRes.status}`));
+        // Pokračujeme — profil je uložený, len provízie nie. Refresh + close panel.
       }
+
       await Promise.all([loadProvizie(), refreshAccounts()]);
       setEditingId(null);
+      setEditSavedFor(acc.id);
+      setTimeout(() => setEditSavedFor(null), 1800);
+    } catch (e) {
+      alert("Neočakávaná chyba: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setEditSaving(false);
     }
@@ -814,7 +856,7 @@ function TabTim() {
             </div>
           </div>
           {newUserError && (
-            <div style={{ marginTop: "8px", padding: "8px 12px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "8px", fontSize: "12px", color: "#DC2626" }}>
+            <div style={{ marginTop: "8px", padding: "8px 12px", background: "#FEF2F2", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "12px", color: "#DC2626" }}>
               {newUserError}
             </div>
           )}
@@ -859,12 +901,12 @@ function TabTim() {
 
       {/* Bulk invite toolbar */}
       {isAdmin && selectedInvites.size > 0 && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", marginBottom: "8px", borderRadius: "10px", background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
-          <span style={{ fontSize: "13px", color: "#1D4ED8", fontWeight: 600 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", marginBottom: "8px", borderRadius: "10px", background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
+          <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: 600 }}>
             {selectedInvites.size} {selectedInvites.size === 1 ? "maklér vybraný" : "makléri vybraní"}
           </span>
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={() => setSelectedInvites(new Set())} style={{ padding: "5px 10px", background: "transparent", border: "1px solid #BFDBFE", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#1D4ED8" }}>
+            <button onClick={() => setSelectedInvites(new Set())} style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)" }}>
               Zrušiť výber
             </button>
             <button disabled={bulkSending} onClick={async () => {
@@ -921,17 +963,17 @@ function TabTim() {
 
                 {/* Provízne % badges */}
                 {(() => {
-                  const provRec = provizie.find(p => p.makler_id === acc.id || p.meno === acc.name);
+                  const provRec = provizie.find(p => p.makler_id === acc.id || (p.meno || "").trim().toLowerCase() === (acc.name || "").trim().toLowerCase());
                   if (!provRec && !isAdmin) return null;
                   return (
                     <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                       {provRec?.percento != null && (
-                        <div title="Provízne %" style={{ padding: "3px 9px", borderRadius: 20, background: "#F0FDF4", border: "1px solid #BBF7D0", fontSize: 12, fontWeight: 700, color: "#065F46" }}>
+                        <div title="Provízne %" style={{ padding: "3px 9px", borderRadius: 20, background: "var(--bg-elevated)", border: "1px solid #BBF7D0", fontSize: 12, fontWeight: 700, color: "var(--text-primary)" }}>
                           {provRec.percento} %
                         </div>
                       )}
                       {provRec?.medziprovizia != null && provRec.medziprovizia > 0 && (
-                        <div title="Medziprovizia" style={{ padding: "3px 9px", borderRadius: 20, background: "#EFF6FF", border: "1px solid #BFDBFE", fontSize: 12, fontWeight: 700, color: "#1D4ED8" }}>
+                        <div title="Medziprovizia" style={{ padding: "3px 9px", borderRadius: 20, background: "var(--bg-elevated)", border: "1px solid var(--border)", fontSize: 12, fontWeight: 700, color: "var(--text-secondary)" }}>
                           {provRec.medziprovizia} % ∑
                         </div>
                       )}
@@ -980,15 +1022,25 @@ function TabTim() {
                   )}
                   {isAdmin && acc.id !== "ales" && (
                     <button onClick={async () => {
-                      if (!confirm(`Resetovať heslo pre ${acc.name}?`)) return;
+                      // 🔒 M1: re-auth namiesto blocking confirm
+                      const proof = await reAuth.prompt({
+                        title: `Resetovať heslo pre ${acc.name}`,
+                        description: "Vygeneruje sa dočasné heslo + skopíruje do schránky. Cudzí účet password reset je security-sensitive — pre potvrdenie zadaj heslo alebo 2FA kód.",
+                        dangerLabel: "Resetovať heslo",
+                      });
+                      if (!proof) return;
                       try {
-                        const res = await fetch("/api/users/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: acc.id }) });
+                        const res = await fetch("/api/users/reset-password", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ user_id: acc.id, ...proof }),
+                        });
                         const body = await res.json();
                         if (!res.ok) { alert("Chyba: " + (body.error || "neznáma")); return; }
                         try { await navigator.clipboard.writeText(body.temp_password); } catch { /* ignore */ }
                         alert(`✅ Heslo resetované pre ${acc.name}\n\nDočasné heslo (skopírované do schránky):\n\n${body.temp_password}\n\nPošli ho maklerovi bezpečným kanálom.`);
                       } catch (e) { alert("Chyba: " + (e instanceof Error ? e.message : e)); }
-                    }} style={{ padding: "5px 10px", background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#92400E" }}>
+                    }} style={{ padding: "5px 10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-secondary)" }}>
                       🔑 Reset
                     </button>
                   )}
@@ -1002,23 +1054,24 @@ function TabTim() {
 
               {/* Pozvánkový odkaz */}
               {inviteLink?.userId === acc.id && (
-                <div style={{ padding: "12px 14px", borderTop: "1px solid #BBF7D0", background: "#F0FDF4" }}>
-                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#065F46", marginBottom: "6px" }}>
+                <div style={{ padding: "12px 14px", borderTop: "1px solid #BBF7D0", background: "var(--bg-elevated)" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "6px" }}>
                     Odkaz na nastavenie hesla — skopíruj a pošli maklerovi (WhatsApp / SMS)
                   </div>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                     <input readOnly value={inviteLink.url} style={{ flex: 1, fontSize: "11px", padding: "6px 8px", borderRadius: "6px", border: "1px solid #86EFAC", background: "#fff", color: "#374151", minWidth: 0 }} onClick={e => (e.target as HTMLInputElement).select()} />
                     <button onClick={async () => {
-                      await navigator.clipboard.writeText(inviteLink.url);
-                      setInviteLink(null);
-                    }} style={{ padding: "6px 12px", background: "#16A34A", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                      Kopírovať
+                      try { await navigator.clipboard.writeText(inviteLink.url); } catch { /* ignore */ }
+                      setInviteCopied(true);
+                      setTimeout(() => { setInviteLink(null); setInviteCopied(false); }, 1800);
+                    }} disabled={inviteCopied} style={{ padding: "6px 12px", background: inviteCopied ? "#059669" : "#16A34A", color: "#fff", border: "none", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: inviteCopied ? "default" : "pointer", whiteSpace: "nowrap", transition: "background 0.2s" }}>
+                      {inviteCopied ? "✓ Skopírované" : "Kopírovať"}
                     </button>
-                    <button onClick={() => setInviteLink(null)} style={{ padding: "6px 8px", background: "transparent", border: "1px solid #86EFAC", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "#065F46" }}>
+                    <button onClick={() => setInviteLink(null)} style={{ padding: "6px 8px", background: "transparent", border: "1px solid #86EFAC", borderRadius: "6px", fontSize: "11px", cursor: "pointer", color: "var(--text-primary)" }}>
                       ✕
                     </button>
                   </div>
-                  <div style={{ fontSize: "11px", color: "#16A34A", marginTop: "4px" }}>Platí 7 dní.</div>
+                  <div style={{ fontSize: "11px", color: "var(--text-primary)", marginTop: "4px" }}>Platí 7 dní.</div>
                 </div>
               )}
 

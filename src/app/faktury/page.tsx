@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
+import { useReAuth } from "@/components/ReAuthModal";
 
 type Faktura = {
   id: string;
@@ -17,6 +18,7 @@ type Faktura = {
 
 export default function FakturyPage() {
   const { user } = useAuth();
+  const reAuth = useReAuth();
   const [list, setList] = useState<Faktura[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,8 +42,32 @@ export default function FakturyPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("Zmazať faktúru?")) return;
-    await fetch(`/api/faktury?id=${id}`, { method: "DELETE" });
+    const dovod = prompt(
+      "Faktúra bude zrušená (soft-delete). Zákon o DPH § 76 vyžaduje 10-ročnú archiváciu — fyzicky ostáva v DB.\n\nDôvod zrušenia (min 3 znaky, napr. storno / oprava / duplikát):",
+    );
+    if (!dovod) return;
+    if (dovod.trim().length < 3) {
+      alert("Dôvod musí mať aspoň 3 znaky.");
+      return;
+    }
+
+    // 🔒 M1: re-auth pre zrušenie faktúry (legal commit, DPH §76)
+    const proof = await reAuth.prompt({
+      title: "Zrušiť faktúru",
+      description: `Dôvod: "${dovod.trim()}". Faktúra ostane v archíve 10 rokov podľa DPH § 76. Pre potvrdenie zadaj heslo alebo 2FA kód.`,
+      dangerLabel: "Zrušiť faktúru",
+    });
+    if (!proof) return;
+
+    const qs = new URLSearchParams({ id, dovod: dovod.trim() });
+    if (proof.confirm_password) qs.set("confirm_password", proof.confirm_password);
+    if (proof.confirm_code) qs.set("confirm_code", proof.confirm_code);
+    const res = await fetch(`/api/faktury?${qs.toString()}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.error || "Zrušenie zlyhalo.");
+      return;
+    }
     load();
   }
 

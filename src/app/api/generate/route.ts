@@ -63,6 +63,7 @@ function bataPrice(cena: string): string {
 }
 
 async function tryOpenAI(prompt: string, system?: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const messages: any[] = []
   if (system) messages.push({ role: 'system', content: system })
   messages.push({ role: 'user', content: prompt })
@@ -76,10 +77,13 @@ async function tryOpenAI(prompt: string, system?: string) {
   return data.choices?.[0]?.message?.content
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function tryClaude(prompt: string, images?: any[], system?: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const content: any[] = []
   if (images?.length) images.forEach(img => content.push({ type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } }))
   content.push({ type: 'text', text: prompt })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body: any = { model: 'claude-sonnet-4-20250514', max_tokens: 2000, messages: [{ role: 'user', content }] }
   if (system) body.system = system
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -93,6 +97,7 @@ async function tryClaude(prompt: string, images?: any[], system?: string) {
 }
 
 async function tryGemini(prompt: string, webSearch = false) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const body: any = { contents: [{ parts: [{ text: prompt }] }] }
   if (webSearch) body.tools = [{ google_search: {} }]
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {

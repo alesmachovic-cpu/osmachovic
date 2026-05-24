@@ -3,8 +3,22 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord, canEditNaber } from "@/lib/scope";
 import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
+
+// Stĺpce vrátené v list endpointe. Zámerne vylučujeme:
+//   - podpis_data (base64 podpis, ~25 KB/riadok = 97% payloadu) — UI list ho nečíta,
+//     PDF route a PATCH/DELETE handlery si robia vlastný select.
+//   - podpis_meta (JSONB s IP/UA metadátami podpisu) — interné, nečíta sa v list.
+// Detail view (vrátane podpisu) by mal použiť samostatný endpoint /api/nabery/[id]
+// keby raz vznikol; momentálne ho nikto nepoužíva pre podpis_data v UI liste.
+const LIST_COLUMNS =
+  "id, typ_nehnutelnosti, kraj, okres, obec, cast_obce, kat_uzemie, ulica, supisne_cislo, cislo_orientacne, " +
+  "plocha, stav, poznamky_vybavenie, parametre, vybavenie, oznacenie, majitel, konatel, jednatel, " +
+  "kontakt_majitel, uzivatel, kontakt_uzivatel, predajna_cena, makler, makler_id, zmluva, typ_zmluvy, " +
+  "datum_podpisu, zmluva_do, provizia, popis, created_at, klient_id, updated_at, datum_naberu, " +
+  "calendar_event_id, parent_naberak_id, gdpr_consent, gdpr_consent_at, company_id";
 
 /**
  * GET /api/nabery — list naberove_listy
@@ -26,11 +40,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  let query = sb.from("naberove_listy").select("*").eq("company_id", companyId).order("created_at", { ascending: false });
+  let query = sb.from("naberove_listy").select(LIST_COLUMNS).eq("company_id", companyId).order("created_at", { ascending: false });
   if (klientId) query = query.eq("klient_id", klientId);
   if (maklerUuid) query = query.eq("makler_id", maklerUuid);
   if (dnes) {
-    const today = new Date().toISOString().slice(0, 10);
+    // Europe/Bratislava dátum (nie UTC) — aby "dnes" zodpovedalo SK kalendárnemu dňu
+    const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Bratislava" }).format(new Date());
     query = query.gte("created_at", today + "T00:00:00").lte("created_at", today + "T23:59:59");
   }
   const { data, error } = await query;
@@ -74,6 +89,7 @@ export async function POST(req: NextRequest) {
     klient_id: klientId,
     company_id: scope.company_id,
     makler: rest.makler ?? null,
+    makler_id: ownerMakler, // denormalized owner pre rýchle filtrovanie cez index
   };
   // makler text stĺpec (legacy) — vyplň ak chýba
   if (!payload.makler) {
@@ -83,6 +99,14 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await sb.from("naberove_listy").insert(payload).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "naberovy_list.create",
+    actor_id: userId,
+    target_id: (data as { id: string }).id,
+    target_type: "naberovy_list",
+    detail: { owner_makler_id: ownerMakler, klient_id: body.klient_id ?? null },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ naber: data, owner_makler_id: ownerMakler });
 }
 
@@ -137,6 +161,14 @@ export async function PATCH(req: NextRequest) {
   const { user_id: _u, id: _id, ...rest } = body;
   const { data, error } = await sb.from("naberove_listy").update(rest).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: isSigning ? "naberovy_list.sign" : "naberovy_list.update",
+    actor_id: userId,
+    target_id: id,
+    target_type: "naberovy_list",
+    detail: { fields_changed: Object.keys(rest), is_signing: isSigning },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ naber: data });
 }
 
@@ -179,7 +211,16 @@ export async function DELETE(req: NextRequest) {
     if (!allowed) return NextResponse.json({ error: "Nemáš oprávnenie zmazať tento náber" }, { status: 403 });
   }
 
+  const wasSigned = !!existing.podpis_data;
   const { error } = await sb.from("naberove_listy").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logAudit({
+    action: "naberovy_list.delete",
+    actor_id: userId,
+    target_id: id,
+    target_type: "naberovy_list",
+    detail: { was_signed: wasSigned, klient_id: existing.klient_id ?? null },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json({ ok: true });
 }

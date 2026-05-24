@@ -6,7 +6,9 @@ type MotivatedSeller = {
   signal_type: string;
   severity: string;
   detected_at: string;
-  evidence: string;
+  // Evidence môže byť string (legacy / niektoré signály) alebo object
+  // (napr. RELISTED má { days_away, prev_cena, new_cena }).
+  evidence: string | Record<string, unknown> | null;
   monitor_inzeraty: {
     id: string;
     nazov: string;
@@ -20,6 +22,19 @@ type MotivatedSeller = {
     predajca_typ: string;
   } | null;
 };
+
+// Pretypuje structured evidence (napr. RELISTED má {days_away, prev_cena, new_cena})
+// na ľudsky-čitateľný string. Bez tohto by React #31 crashol pri pokuse o render
+// objektu ako child.
+function formatEvidence(ev: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (typeof ev.days_away === "number") parts.push(`mimo ${ev.days_away} dní`);
+  if (typeof ev.prev_cena === "number") parts.push(`stará ${ev.prev_cena.toLocaleString("sk")} €`);
+  if (typeof ev.new_cena === "number") parts.push(`nová ${ev.new_cena.toLocaleString("sk")} €`);
+  if (typeof ev.diff_pct === "number") parts.push(`${ev.diff_pct > 0 ? "+" : ""}${ev.diff_pct.toFixed(1)}%`);
+  // Fallback — vypíš kľúče
+  return parts.length > 0 ? parts.join(" · ") : Object.keys(ev).join(", ");
+}
 
 type AnalyzaData = {
   total_active: number;
@@ -222,7 +237,11 @@ function AnalyzyInner() {
                       {inn.plocha ? ` · ${inn.plocha} m²` : ""}
                     </div>
                     {s.evidence && (
-                      <div style={{ fontSize: "11px", color: "#d97706", marginTop: "3px" }}>{s.evidence}</div>
+                      <div style={{ fontSize: "11px", color: "#d97706", marginTop: "3px" }}>
+                        {typeof s.evidence === "string"
+                          ? s.evidence
+                          : formatEvidence(s.evidence)}
+                      </div>
                     )}
                   </div>
                   {inn.url && (

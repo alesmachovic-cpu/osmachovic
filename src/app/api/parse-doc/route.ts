@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
+import { assertFileSize, assertMime, ALLOWED_DOC_MIMES, UPLOAD_LIMITS } from "@/lib/uploadGuards";
 
 export const maxDuration = 300;
 export const runtime = "nodejs";
@@ -183,6 +185,10 @@ async function callGPT(base64: string, mime: string, filename: string): Promise<
 
 export async function POST(req: NextRequest) {
   try {
+    // 🚨 P1 fix: auth + size limit + MIME whitelist + base64 size guard.
+    const auth = await requireUser(req);
+    if (auth.error) return auth.error;
+
     const ctype = req.headers.get("content-type") || "";
     let parts: Array<{ base64: string; mime: string }> = [];
     let filename = "document.pdf";
@@ -192,10 +198,25 @@ export async function POST(req: NextRequest) {
     if (ctype.includes("application/json")) {
       const body = await req.json();
       filename = body.filename || "document.pdf";
+
+      // Guard base64 payloady — útočník môže poslať obrovský payload v JSON.
+      // base64 délka ~ 1.37× pôvodný bajt → limit 20 MB * 1.5 = 30 MB base64.
+      const maxBase64 = Math.ceil(UPLOAD_LIMITS.PARSE_DOC_MAX_BYTES * 1.5);
+
       if (Array.isArray(body.images) && body.images.length > 0) {
+        if (body.images.length > 50) {
+          return NextResponse.json({ error: "Maximum 50 obrázkov v jednom požiadavku" }, { status: 413 });
+        }
+        const totalSize = body.images.reduce((s: number, b: string) => s + (typeof b === "string" ? b.length : 0), 0);
+        if (totalSize > maxBase64) {
+          return NextResponse.json({ error: "Príliš veľký JSON payload (limit 30 MB base64)" }, { status: 413 });
+        }
         parts = body.images.map((b64: string) => ({ base64: b64, mime: "image/jpeg" }));
         console.log(`[parse-doc] JSON images: ${parts.length}`);
       } else if (body.pdf_base64) {
+        if (typeof body.pdf_base64 !== "string" || body.pdf_base64.length > maxBase64) {
+          return NextResponse.json({ error: "Príliš veľký PDF payload (limit 30 MB base64)" }, { status: 413 });
+        }
         pdfBase64 = body.pdf_base64;
         parts = [{ base64: pdfBase64, mime: pdfMime }];
       }
@@ -203,6 +224,12 @@ export async function POST(req: NextRequest) {
       const fd = await req.formData();
       const file = fd.get("file") as File | null;
       if (!file) return NextResponse.json({ error: "Žiadny súbor" }, { status: 400 });
+
+      const sz = assertFileSize(file, UPLOAD_LIMITS.PARSE_DOC_MAX_BYTES);
+      if (!sz.ok) return NextResponse.json({ error: sz.error }, { status: sz.status });
+      const mi = assertMime(file, ALLOWED_DOC_MIMES);
+      if (!mi.ok) return NextResponse.json({ error: mi.error }, { status: mi.status });
+
       filename = file.name;
       pdfMime = file.type || "application/pdf";
       const buf = Buffer.from(await file.arrayBuffer());

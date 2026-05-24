@@ -114,7 +114,7 @@ export async function GET(request: Request) {
         }
 
         // 4. Vlož do klient_dokumenty.
-        // company_id musí byť vyplnený (NOT NULL constraint) — lookup cez klienta.
+        // company_id NOT NULL — lookup cez klient záznam.
         const { data: klientRow } = await sb
           .from("klienti")
           .select("company_id")

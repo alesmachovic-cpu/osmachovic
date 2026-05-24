@@ -723,10 +723,15 @@ export default function NaberyForm({ typ, klient, onBack, onSubmit, parentNabera
     await klientApiUpdate(authUser.id, klient.id, klientPatch);
     // Log do timeline
     try {
-      await supabase.from("klient_udalosti").insert({
-        klient_id: klient.id, typ: "status_zmena",
-        popis: "Dohodnutý náber → Nabraný · Náberový list odovzdaný",
-        autor: authUser.id,
+      await fetch("/api/klient-udalosti", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          klient_id: klient.id,
+          typ: "status_zmena",
+          popis: "Dohodnutý náber → Nabraný · Náberový list odovzdaný",
+          autor: authUser.id,
+        }),
       });
     } catch { /* neblokuj */ }
 
@@ -865,7 +870,7 @@ Odpovedaj stručne po slovensky.`;
       {showDraftBanner && draftMeta && (
         <div style={{
           padding: "12px 16px", marginBottom: "16px", borderRadius: "12px",
-          background: "#FEF3C7", border: "1px solid #FDE68A", color: "#92400E",
+          background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
           flexWrap: "wrap",
         }}>
@@ -877,11 +882,11 @@ Odpovedaj stručne po slovensky.`;
           <div style={{ display: "flex", gap: "8px" }}>
             <button onClick={loadDraft} style={{
               padding: "6px 14px", borderRadius: "8px", border: "none",
-              background: "#92400E", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer",
+              background: "#374151", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer",
             }}>Pokračovať</button>
             <button onClick={discardDraft} style={{
               padding: "6px 14px", borderRadius: "8px", border: "1px solid #92400E",
-              background: "transparent", color: "#92400E", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+              background: "transparent", color: "var(--text-secondary)", fontSize: "12px", fontWeight: 600, cursor: "pointer",
             }}>Zahodiť</button>
           </div>
         </div>
@@ -1008,7 +1013,7 @@ Odpovedaj stručne po slovensky.`;
               </div>
             </div>
             {lvMajitelia.length > 0 && (
-              <div style={{ marginTop: "14px", padding: "12px 14px", background: "#F0FDF4", borderRadius: "10px", border: "1px solid #BBF7D0" }}>
+              <div style={{ marginTop: "14px", padding: "12px 14px", background: "var(--bg-elevated)", borderRadius: "10px", border: "1px solid #BBF7D0" }}>
                 <div style={{ fontSize: "11px", fontWeight: "700", color: "#059669", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                   Ďalší spoluvlastníci z LV
                 </div>
@@ -1897,7 +1902,7 @@ Odpovedaj stručne po slovensky.`;
         </div>
         {/* Ak zostatok hypotéky je vyplnený a vyplatenie z kupnej ceny — upozornenie */}
         {anuita && tarchyRiesenie === "z_kupnej" && (
-          <div style={{ marginTop: "12px", padding: "10px 12px", background: "#FEF3C7", borderRadius: "8px", border: "1px solid #FDE68A", fontSize: "12px", color: "#92400E" }}>
+          <div style={{ marginTop: "12px", padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "12px", color: "var(--text-secondary)" }}>
             ⚠️ Zostatok hypotéky ({anuita} €) bude vyplatený z kúpnej ceny
           </div>
         )}
@@ -1921,8 +1926,8 @@ Odpovedaj stručne po slovensky.`;
       {lvPravneVady && (
         <div style={{ ...cardSt, border: "1.5px solid #FDE68A", background: "var(--bg-surface)" }}>
           <div style={sectionTitle}>⚠️ Ťarchy / právne vady</div>
-          <div style={{ padding: "10px 12px", background: "#FEF3C7", borderRadius: "8px", border: "1px solid #FDE68A", marginBottom: "14px" }}>
-            <div style={{ fontSize: "13px", color: "#92400E", lineHeight: 1.5 }}>{lvPravneVady}</div>
+          <div style={{ padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: "8px", border: "1px solid var(--border)", marginBottom: "14px" }}>
+            <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 }}>{lvPravneVady}</div>
           </div>
           <div>
             <label style={labelSt}>Riešenie ťarchy</label>
@@ -2023,7 +2028,7 @@ Odpovedaj stručne po slovensky.`;
                             <div style={{
                               width: "60px", height: "60px", background: "#FEF2F2", borderRadius: "8px",
                               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                              border: "1px solid #FECACA",
+                              border: "1px solid var(--border)",
                             }}>
                               <span style={{ fontSize: "20px" }}>📄</span>
                               <span style={{ fontSize: "8px", color: "#666", textAlign: "center", padding: "0 2px" }}>PDF</span>
@@ -2093,7 +2098,7 @@ Odpovedaj stručne po slovensky.`;
                   const vykup = trhCena - rekoCena - trhCena * (marza / 100);
                   return (
                     <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
-                      Trhová: <strong style={{ color: "#1E40AF" }}>{trhCena.toLocaleString("sk")} €</strong>
+                      Trhová: <strong style={{ color: "var(--text-secondary)" }}>{trhCena.toLocaleString("sk")} €</strong>
                       {" · "}Výkup: <strong style={{ color: vykup > 0 ? "#059669" : "#DC2626" }}>{vykup.toLocaleString("sk")} €</strong>
                     </div>
                   );
@@ -2128,7 +2133,7 @@ Odpovedaj stručne po slovensky.`;
               {(() => {
                 const m2 = Number(plocha) || 0;
                 if (m2 <= 0) return (
-                  <div style={{ marginTop: "16px", padding: "12px 16px", background: "#FEF3C7", borderRadius: "10px", fontSize: "13px", color: "#92400E" }}>
+                  <div style={{ marginTop: "16px", padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: "10px", fontSize: "13px", color: "var(--text-secondary)" }}>
                     Zadaj výmeru (m²) pre výpočet odhadu
                   </div>
                 );
@@ -2138,14 +2143,14 @@ Odpovedaj stručne po slovensky.`;
                 const vykupCena = trhCena - rekoCena - marzaEur;
                 return (
                   <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }} className="naber-grid">
-                    <div style={{ padding: "16px", borderRadius: "12px", background: "#EFF6FF", border: "1px solid #BFDBFE", textAlign: "center" }}>
-                      <div style={{ fontSize: "11px", fontWeight: "600", color: "#1D4ED8", marginBottom: "4px" }}>TRHOVÁ CENA</div>
-                      <div style={{ fontSize: "20px", fontWeight: "800", color: "#1E40AF" }}>{trhCena.toLocaleString("sk")} €</div>
+                    <div style={{ padding: "16px", borderRadius: "12px", background: "var(--bg-elevated)", border: "1px solid var(--border)", textAlign: "center" }}>
+                      <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-secondary)", marginBottom: "4px" }}>TRHOVÁ CENA</div>
+                      <div style={{ fontSize: "20px", fontWeight: "800", color: "var(--text-secondary)" }}>{trhCena.toLocaleString("sk")} €</div>
                       <div style={{ fontSize: "10px", color: "#3B82F6", marginTop: "2px" }}>{m2} m² × {odhadCenaM2} €</div>
                     </div>
                     {potrebujeReko && (
-                      <div style={{ padding: "16px", borderRadius: "12px", background: "#FEF3C7", border: "1px solid #FDE68A", textAlign: "center" }}>
-                        <div style={{ fontSize: "11px", fontWeight: "600", color: "#92400E", marginBottom: "4px" }}>REKONŠTRUKCIA</div>
+                      <div style={{ padding: "16px", borderRadius: "12px", background: "var(--bg-elevated)", border: "1px solid var(--border)", textAlign: "center" }}>
+                        <div style={{ fontSize: "11px", fontWeight: "600", color: "var(--text-secondary)", marginBottom: "4px" }}>REKONŠTRUKCIA</div>
                         <div style={{ fontSize: "20px", fontWeight: "800", color: "#B45309" }}>-{rekoCena.toLocaleString("sk")} €</div>
                       </div>
                     )}
@@ -2300,7 +2305,7 @@ Odpovedaj stručne po slovensky.`;
       {error && (
         <div style={{
           padding: "12px 16px", background: "#FEF2F2", borderRadius: "10px",
-          color: "#991B1B", fontSize: "13px", marginBottom: "16px", border: "1px solid #FECACA",
+          color: "#991B1B", fontSize: "13px", marginBottom: "16px", border: "1px solid var(--border)",
         }}>
           {error}
         </div>
@@ -2398,8 +2403,8 @@ function FinancneKalkulacky({
     if (h === "V rozsahu") return { bg: "#F0FDF4", color: "#166534" };
     if (h === "Mierne vysoká") return { bg: "#FEF9C3", color: "#854D0E" };
     if (h === "Vysoká") return { bg: "#FEF2F2", color: "#991B1B" };
-    if (h === "Mierne nízka") return { bg: "#EFF6FF", color: "#1D4ED8" };
-    return { bg: "#EFF6FF", color: "#1D4ED8" };
+    if (h === "Mierne nízka") return { bg: "#EFF6FF", color: "var(--text-secondary)" };
+    return { bg: "#EFF6FF", color: "var(--text-secondary)" };
   }
 
   const [showInzeraty, setShowInzeraty] = useState(false);
