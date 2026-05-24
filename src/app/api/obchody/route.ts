@@ -74,13 +74,14 @@ export async function POST(req: NextRequest) {
 
   if (obchodErr) return NextResponse.json({ error: obchodErr.message }, { status: 500 });
 
-  // Naseeduj preset úlohy
+  // Naseeduj preset úlohy — company_id musí byť NOT NULL (P0 fix 2026-05-24).
   const seedRows = OBCHOD_PRESET.map(u => ({
-    obchod_id: obchod.id,
-    kategoria: u.kategoria,
-    nazov:     u.nazov,
-    popis:     u.popis ?? null,
-    priorita:  u.priorita,
+    obchod_id:  obchod.id,
+    company_id: klient.company_id,
+    kategoria:  u.kategoria,
+    nazov:      u.nazov,
+    popis:      u.popis ?? null,
+    priorita:   u.priorita,
   }));
 
   const { error: seedErr } = await sb.from("obchod_ulohy").insert(seedRows);

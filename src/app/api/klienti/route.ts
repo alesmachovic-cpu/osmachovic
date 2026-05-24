@@ -130,7 +130,10 @@ export async function PATCH(req: NextRequest) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 
   const userId = auth.user.id;
-  const id = String(body.id || "");
+  // P0 fix 2026-05-24: niektoré UI flow posielajú id v query stringu (?id=...),
+  // nie v body. Accept oboje aby sa nedalo zlyhať na "id required" 400.
+  const idFromQuery = new URL(req.url).searchParams.get("id");
+  const id = String(body.id || idFromQuery || "");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const scope = await getUserScope(userId);
@@ -156,7 +159,21 @@ export async function PATCH(req: NextRequest) {
   if (scope.isAdmin && bodyMakler) patch.makler_id = bodyMakler; // delegate
 
   const { data, error } = await sb.from("klienti").update(patch).eq("id", id).select().single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // P0 fix 2026-05-24: schema cache miss (UI posiela neznámy stĺpec, napr. poznamky) → 400 namiesto 500.
+    // Logujeme attempt body keys aby sa dal source bug v UI nájsť.
+    if (error.code === "PGRST204" || /column|schema cache/i.test(error.message)) {
+      console.warn("[/api/klienti PATCH] schema mismatch:", {
+        attempted_fields: Object.keys(patch),
+        supabase_error: error.message,
+      });
+      return NextResponse.json({
+        error: `Niektoré polia neexistujú v klienti schéme (${error.message}). UI bug — refresh stránku alebo pošli sken Network tabu.`,
+        code: "SCHEMA_MISMATCH",
+      }, { status: 400 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   await logAudit({
     action: "klient.update",
     actor_id: userId,
