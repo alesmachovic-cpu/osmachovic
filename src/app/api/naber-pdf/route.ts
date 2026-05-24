@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
-const getSb = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const getSb = () => getSupabaseAdmin();
 
 const TYP_LABELS: Record<string, string> = {
   byt: "Byt", rodinny_dom: "Rodinny dom", pozemok: "Pozemok",

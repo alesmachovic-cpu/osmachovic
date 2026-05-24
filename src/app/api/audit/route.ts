@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -13,8 +14,11 @@ export const runtime = "nodejs";
  *   Query: ?user_id=xxx | ?action=xxx | ?entity_type=xxx
  */
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const auth = await requireUser(request);
+    if (auth.error) return auth.error;
+
     const body = await request.json();
     const sb = getSupabaseAdmin();
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -35,8 +39,11 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const auth = await requireUser(request);
+    if (auth.error) return auth.error;
+
     const { searchParams } = new URL(request.url);
     const sb = getSupabaseAdmin();
 

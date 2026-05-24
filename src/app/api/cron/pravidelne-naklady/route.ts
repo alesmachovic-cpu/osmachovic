@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { sendPushToAll } from "@/lib/monitor";
 
@@ -6,7 +6,14 @@ import { sendPushToAll } from "@/lib/monitor";
 // Pre každý aktívny pravidelný náklad: ak je dnes 0–2 dni pred dňom splatnosti
 // a tento mesiac ešte neexistuje záznam, vytvor ho v prehlad_zaznamy.
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  const queryKey = request.nextUrl.searchParams.get("key");
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && queryKey !== cronSecret) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, "0");
