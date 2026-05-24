@@ -7,10 +7,15 @@ export const runtime = "nodejs";
 
 /**
  * POST /api/auth/google/match
- * Body: { email: string }
+ * Body: { supabase_jwt: string }
  *
- * Nájde CRM usera podľa Google emailu (login_email alebo email).
- * Volané z /auth/callback po Google OAuth — pred tým ako existuje session cookie.
+ * Volané z /auth/callback po Google OAuth.
+ * Overí Supabase JWT (podpísaný Supabase Auth, nepodvrhuteľný), extrahuje
+ * verifikovaný email a nájde CRM usera (login_email alebo email).
+ *
+ * 🔒 JWT verification (FIX 2026-05-24):
+ *   Pôvodne body.email bol trusted — útočník mohol POST {email:"victim@x.com"}
+ *   a získať session pre toho usera. Teraz sa email berie z verifikovaného JWT.
  *
  * 🔒 2FA gate (FIX 2026-05-20):
  *   Pôvodne tento endpoint po Google OAuth rovno vystavil session cookie
@@ -19,17 +24,28 @@ export const runtime = "nodejs";
  *   namiesto session cookie (rovnaký pattern ako /api/auth/login).
  */
 export async function POST(req: NextRequest) {
-  let email: string;
+  let supabaseJwt: string;
   try {
     const body = await req.json();
-    email = String(body.email || "").trim().toLowerCase();
+    supabaseJwt = String(body.supabase_jwt || "");
   } catch {
     return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 });
   }
 
-  if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
+  if (!supabaseJwt) {
+    return NextResponse.json({ error: "supabase_jwt required" }, { status: 400 });
+  }
 
   const sb = getSupabaseAdmin();
+
+  // Verifikácia JWT proti Supabase Auth — ak je platný, vráti usera
+  // s overeným emailom z Google OAuth flow. Neplatný/expired JWT → 401.
+  const { data: supabaseUser, error: jwtErr } = await sb.auth.getUser(supabaseJwt);
+  if (jwtErr || !supabaseUser?.user?.email) {
+    return NextResponse.json({ error: "invalid_token" }, { status: 401 });
+  }
+  const email = supabaseUser.user.email.toLowerCase();
+
   const SELECT = "id, name, initials, role, company_id, totp_enabled_at";
 
   // Skús najprv login_email; ak nič, fallback na email. (`.or()` filter má problém
