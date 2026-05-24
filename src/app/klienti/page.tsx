@@ -621,7 +621,7 @@ function KlientiContent() {
                       fetchKlienti();
                     }} style={{
                       padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",
-                      background: "#D1FAE5", color: "var(--text-primary)", border: "none", cursor: "pointer",
+                      background: "#D1FAE5", color: "#065F46", border: "none", cursor: "pointer",
                     }}>✓</button>
                   )}
                   {canEdit && (

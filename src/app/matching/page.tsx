@@ -346,7 +346,7 @@ export default function MatchingPage() {
                       <span key={r} style={{
                         fontSize: "11.5px", fontWeight: "500",
                         padding: "4px 10px", borderRadius: "8px",
-                        background: "#D1FAE5", color: "var(--text-primary)",
+                        background: "#D1FAE5", color: "#065F46",
                       }}>
                         ✓ {r}
                       </span>

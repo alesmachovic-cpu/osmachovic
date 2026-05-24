@@ -41,9 +41,10 @@ export async function GET(req: NextRequest) {
   }
   if (telefon) {
     const last9 = telefon.replace(/\D/g, "").slice(-9);
-    const { data, error } = await sb.from("klienti").select("*").ilike("telefon", `%${last9}%`).eq("company_id", companyId).limit(1).maybeSingle();
+    const { data, error } = await sb.from("klienti").select("*").ilike("telefon", `%${last9}%`).eq("company_id", companyId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ klient: data });
+    // Spätná kompatibilita: `klient` = prvý match (single), `klienti` = celé pole.
+    return NextResponse.json({ klient: data?.[0] ?? null, klienti: data ?? [] });
   }
   if (q) {
     const { data, error } = await sb.from("klienti").select("id, meno, telefon, email").ilike("meno", `%${q}%`).eq("company_id", companyId).limit(8);

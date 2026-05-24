@@ -23,6 +23,8 @@ import { ProviziaMiniCalc } from "@/components/calc/ProviziaMiniCalc";
 import { ClientInsightPanel } from "@/components/client-insight/ClientInsightPanel";
 import ProdukciaTab from "@/components/produkcia/ProdukciaTab";
 import ObchodTab from "@/components/Obchod/ObchodTab";
+import PropertyPickerSearch from "@/components/PropertyPickerSearch";
+import HypoPoradcaPicker from "@/components/HypoPoradcaPicker";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
@@ -701,6 +703,27 @@ export default function KlientDetailPage() {
   }
 
   // Status change handler s automatickým workflow
+  // Pre OBOJE klientov — zmena status_kupujuci je čisto data update,
+  // bez calendar/náber side-effectov (tie patria predávajúcej strane).
+  async function handleKupujuciStatusChange(newStatus: string) {
+    if (!klient) return;
+    if (newStatus === "nabrany") return;
+    const oldStatus = klient.status_kupujuci || null;
+    if (user?.id) await klientUpdate(user.id, klient.id, { status_kupujuci: newStatus });
+    try {
+      await fetch("/api/klient-udalosti", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          klient_id: klient.id,
+          typ: "status_zmena",
+          popis: `[Kúpa] ${STATUS_LABELS[oldStatus as keyof typeof STATUS_LABELS] || oldStatus || "—"} → ${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS] || newStatus}`,
+          autor: user?.id || null,
+        }),
+      });
+    } catch { /* neblokuj */ }
+    loadAll();
+  }
+
   async function handleStatusChange(newStatus: string) {
     if (!klient) return;
     // nabrany can only be set automatically via náberový list
@@ -867,11 +890,26 @@ export default function KlientDetailPage() {
     return 0;
   }
 
+  // Pri OBOJE klientovi vedie predaj `status` a kúpu samostatný `status_kupujuci`.
+  // Pri čistých kupujúcich vedie `status` kupujúcu pipeline (status_kupujuci je NULL).
+  // Pri predávajúcich/prenajímateľoch nemá kupujúca strana zmysel.
+  function kupujuciStatus(): string | null {
+    if (!klient) return null;
+    if (klient.typ === "kupujuci") return klient.status;
+    if (klient.typ === "oboje") return klient.status_kupujuci || null;
+    return null;
+  }
+  function predavajuciStatus(): string | null {
+    if (!klient) return null;
+    if (klient.typ === "kupujuci") return null;
+    return klient.status;
+  }
+
   // Kupujuci workflow (F1 plan-kupujuci, per Aleš 2026-05-23)
-  // Mapuje klient.status na pozíciu v 8-krokovej kupujúcej pipeline (0-7).
+  // Mapuje aktuálny kupujúci status na pozíciu v 8-krokovej pipeline (0-7).
   function getKupujuciStep(): number {
-    if (!klient) return 0;
-    const s = klient.status as string;
+    const s = kupujuciStatus();
+    if (!s) return 0;
     if (s === "uz_kupil") return 7;
     if (s === "podpis_kz") return 6;
     if (s === "rezervacia") return 5;
@@ -1392,11 +1430,30 @@ export default function KlientDetailPage() {
 
         {/* Status + Typ badges */}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
-          <select
-            value={klient.status}
-            onChange={(e) => handleStatusChange(e.target.value)}
-            disabled={!isOwner}
-            style={{
+          {(() => {
+            const KUPUJUCI_STATUSY = [
+              { value: "novy_kontakt", label: "Nový kontakt" },
+              { value: "zaujem_konkretna_nasa", label: "Záujem — naša nehnuteľnosť" },
+              { value: "zaujem_konkretna_ina_rk", label: "Záujem — v inej RK" },
+              { value: "caka_na_hypoteku", label: "Čaká na hypotéku" },
+              { value: "odlozene", label: "Odložené" },
+              { value: "nereaguje", label: "Nereaguje" },
+              { value: "turista", label: "Turista" },
+              { value: "realitna_kancelaria", label: "Realitná kancelária" },
+              { value: "uz_kupil", label: "Už kúpil" },
+            ];
+            const PREDAVAJUCI_STATUSY = [
+              { value: "aktivny", label: "Aktívny" },
+              { value: "novy_kontakt", label: "Nový kontakt" },
+              { value: "dohodnuty_naber", label: "Dohodnutý náber" },
+              ...(klient.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
+              { value: "volat_neskor", label: "Volať neskôr" },
+              { value: "nedovolal", label: "Nedovolal" },
+              { value: "nechce_rk", label: "Nechce RK" },
+              { value: "uz_predal", label: "Už predal" },
+              { value: "realitna_kancelaria", label: "Realitná kancelária" },
+            ];
+            const selectStyle: React.CSSProperties = {
               padding: "6px 28px 6px 14px", borderRadius: "20px", fontSize: "12px", fontWeight: "700",
               background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)",
               cursor: isOwner ? "pointer" : "default", appearance: "none",
@@ -1404,46 +1461,39 @@ export default function KlientDetailPage() {
               backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
               backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
               outline: "none",
-            }}
-          >
-            {(() => {
-              const kupujuciStatusy = [
-                { value: "aktivny", label: "Aktívny" },
-                { value: "zaujem_konkretna_nasa", label: "Záujem — naša nehnuteľnosť" },
-                { value: "zaujem_konkretna_ina_rk", label: "Záujem — v inej RK" },
-                { value: "caka_na_hypoteku", label: "Čaká na hypotéku" },
-                { value: "odlozene", label: "Odložené" },
-                { value: "nereaguje", label: "Nereaguje" },
-                { value: "turista", label: "Turista" },
-                { value: "realitna_kancelaria", label: "Realitná kancelária" },
-                { value: "uz_kupil", label: "Už kúpil" },
-              ];
-              const predavajuciStatusy = [
-                { value: "aktivny", label: "Aktívny" },
-                { value: "novy_kontakt", label: "Nový kontakt" },
-                { value: "dohodnuty_naber", label: "Dohodnutý náber" },
-                ...(klient.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
-                { value: "volat_neskor", label: "Volať neskôr" },
-                { value: "nedovolal", label: "Nedovolal" },
-                { value: "nechce_rk", label: "Nechce RK" },
-                { value: "uz_predal", label: "Už predal" },
-                { value: "realitna_kancelaria", label: "Realitná kancelária" },
-              ];
-              // Per Aleš (2026-05-23): kupujuci → kupujúce statusy; predavajuci →
-              // predávajúca pipeline; oboje → SPOJENÉ (deduplicated by value).
-              let options;
-              if (klient.typ === "kupujuci") options = kupujuciStatusy;
-              else if (klient.typ === "oboje") {
-                const seen = new Set<string>();
-                options = [...predavajuciStatusy, ...kupujuciStatusy].filter(o => {
-                  if (seen.has(o.value)) return false;
-                  seen.add(o.value);
-                  return true;
-                });
-              } else options = predavajuciStatusy;
-              return options.map(o => <option key={o.value} value={o.value}>{o.label}</option>);
-            })()}
-          </select>
+            };
+            const tagStyle: React.CSSProperties = {
+              fontSize: "10px", fontWeight: 700, color: "var(--text-muted)",
+              textTransform: "uppercase", letterSpacing: "0.05em",
+            };
+
+            if (klient.typ === "oboje") {
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={tagStyle}>Predaj</span>
+                    <select value={klient.status} onChange={(e) => handleStatusChange(e.target.value)} disabled={!isOwner} style={selectStyle}>
+                      {PREDAVAJUCI_STATUSY.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={tagStyle}>Kúpa</span>
+                    <select value={klient.status_kupujuci || ""} onChange={(e) => handleKupujuciStatusChange(e.target.value)} disabled={!isOwner} style={selectStyle}>
+                      <option value="">— vyber —</option>
+                      {KUPUJUCI_STATUSY.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              );
+            }
+
+            const options = klient.typ === "kupujuci" ? KUPUJUCI_STATUSY : PREDAVAJUCI_STATUSY;
+            return (
+              <select value={klient.status} onChange={(e) => handleStatusChange(e.target.value)} disabled={!isOwner} style={selectStyle}>
+                {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            );
+          })()}
           <span style={{
             padding: "4px 12px", borderRadius: "20px", fontSize: "11px", fontWeight: "600",
             background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)",
@@ -1472,6 +1522,125 @@ export default function KlientDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Záujem o konkrétnu nehnuteľnosť — naša / v inej RK (kupujúca strana) */}
+      {(kupujuciStatus() === "zaujem_konkretna_nasa" || kupujuciStatus() === "zaujem_konkretna_ina_rk") && (
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            {kupujuciStatus() === "zaujem_konkretna_nasa" ? "Záujem — naša nehnuteľnosť" : "Záujem — v inej RK"}
+          </div>
+          {kupujuciStatus() === "zaujem_konkretna_nasa" ? (
+            <PropertyPickerSearch
+              value={klient.zaujem_nehnutelnost_id || null}
+              disabled={!isOwner}
+              onChange={async (id) => {
+                if (user?.id) await klientUpdate(user.id, klient.id, { zaujem_nehnutelnost_id: id });
+                loadAll();
+              }}
+            />
+          ) : (
+            <>
+            <textarea
+              defaultValue={klient.zaujem_ina_rk || ""}
+              disabled={!isOwner}
+              placeholder={"napr. 3-izbový byt Petržalka v RK Re/Max\nalebo\nhttps://nehnutelnosti.sk/..."}
+              rows={3}
+              onBlur={async (e) => {
+                const val = e.target.value.trim() || null;
+                if (val === (klient.zaujem_ina_rk || null)) return;
+                if (user?.id) await klientUpdate(user.id, klient.id, { zaujem_ina_rk: val });
+                loadAll();
+              }}
+              style={{
+                width: "100%", padding: "10px 12px", borderRadius: "10px",
+                background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                color: "var(--text-primary)", fontSize: 13, outline: "none",
+                resize: "vertical", fontFamily: "inherit",
+              }}
+            />
+            <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>
+              Stačí jedno — buď slovný popis (typ, lokalita, ktorá RK), alebo URL inzerátu.
+            </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Hypo poradca — pri statuse "Čaká na hypotéku" (kupujúca strana) */}
+      {kupujuciStatus() === "caka_na_hypoteku" && (
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Kto rieši hypotéku
+          </div>
+          <HypoPoradcaPicker
+            value={{
+              hypo_typ: (klient.hypo_typ as "nas_poradca" | "externy" | "klient_sam" | null) || null,
+              hypo_meno: klient.hypo_meno || null,
+              hypo_firma: klient.hypo_firma || null,
+              hypo_poradca_id: klient.hypo_poradca_id || null,
+            }}
+            disabled={!isOwner}
+            onChange={async (v) => {
+              if (user?.id) await klientUpdate(user.id, klient.id, v);
+              loadAll();
+            }}
+          />
+        </div>
+      )}
+
+      {/* Odložené — kedy začne znova hľadať (ktorákoľvek strana) */}
+      {(predavajuciStatus() === "odlozene" || kupujuciStatus() === "odlozene") && (
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Hľadať byt znova od
+          </div>
+          <input
+            type="date"
+            defaultValue={klient.odlozene_do || ""}
+            disabled={!isOwner}
+            onChange={async (e) => {
+              const val = e.target.value || null;
+              if (val === (klient.odlozene_do || null)) return;
+              if (user?.id) await klientUpdate(user.id, klient.id, { odlozene_do: val });
+              loadAll();
+            }}
+            style={{
+              width: "100%", padding: "10px 12px", borderRadius: "10px",
+              background: "var(--bg-elevated)", border: "1px solid var(--border)",
+              color: "var(--text-primary)", fontSize: 13, outline: "none",
+            }}
+          />
+          <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>
+            Orientačný dátum — kedy sa ku klientovi vrátiť.
+          </div>
+        </div>
+      )}
+
+      {/* Realitná kancelária — názov (ktorákoľvek strana; pri OBOJE tento status nie je v ponuke) */}
+      {(predavajuciStatus() === "realitna_kancelaria" || kupujuciStatus() === "realitna_kancelaria") && (
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Názov realitnej kancelárie
+          </div>
+          <input
+            type="text"
+            defaultValue={klient.rk_nazov || ""}
+            disabled={!isOwner}
+            placeholder="napr. Re/Max, Century 21, lokálna RK…"
+            onBlur={async (e) => {
+              const val = e.target.value.trim() || null;
+              if (val === (klient.rk_nazov || null)) return;
+              if (user?.id) await klientUpdate(user.id, klient.id, { rk_nazov: val });
+              loadAll();
+            }}
+            style={{
+              width: "100%", padding: "10px 12px", borderRadius: "10px",
+              background: "var(--bg-elevated)", border: "1px solid var(--border)",
+              color: "var(--text-primary)", fontSize: 13, outline: "none",
+            }}
+          />
+        </div>
+      )}
 
       {/* Spolupráca */}
       {isOwner && makleri.length > 0 && (
@@ -1745,8 +1914,8 @@ export default function KlientDetailPage() {
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <span style={{ fontSize: "20px" }}>📄</span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>List vlastníctva chýba</div>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              <div style={{ fontSize: "13px", fontWeight: "700", color: "#78350F" }}>List vlastníctva chýba</div>
+              <div style={{ fontSize: "12px", color: "#92400E" }}>
                 {lvUploading ? "Analyzujem LV..." : "Nahraj PDF alebo fotku LV"}
               </div>
             </div>
