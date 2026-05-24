@@ -15,19 +15,20 @@ export const runtime = "nodejs";
 //   ?q=X        → search by meno (ilike, limit 8)
 //   (nič)       → všetci
 export async function GET(req: NextRequest) {
+  // P0 fix 2026-05-24: strict auth — pred fixom VIANEMA fallback servíroval
+  // všetkých 60+ klientov (PII, GDPR) komukoľvek bez session.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   const params = new URL(req.url).searchParams;
   const id = params.get("id");
   const telefon = params.get("telefon");
   const q = params.get("q");
 
-  // Zisti company_id zo session (fallback = Vianema pre backward compat)
-  const sessionUserId = readSessionUserId(req);
-  let companyId = VIANEMA_COMPANY_ID;
-  if (sessionUserId) {
-    const scope = await getUserScope(sessionUserId);
-    if (scope) companyId = scope.company_id;
-  }
+  const scope = await getUserScope(auth.user.id);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const companyId = scope.company_id;
 
   if (id) {
     const { data, error } = await sb.from("klienti").select("*").eq("id", id).eq("company_id", companyId).maybeSingle();

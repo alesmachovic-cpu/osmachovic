@@ -16,16 +16,18 @@ const VALID_STATUSES = ["aktivny", "koncept", "predany", "archivovany", "priprav
  *   (nič)             → všetky (pre portfolio, matching)
  */
 export async function GET(req: NextRequest) {
+  // P0 fix 2026-05-24: strict auth — pred fixom VIANEMA fallback servíroval
+  // všetky nehnutelnosti komukoľvek bez session.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   const id = req.nextUrl.searchParams.get("id");
   const klientId = req.nextUrl.searchParams.get("klient_id");
 
-  const sessionUserId = readSessionUserId(req);
-  let companyId = VIANEMA_COMPANY_ID;
-  if (sessionUserId) {
-    const scope = await getUserScope(sessionUserId);
-    if (scope) companyId = scope.company_id;
-  }
+  const scope = await getUserScope(auth.user.id);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const companyId = scope.company_id;
 
   if (id) {
     const { data, error } = await sb.from("nehnutelnosti").select("*").eq("id", id).eq("company_id", companyId).maybeSingle();

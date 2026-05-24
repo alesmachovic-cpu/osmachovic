@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope } from "@/lib/scope";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -8,11 +9,23 @@ export const runtime = "nodejs";
  * GET /api/dashboard?user_id=X
  * Returns dashboard statistics for the logged-in user.
  * Uses service_role key → bypasses RLS.
+ *
+ * P0 fix 2026-05-24: strict auth + IDOR guard — pred fixom server akceptoval
+ * ľubovoľný user_id z query, čím sa dal pozrieť dashboard ktoréhokoľvek
+ * makléra (vrátane súm provízií).
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get("user_id");
   if (!userId) return NextResponse.json({ error: "user_id required" }, { status: 400 });
+
+  // IDOR guard — len ja na svoj dashboard; admin/super_admin na kohokoľvek
+  if (userId !== auth.user.id && auth.user.role !== "platform_admin" && auth.user.role !== "super_admin") {
+    return NextResponse.json({ error: "Nemáš prístup k cudziemu dashboardu" }, { status: 403 });
+  }
 
   const sb = getSupabaseAdmin();
   const scope = await getUserScope(userId);
