@@ -67,13 +67,13 @@ export default function AuthCallback() {
           return;
         }
 
-        // Normálny Google login: nájdi usera podľa emailu (server-side, bezpečné)
+        // Normálny Google login: pošli Supabase JWT (overiteľný server-side)
         setStatus("Hľadám účet...");
         const matchRes = await fetch("/api/auth/google/match", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ email: gmailEmail }),
+          body: JSON.stringify({ supabase_jwt: session.access_token }),
         });
 
         if (!matchRes.ok) {
