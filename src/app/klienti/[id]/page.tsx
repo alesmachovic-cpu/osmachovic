@@ -504,14 +504,20 @@ export default function KlientDetailPage() {
     setVzPodpisana(vzArr.some((v: Record<string, unknown>) => !!v.podpisane_at));
 
     // Auto-prechod: nabrany + aktivny inzerat → inzerovany
+    // P0 fix 2026-05-24: atomicita — log do CRM Log IBA ak DB update prejde,
+    // inak vznikne falošný audit záznam ("status zmenený" pri zlyhaní update-u).
     const hasAktivnyInzerat = inzeratyArr.some(n => (n as Record<string, unknown>).status === "aktivny");
     if (klientData?.status === "nabrany" && hasAktivnyInzerat && user?.id) {
-      klientUpdate(user.id, id, { status: "inzerovany" });
-      setKlient(k => k ? { ...k, status: "inzerovany" as KlientStatus } : k);
-      fetch("/api/klient-udalosti", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ klient_id: id, typ: "status_zmena", popis: "Nabraný → Inzerovaný", autor: user.id }),
-      }).catch(() => {});
+      const updateRes = await klientUpdate(user.id, id, { status: "inzerovany" });
+      if (!updateRes.error) {
+        setKlient(k => k ? { ...k, status: "inzerovany" as KlientStatus } : k);
+        await fetch("/api/klient-udalosti", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ klient_id: id, typ: "status_zmena", popis: "Nabraný → Inzerovaný", autor: user.id }),
+        }).catch(() => {});
+      } else {
+        console.warn("[auto-prechod inzerovany] update failed:", updateRes.error.message);
+      }
     }
 
     // Zostavenie timeline

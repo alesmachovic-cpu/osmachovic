@@ -29,16 +29,30 @@ function isAllowedHost(req: NextRequest): boolean {
 }
 
 export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const isApi = pathname.startsWith("/api/");
+
   // Blokuj Vercel preview URL (funny-stonebraker-*.vercel.app atď.)
   if (!isAllowedHost(request)) {
+    // P1 fix 2026-05-24: API musí vždy JSON, nie HTML.
+    if (isApi) {
+      return NextResponse.json({ error: "Access denied", code: "FORBIDDEN_HOST" }, { status: 403 });
+    }
     return new NextResponse("Access denied", { status: 403 });
   }
 
   // Billing guard — ak firma má is_active=false, presmeruj na billing stránku.
   // Cookie crm_billing=suspended nastaví /api/auth/login a /api/auth/google/match.
   const billing = request.cookies.get("crm_billing")?.value;
-  const { pathname } = request.nextUrl;
   if (billing === "suspended" && !isBillingExempt(pathname)) {
+    // P1 fix 2026-05-24: API musí vrátiť JSON 402 (Payment Required), nie HTML redirect.
+    // Inak API klienti / monitoring dostane HTML login page namiesto strukturovaného erroru.
+    if (isApi) {
+      return NextResponse.json({
+        error: "Účet je pozastavený (billing)",
+        code: "ACCOUNT_SUSPENDED",
+      }, { status: 402 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/nastavenia";
     url.search = "?tab=billing&suspended=1";

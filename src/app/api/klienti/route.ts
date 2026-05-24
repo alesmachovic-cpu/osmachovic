@@ -160,8 +160,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data, error } = await sb.from("klienti").update(patch).eq("id", id).select().single();
   if (error) {
-    // P0 fix 2026-05-24: schema cache miss (UI posiela neznámy stĺpec, napr. poznamky) → 400 namiesto 500.
-    // Logujeme attempt body keys aby sa dal source bug v UI nájsť.
+    // P0 fix 2026-05-24a: schema cache miss → 400 namiesto 500.
     if (error.code === "PGRST204" || /column|schema cache/i.test(error.message)) {
       console.warn("[/api/klienti PATCH] schema mismatch:", {
         attempted_fields: Object.keys(patch),
@@ -170,6 +169,17 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({
         error: `Niektoré polia neexistujú v klienti schéme (${error.message}). UI bug — refresh stránku alebo pošli sken Network tabu.`,
         code: "SCHEMA_MISMATCH",
+      }, { status: 400 });
+    }
+    // P0 fix 2026-05-24b: DB check constraint violation (napr. invalid status) → 400.
+    if (error.code === "23514") {
+      console.warn("[/api/klienti PATCH] constraint violation:", {
+        attempted_fields: Object.keys(patch),
+        supabase_error: error.message,
+      });
+      return NextResponse.json({
+        error: `Neplatná hodnota poľa (${error.message})`,
+        code: "INVALID_VALUE",
       }, { status: 400 });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
