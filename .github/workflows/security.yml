@@ -4,9 +4,9 @@ on:
   schedule:
     - cron: "0 6 * * 1"   # každý pondelok o 6:00 UTC
   push:
-    branches: [main, prod]
+    branches: [main, dev, prod]
   pull_request:
-    branches: [main, prod]
+    branches: [main, dev, prod]
 
 jobs:
   npm-audit:
@@ -44,3 +44,14 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npx tsc --noEmit
+
+  api-auth-guard:
+    name: API Auth Guard (prevent VIANEMA fallback + TIER 1 regression)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run static analysis
+        run: node scripts/check-api-auth.mjs

@@ -60,13 +60,20 @@ export async function GET(req: NextRequest) {
  * automaticky z klienta (= vlastník klienta), nie z volajúceho.
  */
 export async function POST(req: NextRequest) {
+  // P0 fix 2026-06-02: strict auth — body.user_id trust → IDOR risk.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 
-  const userId = String(body.user_id || "");
+  const bodyUserId = String(body.user_id || "");
+  const userId = bodyUserId || auth.user.id;
   const klientId = body.klient_id ? String(body.klient_id) : null;
-  if (!userId) return NextResponse.json({ error: "user_id required" }, { status: 400 });
+  if (bodyUserId && bodyUserId !== auth.user.id && auth.user.role !== "platform_admin" && auth.user.role !== "super_admin") {
+    return NextResponse.json({ error: "Nemôžeš vytvoriť náber v mene iného usera" }, { status: 403 });
+  }
 
   const scope = await getUserScope(userId);
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });

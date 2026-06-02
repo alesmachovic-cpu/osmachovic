@@ -175,6 +175,52 @@ VAPID_PRIVATE_KEY                # web-push
 - Nevypisuj sensitive údaje (API keys, tokens, session secret) do logov ani do error response.
 - Žiadne commity priamo do `main` bez prečítania diffu — preferuj feature branch alebo worktree.
 
+## 🛡️ API Security Rules (mandatórne — automaticky vynucované cez CI)
+
+**Po dvojkolovom security audite 24.5.+2.6.2026 (P0 leaks na 11+ endpointoch) platia:**
+
+### Pravidlo 1: Každý nový `src/app/api/**/route.ts` handler MUSÍ volať `requireUser(req)` ako prvý krok
+
+```ts
+export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+  // ... zvyšok handlera
+  const scope = await getUserScope(auth.user.id);
+  const companyId = scope.company_id;  // ✓ správne — z verifikovanej session
+}
+```
+
+### Pravidlo 2: NIKDY nepoužívaj VIANEMA_COMPANY_ID ako fallback
+
+**❌ Zakázaný pattern (toto bol P0 bug):**
+```ts
+const sessionUserId = readSessionUserId(req);
+let companyId = VIANEMA_COMPANY_ID;        // ← bez session → leak všetkých dát
+if (sessionUserId) { ... }
+```
+
+Bez session → fallback servíruje VŠETKY záznamy firmy komukoľvek. **CI fail.**
+
+### Pravidlo 3: Verejný endpoint? Musí byť v PUBLIC_WHITELIST
+
+Ak je nový endpoint zámerne verejný (auth login, webhook, cron) → pridaj cestu do `scripts/check-api-auth.mjs` `PUBLIC_WHITELIST` + komentár prečo. Inak CI fail.
+
+### Pravidlo 4: 11 sensitive routes je TIER 1 protected
+
+Tieto routes boli ručne fix-nuté po audite a sú watchované:
+`/api/klienti`, `/api/nehnutelnosti`, `/api/faktury`, `/api/dashboard`, `/api/obhliadky`, `/api/nabery`, `/api/klienti/counts`, `/api/audit`, `/api/ulohy`, `/api/klient-dokumenty`, `/api/obchody`.
+
+**Odstránenie `requireUser()` z ktoréhokoľvek z nich = CI hard fail.**
+
+### Local check pred push
+
+```bash
+node scripts/check-api-auth.mjs
+```
+
+Beží automaticky v CI cez `.github/workflows/security.yml` → job `api-auth-guard`.
+
 ## Lessons learned (2026-05-21)
 - **URL generátory:** Nikdy nepoužívaj `process.env.VERCEL_ENV === "production"` na rozhodnutie medzi `vianema.amgd.sk` vs `dev.amgd.sk`. Dev je samostatný Vercel projekt (`vianema-dev`) deployovaný ako `target=production` → `VERCEL_ENV === "production"` je `true` aj na dev. Vždy použi `request.headers.get("host")` + `x-forwarded-proto`. Whitelist hostov rieši `middleware.ts` (`ALLOWED_HOSTS`).
 - **PATCH endpointy s M1 re-auth gate:** Backend kontroluje `"role" in updates` (alebo iné sensitive pole) → spúšťa `requireReAuth`. Frontend MUSÍ posielať len **reálne zmenené polia**. Ak posielaš nezmenený `role` v body, spustí sa false-positive re-auth alert. Pattern: zostav `payload` postupne a sensitive polia pridávaj iba pri ich reálnej zmene.
