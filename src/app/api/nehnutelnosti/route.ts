@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope } from "@/lib/scope";
 import { logAudit } from "@/lib/audit";
-import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
-import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
