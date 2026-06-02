@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope } from "@/lib/scope";
-import { readSessionUserId } from "@/lib/auth/requireUser";
-import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { requireUser } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
 // GET /api/klienti/counts
 // Vráti { [klient_id]: { obhliadky: n, nabery: n } } pre všetkých klientov firmy
 export async function GET(req: NextRequest) {
+  // P0 fix 2026-05-24: strict auth.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
-  const userId = readSessionUserId(req);
-  let companyId = VIANEMA_COMPANY_ID;
-  if (userId) {
-    const scope = await getUserScope(userId);
-    if (scope?.company_id) companyId = scope.company_id;
-  }
+  const scope = await getUserScope(auth.user.id);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const companyId = scope.company_id;
 
   const [obhliadkyRes, naberyRes] = await Promise.all([
     sb.from("obhliadky").select("predavajuci_klient_id").eq("company_id", companyId),
