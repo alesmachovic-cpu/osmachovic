@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord, canEditNaber } from "@/lib/scope";
-import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
-import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { requireUser } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -24,21 +23,20 @@ const LIST_COLUMNS =
  * GET /api/nabery — list naberove_listy
  */
 export async function GET(req: NextRequest) {
+  // P0 fix 2026-05-24: strict auth — pred fixom VIANEMA fallback servíroval
+  // všetky náberáky (PII vrátane majiteľov, kontaktov) komukoľvek bez session.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   const klientId = req.nextUrl.searchParams.get("klient_id");
   const mine = req.nextUrl.searchParams.get("mine") === "1";
   const dnes = req.nextUrl.searchParams.get("dnes") === "1";
 
-  const sessionUserId = readSessionUserId(req);
-  let companyId = VIANEMA_COMPANY_ID;
-  let maklerUuid: string | null = null;
-  if (sessionUserId) {
-    const scope = await getUserScope(sessionUserId);
-    if (scope) {
-      companyId = scope.company_id;
-      if (mine) maklerUuid = scope.makler_id ?? null;
-    }
-  }
+  const scope = await getUserScope(auth.user.id);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const companyId = scope.company_id;
+  const maklerUuid: string | null = mine ? (scope.makler_id ?? null) : null;
 
   let query = sb.from("naberove_listy").select(LIST_COLUMNS).eq("company_id", companyId).order("created_at", { ascending: false });
   if (klientId) query = query.eq("klient_id", klientId);

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
-import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
-import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { requireUser } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
 import { sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
 
@@ -27,16 +26,18 @@ const LIST_COLUMNS =
  *   bez parametrov → všetky obhliadky (admin)
  */
 export async function GET(req: NextRequest) {
+  // P0 fix 2026-05-24: strict auth — pred fixom VIANEMA fallback servíroval
+  // všetky obhliadky (vrátane kupujucich mien, telefónov, klient_id) komukoľvek bez session.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   const klientId = req.nextUrl.searchParams.get("klient_id");
   const nehnId = req.nextUrl.searchParams.get("nehnutelnost_id");
 
-  const sessionUserId = readSessionUserId(req);
-  let companyId = VIANEMA_COMPANY_ID;
-  if (sessionUserId) {
-    const scope = await getUserScope(sessionUserId);
-    if (scope) companyId = scope.company_id;
-  }
+  const scope = await getUserScope(auth.user.id);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const companyId = scope.company_id;
 
   let q = sb.from("obhliadky").select(LIST_COLUMNS).eq("company_id", companyId).order("datum", { ascending: false });
   if (klientId) {
@@ -77,6 +78,10 @@ function normalizePhone(raw: string | null | undefined): string {
  *   - vždy zapíš zdrojového makléra do poznámky
  */
 export async function POST(req: NextRequest) {
+  // P0 fix 2026-05-24: strict auth.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 
@@ -113,16 +118,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Zisti company_id — POST nemá session požiadavku, ale user_id môže byť v body
-  const postSessionUserId = readSessionUserId(req);
-  let postCompanyId = VIANEMA_COMPANY_ID;
-  if (postSessionUserId) {
-    const scope = await getUserScope(postSessionUserId);
-    if (scope) postCompanyId = scope.company_id;
-  } else if (body.user_id) {
-    const scope = await getUserScope(String(body.user_id));
-    if (scope) postCompanyId = scope.company_id;
-  }
+  // company_id z auth scope (auth už zaručené strict)
+  const postScope = await getUserScope(auth.user.id);
+  if (!postScope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const postCompanyId = postScope.company_id;
 
   // 1) Vlož obhliadku
   const payload: Record<string, unknown> = {
@@ -238,7 +237,7 @@ export async function POST(req: NextRequest) {
   // Audit log — kto vytvoril (postSessionUserId môže byť null pre legacy klientov).
   await logAudit({
     action: "obhliadka.create",
-    actor_id: postSessionUserId || "system",
+    actor_id: auth.user.id,
     target_id: (data as { id: string }).id,
     target_type: "obhliadka",
     detail: {
