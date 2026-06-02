@@ -64,12 +64,21 @@ export async function GET(req: NextRequest) {
  * iného vlastníka (delegate).
  */
 export async function POST(req: NextRequest) {
+  // P0 fix 2026-06-02: strict auth — predtým endpoint trustol body.user_id,
+  // ktorý umožňoval IDOR (útočník mohol vydávať sa za iného usera).
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 
-  const userId = String(body.user_id || "");
-  if (!userId) return NextResponse.json({ error: "user_id required" }, { status: 400 });
+  // user_id z body musí matchovať session (alebo caller je admin pre delegate)
+  const bodyUserId = String(body.user_id || "");
+  const userId = bodyUserId || auth.user.id;
+  if (bodyUserId && bodyUserId !== auth.user.id && auth.user.role !== "platform_admin" && auth.user.role !== "super_admin") {
+    return NextResponse.json({ error: "Nemôžeš vytvoriť klienta v mene iného usera" }, { status: 403 });
+  }
 
   const scope = await getUserScope(userId);
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
