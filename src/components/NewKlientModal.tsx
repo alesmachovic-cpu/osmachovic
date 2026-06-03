@@ -525,6 +525,10 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     (editKlient as Record<string, unknown> | undefined)?.rk_nazov as string || ""
   );
   const [typNehnutelnosti, setTypNehnutelnosti] = useState("");
+  // Odporúčanie — kto nového klienta odporučil (len nový klient).
+  const [odporucilId, setOdporucilId] = useState<string | null>(null);
+  const [odporucilQuery, setOdporucilQuery] = useState("");
+  const [odporucilResults, setOdporucilResults] = useState<Array<{ id: string; meno: string; telefon?: string }>>([]);
   const [lokalitaInput, setLokalitaInput] = useState(editKlient?.lokalita || "");
   // lokalitaValue = "confirmed" DB value — len ak je v LOKALITY_DB (edit mode: overíme)
   const [lokalitaValue, setLokalitaValue] = useState(() => {
@@ -849,6 +853,8 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     } else if (isEdit) {
       basePayload.rk_nazov = null;
     }
+    // Odporúčanie — len pri novom klientovi (kto ho odporučil).
+    if (!isEdit && odporucilId) basePayload.odporucil_klient_id = odporucilId;
     const payload = basePayload;
 
     console.log("[NewKlientModal] isEdit:", isEdit, "id:", editKlient?.id, "payload:", JSON.stringify(payload));
@@ -1474,6 +1480,44 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
               placeholder="Interná poznámka..."
               value={poznamka} onChange={e => setPoznamka(e.target.value)} />
           </div>
+
+          {/* Odporúčanie — len pri novom klientovi */}
+          {!isEdit && (
+            <div>
+              <div style={labelSt}>Odporučil (existujúci klient)</div>
+              {odporucilId ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ ...inputSt, flex: 1 }}>{odporucilQuery}</span>
+                  <button type="button" onClick={() => { setOdporucilId(null); setOdporucilQuery(""); setOdporucilResults([]); }}
+                    style={{ padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "8px", background: "var(--bg-surface)", cursor: "pointer", fontSize: "13px" }}>✕</button>
+                </div>
+              ) : (
+                <div style={{ position: "relative" }}>
+                  <input style={inputSt} placeholder="Hľadaj klienta podľa mena…"
+                    value={odporucilQuery}
+                    onChange={async (e) => {
+                      const q = e.target.value; setOdporucilQuery(q);
+                      if (q.trim().length < 2) { setOdporucilResults([]); return; }
+                      try {
+                        const r = await fetch(`/api/klienti?q=${encodeURIComponent(q.trim())}`, { credentials: "include" });
+                        const d = await r.json();
+                        setOdporucilResults(Array.isArray(d) ? d.filter((x: { id: string }) => x.id !== editKlient?.id) : []);
+                      } catch { setOdporucilResults([]); }
+                    }} />
+                  {odporucilResults.length > 0 && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, background: "#fff", border: "1px solid var(--border)", borderRadius: "8px", marginTop: "4px", maxHeight: "180px", overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
+                      {odporucilResults.map(k => (
+                        <div key={k.id} onClick={() => { setOdporucilId(k.id); setOdporucilQuery(k.meno); setOdporucilResults([]); }}
+                          style={{ padding: "8px 12px", cursor: "pointer", fontSize: "13px", borderBottom: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                          {k.meno}{k.telefon ? ` · ${k.telefon}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Error */}

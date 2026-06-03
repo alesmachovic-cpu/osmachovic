@@ -1286,6 +1286,25 @@ export default function KlientDetailPage() {
                 Anonymizovať (GDPR)
               </button>
             )}
+            <button onClick={async () => {
+              // F4: export osobných údajov klienta-subjektu (GDPR čl. 15 + 20).
+              try {
+                const r = await fetch(`/api/gdpr/export?klient_id=${klient.id}`);
+                if (!r.ok) { const b = await r.json().catch(() => ({})); alert(b.error || "Export zlyhal"); return; }
+                const data = await r.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `gdpr-export-${klient.id}.json`; a.click();
+                URL.revokeObjectURL(url);
+              } catch { alert("Export zlyhal"); }
+            }} style={{
+              padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
+              border: "1px solid var(--border)", borderRadius: "10px", fontSize: "12px",
+              fontWeight: "600", cursor: "pointer",
+            }} title="Export osobných údajov klienta podľa GDPR čl. 15 a 20">
+              Export GDPR údajov
+            </button>
             {(klient as { anonymized_at?: string | null }).anonymized_at && (
               <span style={{
                 padding: "9px 14px", background: "#F3F4F6", color: "#6B7280",
