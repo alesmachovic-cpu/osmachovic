@@ -53,7 +53,8 @@ Toto je živý plán. Každý nález = budúci fix. Implementuje sa po schválen
 **Fix:** Prepísať export na vstup `klient_id` → exportovať klienta + nábery + obhliadky + dokumenty + udalosti + faktúry kde je odberateľom.
 
 ### F5 — GDPR výmaz nemaže dokumenty v Google Drive
-**Stav:** ✅ ČIASTOČNE 2026-06-03. Keďže OAuth scope je `drive.readonly` (nevieme mazať programaticky), erasure teraz generuje audit záznam `gdpr.erasure.drive_manual_required` + `drive_manual_delete_required: true` + výrazné upozornenie v odpovedi, aby admin Drive priečinok klienta zmazal ručne. Plné riešenie (scope `drive.file` + auto-delete) = budúci follow-up. Overené: tsc, audit-all 20=20.
+**Stav AML retention:** ✅ DORIEŠENÉ 2026-06-03. Erasure už **nemaže AML/identifikačné doklady** (kópia OP, Identifikácia, AML, KYC) — § 20 zák. 297/2008 ich káže držať 5 r. (čl.17 ods.3 b výnimka). Migr. 103 pridala `aml_retention` flag + `retention_do`; erasure rozdelí doklady (AML ponechá s retention_do=+5r, ostatné zmaže); retention cron (F11) zmaže AML doklady po vypršaní. 
+**Stav Drive:** ✅ ČIASTOČNE 2026-06-03. Keďže OAuth scope je `drive.readonly` (nevieme mazať programaticky), erasure teraz generuje audit záznam `gdpr.erasure.drive_manual_required` + `drive_manual_delete_required: true` + výrazné upozornenie v odpovedi, aby admin Drive priečinok klienta zmazal ručne. Plné riešenie (scope `drive.file` + auto-delete) = budúci follow-up. Overené: tsc, audit-all 20=20.
 **Súbory:** `src/app/api/gdpr/erasure/route.ts`, `src/lib/google.ts` (scope `drive.readonly`, r. 16)
 **Problém:** Erasure spraví cascade delete v DB + anonymizáciu, ale Drive sa nedotkne (grep `drive` = 0). OAuth scope je `readonly` → CRM technicky ani nemôže mazať. OP/LV scany ostávajú v Drive natrvalo → výmaz neúplný.
 **Zákon:** GDPR čl. 17.

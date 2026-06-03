@@ -114,8 +114,37 @@ export async function POST(req: NextRequest) {
   const errors: string[] = [];
   const counts: Record<string, number> = {};
 
-  const d1 = await sb.from("klient_dokumenty").delete().eq("klient_id", klientId);
-  if (d1.error) errors.push(`dokumenty: ${d1.error.message}`); else counts.dokumenty = d1.count ?? 0;
+  // 🔒 AML retention: doklady s aml_retention=true (kópia OP, identifikácia,
+  // overovacia dokumentácia) sa NEMAŽÚ — § 20 zák. 297/2008 prikazuje uchovať
+  // ich 5 r. po skončení vzťahu (právny základ čl. 6 ods.1 c GDPR, výnimka z
+  // práva na výmaz čl. 17 ods.3 b). Ostatné doklady (foto, LV, nábery) sa mažú.
+  const AML_RETENTION_TYPES = ["Identifikácia", "OP", "Občiansky preukaz", "AML", "KYC"];
+  const { data: docs } = await sb
+    .from("klient_dokumenty")
+    .select("id, type, aml_retention")
+    .eq("klient_id", klientId);
+  const isAmlRetained = (d: { type?: string | null; aml_retention?: boolean | null }) =>
+    d.aml_retention === true || (d.type != null && AML_RETENTION_TYPES.includes(d.type));
+  const toDelete = (docs ?? []).filter(d => !isAmlRetained(d)).map(d => d.id);
+  const toKeep = (docs ?? []).filter(isAmlRetained).map(d => d.id);
+
+  if (toDelete.length) {
+    const dDel = await sb.from("klient_dokumenty").delete().in("id", toDelete);
+    if (dDel.error) errors.push(`dokumenty: ${dDel.error.message}`);
+  }
+  counts.dokumenty_zmazane = toDelete.length;
+
+  // AML doklady ponechané — nastav retention_do = dnes + 5 rokov (koniec vzťahu).
+  if (toKeep.length) {
+    const retentionDo = new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const dKeep = await sb
+      .from("klient_dokumenty")
+      .update({ retention_do: retentionDo })
+      .in("id", toKeep)
+      .is("retention_do", null);
+    if (dKeep.error) errors.push(`aml retention set: ${dKeep.error.message}`);
+  }
+  counts.dokumenty_aml_ponechane = toKeep.length;
 
   const d2 = await sb.from("podpis_otps").delete().eq("klient_id", klientId);
   if (d2.error) errors.push(`podpis_otps: ${d2.error.message}`); else counts.podpis_otps = d2.count ?? 0;

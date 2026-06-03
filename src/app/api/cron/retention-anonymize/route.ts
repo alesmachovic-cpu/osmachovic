@@ -46,12 +46,23 @@ export async function GET(request: NextRequest) {
   const inDeal = new Set((obchodKlienti ?? []).map((o: { klient_id: string | null }) => o.klient_id).filter(Boolean));
   const toAnon = (candidates ?? []).filter(k => !inDeal.has(k.id));
 
+  // AML doklady, ktorým uplynula 5-ročná retencia (§ 20) → musia sa zmazať
+  // (GDPR minimalizácia po splnení zákonnej povinnosti).
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: expiredAml } = await sb
+    .from("klient_dokumenty")
+    .select("id")
+    .not("retention_do", "is", null)
+    .lt("retention_do", today);
+  const expiredAmlIds = (expiredAml ?? []).map((d: { id: string }) => d.id);
+
   if (!enabled) {
     return NextResponse.json({
       ok: true,
       dry_run: true,
       retention_years: years,
       candidates_count: toAnon.length,
+      aml_docs_expired_count: expiredAmlIds.length,
       candidates: toAnon.map(k => ({ id: k.id, typ: k.typ, status: k.status, updated_at: k.updated_at })),
       note: "DRY-RUN — žiadne dáta sa nezmenili. Pre reálnu anonymizáciu nastav RETENTION_ANONYMIZE_ENABLED=true.",
       ran_at: new Date().toISOString(),
@@ -83,11 +94,31 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // Zmaž AML doklady po uplynutí retencie (§ 20 lehota vypršala).
+  let amlDeleted = 0;
+  if (expiredAmlIds.length) {
+    const dAml = await sb.from("klient_dokumenty").delete().in("id", expiredAmlIds);
+    if (dAml.error) errors.push(`aml_docs: ${dAml.error.message}`);
+    else {
+      amlDeleted = expiredAmlIds.length;
+      await logAudit({
+        action: "klient_dokumenty.aml_retention_expired",
+        actor_id: null,
+        actor_name: "cron/retention",
+        target_id: null,
+        target_type: "klient_dokument",
+        detail: { count: amlDeleted },
+        ip_address: undefined,
+      });
+    }
+  }
+
   return NextResponse.json({
     ok: errors.length === 0,
     dry_run: false,
     retention_years: years,
     anonymized,
+    aml_docs_deleted: amlDeleted,
     errors: errors.length ? errors : undefined,
     ran_at: new Date().toISOString(),
   });
