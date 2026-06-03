@@ -56,9 +56,18 @@ function KupujuciInner() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterMakler, setFilterMakler] = useState<string>("mine");
+  const [filterMakler, setFilterMakler] = useState<string>("mine"); // super_admin auto-switches to "all" via useEffect below
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
+
+  // 2026-06-03: useUserScope() je pri prvom renderi null → isAdmin = false → default "mine".
+  // Po načítaní scope, ak admin, prepni RAZ na "all".
+  useEffect(() => {
+    if (isAdmin && filterMakler === "mine") {
+      setFilterMakler("all");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
 
   useEffect(() => {
     loadData();

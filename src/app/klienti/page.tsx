@@ -104,9 +104,19 @@ function KlientiContent() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("");
   const [filterTyp, setFilterTyp] = useState<FilterTyp>("");
-  const [filterMakler, setFilterMakler] = useState<string>("mine"); // default: my clients
+  const [filterMakler, setFilterMakler] = useState<string>("mine"); // default: my clients (super_admin auto-switches to "all" via useEffect when scope loads)
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
+
+  // 2026-06-03: useUserScope() môže byť pri prvom renderi null → isAdmin = false → default
+  // filterMakler="mine". Po načítaní scope, ak je user admin, prepni na "all" RAZ.
+  // Závislosť IBA na isAdmin — keď admin manuálne zmení na "mine", efekt sa nespustí znova.
+  useEffect(() => {
+    if (isAdmin && filterMakler === "mine") {
+      setFilterMakler("all");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
   // Status change modal state
   const [statusModal, setStatusModal] = useState<{ klient: Klient; status: string } | null>(null);
   const [statusDatum, setStatusDatum] = useState("");

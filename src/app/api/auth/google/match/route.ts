@@ -7,10 +7,15 @@ export const runtime = "nodejs";
 
 /**
  * POST /api/auth/google/match
- * Body: { email: string }
+ * Body: { supabase_jwt: string }
  *
- * Nájde CRM usera podľa Google emailu (login_email alebo email).
- * Volané z /auth/callback po Google OAuth — pred tým ako existuje session cookie.
+ * Volané z /auth/callback po Google OAuth.
+ * Overí Supabase JWT (podpísaný Supabase Auth, nepodvrhuteľný), extrahuje
+ * verifikovaný email a nájde CRM usera (login_email alebo email).
+ *
+ * 🔒 JWT verification (FIX 2026-05-24):
+ *   Pôvodne body.email bol trusted — útočník mohol POST {email:"victim@x.com"}
+ *   a získať session pre toho usera. Teraz sa email berie z verifikovaného JWT.
  *
  * 🔒 2FA gate (FIX 2026-05-20):
  *   Pôvodne tento endpoint po Google OAuth rovno vystavil session cookie
@@ -19,42 +24,53 @@ export const runtime = "nodejs";
  *   namiesto session cookie (rovnaký pattern ako /api/auth/login).
  */
 export async function POST(req: NextRequest) {
-  let email: string;
+  let supabaseJwt: string;
   try {
     const body = await req.json();
-    email = String(body.email || "").trim().toLowerCase();
+    supabaseJwt = String(body.supabase_jwt || "");
   } catch {
     return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 });
   }
 
-  if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
+  if (!supabaseJwt) {
+    return NextResponse.json({ error: "supabase_jwt required" }, { status: 400 });
+  }
 
   const sb = getSupabaseAdmin();
-  const SELECT = "id, name, initials, role, company_id, totp_enabled_at";
 
-  // Skús najprv login_email; ak nič, fallback na email. (`.or()` filter má problém
-  // s bodkami a @ v hodnote — parsuje ich ako oddeľovače cesty, preto chained query.)
-  type MatchedUser = { id: string; name: string; initials: string | null; role: string | null; company_id: string | null; totp_enabled_at: string | null };
-  let users: MatchedUser | null = null;
-  {
-    const { data, error } = await sb
-      .from("users")
-      .select(SELECT)
-      .ilike("login_email", email)
-      .limit(1)
-      .maybeSingle();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    users = data as typeof users;
+  // Verifikácia JWT proti Supabase Auth — ak je platný, vráti usera
+  // s overeným emailom z Google OAuth flow. Neplatný/expired JWT → 401.
+  const { data: supabaseUser, error: jwtErr } = await sb.auth.getUser(supabaseJwt);
+  if (jwtErr || !supabaseUser?.user?.email) {
+    return NextResponse.json({ error: "invalid_token" }, { status: 401 });
   }
-  if (!users) {
-    const { data, error } = await sb
-      .from("users")
-      .select(SELECT)
-      .ilike("email", email)
-      .limit(1)
-      .maybeSingle();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    users = data as typeof users;
+  const email = supabaseUser.user.email.toLowerCase();
+
+  // 2026-06-03: tolerant SELECT — prod DB (hokymscytscsewrpwdjf) zatiaľ nemá
+  // totp_* stĺpce (2FA migrácia ešte nebehala). Skús full SELECT; ak schema
+  // mismatch, fallback bez totp. Po DB migrácii (sql/migrations/2026-06-03-add-totp-columns.sql)
+  // ostane funkčný full path.
+  const SELECT_FULL = "id, name, initials, role, company_id, totp_enabled_at";
+  const SELECT_LEGACY = "id, name, initials, role, company_id";
+  type MatchedUser = { id: string; name: string; initials: string | null; role: string | null; company_id: string | null; totp_enabled_at?: string | null };
+
+  async function lookup(byCol: "login_email" | "email"): Promise<MatchedUser | null> {
+    const { data, error } = await sb.from("users").select(SELECT_FULL).ilike(byCol, email).limit(1).maybeSingle();
+    if (!error) return data as MatchedUser | null;
+    if (error.code === "PGRST204" || /column .* does not exist|schema cache/i.test(error.message)) {
+      const r2 = await sb.from("users").select(SELECT_LEGACY).ilike(byCol, email).limit(1).maybeSingle();
+      if (r2.error) throw new Error(r2.error.message);
+      return r2.data as MatchedUser | null;
+    }
+    throw new Error(error.message);
+  }
+
+  let users: MatchedUser | null = null;
+  try {
+    users = await lookup("login_email");
+    if (!users) users = await lookup("email");
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "lookup_failed" }, { status: 500 });
   }
   if (!users) return NextResponse.json({ error: "not_found" }, { status: 404 });
 

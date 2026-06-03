@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
 import { logAudit } from "@/lib/audit";
-import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
-import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
+import { requireUser } from "@/lib/auth/requireUser";
 import { sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
 import { requireReAuth } from "@/lib/auth/reAuth";
 
@@ -15,19 +14,20 @@ export const runtime = "nodejs";
 //   ?q=X        → search by meno (ilike, limit 8)
 //   (nič)       → všetci
 export async function GET(req: NextRequest) {
+  // P0 fix 2026-05-24: strict auth — pred fixom VIANEMA fallback servíroval
+  // všetkých 60+ klientov (PII, GDPR) komukoľvek bez session.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   const params = new URL(req.url).searchParams;
   const id = params.get("id");
   const telefon = params.get("telefon");
   const q = params.get("q");
 
-  // Zisti company_id zo session (fallback = Vianema pre backward compat)
-  const sessionUserId = readSessionUserId(req);
-  let companyId = VIANEMA_COMPANY_ID;
-  if (sessionUserId) {
-    const scope = await getUserScope(sessionUserId);
-    if (scope) companyId = scope.company_id;
-  }
+  const scope = await getUserScope(auth.user.id);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const companyId = scope.company_id;
 
   if (id) {
     const { data, error } = await sb.from("klienti").select("*").eq("id", id).eq("company_id", companyId).maybeSingle();
@@ -65,12 +65,21 @@ export async function GET(req: NextRequest) {
  * iného vlastníka (delegate).
  */
 export async function POST(req: NextRequest) {
+  // P0 fix 2026-06-02: strict auth — predtým endpoint trustol body.user_id,
+  // ktorý umožňoval IDOR (útočník mohol vydávať sa za iného usera).
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 
-  const userId = String(body.user_id || "");
-  if (!userId) return NextResponse.json({ error: "user_id required" }, { status: 400 });
+  // user_id z body musí matchovať session (alebo caller je admin pre delegate)
+  const bodyUserId = String(body.user_id || "");
+  const userId = bodyUserId || auth.user.id;
+  if (bodyUserId && bodyUserId !== auth.user.id && auth.user.role !== "platform_admin" && auth.user.role !== "super_admin") {
+    return NextResponse.json({ error: "Nemôžeš vytvoriť klienta v mene iného usera" }, { status: 403 });
+  }
 
   const scope = await getUserScope(userId);
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
@@ -131,7 +140,10 @@ export async function PATCH(req: NextRequest) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 
   const userId = auth.user.id;
-  const id = String(body.id || "");
+  // P0 fix 2026-05-24: niektoré UI flow posielajú id v query stringu (?id=...),
+  // nie v body. Accept oboje aby sa nedalo zlyhať na "id required" 400.
+  const idFromQuery = new URL(req.url).searchParams.get("id");
+  const id = String(body.id || idFromQuery || "");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const scope = await getUserScope(userId);
@@ -157,7 +169,31 @@ export async function PATCH(req: NextRequest) {
   if (scope.isAdmin && bodyMakler) patch.makler_id = bodyMakler; // delegate
 
   const { data, error } = await sb.from("klienti").update(patch).eq("id", id).select().single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // P0 fix 2026-05-24a: schema cache miss → 400 namiesto 500.
+    if (error.code === "PGRST204" || /column|schema cache/i.test(error.message)) {
+      console.warn("[/api/klienti PATCH] schema mismatch:", {
+        attempted_fields: Object.keys(patch),
+        supabase_error: error.message,
+      });
+      return NextResponse.json({
+        error: `Niektoré polia neexistujú v klienti schéme (${error.message}). UI bug — refresh stránku alebo pošli sken Network tabu.`,
+        code: "SCHEMA_MISMATCH",
+      }, { status: 400 });
+    }
+    // P0 fix 2026-05-24b: DB check constraint violation (napr. invalid status) → 400.
+    if (error.code === "23514") {
+      console.warn("[/api/klienti PATCH] constraint violation:", {
+        attempted_fields: Object.keys(patch),
+        supabase_error: error.message,
+      });
+      return NextResponse.json({
+        error: `Neplatná hodnota poľa (${error.message})`,
+        code: "INVALID_VALUE",
+      }, { status: 400 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   await logAudit({
     action: "klient.update",
     actor_id: userId,

@@ -101,13 +101,22 @@ export default function NehnutelnostiPage() {
                     <div style={{ fontWeight: '500' }}>{n.lokalita}</div>
                     {n.ulica && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{n.ulica}</div>}
                   </td>
-                  <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{n.typ_nehnutelnosti || '—'}</td>
+                  {/* P0 fix 2026-05-24: DB má 'typ', 'cena', 'plocha' — nie typ_nehnutelnosti / typ_transakcie / eurM2 */}
+                  <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{(n.typ_nehnutelnosti || (n as Record<string, unknown>).typ as string) || '—'}</td>
                   <td style={{ padding: '12px 16px' }}>
-                    <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: n.typ_transakcie === 'predaj' ? 'rgba(0,113,227,0.15)' : 'rgba(48,209,88,0.15)', color: n.typ_transakcie === 'predaj' ? '#0071e3' : '#30d158' }}>{n.typ_transakcie}</span>
+                    {n.typ_transakcie ? (
+                      <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: n.typ_transakcie === 'predaj' ? 'rgba(0,113,227,0.15)' : 'rgba(48,209,88,0.15)', color: n.typ_transakcie === 'predaj' ? '#0071e3' : '#30d158' }}>{n.typ_transakcie}</span>
+                    ) : <span style={{ color: 'var(--text-secondary)' }}>—</span>}
                   </td>
                   <td style={{ padding: '12px 16px', fontWeight: '500' }}>{n.cena ? n.cena.toLocaleString('sk-SK') + ' €' : '—'}</td>
                   <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{n.plocha ? n.plocha + ' m²' : '—'}</td>
-                  <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{n.eurM2 ? n.eurM2.toLocaleString('sk-SK') : '—'}</td>
+                  <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>
+                    {/* Compute €/m² ak chýba */}
+                    {(() => {
+                      const eurM2 = n.eurM2 ?? (n.cena && n.plocha ? Math.round(n.cena / n.plocha) : null);
+                      return eurM2 ? eurM2.toLocaleString('sk-SK') : '—';
+                    })()}
+                  </td>
                   <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{n.izby || '—'}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: `${stavColor[n.stav_inzeratu]}22`, color: stavColor[n.stav_inzeratu] || '#8e8e93' }}>{n.stav_inzeratu}</span>

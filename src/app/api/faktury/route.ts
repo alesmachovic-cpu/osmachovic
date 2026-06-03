@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { requireUser, readSessionUserId } from "@/lib/auth/requireUser";
+import { requireUser } from "@/lib/auth/requireUser";
 import { getUserScope } from "@/lib/scope";
-import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
 import { logAudit } from "@/lib/audit";
 import { getDphRate, calcDph } from "@/lib/dphRates";
 import { sanitizeText, sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
@@ -11,15 +10,16 @@ import { requireReAuth } from "@/lib/auth/reAuth";
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  // P0 fix 2026-05-24: strict auth.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   const { searchParams } = new URL(req.url);
 
-  const sessionUserId = readSessionUserId(req);
-  let companyId = VIANEMA_COMPANY_ID;
-  if (sessionUserId) {
-    const scope = await getUserScope(sessionUserId);
-    if (scope) companyId = scope.company_id;
-  }
+  const scope = await getUserScope(auth.user.id);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const companyId = scope.company_id;
 
   // includeZrusene=1 ukáže aj soft-deleted (pre archív / kontrolu DPH).
   const includeZrusene = searchParams.get("includeZrusene") === "1";
@@ -68,6 +68,10 @@ function nextNumber(existing: string[], prefix: string) {
 }
 
 export async function POST(req: NextRequest) {
+  // P0 fix 2026-05-24: strict auth.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const sb = getSupabaseAdmin();
   const body = await req.json();
   const { polozky = [], ...faktura } = body;
@@ -76,15 +80,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "user_id required" }, { status: 400 });
   }
 
-  const postSessionUserId = readSessionUserId(req);
-  let postCompanyId = VIANEMA_COMPANY_ID;
-  if (postSessionUserId) {
-    const scope = await getUserScope(postSessionUserId);
-    if (scope) postCompanyId = scope.company_id;
-  } else {
-    const scope = await getUserScope(String(faktura.user_id));
-    if (scope) postCompanyId = scope.company_id;
-  }
+  const postScope = await getUserScope(auth.user.id);
+  if (!postScope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const postCompanyId = postScope.company_id;
 
   const sumaCelkomBezDph = polozky.reduce((s: number, p: { spolu?: number }) => s + (Number(p.spolu) || 0), 0);
 

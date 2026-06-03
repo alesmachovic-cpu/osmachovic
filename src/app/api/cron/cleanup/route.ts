@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -7,7 +7,14 @@ export const maxDuration = 60;
 // Retention policy cleanup — spúšťa sa každú noc o 3:00
 // - login_attempts starší ako 24h
 // - audit_log starší ako 2 roky
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  const queryKey = request.nextUrl.searchParams.get("key");
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && queryKey !== cronSecret) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const sb = getSupabaseAdmin();
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const since2y  = new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000).toISOString();
