@@ -101,10 +101,12 @@ Erasure je len manuálna. Žiadny cron na anonymizáciu PII po uplynutí účelu
 **Zákon:** GDPR čl. 5(1)(e). **Fix:** definovať retention lehoty per kategória + cron na anonymizáciu.
 
 ### F12 — Chýba breach notification playbook (72h)
+**Stav:** ✅ HOTOVÉ 2026-06-03. Napísaný `security-audit/breach-playbook.md` — kompletný 72h SOP: definícia breachu, okamžité kroky, eskalácia, posúdenie rizika, ohlásenie ÚOOÚ (čl.33), informovanie klientov (čl.34), register incidentov, šablóny, scenáre pre Vianemu, prevencia. Follow-up: doplniť reálne dátumy na `/bezpecnost`.
 Žiadny proces „ak leak, čo do 72 h". `/bezpecnost` má placeholdery `[DOPLŇTE DÁTUM]`.
 **Zákon:** GDPR čl. 33/34. **Fix:** napísať playbook + doplniť reálne dátumy.
 
 ### F13 — eKasa pre hotovostné platby
+**Stav:** ✅ VYRIEŠENÉ POLICY (nie kód) 2026-06-03. eKasa (zák. 289/2008) sa vzťahuje len na **tržbu = hotovosť/karta na mieste** (§ 2 písm. h). **Bankový prevod NIE JE tržba → eKasa povinnosť nevzniká.** Riešenie: policy „provízia výhradne bezhotovostne, prevodom na účet" → žiadna eKasa integrácia do CRM netreba. **Akcie CEO:** (1) doplniť do obchodných podmienok + šablóny faktúry „úhrada výlučne prevodom"; (2) [daňový poradca overiť] aktuálne znenie prílohy č.1 (či realitka nie je na zozname) + obsah novely 170/2024. Pozn.: zákon 394/2012 aj tak zakazuje hotovosť nad 15 000 €.
 Od 1.1.2026 RK eviduje hotovosť cez eKasu. Žiadna integrácia/policy.
 **Fix:** buď integrácia, alebo formálna policy „iba bezhotovostné platby" (jednoduchšie).
 
