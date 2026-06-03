@@ -62,6 +62,7 @@ const PUBLIC_WHITELIST = new Set([
   "src/app/api/auth/register/route.ts",          // registrácia nového usera
 
   // Verejné utility endpointy
+  "src/app/api/consent-confirm/route.ts",        // klient klikne "chcem zostať" z e-mailu — HMAC token, bez session
   "src/app/api/locale/route.ts",                 // i18n preferences (cookie)
   "src/app/api/weather/route.ts",                // public weather proxy
   "src/app/api/ico-lookup/route.ts",             // FinStat lookup, public

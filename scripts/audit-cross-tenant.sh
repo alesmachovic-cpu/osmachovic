@@ -39,6 +39,7 @@ ALLOWLIST=(
   "src/app/api/faktury/pdf"        # by-ID
   "src/app/api/objednavka-pdf"     # by-ID
   "src/app/api/sign"               # token-based signing flow
+  "src/app/api/consent-confirm"    # verejný HMAC-token endpoint (klik z e-mailu, bez session)
   "src/app/api/property-story"     # AI utility, čaká na refactor
   # Matching/AI endpointy (TODO add company scope ako P3):
   "src/app/api/matching"
