@@ -299,12 +299,34 @@ async function buildOps(
     y -= 4;
   }
 
-  // Súčet
+  // Súčet — F7: rozpis DPH pre platiteľa (zákon o DPH 222/2004 § 74 ods.1:
+  // faktúra platiteľa musí obsahovať základ dane, sadzbu a výšku dane).
+  const sumaBezDph = Number(faktura.suma_bez_dph ?? faktura.suma_celkom ?? 0);
+  const dphSuma = Number(faktura.dph ?? 0);
+  const sumaCelkom = Number(faktura.suma_celkom ?? 0);
+  const jePlatcaDph = dphSuma > 0 || !!(dodavatel.ic_dph && dodavatel.ic_dph.trim());
+
   y -= 8;
   ops.push({ kind: "line", x1: margin, y1: y, x2: pageW - margin, y2: y, gray: 0.2 });
   y -= 16;
+
+  if (jePlatcaDph && dphSuma > 0) {
+    const sadzba = sumaBezDph > 0 ? Math.round((dphSuma / sumaBezDph) * 100) : 0;
+    ops.push({ kind: "text", x: margin, y, size: 10, text: "Zaklad dane" });
+    ops.push({ kind: "text", x: xRight(fmtMoney(sumaBezDph), 10, pageW - margin), y, size: 10, text: fmtMoney(sumaBezDph) });
+    y -= 14;
+    ops.push({ kind: "text", x: margin, y, size: 10, text: `DPH ${sadzba}%` });
+    ops.push({ kind: "text", x: xRight(fmtMoney(dphSuma), 10, pageW - margin), y, size: 10, text: fmtMoney(dphSuma) });
+    y -= 18;
+  }
+
   ops.push({ kind: "text", x: margin, y, size: 12, text: "Celkom k uhrade" });
-  ops.push({ kind: "text", x: xRight(fmtMoney(faktura.suma_celkom as number), 14, pageW - margin), y, size: 14, text: fmtMoney(faktura.suma_celkom as number) });
+  ops.push({ kind: "text", x: xRight(fmtMoney(sumaCelkom), 14, pageW - margin), y, size: 14, text: fmtMoney(sumaCelkom) });
+
+  if (!jePlatcaDph) {
+    y -= 16;
+    ops.push({ kind: "text", x: margin, y, size: 9, text: "Dodavatel nie je platitelom DPH." });
+  }
 
   if (faktura.poznamka) {
     y -= 20;

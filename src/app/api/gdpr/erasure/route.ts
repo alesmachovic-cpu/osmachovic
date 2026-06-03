@@ -151,6 +151,21 @@ export async function POST(req: NextRequest) {
     }).eq("id", gdprReq.id);
   }
 
+  // 🔒 F5: Google Drive sa NEzmaže programaticky — OAuth scope je drive.readonly
+  // (CRM nemá oprávnenie mazať Drive súbory). Klientske dokumenty (OP, LV scany)
+  // v Drive ostávajú → výmaz by bol neúplný (GDPR čl. 17). Preto generujeme
+  // explicitnú úlohu + audit záznam, aby admin Drive priečinok klienta zmazal ručne.
+  await logAudit({
+    action: "gdpr.erasure.drive_manual_required",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: klientId,
+    target_type: "klient",
+    detail: { klient_meno_pred: klient.meno, gdpr_request_id: gdprReq?.id,
+      poznamka: "Zmaž ručne Drive priečinok klienta (OP/LV scany) — scope drive.readonly neumožňuje programatické mazanie." },
+    ip_address: ip || undefined,
+  });
+
   // 7) Final audit log entry
   await logAudit({
     action: errors.length === 0 ? "gdpr.erasure.completed" : "gdpr.erasure.partial",
@@ -168,8 +183,10 @@ export async function POST(req: NextRequest) {
     gdpr_request_id: gdprReq?.id,
     deleted: counts,
     errors: errors.length > 0 ? errors : undefined,
-    message: errors.length === 0
+    drive_manual_delete_required: true,
+    message: (errors.length === 0
       ? "GDPR erasure dokončená. Faktúry ostávajú anonymizované (10y retention podľa DPH zákona § 76)."
-      : `GDPR erasure čiastočne dokončená. ${errors.length} chýb. Manuálna kontrola.`,
+      : `GDPR erasure čiastočne dokončená. ${errors.length} chýb. Manuálna kontrola.`)
+      + " ⚠️ DÔLEŽITÉ: Zmaž ručne aj priečinok klienta v Google Drive (OP/LV scany) — systém ho nevie zmazať automaticky.",
   });
 }

@@ -53,6 +53,7 @@ Toto je živý plán. Každý nález = budúci fix. Implementuje sa po schválen
 **Fix:** Prepísať export na vstup `klient_id` → exportovať klienta + nábery + obhliadky + dokumenty + udalosti + faktúry kde je odberateľom.
 
 ### F5 — GDPR výmaz nemaže dokumenty v Google Drive
+**Stav:** ✅ ČIASTOČNE 2026-06-03. Keďže OAuth scope je `drive.readonly` (nevieme mazať programaticky), erasure teraz generuje audit záznam `gdpr.erasure.drive_manual_required` + `drive_manual_delete_required: true` + výrazné upozornenie v odpovedi, aby admin Drive priečinok klienta zmazal ručne. Plné riešenie (scope `drive.file` + auto-delete) = budúci follow-up. Overené: tsc, audit-all 20=20.
 **Súbory:** `src/app/api/gdpr/erasure/route.ts`, `src/lib/google.ts` (scope `drive.readonly`, r. 16)
 **Problém:** Erasure spraví cascade delete v DB + anonymizáciu, ale Drive sa nedotkne (grep `drive` = 0). OAuth scope je `readonly` → CRM technicky ani nemôže mazať. OP/LV scany ostávajú v Drive natrvalo → výmaz neúplný.
 **Zákon:** GDPR čl. 17.
@@ -65,6 +66,7 @@ Toto je živý plán. Každý nález = budúci fix. Implementuje sa po schválen
 **Fix:** Pridať AML evidenciu (identifikácia KUV, referencia OP scanu, dátum, PEP/sankčný check) + tvrdý blocker stavu KZ. Zaregistrovať Vianemu do 31.8.2026.
 
 ### F7 — Faktúra PDF nezobrazuje základ dane a sadzbu DPH
+**Stav:** ✅ OPRAVENÉ 2026-06-03. PDF teraz pre platiteľa DPH zobrazuje rozpis: Základ dane / DPH X% / Celkom k úhrade (sadzba sa počíta z dph÷suma_bez_dph). Pre neplatiteľa pridaný text „Dodávateľ nie je platiteľom DPH." Súbor `faktury/pdf/route.ts`. Overené: tsc, audit-all 20=20.
 **Súbor:** `src/app/api/faktury/pdf/route.ts` (r. 306-307 — len „Celkom k úhrade")
 **Problém:** DPH sa počíta (`lib/dphRates`), ale na PDF chýba rozpis základ dane / sadzba / suma DPH.
 **Zákon:** Zák. 222/2004 § 74 ods. 1.
