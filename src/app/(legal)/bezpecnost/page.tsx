@@ -58,7 +58,6 @@ export default function BezpecnostPage() {
         <table style={tableSt}>
           <tbody>
             <TRow label="Bezpečnostný audit" value="Priebežný — automatizovaný pri každom nasadení" />
-            <TRow label="Penetračné testy" value="Plánované Q3 2026" />
             <TRow label="Dátové úniky (breaches)" value="0 od spustenia (vianema.amgd.sk)" />
             <TRow label="Zodpovedná osoba pre bezpečnosť" value="security@vianema.sk" />
           </tbody>
