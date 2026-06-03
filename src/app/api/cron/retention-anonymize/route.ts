@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const years = Number(process.env.RETENTION_YEARS || "5");
+  // Default 7 rokov nečinnosti (odôvodnené dlhým realitným cyklom — predávajúci
+  // dnes býva kupujúci o roky neskôr). Prepíše env RETENTION_YEARS.
+  const years = Number(process.env.RETENTION_YEARS || "7");
   const enabled = process.env.RETENTION_ANONYMIZE_ENABLED === "true";
   const cutoff = new Date(Date.now() - years * 365 * 24 * 60 * 60 * 1000).toISOString();
 
