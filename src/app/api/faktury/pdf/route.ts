@@ -383,8 +383,12 @@ export async function GET(req: NextRequest) {
     .select("popis, mnozstvo, jednotka, cena_jednotka, spolu, poradie")
     .eq("faktura_id", id);
 
+  // 🔒 Snapshot first — faktúra je nemenný účtovný doklad (222/2004, 431/2002).
+  // Fallback na live `makler_dodavatel` len pre legacy faktúry bez snapshotu.
   let dodavatel: Dodavatel = EMPTY_DODAVATEL;
-  if (f.user_id) {
+  if (f.dodavatel_snapshot) {
+    dodavatel = { ...EMPTY_DODAVATEL, ...(f.dodavatel_snapshot as Partial<Dodavatel>) };
+  } else if (f.user_id) {
     const { data: dod } = await sb.from("makler_dodavatel").select("*").eq("user_id", f.user_id).maybeSingle();
     if (dod) dodavatel = { ...EMPTY_DODAVATEL, ...dod };
   }

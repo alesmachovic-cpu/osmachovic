@@ -84,6 +84,16 @@ export async function POST(req: NextRequest) {
   if (!postScope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
   const postCompanyId = postScope.company_id;
 
+  // 🔒 Snapshot dodávateľa (compliance 222/2004 § 71-76 + 431/2002).
+  // Faktúra je nemenný účtovný doklad — údaje dodávateľa musia ostať také,
+  // aké boli k dátumu vystavenia. Bez snapshotu by zmena nastavení (IBAN,
+  // IČ DPH, adresa) retroaktívne menila všetky historické faktúry.
+  const { data: dodavatel } = await sb
+    .from("makler_dodavatel")
+    .select("nazov, adresa, ico, dic, ic_dph, iban, banka, swift, obch_register, konst_symbol, email, telefon, splatnost_dni, uvodny_text, poznamka_default, vystavil, podpis_data")
+    .eq("user_id", String(faktura.user_id))
+    .maybeSingle();
+
   const sumaCelkomBezDph = polozky.reduce((s: number, p: { spolu?: number }) => s + (Number(p.spolu) || 0), 0);
 
   // 🆕 DPH výpočet podľa firma_info.platca_dph + dátum vystavenia.
@@ -121,6 +131,7 @@ export async function POST(req: NextRequest) {
       variabilny_symbol: vs,
       odberatel_id: faktura.odberatel_id ?? null,
       odberatel_snapshot: faktura.odberatel_snapshot ?? null,
+      dodavatel_snapshot: dodavatel ?? null,
       datum_vystavenia: datumVystavenia,
       datum_dodania: faktura.datum_dodania ?? null,
       datum_splatnosti: faktura.datum_splatnosti ?? null,
