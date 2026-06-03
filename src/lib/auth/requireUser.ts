@@ -126,6 +126,11 @@ export function readSessionUserId(req: NextRequest): string | null {
 export const isSuperAdmin = (role: string | null | undefined): boolean =>
   role === "super_admin" || role === "majitel";
 
+/** Privilegované roly pre ktoré je 2FA POVINNÉ (nie opt-in).
+ * Pozn.: "admin" je legacy rola ktorú vytvára /api/auth/register pre majiteľa firmy. */
+export const isAdminTier = (role: string | null | undefined): boolean =>
+  role === "super_admin" || role === "majitel" || role === "platform_admin" || role === "admin";
+
 /** manazer + všetko nad tým */
 export const isManagerOrAbove = (role: string | null | undefined): boolean =>
   isSuperAdmin(role) || role === "manazer";

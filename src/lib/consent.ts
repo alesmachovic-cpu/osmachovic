@@ -20,7 +20,8 @@ export function setConsent(prefs: ConsentPrefs): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
   // Nastaviť aj cookie pre server-side čítanie (1 rok)
   const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
-  document.cookie = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify(prefs))}; expires=${expires}; path=/; SameSite=Lax`;
+  // Secure: stránka je HTTPS-only (HSTS). Localhost je secure context, takže dev funguje tiež.
+  document.cookie = `${STORAGE_KEY}=${encodeURIComponent(JSON.stringify(prefs))}; expires=${expires}; path=/; SameSite=Lax; Secure`;
 }
 
 export function hasConsent(category: keyof ConsentPrefs): boolean {

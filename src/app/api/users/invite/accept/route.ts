@@ -3,7 +3,8 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { validatePasswordStrength } from "@/lib/auth/password";
-import { buildSessionCookieValue } from "@/lib/auth/session";
+import { buildSessionCookieValue, buildTwoFactorCookieValue } from "@/lib/auth/session";
+import { isAdminTier } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
 import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
 
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
     // NEVYSTAVUJ session rovno. Vyžaduj 6-cifrový kód cez /api/auth/2fa/verify.
     const { data: user } = await sb
       .from("users")
-      .select("totp_enabled_at")
+      .select("totp_enabled_at, role")
       .eq("id", invite.user_id)
       .maybeSingle();
     if (user?.totp_enabled_at) {
@@ -114,7 +115,9 @@ export async function POST(request: NextRequest) {
     });
 
     const res = NextResponse.json({ success: true, userId: invite.user_id });
-    res.headers.set("Set-Cookie", buildSessionCookieValue(invite.user_id));
+    res.headers.append("Set-Cookie", buildSessionCookieValue(invite.user_id));
+    // 🔒 Ak je pozvaný user admin a nemá 2FA → middleware ho presmeruje na setup.
+    res.headers.append("Set-Cookie", buildTwoFactorCookieValue(isAdminTier(user?.role)));
     return res;
   } catch (e) {
     console.error("[invite/accept] error:", e);
