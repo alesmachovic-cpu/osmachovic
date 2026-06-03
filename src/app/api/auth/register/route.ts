@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { buildSessionCookieValue, buildBillingCookieValue } from "@/lib/auth/session";
+import { buildSessionCookieValue, buildBillingCookieValue, buildTwoFactorCookieValue } from "@/lib/auth/session";
+import { isAdminTier } from "@/lib/auth/requireUser";
 import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
@@ -119,6 +120,8 @@ export async function POST(request: Request) {
     const res = NextResponse.json({ user });
     res.headers.append("Set-Cookie", buildSessionCookieValue(String(user.id)));
     res.headers.append("Set-Cookie", buildBillingCookieValue(true));
+    // 🔒 Nový majiteľ firmy (admin) nemá 2FA → middleware ho presmeruje na setup.
+    res.headers.append("Set-Cookie", buildTwoFactorCookieValue(isAdminTier(user.role)));
     return res;
   } catch (e) {
     console.error("[register] error:", e);

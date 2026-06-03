@@ -6,28 +6,11 @@ import createNextIntlPlugin from "next-intl/plugin";
  * leak referrer info. Aplikuje sa na všetky routes.
  */
 /**
- * Content-Security-Policy — must allow what app actually uses:
- *   - script-src: Next.js inline + Vercel Analytics + Supabase + AI APIs
- *   - style-src: 'unsafe-inline' (app uses inline style={...} extensively)
- *   - img-src: any HTTPS source (foto z portálov, og:image atď.)
- *   - connect-src: Supabase, Anthropic, Google APIs, Resend webhooks
- *   - frame-ancestors: 'none' (DENY embedding)
+ * Content-Security-Policy NIE je tu — žije ako JEDINÝ zdroj pravdy v
+ * src/middleware.ts (runs na každej HTML route, vrátane cloudflare captcha
+ * domén). Mať CSP na dvoch miestach driftlo (frame-ancestors 'self' vs 'none',
+ * chýbajúce captcha domény). Single-source fix 2026-06-03.
  */
-const cspDirectives = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://*.vercel-analytics.com https://*.vercel-insights.com",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co https://api.anthropic.com https://generativelanguage.googleapis.com https://api.resend.com https://*.googleapis.com https://api.openai.com https://accounts.google.com https://*.vercel-insights.com",
-  "frame-src 'self' blob: https://accounts.google.com",
-  "frame-ancestors 'self'",
-  "base-uri 'self'",
-  "form-action 'self' https://accounts.google.com",
-  "object-src 'none'",
-  "upgrade-insecure-requests",
-].join("; ");
-
 const securityHeaders = [
   // Prevent MIME sniffing (XSS vector)
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -39,8 +22,7 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
   // Permissions policy — vypni features ktoré appka nepotrebuje
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
-  // Content Security Policy — najpresnejšia obrana proti XSS
-  { key: "Content-Security-Policy", value: cspDirectives },
+  // Content-Security-Policy — definované v middleware.ts (single source, viď komentár vyššie)
   // Cross-Origin Opener Policy — izoluje window context (Spectre mitigation)
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   // Zabrán indexovaniu crawlermi a AI botmi

@@ -59,6 +59,19 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // 🔒 2FA enforcement — admin bez 2FA (cookie crm_2fa=setup, nastaví login/google-match)
+  // → presmeruj na povinný setup. Len HTML navigácia; API prechádza (chránené requireUser).
+  // Exempt: setup page samotná + /auth (OAuth callback) — inak by sa flow zacyklil/rozbil.
+  const twoFa = request.cookies.get("crm_2fa")?.value;
+  if (twoFa === "setup" && !isApi
+      && !pathname.startsWith("/nastavenia/security")
+      && !pathname.startsWith("/auth")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/nastavenia/security";
+    url.search = "?setup2fa=1";
+    return NextResponse.redirect(url);
+  }
+
   // Nonce-based CSP je zámerně vynechané — keď je nonce prítomný, prehliadač
   // ignoruje 'unsafe-inline', čo blokuje Next.js bootstrap inline scripty
   // a React sa nehydratuje. Použiváme 'unsafe-inline' bez nonce.
