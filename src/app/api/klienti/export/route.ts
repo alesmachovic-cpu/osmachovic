@@ -20,6 +20,13 @@ export async function GET(req: NextRequest) {
   }
 
   const sb = getSupabaseAdmin();
+
+  // 🔒 Tenant guard — klient musí patriť firme používateľa (zabráni cross-tenant IDOR exportu PII)
+  const { data: owner } = await sb.from("klienti").select("company_id").eq("id", id).maybeSingle();
+  if (!owner || owner.company_id !== auth.user.company_id) {
+    return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+  }
+
   const [klient, obhliadky, nabery, docs, udalosti] = await Promise.all([
     sb.from("klienti").select("*").eq("id", id).single(),
     sb.from("obhliadky").select("id, created_at, datum, poznamka").eq("klient_id", id),
