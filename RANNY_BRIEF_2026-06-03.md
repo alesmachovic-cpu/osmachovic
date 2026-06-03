@@ -36,8 +36,25 @@ Backend match v `/api/auth/login` (`src/app/api/auth/login/route.ts:217-222`) **
 
 | # | Problem | Root cause | Fix |
 |---|---------|-----------|-----|
-| 1 | Google login (Aleš) → 500 "column users.totp_enabled_at does not exist" | 2FA stĺpce nemigrované do prod DB | `a4a3ef0` tolerant SELECT + DB migrácia spustená v Supabase |
+| 1 | Google login `/api/auth/google/match` → 500 "column users.totp_enabled_at does not exist" | 2FA stĺpce nemigrované do prod DB | `a4a3ef0` tolerant SELECT + DB migrácia |
 | 2 | Email/password login → 403 "Captcha overenie je povinné" | Turnstile site key `0x4AAAAAADNt2x_biTBxcJDO` Cloudflare odmieta ("Invalid input for parameter sitekey") | `cbbee10` soft-fail captcha (verify ak je token, inak warn-only) |
+| 3 | Aj po úspešnom match endpoint → user späť na login form | `/api/users` failovalo 500 "column users.telefon does not exist" → AuthProvider.loadAccounts crash → user state never set | DB migrácia — `ALTER TABLE users ADD COLUMN telefon text` |
+| 4 | `/api/nabery` GET → 500 "column naberove_listy.makler_id does not exist" | Denormalized owner stĺpec nikdy nemigrovaný do prod | DB migrácia — `ALTER TABLE naberove_listy ADD COLUMN makler_id uuid` + backfill z klienti.makler_id (38 z 50 náberákov dostalo vlastníka) |
+
+### End-to-end overenie po fixoch (live na vianema.amgd.sk)
+
+| Endpoint | Status |
+|----------|--------|
+| `/api/auth/google/match` (real Aleš JWT) | ✅ 200 + user object + session cookie |
+| `/api/users` | ✅ 200 (12 users) |
+| `/api/klienti` | ✅ 200 (klienti vrátane "Peter spetko" z dneška) |
+| `/api/nabery` | ✅ 200 (50 náberákov) |
+| `/api/obhliadky` | ✅ 200 |
+| `/api/nehnutelnosti` | ✅ 200 |
+| `/api/ulohy` | ✅ 200 |
+| `/api/faktury` | ✅ 200 |
+
+UI overené: po Google login redirect na `/` → dashboard sa renderuje so sidebar, `crm_user=ales` v localStorage, žiadny login form, 3 console errors (oproti 169 pred fixom — zvyšok je iba neresolved Turnstile warnings).
 
 ---
 
@@ -68,9 +85,15 @@ WHERE id = 'peter-kramp...';   -- skopíruj id z user listu (uvidíš v /makleri
 Alebo cez UI: Settings → Tým → klik na Krampl → Reset heslo.  
 Heslo mu povieš ústne ráno.
 
-### 3) ✅ SQL migrácia — HOTOVÁ (nemusíš nič robiť)
+### 3) ✅ SQL migrácie — HOTOVÉ (nemusíš nič robiť)
 
-Spustil som ti ju cez Playwright v Supabase SQL editori o 03:33 CEST. Výsledok: "Success. No rows returned." Stĺpce `totp_secret`, `totp_enabled_at`, `totp_backup_codes`, `totp_last_used_counter` + tabuľka `auth_2fa_challenges` sú v prod DB. 2FA setup je teraz funkčný.
+Spustil som tri ALTER batche cez Playwright v Supabase SQL editori medzi 03:33-04:05 CEST. Audit trail v repe: `sql/migrations/2026-06-03-backfill-prod-schema.sql` (idempotentná, môže sa znova spustiť).
+
+| Migrácia | Stav |
+|----------|------|
+| `users.totp_*` (4 stĺpce) + `auth_2fa_challenges` tabuľka + indexy + RLS enable | ✅ |
+| `users.telefon text` | ✅ |
+| `naberove_listy.makler_id uuid` + backfill + index | ✅ (38/50 backfilled) |
 
 ---
 
