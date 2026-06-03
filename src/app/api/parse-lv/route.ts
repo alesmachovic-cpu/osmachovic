@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 60; // Gemini PDF reading môže trvať 30-50s
+export const maxDuration = 60; // Claude PDF reading môže trvať 30-50s
 
 // SYSTEM_LV/POSUDOK/ZMLUVA definované nižšie po SYSTEM_UNIVERSAL
 
@@ -154,90 +154,35 @@ function extractJSON(raw: string): Record<string, string> | null {
   try { return JSON.parse(jsonMatch[0]); } catch { return null; }
 }
 
-/* ── Strategy 1: Gemini Flash (najrýchlejší, vie čítať PDF natívne) ── */
-async function parseByGemini(text: string, system: string, pdfBase64?: string): Promise<Record<string, string> | null> {
-  if (!process.env.GEMINI_API_KEY) { console.log("[parse-doc] Gemini: no API key"); return null; }
-  try {
-    // Ak máme PDF base64, pošleme ho priamo — Gemini vie čítať PDF natívne
-    const parts: Array<Record<string, unknown>> = [];
-    if (pdfBase64) {
-      parts.push({ inlineData: { mimeType: "application/pdf", data: pdfBase64 } });
-      parts.push({ text: USER_PROMPT("(viď priložený PDF dokument)") });
-    } else {
-      parts.push({ text: USER_PROMPT(text) });
-    }
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: [{ parts }],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 16000,
-            responseMimeType: "application/json",
-            thinkingConfig: { thinkingBudget: 0 }, // vypnúť thinking aby sa output nekrátil
-          },
-        }),
-      }
-    );
-    if (!res.ok) { const err = await res.text(); console.error("[parse-doc] Gemini HTTP", res.status, err.slice(0, 300)); return null; }
-    const data = await res.json();
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-    console.log("[parse-doc] Gemini raw length:", raw.length, pdfBase64 ? "(from PDF)" : "(from text)");
-    return extractJSON(raw);
-  } catch (e) {
-    console.error("[parse-doc] Gemini failed:", e);
-    return null;
-  }
-}
+/* ── Jediná stratégia: Claude (číta PDF aj sken natívne). ──────────────────
+   GDPR 2026-06-03 (F2): klientske dokumenty (LV, posudky — obsahujú meno,
+   dátum narodenia, adresu vlastníkov) spracúva VÝHRADNE Anthropic — jediný AI
+   subprocessor s podpísaným DPA/SCC. Gemini a OpenAI odstránené z PII parse
+   flow (free Gemini tier trénuje na dátach; bez DPA = GDPR riziko). */
+type ParseDocBlock = { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } };
+type ParseTextBlock = { type: "text"; text: string };
 
-/* ── Strategy 2: GPT-4o-mini ── */
-async function parseByGPT(text: string, system: string): Promise<Record<string, string> | null> {
-  if (!process.env.OPENAI_API_KEY) { console.log("[parse-doc] GPT: no API key"); return null; }
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.1,
-        max_tokens: 4000,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: USER_PROMPT(text) },
-        ],
-      }),
-    });
-    if (!res.ok) { const err = await res.text(); console.error("[parse-doc] GPT HTTP", res.status, err.slice(0, 300)); return null; }
-    const data = await res.json();
-    const raw = data.choices?.[0]?.message?.content?.trim() || "";
-    console.log("[parse-doc] GPT raw length:", raw.length);
-    return extractJSON(raw);
-  } catch (e) {
-    console.error("[parse-doc] GPT failed:", e);
-    return null;
-  }
-}
-
-/* ── Strategy 3: Claude Haiku (fallback) ── */
-async function parseByClaude(text: string, system: string): Promise<Record<string, string> | null> {
+async function parseByClaude(text: string, system: string, pdfBase64?: string): Promise<Record<string, string> | null> {
   if (!process.env.ANTHROPIC_API_KEY) { console.log("[parse-doc] Claude: no API key"); return null; }
   try {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const content: Array<ParseDocBlock | ParseTextBlock> = [];
+    if (pdfBase64) {
+      content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } });
+      content.push({ type: "text", text: USER_PROMPT("(viď priložený PDF dokument)") });
+    } else {
+      content.push({ type: "text", text: USER_PROMPT(text) });
+    }
     const msg = await anthropic.messages.create({
-      model: "claude-3-5-haiku-20241022",
-      max_tokens: 4000,
-      system: system,
-      messages: [{ role: "user", content: USER_PROMPT(text) }],
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 8000,
+      temperature: 0.1,
+      system,
+      messages: [{ role: "user", content }],
     });
-    const raw = (msg.content[0] as { type: string; text: string }).text.trim();
+    const raw = msg.content.map(b => (b.type === "text" ? b.text : "")).join("").trim();
+    console.log("[parse-doc] Claude raw length:", raw.length, pdfBase64 ? "(from PDF)" : "(from text)");
     return extractJSON(raw);
   } catch (e) {
     console.error("[parse-doc] Claude failed:", e);
@@ -245,7 +190,7 @@ async function parseByClaude(text: string, system: string): Promise<Record<strin
   }
 }
 
-/* ══════ MAIN — Gemini (najrýchlejší) → GPT → Claude ══════ */
+/* ══════ MAIN — výhradne Claude (PDF aj text), bez fallbacku ══════ */
 export async function POST(req: NextRequest) {
   const { lv_text, doc_type, pdf_base64 } = await req.json();
 
@@ -257,32 +202,14 @@ export async function POST(req: NextRequest) {
   const text = lv_text?.trim() || "";
   console.log(`[parse-doc] Document type: ${doc_type || "lv"}, has PDF: ${!!pdf_base64}, text len: ${text.length}`);
 
-  // Ak máme len PDF (bez textu), GPT a Claude nemajú čo čítať — iba Gemini vie PDF
-  const hasPdfOnly = !!pdf_base64 && !text;
-  const strategies = hasPdfOnly
-    ? [(t: string) => parseByGemini(t, system, pdf_base64)]
-    : [
-        (t: string) => parseByGemini(t, system, pdf_base64),
-        (t: string) => parseByGPT(t, system),
-        (t: string) => parseByClaude(t, system),
-      ];
-  const names = hasPdfOnly ? ["Gemini"] : ["Gemini", "GPT", "Claude"];
-
-  const attempts: string[] = [];
-  for (let i = 0; i < strategies.length; i++) {
-    console.log(`[parse-doc] Trying ${names[i]}...`);
-    const result = await strategies[i](text);
-    const hasAnyField = result && Object.values(result).some(v => v !== undefined && v !== null && String(v).trim() !== "" && String(v).toLowerCase() !== "n/a");
-    if (hasAnyField) {
-      console.log(`[parse-doc] ✓ ${names[i]} succeeded with fields:`, Object.keys(result!).join(", "));
-      return NextResponse.json({ ...result, _ai: names[i], _docType: doc_type || "lv" });
-    }
-    attempts.push(`${names[i]}: ${result === null ? "chyba (pozri logs)" : "prázdna odpoveď"}`);
-    console.log(`[parse-doc] ✗ ${names[i]} returned empty, trying next...`);
+  const result = await parseByClaude(text, system, pdf_base64 || undefined);
+  const hasAnyField = result && Object.values(result).some(v => v !== undefined && v !== null && String(v).trim() !== "" && String(v).toLowerCase() !== "n/a");
+  if (hasAnyField) {
+    console.log(`[parse-doc] ✓ Claude succeeded with fields:`, Object.keys(result!).join(", "));
+    return NextResponse.json({ ...result, _ai: "Claude", _docType: doc_type || "lv" });
   }
 
   return NextResponse.json({
-    error: `AI nedokázali spracovať dokument. Pokusy: ${attempts.join(" | ")}. Skontroluj či je PDF čitateľné (nie iba obrázok) a či má text.`,
-    attempts,
+    error: `AI nedokázalo spracovať dokument. Skontroluj či je PDF čitateľné a či obsahuje text/sken listu vlastníctva.`,
   }, { status: 500 });
 }

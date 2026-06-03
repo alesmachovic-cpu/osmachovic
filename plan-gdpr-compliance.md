@@ -19,7 +19,15 @@ Toto je živý plán. Každý nález = budúci fix. Implementuje sa po schválen
 **Fix:** Pred query načítať klienta, overiť `klient.company_id === scope.company_id` a `canEditRecord(scope, klient.makler_id)` pri write. Doplniť do `audit-cross-tenant` checku.
 
 ### F2 — PII tretích osôb (vlastníci z LV) posielané do US AI bez podkladu
-**Súbory:** `src/app/api/parse-lv/route.ts` (r. 130,145), `parse-doc/route.ts`, `ai-writer/route.ts`
+**Stav:** ✅ OPRAVENÉ 2026-06-03 (uncommitted) — rozhodnutie CEO: používať IBA Anthropic na klientske dokumenty.
+- **parse-lv, parse-doc, parse-pdf** prepísané na VÝHRADNE Claude (Anthropic). Claude číta PDF (document blok), rasterizované stránky (image bloky) aj text/OCR natívne. Gemini + OpenAI úplne odstránené z PII parse flow. parse-pdf si nechal lokálny `pdf-parse` (bez prenosu dát) ako last resort.
+- Model: `claude-haiku-4-5-20251001`. SDK 0.96.0 podporuje document bloky (overené tsc).
+- `/bezpecnost`: disclosure spresnený — klientske dokumenty výhradne Anthropic; OpenAI/Gemini ostávajú pre copywriter + analýzu trhu/okolia (bez identifikačných dokumentov klientov).
+- **Minimalizácia netreba** — CEO potvrdil: všetci vlastníci na LV sú štandardne naši predávajúci klienti (nepredáva sa len časť nehnuteľnosti), spracúvame ich legitímne na základe zmluvy.
+**Overené:** tsc čistý, PII routes bez Gemini/OpenAI, audit-all 20=20 (žiadna regresia).
+**Zostáva mimo kódu:** podpísať DPA s Anthropicom (ak ešte nie je); živý test parsovania (platený Claude call — čaká na CEO súhlas).
+**Pozn. (nový nález mimo F2):** `parse-lv` nemá `requireUser()` guard — anonymný útočník môže páliť náš Claude quota + posielať ľubovoľné PDF. Pridať do plánu (P1, cost/abuse).
+**Súbory:** `parse-lv/route.ts`, `parse-doc/route.ts`, `parse-pdf/route.ts`, `src/app/(legal)/bezpecnost/page.tsx`
 **Problém:** Do Anthropic/OpenAI/Gemini (USA) sa posiela **celý PDF base64** LV / znaleckého posudku / zmlúv = mená vlastníkov, dátumy narodenia, rodné čísla, adresy. Žiadna redakcia/pseudonymizácia. Sú to PII **cudzích osôb** (nie naši klienti, bez súhlasu). Subprocessor zoznam na `/bezpecnost` (r. 76-86) **neobsahuje OpenAI ani Gemini**, hoci sa reálne volajú.
 **Zákon:** GDPR čl. 6 (právny základ), čl. 9 (osobitná kategória – rodné číslo), čl. 28 (subprocessor), čl. 44+ (transfer mimo EÚ), čl. 13/14 (informačná povinnosť).
 **Riziko:** Aktívne pri každom parse-LV v náberovom flow. Bez DPA + transfer základu neobhájiteľné.

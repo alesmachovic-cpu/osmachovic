@@ -66,6 +66,16 @@ export default function BezpecnostPage() {
       </Section>
 
       <Section title="Subprocesori" id="subprocesori">
+        <p style={pSt}>
+          Klientske dokumenty obsahujúce osobné údaje (list vlastníctva, znalecký posudok —
+          meno, dátum narodenia, adresa vlastníka) spracúva <strong>výhradne Anthropic (Claude)</strong>,
+          ktorý je jediný AI spracovateľ s podpísanou zmluvou o spracúvaní (DPA). Na tvorbu inzerátov
+          a analýzu verejných trhových dát môžeme využiť aj OpenAI a Google Gemini — týmto
+          spracovateľom <strong>neposielame identifikačné dokumenty klientov</strong>. Spracovanie
+          prebieha cez zabezpečené API rozhranie; prenos do USA je krytý štandardnými zmluvnými
+          doložkami (SCC), prípadne Data Privacy Framework (DPF). Právnym základom je plnenie zmluvy
+          o realitnom sprostredkovaní a oprávnený záujem na efektívnom spracovaní.
+        </p>
         <table style={tableSt}>
           <thead>
             <tr>
@@ -77,8 +87,9 @@ export default function BezpecnostPage() {
               ["Supabase Inc.", "Databáza, Auth", "EU (Frankfurt)", "supabase.com/legal/dpa"],
               ["Vercel Inc.", "Hosting, Edge", "EU / USA (DPF)", "vercel.com/legal/dpa"],
               ["Resend Inc.", "E-mail", "USA (DPF)", "resend.com/legal/dpa"],
-              ["Google LLC", "Calendar, Drive, OAuth", "USA (DPF + SCC)", "cloud.google.com/terms/data-processing-terms"],
-              ["Anthropic PBC", "AI (Claude)", "USA (SCC)", "anthropic.com/legal/privacy"],
+              ["Google LLC", "Calendar, Drive, OAuth, Gemini (analýza trhu/okolia)", "USA (DPF + SCC)", "cloud.google.com/terms/data-processing-terms"],
+              ["Anthropic PBC", "AI (Claude — spracovanie klientskych dokumentov, copywriter, analýza)", "USA (SCC)", "anthropic.com/legal/privacy"],
+              ["OpenAI, L.L.C.", "AI (GPT — copywriter/analýza, bez klientskych dokumentov)", "USA (SCC)", "openai.com/policies/data-processing-addendum"],
             ].map((row, i) => (
               <tr key={i}>{row.map((v, j) => <td key={j} style={tdSt}>{v}</td>)}</tr>
             ))}
