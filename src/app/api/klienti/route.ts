@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit";
 import { requireUser } from "@/lib/auth/requireUser";
 import { sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
 import { requireReAuth } from "@/lib/auth/reAuth";
+import { touchEngagement } from "@/lib/engagement";
 
 export const runtime = "nodejs";
 
@@ -84,10 +85,18 @@ export async function POST(req: NextRequest) {
   const scope = await getUserScope(userId);
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
 
-  const { user_id: _u, makler_id: bodyMakler, ...rest } = body;
+  const { user_id: _u, makler_id: bodyMakler, odporucil_klient_id: bodyOdporucil, ...rest } = body;
   const makler_id = scope.isAdmin && bodyMakler ? String(bodyMakler) : scope.makler_id;
   if (!makler_id) {
     return NextResponse.json({ error: "Užívateľ nemá priradeného makléra" }, { status: 400 });
+  }
+
+  // Odporúčanie: nový klient naviazaný na existujúceho, ktorý ho odporučil.
+  // Over že odporúčajúci patrí do tej istej firmy (žiadne cross-tenant prepojenie).
+  let validReferrer: string | null = null;
+  if (bodyOdporucil) {
+    const { data: ref } = await sb.from("klienti").select("id, company_id").eq("id", String(bodyOdporucil)).maybeSingle();
+    if (ref && ref.company_id === scope.company_id) validReferrer = ref.id;
   }
 
   // C4: XSS sanitize free-form text fields (poznamka, meno, lokalita, ...)
@@ -100,6 +109,7 @@ export async function POST(req: NextRequest) {
     makler_id,
     created_by_makler_id: makler_id,
     company_id: scope.company_id,
+    odporucil_klient_id: validReferrer,
   };
   const { data, error } = await sb.from("klienti").insert(payload).select().single();
   if (error) {
@@ -108,6 +118,20 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: error.message, code: error.code }, { status: 500 });
   }
+
+  // Odporúčajúci klient = aktívny živý vzťah → reset retention lehoty (F11)
+  // + záznam do jeho histórie.
+  if (validReferrer) {
+    await touchEngagement(validReferrer);
+    await sb.from("klient_udalosti").insert({
+      klient_id: validReferrer,
+      typ: "ine",
+      popis: `Dal odporúčanie — nový klient: ${typeof data.meno === "string" ? data.meno : data.id}`,
+      autor: auth.user.name || null,
+      company_id: scope.company_id,
+    });
+  }
+
   await logAudit({
     action: "klient.create",
     actor_id: userId,
