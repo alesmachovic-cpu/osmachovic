@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/auth/requireUser";
 import { getUserScope, type UserScope } from "@/lib/scope";
 import { logAudit } from "@/lib/audit";
+import { touchEngagement } from "@/lib/engagement";
 
 export const runtime = "nodejs";
 
@@ -81,6 +82,9 @@ export async function POST(req: NextRequest) {
     source: (body.source as string) || "crm",
   }).select("id").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Udelenie súhlasu = živý vzťah → reset retention lehoty (F11).
+  await touchEngagement(klientId);
 
   await logAudit({
     action: "consent.granted",

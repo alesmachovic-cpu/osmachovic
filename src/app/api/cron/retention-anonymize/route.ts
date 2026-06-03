@@ -35,12 +35,14 @@ export async function GET(request: NextRequest) {
 
   const sb = getSupabaseAdmin();
 
-  // Kandidáti: neaktívni (updated_at < cutoff), nie anonymizovaní.
+  // Kandidáti: bez živého vzťahu (last_engagement_at < cutoff), nie anonymizovaní.
+  // last_engagement_at sa resetuje len pri REÁLNEJ interakcii klienta (kontakt,
+  // súhlas, obhliadka) — viď src/lib/engagement.ts + retention-policy.md.
   const { data: candidates, error } = await sb
     .from("klienti")
-    .select("id, meno, typ, status, updated_at")
+    .select("id, meno, typ, status, last_engagement_at")
     .is("anonymized_at", null)
-    .lt("updated_at", cutoff);
+    .lt("last_engagement_at", cutoff);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Vylúč klientov, ktorí sú v akomkoľvek obchode (zákonná retencia).
@@ -65,7 +67,7 @@ export async function GET(request: NextRequest) {
       retention_years: years,
       candidates_count: toAnon.length,
       aml_docs_expired_count: expiredAmlIds.length,
-      candidates: toAnon.map(k => ({ id: k.id, typ: k.typ, status: k.status, updated_at: k.updated_at })),
+      candidates: toAnon.map(k => ({ id: k.id, typ: k.typ, status: k.status, last_engagement_at: k.last_engagement_at })),
       note: "DRY-RUN — žiadne dáta sa nezmenili. Pre reálnu anonymizáciu nastav RETENTION_ANONYMIZE_ENABLED=true.",
       ran_at: new Date().toISOString(),
     });
@@ -91,7 +93,7 @@ export async function GET(request: NextRequest) {
       actor_name: "cron/retention",
       target_id: k.id,
       target_type: "klient",
-      detail: { retention_years: years, typ: k.typ, last_activity: k.updated_at },
+      detail: { retention_years: years, typ: k.typ, last_activity: k.last_engagement_at },
       ip_address: undefined,
     });
   }

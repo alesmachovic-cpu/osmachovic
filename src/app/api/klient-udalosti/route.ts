@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
 import { getUserScope, canEditRecord } from "@/lib/scope";
+import { touchEngagement } from "@/lib/engagement";
 
 export const runtime = "nodejs";
 
@@ -52,6 +53,9 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Reálny kontakt klienta = živý vzťah → reset retention lehoty (F11).
+  // status_zmena je interná admin akcia, nie kontakt → neresetuje.
+  if (typ !== "status_zmena") await touchEngagement(klient_id);
   await logAudit({
     action: "klient_udalost.create",
     actor_id: auth.user.id, actor_name: auth.user.name,
