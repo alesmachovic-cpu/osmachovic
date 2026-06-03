@@ -73,12 +73,14 @@ Toto je živý plán. Každý nález = budúci fix. Implementuje sa po schválen
 **Fix:** Doplniť na PDF rozpis: základ dane / sadzba (15/19/23 %) / DPH / spolu. Overiť sadzbu od 1.1.2026 (23 %).
 
 ### F8 — Audit log neloguje READ prístup k PII + pokrýva len ~33 % write operácií
+**Stav:** ✅ ČIASTOČNE 2026-06-03. Pridané logovanie READ prístupu k najcitlivejšiemu endpointu — `klient-dokumenty` GET (dešifrovanie OP/LV/AML scanov) → `klient_dokumenty.read` (len keď count>0). GDPR export už loguje (F4). Zostáva: batch-doplniť write audit na zvyšok endpointov (ongoing). Overené: tsc, audit-all 20=20.
 **Súbory:** `src/app/api/klienti/route.ts`, `klient-dokumenty/route.ts` (GET nelogujú)
 **Problém:** Loguje sa len write (29/87 súborov). Čítanie PII (zoznam klientov, dešifrovanie OP/LV scanu) sa neloguje → pri breachi nevieme dokázať rozsah dotknutých osôb.
 **Zákon:** GDPR čl. 5(2) accountability, čl. 33/34 (rozsah breachu).
 **Fix:** Logovať READ aspoň na `klient-dokumenty` GET (dešifrovanie OP/AML) a GDPR export. Batch-doplniť write audit na tabuľky s PII (cieľ 100 %).
 
 ### F9 — Retention audit_log cron je nefunkčný (no-op konflikt s triggerom)
+**Stav:** ✅ OPRAVENÉ 2026-06-03. Odstránený mŕtvy `audit_log.delete()` z cleanup cronu (trigger ho blokol → tichý no-op, navyše 2r < zákonných 5/10r). audit_log = zámerne append-only (forenzná + zákonná retencia, GDPR čl.6 oprávnený záujem). login_attempts cleanup teraz surfaceuje chyby. Overené: tsc, audit-all 20=20.
 **Súbory:** `src/app/api/cron/cleanup/route.ts` (r. 24), `supabase/migrations/080_audit_log_immutable.sql`
 **Problém:** Cron robí `DELETE` na `audit_log` po 2 rokoch, ale migr. 080 má `BEFORE DELETE RAISE EXCEPTION` → delete vždy zlyhá, cron ticho vráti `audit_log_cleaned: false`. Retention reálne nefunguje, log rastie donekonečna (IP, mená). Navyše 2 roky < zákonných 5 r. (AML) / 10 r. (DPH).
 **Zákon:** GDPR čl. 5(1)(e) minimalizácia vs. zák. 297/2008 § 11 (5 r.) / zák. 222/2004 § 76 (10 r.).

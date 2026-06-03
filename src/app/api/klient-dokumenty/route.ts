@@ -95,6 +95,21 @@ export async function GET(req: NextRequest) {
     return out;
   });
 
+  // 🔒 F8: forenzný trail prístupu k citlivým PII (dešifrované OP/LV/AML scany).
+  // GDPR čl. 5(2) accountability + rozsah pri ohlasovaní porušenia (čl. 33/34).
+  // Logujeme len reálny prístup k dokumentom (nie prázdne priečinky).
+  if (decrypted.length > 0) {
+    await logAudit({
+      action: "klient_dokumenty.read",
+      actor_id: auth.user.id,
+      actor_name: auth.user.name,
+      target_id: klientId,
+      target_type: "klient",
+      detail: { count: decrypted.length },
+      ip_address: req.headers.get("x-forwarded-for") || undefined,
+    });
+  }
+
   return NextResponse.json({ dokumenty: decrypted });
 }
 
