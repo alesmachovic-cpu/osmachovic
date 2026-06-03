@@ -69,7 +69,13 @@ function NaberPageContent() {
   const { user } = useAuth();
   const { scope } = useUserScope();
   const isAdmin = scope?.isAdmin ?? false;
+  // useState lazy init s isAdmin je nespoľahlivé — useUserScope je pri mount-e null →
+  // isAdmin=false → default "mine" aj pre adminov. useEffect nižšie to opraví.
   const [filterMakler, setFilterMakler] = useState<string>(isAdmin ? "all" : "mine");
+  useEffect(() => {
+    if (isAdmin && filterMakler === "mine") setFilterMakler("all");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
 
