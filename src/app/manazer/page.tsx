@@ -462,7 +462,7 @@ function TabPrehlad() {
               <div>
                 <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>{m.name}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                  {m.role === "admin" ? "Administrátor" : m.role === "manager" ? "Manažér" : "Maklér"}
+                  {m.role === "super_admin" ? "Administrátor" : m.role === "majitel" ? "Majiteľ" : m.role === "manazer" ? "Manažér" : "Maklér"}
                 </div>
               </div>
               <div style={{ textAlign: "center", fontWeight: 600, color: "var(--text-primary)" }}>{m.klienti}</div>

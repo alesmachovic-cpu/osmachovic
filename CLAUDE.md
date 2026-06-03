@@ -36,6 +36,35 @@ Test/staging: **https://dev.amgd.sk**
 
 **Prečo:** Vianema má reálnych klientov, reálne osobné údaje (AML/KYC, OP, listy vlastníctva), reálne peniaze (provízie, faktúry). Jeden security breach = okamžitý koniec firmy + GDPR pokuty + osobná zodpovednosť Aleša ako CEO. Žiadna feature, žiadna deadline, žiadny "rýchly fix" toto neprebije.
 
+## 🔴 ZAMRZNUTÝ BASELINE: Bezpečnosť + Právo/Compliance (platí na `dev` aj `main`)
+
+**Pri KAŽDEJ zmene — aj na `dev` branchi — sa nesmie nepozorovane oslabiť ani zmeniť dvojica: (a) bezpečnostné nastavenie, (b) právne / compliance nastavenie.** `dev` nie je "ihrisko kde sa to nemusí riešiť" — všetko čo na `dev` vznikne smeruje do produkcie, takže ten istý gate platí od prvého commitu.
+
+### Čo je chránený PRÁVNY / COMPLIANCE baseline (popri security baseline)
+Toto sa nesmie zmeniť bez výslovného súhlasu Aleša:
+- **GDPR** — súhlasy (cookie consent, marketing), právo na výmaz, retention/lehoty uchovávania, export osobných údajov, audit trail prístupov k PII.
+- **AML/KYC** — povinné kontroly, evidencia, lehoty, identifikácia klienta.
+- **Faktúry — zákonné náležitosti** — IČO/DIČ/IČ DPH, číslovanie radov, dátumy (vystavenie/dodanie/splatnosť), DPH sadzby a výpočet, dodávateľ snapshot (nemennosť faktúry po vystavení), integrita/append-only.
+- **Provízie a daňové polia** — výpočtové pravidlá ktoré majú daňový/účtovný dopad.
+- **Texty s právnym účinkom** — zmluvy (ÚZ/RZ/KZ/ZZ), súhlasy, poučenia, podpisové doložky, znenie e-mailov s právnym obsahom.
+
+### 🔴 ČERVENÉ UPOZORNENIE — povinný protokol
+Ak akákoľvek zmena (vrátane "len UI", "len refactor", "len kozmetika") **vyžaduje alebo spôsobí** zmenu security alebo právneho/compliance baseline:
+
+1. **ZASTAV. Nerob commit, nepokračuj v kóde.**
+2. Vypíš Alešovi na začiatok odpovede tento presný banner (aby bol nemožné prehliadnuť):
+
+   ```
+   🔴🔴🔴 POZOR — ZMENA BEZPEČNOSTI / PRÁVA 🔴🔴🔴
+   ```
+   Pod ním v **tučnom** texte: čoho sa zmena týka (security / GDPR / AML / faktúra / zmluva …), **čo presne sa mení**, **prečo to inak nejde**, a **aké je riziko** (pokuta, leak, neplatná faktúra, neplatná zmluva).
+3. **Počkaj na výslovné „áno, zmeň to"** od Aleša. Ticho ≠ súhlas.
+4. Až po súhlase pokračuj — a zmenu zapíš do commit message + (ak je trvalá) do tohto CLAUDE.md.
+
+**Nikdy** túto zmenu neschovaj do väčšieho diffu, neoznač ako „drobnosť", ani neprejdi ďalej s predpokladom že to bude OK. Realiťák Aleš nemusí v kóde vidieť že sa práve mení niečo právne — preto je červené upozornenie jeho jediná poistka.
+
+> Bezpečnostná časť tohto baseline je detailne rozpísaná nižšie v sekciách „🔒 ZLATÉ PRAVIDLO", „🛡️ API Security Rules" a „🛡️ Security Regression Guardian Mode". Tento blok ich **rozširuje o právnu/compliance vrstvu a o povinné červené upozornenie** — neruší ich.
+
 ## Workflow — DÔLEŽITÉ
 1. **Pri každej netriviálnej úlohe (3+ kroky) najprv vytvor plán** v `plan.md`.
 2. Pred kódom prečítaj existujúci kód, aby si pochopil kontext.

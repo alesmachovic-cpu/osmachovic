@@ -93,7 +93,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Chyba pri vytváraní kancelárie" }, { status: 500 });
     }
 
-    // Vytvor admin usera
+    // Vytvor majiteľa firmy.
+    // "majitel" je kanonická rola vlastníka RK (viď src/lib/scope.ts Role type).
+    // Dáva plné práva v rámci vlastnej firmy (isSuperAdmin → true, scope.isAdmin →
+    // true), ale je company-scoped — cross-tenant prístup má len "platform_admin".
+    // NEPOUŽÍVAŤ "admin": nie je v kanonickej taxonómii, isSuperAdmin() ho nepozná
+    // → owner by bol under-privileged.
     const hashed = await bcrypt.hash(password, 10);
     const initials = name.trim().split(/\s+/).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
 
@@ -104,7 +109,7 @@ export async function POST(request: Request) {
         initials,
         email: email.toLowerCase().trim(),
         password: hashed,
-        role: "admin",
+        role: "majitel",
         company_id: company.id,
       })
       .select("id, name, role, email, company_id")

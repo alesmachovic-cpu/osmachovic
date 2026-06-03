@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { requireUser } from "@/lib/auth/requireUser";
+import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 import { classify, toLegacyDbEnum } from "@/lib/monitor/classifier";
 import type { ClassifierInput } from "@/lib/monitor/classifier";
 
@@ -13,13 +13,13 @@ export const maxDuration = 300;
  * Prejde všetky aktívne inzeráty a re-klasifikuje ich cez classifier v2.
  * Rešpektuje predajca_typ_override — manuálne override-y preskočí.
  *
- * Len pre admin / super_admin. Timeout 5 minút (maxDuration=300).
+ * Len pre majiteľa / super_admin. Timeout 5 minút (maxDuration=300).
  */
 export async function POST(req: NextRequest) {
   const auth = await requireUser(req);
   if (auth.error) return auth.error;
 
-  if (auth.user.role !== "super_admin" && auth.user.role !== "admin") {
+  if (!isSuperAdmin(auth.user.role)) {
     return NextResponse.json({ error: "Nedostatočné oprávnenia" }, { status: 403 });
   }
 
