@@ -54,8 +54,10 @@ export default async function GdprPage() {
 
       <Section title="5. Automatizované rozhodovanie a profilovanie">
         <p>
-          CRM systém využíva nástroje umelej inteligencie (Anthropic Claude, Google Gemini) na analýzu
-          trhovej ceny nehnuteľnosti, vyhodnotenie inzerátov a návrhy copywritingu. Tieto nástroje
+          CRM systém využíva nástroje umelej inteligencie. Klientske dokumenty (list vlastníctva,
+          znalecký posudok) spracúva <strong>výhradne Anthropic Claude</strong>. Na analýzu trhovej
+          ceny, vyhodnotenie inzerátov a copywriting (bez identifikačných dokumentov) môžu byť použité
+          aj Google Gemini a OpenAI. Tieto nástroje
           <strong> nepredstavujú automatizované rozhodovanie s právnym účinkom</strong> v zmysle čl. 22
           GDPR — slúžia výlučne ako podporný nástroj pre makléra, ktorý prijíma všetky rozhodnutia sám.
         </p>
@@ -111,9 +113,9 @@ export default async function GdprPage() {
       <Section title="10. Bezpečnosť">
         <ul style={ulSt}>
           <li>Šifrovanie databázy AES-256 (Supabase) + AES-256-GCM pre citlivé dokumenty</li>
-          <li>Row Level Security — každý maklér vidí len svoje záznamy</li>
+          <li>Prístup k údajom obmedzený podľa firmy a roly používateľa (multi-tenant izolácia + Row Level Security)</li>
           <li>HTTPS / HSTS preload na všetkých doménach</li>
-          <li>Audit log každého prístupu k citlivým dátam</li>
+          <li>Audit log kritických operácií a prístupu k citlivým dokumentom (kto, kedy, IP)</li>
           <li>Rate-limiting prihlásení (max 5 neúspechov / 15 min / IP)</li>
         </ul>
       </Section>
@@ -124,7 +126,7 @@ export default async function GdprPage() {
           <li><strong>Právo na opravu (čl. 16)</strong> — oprava nesprávnych alebo neúplných údajov</li>
           <li><strong>Právo na vymazanie (čl. 17)</strong> — „právo na zabudnutie" (s výnimkou zákonných povinností uchovávania)</li>
           <li><strong>Právo na obmedzenie spracúvania (čl. 18)</strong></li>
-          <li><strong>Právo na prenositeľnosť (čl. 20)</strong> — strojovo čitateľný export dát na <a href="/transparency" style={linkSt}>Moje dáta</a></li>
+          <li><strong>Právo na prenositeľnosť (čl. 20)</strong> — strojovo čitateľný export dát; požiadajte na <a href="mailto:privacy@vianema.sk" style={linkSt}>privacy@vianema.sk</a> (vlastný self-service prístup pripravujeme v Klientskej zóne)</li>
           <li><strong>Právo namietať (čl. 21)</strong> — voči spracúvaniu na základe oprávneného záujmu</li>
           <li><strong>Právo odvolať súhlas</strong> — kedykoľvek, bez vplyvu na zákonnosť predchádzajúceho spracovania</li>
         </ul>

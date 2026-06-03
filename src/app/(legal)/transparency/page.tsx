@@ -31,14 +31,14 @@ export default function TransparencyPage() {
     if (!user?.id || !confirm("Naozaj chcete požiadať o anonymizáciu Vašich dát? Táto akcia sa nedá vziať späť.")) return;
     setErasing(true);
     try {
-      const r = await fetch("/api/gdpr/erasure", {
+      const r = await fetch("/api/gdpr/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ user_id: user.id }),
+        body: JSON.stringify({ type: "erasure" }),
       });
       if (r.ok) {
-        setEraseMsg("Žiadosť odoslaná. Spracujeme ju do 30 dní a informujeme Vás e-mailom.");
+        setEraseMsg("Žiadosť bola zaevidovaná. Spracujeme ju do 30 dní a informujeme Vás e-mailom.");
       } else {
         setEraseMsg("Chyba pri odosielaní žiadosti. Kontaktujte privacy@vianema.sk");
       }
@@ -120,7 +120,7 @@ export default function TransparencyPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "12px" }}>
               <Stat label="Dátové úniky" value="0" />
               <Stat label="Aktívne sessions" value="Vaša aktuálna" />
-              <Stat label="Posledný pentest" value="[doplniť]" />
+              <Stat label="Bezpečnostný audit" value="Priebežný (CI)" />
             </div>
           </div>
         </>
