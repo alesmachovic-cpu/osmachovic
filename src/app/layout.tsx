@@ -11,7 +11,6 @@ import AuthProvider from "@/components/AuthProvider";
 import LegalFooter from "@/components/LegalFooter";
 import CalendarToast from "@/components/CalendarToast";
 import ReAuthModalHost from "@/components/ReAuthModal";
-import MaintenanceGate from "@/components/MaintenanceGate";
 
 // Inter ako primárny font — latin-ext potrebný pre slovenské diakritiky
 // (č, š, ž, ľ, ť, á, í, é). Brand komponenty (Logo, Wordmark, Monogram,
@@ -82,7 +81,6 @@ export default async function RootLayout({
       </head>
       <body className={`${inter.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning>
         <NextIntlClientProvider locale={locale} messages={messages}>
-        <MaintenanceGate>
         <AuthProvider>
           <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
             {/* Desktop sidebar */}
@@ -114,7 +112,6 @@ export default async function RootLayout({
           <CalendarToast />
           <ReAuthModalHost />
         </AuthProvider>
-        </MaintenanceGate>
         </NextIntlClientProvider>
       </body>
     </html>
