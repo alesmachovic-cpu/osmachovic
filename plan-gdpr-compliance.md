@@ -46,6 +46,7 @@ Toto je živý plán. Každý nález = budúci fix. Implementuje sa po schválen
 ## ⚠️ P1 — riešiť v rámci týždňov/mesiacov
 
 ### F4 — GDPR export exportuje dáta makléra, nie klienta (právo na prístup nefunkčné)
+**Stav:** ✅ OPRAVENÉ 2026-06-03. Pridaná vetva `GET /api/gdpr/export?klient_id=X` → exportuje osobné údaje klienta-subjektu (klient record + nábery + obhliadky + dokumenty-metadata + udalosti), scoped na company_id, s audit logom `gdpr_export_subject`. (PR #19 medzitým pridal cross-tenant guard na pôvodný maklér-export.) Follow-up: tlačidlo „Export GDPR" na detaile klienta (UI). Overené: tsc, audit-all 20=20.
 **Súbor:** `src/app/api/gdpr/export/route.ts` (r. 32-37 filtruje podľa `makler_id`/`user_id`)
 **Problém:** „Export všetkých údajov" vráti údaje makléra, nie subjektu. Žiadosť klienta o prístup (čl. 15) by sme nesplnili.
 **Zákon:** GDPR čl. 15 + čl. 20, zák. 18/2018 § 21.

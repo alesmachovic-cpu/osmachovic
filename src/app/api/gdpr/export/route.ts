@@ -1,12 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
+import { getUserScope } from "@/lib/scope";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req, { strict: true });
   if (auth.error) return auth.error;
+
+  // ── F4: Export osobných údajov KLIENTA-SUBJEKTU (GDPR čl. 15 právo na
+  // prístup + čl. 20 prenositeľnosť). Keď klient požiada o svoje údaje,
+  // exportujeme všetko čo o ňom evidujeme. (Pôvodný export nižšie je export
+  // dát makléra — jeho účtu, nie subjektu.)
+  const klientId = req.nextUrl.searchParams.get("klient_id");
+  if (klientId) {
+    const sb = getSupabaseAdmin();
+    const scope = await getUserScope(auth.user.id);
+    if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+    const { data: klient } = await sb
+      .from("klienti")
+      .select("*")
+      .eq("id", klientId)
+      .eq("company_id", scope.company_id)
+      .maybeSingle();
+    if (!klient) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+
+    const [nabery, obhliadky, dokumenty, udalosti] = await Promise.all([
+      sb.from("naberove_listy").select("*").eq("klient_id", klientId),
+      sb.from("obhliadky").select("*").or(`predavajuci_klient_id.eq.${klientId},kupujuci_klient_id.eq.${klientId}`),
+      // dokumenty: len metadata — NIE šifrované bloby (OP/LV scany) v JSON exporte
+      sb.from("klient_dokumenty").select("id, name, type, mime, size, created_at").eq("klient_id", klientId),
+      sb.from("klient_udalosti").select("*").eq("klient_id", klientId),
+    ]);
+
+    await sb.from("audit_log").insert({
+      user_id: auth.user.id,
+      action: "gdpr_export_subject",
+      entity_type: "klient",
+      entity_id: klientId,
+      ip_address: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+      user_agent: req.headers.get("user-agent"),
+    }).then(() => null, () => null);
+
+    return NextResponse.json({
+      exported_at: new Date().toISOString(),
+      subjekt: "klient",
+      klient,
+      naberove_listy: nabery.data ?? [],
+      obhliadky: obhliadky.data ?? [],
+      dokumenty: dokumenty.data ?? [],
+      udalosti: udalosti.data ?? [],
+      note: "Export osobných údajov dotknutej osoby podľa čl. 15 a 20 GDPR. Skenované dokumenty (OP, LV) sú uvedené len ako zoznam — kópie poskytneme na vyžiadanie.",
+    });
+  }
 
   const userId = req.nextUrl.searchParams.get("user_id") || auth.user?.id;
   if (!userId) return NextResponse.json({ error: "user_id required" }, { status: 400 });
