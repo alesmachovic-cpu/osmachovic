@@ -60,6 +60,16 @@ export async function GET(request: NextRequest) {
     .lt("retention_do", today);
   const expiredAmlIds = (expiredAml ?? []).map((d: { id: string }) => d.id);
 
+  // Obhliadky staršie ako RETENTION_YEARS s free-text PII kupujúceho →
+  // anonymizovať (vynulovať meno/telefón/email/podpis). Záznam (dátum,
+  // nehnuteľnosť) ostáva. FK na klientov rieši anonymizácia klienta vyššie.
+  const { data: oldObhliadky } = await sb
+    .from("obhliadky")
+    .select("id, kupujuci_meno, kupujuci_telefon, kupujuci_email, email_sent_to, podpis_data")
+    .lt("created_at", cutoff);
+  const obhToAnon = (oldObhliadky ?? []).filter(o =>
+    o.kupujuci_meno || o.kupujuci_telefon || o.kupujuci_email || o.email_sent_to || o.podpis_data);
+
   if (!enabled) {
     return NextResponse.json({
       ok: true,
@@ -67,6 +77,7 @@ export async function GET(request: NextRequest) {
       retention_years: years,
       candidates_count: toAnon.length,
       aml_docs_expired_count: expiredAmlIds.length,
+      obhliadky_anonymize_count: obhToAnon.length,
       candidates: toAnon.map(k => ({ id: k.id, typ: k.typ, status: k.status, last_engagement_at: k.last_engagement_at })),
       note: "DRY-RUN — žiadne dáta sa nezmenili. Pre reálnu anonymizáciu nastav RETENTION_ANONYMIZE_ENABLED=true.",
       ran_at: new Date().toISOString(),
@@ -117,9 +128,36 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Anonymizuj staré obhliadky (vynuluj free-text PII kupujúceho).
+  let obhAnonymized = 0;
+  if (obhToAnon.length) {
+    const obhIds = obhToAnon.map(o => o.id);
+    const dObh = await sb.from("obhliadky").update({
+      kupujuci_meno: null,
+      kupujuci_telefon: null,
+      kupujuci_email: null,
+      email_sent_to: null,
+      podpis_data: null,
+    }).in("id", obhIds);
+    if (dObh.error) errors.push(`obhliadky: ${dObh.error.message}`);
+    else {
+      obhAnonymized = obhIds.length;
+      await logAudit({
+        action: "obhliadka.retention_anonymized",
+        actor_id: null,
+        actor_name: "cron/retention",
+        target_id: null,
+        target_type: "obhliadka",
+        detail: { count: obhAnonymized, retention_years: years },
+        ip_address: undefined,
+      });
+    }
+  }
+
   return NextResponse.json({
     ok: errors.length === 0,
     dry_run: false,
+    obhliadky_anonymized: obhAnonymized,
     retention_years: years,
     anonymized,
     aml_docs_deleted: amlDeleted,

@@ -72,9 +72,9 @@ export default async function GdprPage() {
 
       <Section title="7. Doba uchovávania">
         <ul style={ulSt}>
-          <li>Obhliadkové listy: <strong>2 roky</strong> od podpisu, potom anonymizácia</li>
+          <li>Obhliadkové listy: <strong>7 rokov</strong>, potom anonymizácia kontaktných údajov kupujúceho</li>
           <li>Náberové zmluvy a podpísané dokumenty: <strong>10 rokov</strong> (zákon o účtovníctve)</li>
-          <li>Kontaktné údaje aktívnych klientov: <strong>po dobu spolupráce + 3 roky</strong></li>
+          <li>Kontaktné údaje klientov: <strong>po dobu spolupráce a následne 7 rokov od poslednej aktivity</strong>, potom anonymizácia (oprávnený záujem — dlhý realitný cyklus)</li>
           <li>AML doklady: <strong>5 rokov</strong> od skončenia obchodného vzťahu</li>
           <li>Faktúry: <strong>10 rokov</strong> (zákon č. 431/2002 Z. z.)</li>
         </ul>
