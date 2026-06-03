@@ -34,6 +34,7 @@ Toto je živý plán. Každý nález = budúci fix. Implementuje sa po schválen
 **Fix:** (1) Doplniť OpenAI+Gemini do subprocessor tabuľky. (2) Server-side redakcia rodného čísla/mien pred odoslaním, kde use-case dovolí. (3) AI disclosure do privacy policy. (4) Overiť DPA + že API tier netrénuje na dátach (právne).
 
 ### F3 — Faktúra po vystavení voľne meniteľná + bez audit logu
+**Stav:** ✅ OPRAVENÉ 2026-06-03. PATCH `/api/faktury`: (1) company_id scope (cross-tenant ochrana), (2) zámok vystavenej faktúry — povolené len `zaplatene`/`datum_uhrady`/`poznamka`, ostatné → 409 INVOICE_LOCKED, (3) `logAudit("faktura.update")`. POST: `logAudit("faktura.create")`. Frontend PATCHuje len platobné polia → UI nezlomené. Dodávateľ-snapshot commitnutý samostatne (eaa20bc). Overené: tsc, audit-all 20=20.
 **Súbor:** `src/app/api/faktury/route.ts` (PATCH r. 184-201, POST)
 **Problém:** PATCH dovolí prepísať akékoľvek pole vystavenej faktúry (suma, dátum, odberateľ) bez kontroly stavu a **bez `logAudit()`**. POST tiež neloguje. Snapshot dodávateľa (migr. 100) rieši len časť — hlavička faktúry sa dá prepísať.
 **Zákon:** Zák. 431/2002 § 8 (nemennosť účtovného záznamu), zák. 222/2004 § 71 (oprava len dobropisom/ťarchopisom).

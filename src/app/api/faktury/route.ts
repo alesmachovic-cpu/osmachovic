@@ -178,8 +178,23 @@ export async function POST(req: NextRequest) {
     faktura_id: created.id,
   });
 
+  // 🔒 F3: audit log pri vystavení faktúry (forenzný trail účtovného dokladu).
+  await logAudit({
+    action: "faktura.create",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: created.id,
+    target_type: "faktura",
+    detail: { cislo_faktury: cislo, suma_celkom: sumaCelkom },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json(created);
 }
+
+// Polia, ktoré sa smú meniť aj po vystavení faktúry (platobný stav + poznámka).
+// Všetko ostatné (suma, dátumy, odberateľ, položky, snapshoty, číslo) je
+// nemenné — oprava len cez storno + nová faktúra.
+const FAKTURA_PATCH_ALLOWED = new Set(["zaplatene", "datum_uhrady", "poznamka"]);
 
 export async function PATCH(req: NextRequest) {
   const auth = await requireUser(req, { strict: true });
@@ -189,6 +204,31 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const { id, ...rest } = body;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  // 🔒 Scope: faktúra musí patriť do firmy volajúceho (cross-tenant ochrana).
+  const scope = await getUserScope(auth.user.id);
+  if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+  const { data: existing } = await sb
+    .from("faktury")
+    .select("id, company_id, cislo_faktury")
+    .eq("id", id)
+    .maybeSingle();
+  if (!existing || existing.company_id !== scope.company_id) {
+    return NextResponse.json({ error: "Faktúra nenájdená" }, { status: 404 });
+  }
+
+  // 🔒 F3: vystavená faktúra je nemenný účtovný doklad (zákon o DPH 222/2004
+  // § 71-76, o účtovníctve 431/2002 § 8). Po vystavení sa smú meniť len
+  // platobné/poznámkové polia; oprava sumy/dátumu/odberateľa/položiek len cez
+  // storno + vystavenie novej faktúry.
+  const blocked = Object.keys(rest).filter(k => !FAKTURA_PATCH_ALLOWED.has(k));
+  if (blocked.length > 0) {
+    return NextResponse.json({
+      error: `Vystavená faktúra sa nedá upravovať (polia: ${blocked.join(", ")}). Oprava účtovného dokladu je možná len cez storno a vystavenie novej faktúry (zákon o DPH § 71, o účtovníctve § 8).`,
+      code: "INVOICE_LOCKED",
+    }, { status: 409 });
+  }
+
   // C4: XSS sanitize free-form fields
   const cleanRest = sanitizeFields(rest as Record<string, unknown>, [...SANITIZE_FIELDS]);
   const { data, error } = await sb.from("faktury").update(cleanRest).eq("id", id).select().single();
@@ -197,6 +237,16 @@ export async function PATCH(req: NextRequest) {
   if (rest.zaplatene !== undefined) {
     await sb.from("prehlad_zaznamy").update({ zaplatene: rest.zaplatene }).eq("faktura_id", id);
   }
+  // 🔒 F3: audit log každej zmeny faktúry.
+  await logAudit({
+    action: "faktura.update",
+    actor_id: auth.user.id,
+    actor_name: auth.user.name,
+    target_id: id,
+    target_type: "faktura",
+    detail: { cislo_faktury: existing.cislo_faktury, fields: Object.keys(cleanRest) },
+    ip_address: req.headers.get("x-forwarded-for") || undefined,
+  });
   return NextResponse.json(data);
 }
 
