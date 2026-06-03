@@ -148,7 +148,7 @@ async function main() {
     }
 
     // skórovanie polí
-    const scalarFields = Object.keys(expected).filter(k => k !== "majitelia");
+    const scalarFields = Object.keys(expected).filter(k => k !== "majitelia" && !k.startsWith("_"));
     const detail = [];
     let ok = 0;
     for (const k of scalarFields) {
