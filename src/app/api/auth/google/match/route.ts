@@ -46,31 +46,31 @@ export async function POST(req: NextRequest) {
   }
   const email = supabaseUser.user.email.toLowerCase();
 
-  const SELECT = "id, name, initials, role, company_id, totp_enabled_at";
+  // 2026-06-03: tolerant SELECT — prod DB (hokymscytscsewrpwdjf) zatiaľ nemá
+  // totp_* stĺpce (2FA migrácia ešte nebehala). Skús full SELECT; ak schema
+  // mismatch, fallback bez totp. Po DB migrácii (sql/migrations/2026-06-03-add-totp-columns.sql)
+  // ostane funkčný full path.
+  const SELECT_FULL = "id, name, initials, role, company_id, totp_enabled_at";
+  const SELECT_LEGACY = "id, name, initials, role, company_id";
+  type MatchedUser = { id: string; name: string; initials: string | null; role: string | null; company_id: string | null; totp_enabled_at?: string | null };
 
-  // Skús najprv login_email; ak nič, fallback na email. (`.or()` filter má problém
-  // s bodkami a @ v hodnote — parsuje ich ako oddeľovače cesty, preto chained query.)
-  type MatchedUser = { id: string; name: string; initials: string | null; role: string | null; company_id: string | null; totp_enabled_at: string | null };
-  let users: MatchedUser | null = null;
-  {
-    const { data, error } = await sb
-      .from("users")
-      .select(SELECT)
-      .ilike("login_email", email)
-      .limit(1)
-      .maybeSingle();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    users = data as typeof users;
+  async function lookup(byCol: "login_email" | "email"): Promise<MatchedUser | null> {
+    const { data, error } = await sb.from("users").select(SELECT_FULL).ilike(byCol, email).limit(1).maybeSingle();
+    if (!error) return data as MatchedUser | null;
+    if (error.code === "PGRST204" || /column .* does not exist|schema cache/i.test(error.message)) {
+      const r2 = await sb.from("users").select(SELECT_LEGACY).ilike(byCol, email).limit(1).maybeSingle();
+      if (r2.error) throw new Error(r2.error.message);
+      return r2.data as MatchedUser | null;
+    }
+    throw new Error(error.message);
   }
-  if (!users) {
-    const { data, error } = await sb
-      .from("users")
-      .select(SELECT)
-      .ilike("email", email)
-      .limit(1)
-      .maybeSingle();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    users = data as typeof users;
+
+  let users: MatchedUser | null = null;
+  try {
+    users = await lookup("login_email");
+    if (!users) users = await lookup("email");
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "lookup_failed" }, { status: 500 });
   }
   if (!users) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
