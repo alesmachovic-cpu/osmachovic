@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
+import { getUserScope } from "@/lib/scope";
 import { logAudit } from "@/lib/audit";
 import { requireReAuth } from "@/lib/auth/reAuth";
 
@@ -69,6 +70,17 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (getErr) return NextResponse.json({ error: getErr.message }, { status: 500 });
   if (!klient) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+
+  // 🔒 F1 (2026-06-03): super_admin je company-level — nesmie nezvratne vymazať
+  // klienta inej firmy. Platform_admin (cross-company) je výnimka. Cross-company
+  // → 404 (nepriznať existenciu).
+  if (auth.user.role !== "platform_admin") {
+    const scope = await getUserScope(auth.user.id);
+    if (!scope || klient.company_id !== scope.company_id) {
+      return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+    }
+  }
+
   if (klient.anonymized_at) {
     return NextResponse.json({ error: "Klient už bol anonymizovaný", anonymized_at: klient.anonymized_at }, { status: 409 });
   }

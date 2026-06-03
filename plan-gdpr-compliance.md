@@ -1,0 +1,113 @@
+# Plán — GDPR & právny compliance audit (RK Vianema)
+
+**Dátum auditu:** 2026-06-03
+**Audítori:** Compliance Officer (K. Bartošová) + Security Auditor (A. Vrabec), syntéza + verifikácia CEO.
+**Stav:** ANALÝZA HOTOVÁ — čaká sa na poradie implementácie.
+
+Toto je živý plán. Každý nález = budúci fix. Implementuje sa po schválení CEO, jeden po druhom, vždy s `audit-all.sh` pred commitom.
+
+---
+
+## 🚨 P0 — zákonné riziko HNEĎ (implementovať ako prvé)
+
+### F1 — Cross-tenant únik klientskych dokumentov (OP/LV/AML) — IDOR
+**Súbor:** `src/app/api/klient-dokumenty/route.ts` (GET/POST/PATCH/DELETE)
+**Stav:** ✅✅ **OPRAVENÉ 2026-06-03** (uncommitted). Všetky 4 metódy scopujú `company_id` (cross-company → 404), DELETE navyše `canEditRecord`. Root-cause proces: `audit-cross-tenant.sh` rozšírený o detské PII tabuľky (CHILD_PII_TABLES) — odhalil a opravený aj `gdpr/erasure` (super_admin mohol mazať klienta inej firmy → doplnený company guard). Overené: tsc čistý, audit-all 20=20 baseline (žiadna regresia).
+**Problém:** Endpoint používa service role (obchádza RLS) a nekontroluje `company_id` ani vlastníka. Ktokoľvek prihlásený zavolá `GET /api/klient-dokumenty?klientId=<cudzie-uuid>` → dostane **odšifrované** OP/LV/AML scany cudzieho klienta (aj inej firmy). `DELETE ?id=` zmaže cudzí dokument.
+**Zákon:** GDPR čl. 32(1)(b) + čl. 5(1)(f); osobitná kategória údajov (OP, AML).
+**Riziko:** Najcitlivejšia tabuľka v systéme. Insider alebo unesená session = stiahne všetky OP/AML scany firmy. Pokuta + ohlasovacia povinnosť.
+**Fix:** Pred query načítať klienta, overiť `klient.company_id === scope.company_id` a `canEditRecord(scope, klient.makler_id)` pri write. Doplniť do `audit-cross-tenant` checku.
+
+### F2 — PII tretích osôb (vlastníci z LV) posielané do US AI bez podkladu
+**Súbory:** `src/app/api/parse-lv/route.ts` (r. 130,145), `parse-doc/route.ts`, `ai-writer/route.ts`
+**Problém:** Do Anthropic/OpenAI/Gemini (USA) sa posiela **celý PDF base64** LV / znaleckého posudku / zmlúv = mená vlastníkov, dátumy narodenia, rodné čísla, adresy. Žiadna redakcia/pseudonymizácia. Sú to PII **cudzích osôb** (nie naši klienti, bez súhlasu). Subprocessor zoznam na `/bezpecnost` (r. 76-86) **neobsahuje OpenAI ani Gemini**, hoci sa reálne volajú.
+**Zákon:** GDPR čl. 6 (právny základ), čl. 9 (osobitná kategória – rodné číslo), čl. 28 (subprocessor), čl. 44+ (transfer mimo EÚ), čl. 13/14 (informačná povinnosť).
+**Riziko:** Aktívne pri každom parse-LV v náberovom flow. Bez DPA + transfer základu neobhájiteľné.
+**Fix:** (1) Doplniť OpenAI+Gemini do subprocessor tabuľky. (2) Server-side redakcia rodného čísla/mien pred odoslaním, kde use-case dovolí. (3) AI disclosure do privacy policy. (4) Overiť DPA + že API tier netrénuje na dátach (právne).
+
+### F3 — Faktúra po vystavení voľne meniteľná + bez audit logu
+**Súbor:** `src/app/api/faktury/route.ts` (PATCH r. 184-201, POST)
+**Problém:** PATCH dovolí prepísať akékoľvek pole vystavenej faktúry (suma, dátum, odberateľ) bez kontroly stavu a **bez `logAudit()`**. POST tiež neloguje. Snapshot dodávateľa (migr. 100) rieši len časť — hlavička faktúry sa dá prepísať.
+**Zákon:** Zák. 431/2002 § 8 (nemennosť účtovného záznamu), zák. 222/2004 § 71 (oprava len dobropisom/ťarchopisom).
+**Riziko:** Kontrola Finančnej správy → pokuta, dorovnanie DPH, žiadny trail kto menil.
+**Fix:** Po vystavení zamknúť PATCH (povoliť len `zaplatene`/`datum_uhrady`); ostatné opravy len storno + nová faktúra. `logAudit()` do POST aj PATCH.
+
+---
+
+## ⚠️ P1 — riešiť v rámci týždňov/mesiacov
+
+### F4 — GDPR export exportuje dáta makléra, nie klienta (právo na prístup nefunkčné)
+**Súbor:** `src/app/api/gdpr/export/route.ts` (r. 32-37 filtruje podľa `makler_id`/`user_id`)
+**Problém:** „Export všetkých údajov" vráti údaje makléra, nie subjektu. Žiadosť klienta o prístup (čl. 15) by sme nesplnili.
+**Zákon:** GDPR čl. 15 + čl. 20, zák. 18/2018 § 21.
+**Fix:** Prepísať export na vstup `klient_id` → exportovať klienta + nábery + obhliadky + dokumenty + udalosti + faktúry kde je odberateľom.
+
+### F5 — GDPR výmaz nemaže dokumenty v Google Drive
+**Súbory:** `src/app/api/gdpr/erasure/route.ts`, `src/lib/google.ts` (scope `drive.readonly`, r. 16)
+**Problém:** Erasure spraví cascade delete v DB + anonymizáciu, ale Drive sa nedotkne (grep `drive` = 0). OAuth scope je `readonly` → CRM technicky ani nemôže mazať. OP/LV scany ostávajú v Drive natrvalo → výmaz neúplný.
+**Zákon:** GDPR čl. 17.
+**Fix:** Buď (a) generovať TODO pre admina na zmazanie Drive priečinka + audit entry `drive_manual_delete_required`, alebo (b) rozšíriť scope na `drive.file` a mazať programaticky.
+
+### F6 — AML identifikácia nie je tvrdý blocker pred KZ + chýba evidencia
+**Súbor:** `src/lib/obchodStatus.ts` (r. 38-47)
+**Problém:** `allAmlDone = ulohy.filter(aml).every(done)` — na prázdnom poli `.every()` = `true` → obchod bez AML úloh preskočí rovno na `pred_podpisom_kz`. V schéme **chýbajú** polia `aml_check_at`, `kuv`, `pep`. `/aml-poucenie` je len verejný text, nie evidencia.
+**Zákon:** Zák. 297/2008 § 10-11 (identifikácia pri obchode >15 000 € — nehnuteľnosť vždy), § 5 (RK = povinná osoba). **Registrácia povinnej osoby deadline 31.8.2026.**
+**Fix:** Pridať AML evidenciu (identifikácia KUV, referencia OP scanu, dátum, PEP/sankčný check) + tvrdý blocker stavu KZ. Zaregistrovať Vianemu do 31.8.2026.
+
+### F7 — Faktúra PDF nezobrazuje základ dane a sadzbu DPH
+**Súbor:** `src/app/api/faktury/pdf/route.ts` (r. 306-307 — len „Celkom k úhrade")
+**Problém:** DPH sa počíta (`lib/dphRates`), ale na PDF chýba rozpis základ dane / sadzba / suma DPH.
+**Zákon:** Zák. 222/2004 § 74 ods. 1.
+**Fix:** Doplniť na PDF rozpis: základ dane / sadzba (15/19/23 %) / DPH / spolu. Overiť sadzbu od 1.1.2026 (23 %).
+
+### F8 — Audit log neloguje READ prístup k PII + pokrýva len ~33 % write operácií
+**Súbory:** `src/app/api/klienti/route.ts`, `klient-dokumenty/route.ts` (GET nelogujú)
+**Problém:** Loguje sa len write (29/87 súborov). Čítanie PII (zoznam klientov, dešifrovanie OP/LV scanu) sa neloguje → pri breachi nevieme dokázať rozsah dotknutých osôb.
+**Zákon:** GDPR čl. 5(2) accountability, čl. 33/34 (rozsah breachu).
+**Fix:** Logovať READ aspoň na `klient-dokumenty` GET (dešifrovanie OP/AML) a GDPR export. Batch-doplniť write audit na tabuľky s PII (cieľ 100 %).
+
+### F9 — Retention audit_log cron je nefunkčný (no-op konflikt s triggerom)
+**Súbory:** `src/app/api/cron/cleanup/route.ts` (r. 24), `supabase/migrations/080_audit_log_immutable.sql`
+**Problém:** Cron robí `DELETE` na `audit_log` po 2 rokoch, ale migr. 080 má `BEFORE DELETE RAISE EXCEPTION` → delete vždy zlyhá, cron ticho vráti `audit_log_cleaned: false`. Retention reálne nefunguje, log rastie donekonečna (IP, mená). Navyše 2 roky < zákonných 5 r. (AML) / 10 r. (DPH).
+**Zákon:** GDPR čl. 5(1)(e) minimalizácia vs. zák. 297/2008 § 11 (5 r.) / zák. 222/2004 § 76 (10 r.).
+**Fix:** Rozlíšiť typy logov — bezpečnostné/AML/účtovné archivovať 5/10 r., operatívne mazať po lehote cez kontrolovaný proces (nie cez delete čo trigger blokne). Alert pri zlyhaní cronu.
+
+---
+
+## 📋 P2 — roadmapa (nie urgentné)
+
+### F10 — Granulárny consent sa nezbiera pri klientovi
+`gdpr_consent` existuje len na `obhliadky`/`naberove_listy` (migr. 025). `klienti` ho nemá. Tabuľka `consents` existuje ale žiadny API ju nezapisuje. Žiadna granularita (spracovanie vs. marketing) ani evidencia odvolania.
+**Zákon:** GDPR čl. 6/7. **Fix:** pri klientovi zaznamenať právny základ; pre marketing samostatný granulárny súhlas + odvolanie.
+
+### F11 — Žiadny automatický výmaz/anonymizácia klientov po lehote
+Erasure je len manuálna. Žiadny cron na anonymizáciu PII po uplynutí účelu (napr. nezrealizovaný záujemca po X rokoch).
+**Zákon:** GDPR čl. 5(1)(e). **Fix:** definovať retention lehoty per kategória + cron na anonymizáciu.
+
+### F12 — Chýba breach notification playbook (72h)
+Žiadny proces „ak leak, čo do 72 h". `/bezpecnost` má placeholdery `[DOPLŇTE DÁTUM]`.
+**Zákon:** GDPR čl. 33/34. **Fix:** napísať playbook + doplniť reálne dátumy.
+
+### F13 — eKasa pre hotovostné platby
+Od 1.1.2026 RK eviduje hotovosť cez eKasu. Žiadna integrácia/policy.
+**Fix:** buď integrácia, alebo formálna policy „iba bezhotovostné platby" (jednoduchšie).
+
+### F14 — Nový zákon 170/2024 o realitnom sprostredkovaní — PRÁVNE OVERIŤ
+Účinný od 1.1.2025. Treba overiť či sprostredkovateľská/vyhradná zmluva + náberový list obsahujú nové povinné náležitosti: register sprostredkovateľov, informačné povinnosti, poistenie zodpovednosti, odborná spôsobilosť. Súbor: `src/app/api/vyhradna-zmluva/pdf/route.ts`.
+**Fix:** delegovať externému právnikovi na presné znenie, potom doplniť do generátorov zmlúv.
+
+---
+
+## TOP 5 NA OKAMŽITÚ IMPLEMENTÁCIU
+1. **F1** — cross-tenant IDOR na klient-dokumenty (verifikované, exploitovateľné teraz).
+2. **F2** — ošetriť PII do AI (subprocessor zoznam + redakcia + disclosure).
+3. **F3** — zamknúť faktúru po vystavení + audit log.
+4. **F4** — opraviť GDPR export na dáta klienta.
+5. **F6 + F9** — AML blocker pred KZ + oprava audit retention. (+ registrácia povinnej osoby do 31.8.2026.)
+
+## ZÁKONNÉ DEADLINY
+- **31.8.2026** — registrácia Vianema ako AML povinná osoba (novela 73/2026).
+- **1.1.2026** — DPH sadzba 23 %, eKasa pre hotovosť.
+
+## ČO UŽ FUNGUJE SPRÁVNE (nemeniť)
+Append-only audit log (migr. 080), AES-256-GCM šifrovanie dokumentov at-rest (`cryptoDocs.ts`), šifrované Google/TOTP tokeny, HSTS aktívny (`next.config.ts:39`), scope filtering na `klienti`/`obhliadky`/`nabery`, GDPR erasure cascade s re-auth, čisté PII v logoch, snapshot dodávateľa+odberateľa, DPH výpočet podľa dátumu.
