@@ -197,19 +197,20 @@ export async function POST(request: Request) {
     //   ho mohol vynechať v automatizovanom requeste (curl bez widgetu) a
     //   prešiel bez bot challenge. Teraz: ak je TURNSTILE_SECRET_KEY set,
     //   token JE POVINNÝ. Per-IP rate limit chráni proti distributed botnetu.
-    if (process.env.TURNSTILE_SECRET_KEY) {
-      if (!turnstileToken) {
-        await logAttempt(sb, ip, identifier, false);
-        return NextResponse.json({
-          error: "Captcha overenie je povinné. Obnov stránku a počkaj kým sa widget načíta.",
-          code: "TURNSTILE_REQUIRED",
-        }, { status: 403 });
-      }
+    //
+    // ⚠ 2026-06-03 TEMP SOFT-FAIL: production Turnstile site key
+    //   "0x4AAAAAADNt2x_biTBxcJDO" odmieta Cloudflare ("Invalid input for
+    //   parameter sitekey") → widget sa nevykreslí → brokers sa nemôžu
+    //   prihlásiť. Zmena: ak token chýba alebo neoveril, pustíme login ďalej
+    //   (per-IP rate limit + bcrypt password stále chráni). Treba ráno fixnúť
+    //   site key v Cloudflare Turnstile dashboard a vrátiť hard-fail.
+    if (process.env.TURNSTILE_SECRET_KEY && turnstileToken) {
       const ok = await verifyTurnstile(turnstileToken, ip);
       if (!ok) {
-        await logAttempt(sb, ip, identifier, false);
-        return NextResponse.json({ error: "Overenie Turnstile zlyhalo. Obnov stránku a skús znova." }, { status: 403 });
+        console.warn(`[login] turnstile verify failed (soft-fail mode) for ${identifier} from ${ip}`); // safe-log
       }
+    } else if (process.env.TURNSTILE_SECRET_KEY && !turnstileToken) {
+      console.warn(`[login] no turnstile token (soft-fail mode — broken site key) for ${identifier} from ${ip}`); // safe-log
     }
 
     // Nájdi usera
