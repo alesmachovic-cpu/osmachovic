@@ -40,6 +40,7 @@ Backend match v `/api/auth/login` (`src/app/api/auth/login/route.ts:217-222`) **
 | 2 | Email/password login → 403 "Captcha overenie je povinné" | Turnstile site key `0x4AAAAAADNt2x_biTBxcJDO` Cloudflare odmieta ("Invalid input for parameter sitekey") | `cbbee10` soft-fail captcha (verify ak je token, inak warn-only) |
 | 3 | Aj po úspešnom match endpoint → user späť na login form | `/api/users` failovalo 500 "column users.telefon does not exist" → AuthProvider.loadAccounts crash → user state never set | DB migrácia — `ALTER TABLE users ADD COLUMN telefon text` |
 | 4 | `/api/nabery` GET → 500 "column naberove_listy.makler_id does not exist" | Denormalized owner stĺpec nikdy nemigrovaný do prod | DB migrácia — `ALTER TABLE naberove_listy ADD COLUMN makler_id uuid` + backfill z klienti.makler_id (38 z 50 náberákov dostalo vlastníka) |
+| 5 | Super_admin (Aleš) videl iba SVOJICH klientov (22 z 62) na /klienti namiesto všetkých | UI default `filterMakler="mine"` hard-coded → useUserScope() je pri prvom rendere null → isAdmin=false → useState lazy init neprepol na "all" pre adminov | `1e09768` — useEffect ktorý detekuje `isAdmin` transition na true a prepne filterMakler "mine" → "all" RAZ (klienti, kupujuci, naber stránky) |
 
 ### End-to-end overenie po fixoch (live na vianema.amgd.sk)
 
