@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { assertFileSize, assertMime, ALLOWED_DOC_MIMES, UPLOAD_LIMITS } from "@/lib/uploadGuards";
+import { aiParseDisabled, AI_DISABLED_BODY } from "@/lib/aiFlag";
+import { logParseFailure } from "@/lib/parseFailure";
 
 export async function POST(req: NextRequest) {
   try {
     // 🚨 P1 fix: auth + size limit + MIME whitelist.
     const auth = await requireUser(req);
     if (auth.error) return auth.error;
+
+    // #8 kill-switch — keď je AI parsing vypnutý, vráť signál na manuálne vyplnenie.
+    if (aiParseDisabled()) return NextResponse.json(AI_DISABLED_BODY, { status: 503 });
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -63,6 +68,7 @@ export async function POST(req: NextRequest) {
       console.error("[parse-pdf] pdf-parse failed:", e);
     }
 
+    await logParseFailure({ source: "parse-pdf", error: "Claude OCR aj pdf-parse zlyhali", filename: file.name, doc_type: "pdf", actor_id: auth.user.id });
     return NextResponse.json({ error: "Nepodarilo sa prečítať PDF. Skúste skopírovať text z PDF a vložiť ho." }, { status: 500 });
   } catch (e) {
     console.error("[parse-pdf] Error:", e);

@@ -1,0 +1,17 @@
+LIST VLASTNICTVA c. 2451
+Okres: Bratislava V   Obec: BRATISLAVA-Petrzalka
+Katastralne uzemie: Petrzalka
+
+CAST A: MAJETKOVA PODSTATA
+Stavba supisne cislo 1234 na parcele c. 3360/15
+Byt c. 51, 5. poschodie, vchod 7
+Podlahova plocha bytu: 64,80 m2 (bez loggie)
+Loggia 4,20 m2   Pivnica 1,70 m2
+Dvojizbovy byt, panelovy dom, rok vystavby 1985
+
+CAST B: VLASTNICI
+Novak Jan, nar. 12.03.1978, podiel 1/2
+Novakova Eva, nar. 25.07.1980, podiel 1/2
+
+CAST C: TARCHY
+Zalozne pravo v prospech VUB banka a.s. (hypoteka)

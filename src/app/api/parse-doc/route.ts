@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { assertFileSize, assertMime, ALLOWED_DOC_MIMES, UPLOAD_LIMITS } from "@/lib/uploadGuards";
+import { aiParseDisabled, AI_DISABLED_BODY } from "@/lib/aiFlag";
+import { logParseFailure } from "@/lib/parseFailure";
 
 export const maxDuration = 300;
 export const runtime = "nodejs";
@@ -139,6 +141,9 @@ export async function POST(req: NextRequest) {
     const auth = await requireUser(req);
     if (auth.error) return auth.error;
 
+    // #8 kill-switch — keď je AI parsing vypnutý, vráť signál na manuálne vyplnenie.
+    if (aiParseDisabled()) return NextResponse.json(AI_DISABLED_BODY, { status: 503 });
+
     const ctype = req.headers.get("content-type") || "";
     let parts: Array<{ base64: string; mime: string }> = [];
     let filename = "document.pdf";
@@ -196,6 +201,7 @@ export async function POST(req: NextRequest) {
           if (clT.data && Object.keys(clT.data).length > 0) {
             return NextResponse.json({ ...clT.data, _ai: "claude-text" });
           }
+          await logParseFailure({ source: "parse-doc", error: `DOCX: ${clT.error || "empty"}`, filename, doc_type: "docx", actor_id: auth.user.id });
           return NextResponse.json({ error: `Claude DOCX: ${clT.error || "empty"}` }, { status: 500 });
         } catch (e) {
           return NextResponse.json({ error: `DOCX parsing zlyhal: ${String(e).slice(0,200)}` }, { status: 500 });
@@ -218,6 +224,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ...cl.data, _ai: "claude" });
     }
 
+    await logParseFailure({ source: "parse-doc", error: cl.error || "prázdna odpoveď", filename, doc_type: "pdf", actor_id: auth.user.id });
     return NextResponse.json({
       error: `AI nedokázalo spracovať dokument. ${cl.error || "prázdna odpoveď"}.`,
     }, { status: 500 });

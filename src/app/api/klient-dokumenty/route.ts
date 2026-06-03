@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
     nehnutelnost_id: body.nehnutelnost_id || null,
     name: body.name,
     type: body.type,
-    size: body.size,
+    size: body.size ?? 0,
     source: body.source,
     mime: body.mime,
   };
@@ -171,7 +171,21 @@ export async function POST(req: NextRequest) {
     .insert(payload)
     .select("id")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // 🔒 #6 race: unique index (migr. 101) zachytil súbežný duplikát —
+    // vráť existujúci záznam namiesto 500, aby paralelný upload nepadol.
+    if (error.code === "23505") {
+      const { data: dup } = await sb
+        .from("klient_dokumenty")
+        .select("id")
+        .eq("klient_id", klient_id)
+        .eq("name", body.name)
+        .eq("size", body.size ?? 0)
+        .maybeSingle();
+      if (dup?.id) return NextResponse.json({ id: dup.id });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   await logAudit({
     action: "klient_dokumenty.create",
     actor_id: auth.user.id,

@@ -1,0 +1,3 @@
+# Reálne dokumenty (najmä skeny s PII — OP/LV) NEpatria do gitu.
+# Commituj len syntetické .source.txt a .expected.json.
+*.pdf

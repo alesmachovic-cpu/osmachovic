@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { aiParseDisabled, AI_DISABLED_BODY } from "@/lib/aiFlag";
+import { logParseFailure } from "@/lib/parseFailure";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // Claude PDF reading môže trvať 30-50s
@@ -192,6 +194,8 @@ async function parseByClaude(text: string, system: string, pdfBase64?: string): 
 
 /* ══════ MAIN — výhradne Claude (PDF aj text), bez fallbacku ══════ */
 export async function POST(req: NextRequest) {
+  if (aiParseDisabled()) return NextResponse.json(AI_DISABLED_BODY, { status: 503 });
+
   const { lv_text, doc_type, pdf_base64 } = await req.json();
 
   if (!lv_text?.trim() && !pdf_base64) {
@@ -209,6 +213,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...result, _ai: "Claude", _docType: doc_type || "lv" });
   }
 
+  await logParseFailure({ source: "parse-lv", error: "Claude vrátil prázdny výsledok", doc_type: doc_type || "lv" });
   return NextResponse.json({
     error: `AI nedokázalo spracovať dokument. Skontroluj či je PDF čitateľné a či obsahuje text/sken listu vlastníctva.`,
   }, { status: 500 });

@@ -24,8 +24,8 @@ Toto je živý plán. Každý nález = budúci fix. Implementuje sa po schválen
 - Model: `claude-haiku-4-5-20251001`. SDK 0.96.0 podporuje document bloky (overené tsc).
 - `/bezpecnost`: disclosure spresnený — klientske dokumenty výhradne Anthropic; OpenAI/Gemini ostávajú pre copywriter + analýzu trhu/okolia (bez identifikačných dokumentov klientov).
 - **Minimalizácia netreba** — CEO potvrdil: všetci vlastníci na LV sú štandardne naši predávajúci klienti (nepredáva sa len časť nehnuteľnosti), spracúvame ich legitímne na základe zmluvy.
-**Overené:** tsc čistý, PII routes bez Gemini/OpenAI, audit-all 20=20 (žiadna regresia).
-**Zostáva mimo kódu:** podpísať DPA s Anthropicom (ak ešte nie je); živý test parsovania (platený Claude call — čaká na CEO súhlas).
+**Overené:** tsc čistý, PII routes bez Gemini/OpenAI, audit-all 20=20. ✅ ŽIVÝ TEST na dev.amgd.sk PREŠIEL (2026-06-03) — Claude cez document blok presne vytiahol všetky polia z LV PDF vrátane vlastníkov s dátumami narodenia, `_ai:"Claude"` potvrdený, 5,4s. Commit `5de4e0c` na dev.
+**Zostáva mimo kódu:** podpísať DPA s Anthropicom (ak ešte nie je); CEO potvrdiť presnosť na 1 reálnom (skenovanom) LV v appke.
 **Pozn. (nový nález mimo F2):** `parse-lv` nemá `requireUser()` guard — anonymný útočník môže páliť náš Claude quota + posielať ľubovoľné PDF. Pridať do plánu (P1, cost/abuse).
 **Súbory:** `parse-lv/route.ts`, `parse-doc/route.ts`, `parse-pdf/route.ts`, `src/app/(legal)/bezpecnost/page.tsx`
 **Problém:** Do Anthropic/OpenAI/Gemini (USA) sa posiela **celý PDF base64** LV / znaleckého posudku / zmlúv = mená vlastníkov, dátumy narodenia, rodné čísla, adresy. Žiadna redakcia/pseudonymizácia. Sú to PII **cudzích osôb** (nie naši klienti, bez súhlasu). Subprocessor zoznam na `/bezpecnost` (r. 76-86) **neobsahuje OpenAI ani Gemini**, hoci sa reálne volajú.
@@ -105,6 +105,15 @@ Od 1.1.2026 RK eviduje hotovosť cez eKasu. Žiadna integrácia/policy.
 **Fix:** delegovať externému právnikovi na presné znenie, potom doplniť do generátorov zmlúv.
 
 ---
+
+## QA hardening (po review F2, 2026-06-03)
+Po ostrej QA spätnej väzbe na testovací checklist doplnené:
+- **Regresný harness** `tools/parse-regression/` — gold-standard fixtúry, skórovanie presnosti, P50/P95 latencia, prah ACCURACY_MIN 90 % + p95<30s. Beží proti dev. Podporuje aj docx (multipart, AUTH_COOKIE).
+- **#6 race condition** — klient_dokumenty: unique index (migr. 101) + 23505 catch v POST. Real bug fix.
+- **#8 kill-switch** — `AI_PARSE_ENABLED=false` (env) vypne AI parsing → manuálne vyplnenie. `src/lib/aiFlag.ts`, zapojené v 3 parse routes.
+- **#4 failure UX + review fronta** — tabuľka `parse_failures` (migr. 102) + `src/lib/parseFailure.ts` logovanie zlyhaní; vedené hlášky v InzeratForm (dokument je uložený, vyplň ručne).
+- **#5 authz test** `tools/security/klient-dokumenty-authz.mjs` — request-level cross-company izolácia (čaká na 2 cookies od CEO).
+- **SLA:** p95 < 30s (prísnejšie). UI progres počítadlo stránok = drobný follow-up.
 
 ## TOP 5 NA OKAMŽITÚ IMPLEMENTÁCIU
 1. **F1** — cross-tenant IDOR na klient-dokumenty (verifikované, exploitovateľné teraz).
