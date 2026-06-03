@@ -91,10 +91,12 @@ Toto je živý plán. Každý nález = budúci fix. Implementuje sa po schválen
 ## 📋 P2 — roadmapa (nie urgentné)
 
 ### F10 — Granulárny consent sa nezbiera pri klientovi
+**Stav:** ✅ OPRAVENÉ 2026-06-03. Nové `GET/POST/PATCH /api/consents` zapája existujúcu `consents` tabuľku (ledger): udelenie súhlasu (purpose napr. "marketing", s proof_ip/user_agent), odvolanie (čl.7 ods.3 → withdrawn_at), zoznam. Scoped cez klienta na company_id, audit `consent.granted`/`consent.withdrawn`. Core spracovanie (predávajúci/kupujúci) je na zmluve — súhlas len pre marketing. Follow-up: UI checkbox v NewKlientModal + zobrazenie/odvolanie na detaile klienta.
 `gdpr_consent` existuje len na `obhliadky`/`naberove_listy` (migr. 025). `klienti` ho nemá. Tabuľka `consents` existuje ale žiadny API ju nezapisuje. Žiadna granularita (spracovanie vs. marketing) ani evidencia odvolania.
 **Zákon:** GDPR čl. 6/7. **Fix:** pri klientovi zaznamenať právny základ; pre marketing samostatný granulárny súhlas + odvolanie.
 
 ### F11 — Žiadny automatický výmaz/anonymizácia klientov po lehote
+**Stav:** ✅ OPRAVENÉ 2026-06-03. Nový cron `GET /api/cron/retention-anonymize`: anonymizuje PII leadov, ktorí sa NIKDY nestali obchodom a sú >RETENTION_YEARS (default 5) neaktívni. **Bezpečnosť:** DEFAULT = DRY-RUN (len report kandidátov, žiadna zmena); reálne anonymizuje len pri `RETENTION_ANONYMIZE_ENABLED=true`. Vylučuje klientov v obchodoch (zákonná retencia) + už anonymizovaných. Audit `klient.retention_anonymized`. **Nie je naplánovaný vo vercel.json** — spustí sa až keď CEO nastaví retention politiku. Follow-up: po overení politiky zapnúť + naplánovať.
 Erasure je len manuálna. Žiadny cron na anonymizáciu PII po uplynutí účelu (napr. nezrealizovaný záujemca po X rokoch).
 **Zákon:** GDPR čl. 5(1)(e). **Fix:** definovať retention lehoty per kategória + cron na anonymizáciu.
 
