@@ -51,7 +51,8 @@ OTP + IP + timestamp = jednoduchý elektronický podpis (eIDAS čl. 3/10) — pl
 ### G8 — RoPA (záznamy o spracovateľských činnostiach, čl. 30) chýba
 Povinný interný register (účely, kategórie, príjemcovia, lehoty, prenosy). Stavebné bloky rozhádzané (retention, subprocesori) — skonsolidovať. **Zadanie (CEO/Compliance):** vytvoriť RoPA dokument.
 
-### G9 — Breach register (tabuľka) chýba
+### G9 — Breach register (tabuľka) chýba ✅ OPRAVENÉ 2026-06-04
+**Hotové:** migr. 108 `breach_register` (čl. 33 ods. 5) + `/api/gdpr/breach` (admin POST/GET). Tabuľka otestovaná (insert/select/delete). Follow-up: admin UI na zobrazenie. RLS service-role only.
 Playbook existuje, ale evidencia incidentov (čl. 33 ods. 5) ako tabuľka nie. **Zadanie (DB):** tabuľka `breach_register` + určená zodpovedná osoba.
 
 ### G10 — Privacy policy nepokrýva scrapované tretie osoby
@@ -64,7 +65,7 @@ Playbook existuje, ale evidencia incidentov (čl. 33 ods. 5) ako tabuľka nie. *
 `faktury/nova/page.tsx:181` `<option>Hotovosť</option>`. Otvára hotovostný príjem mimo evidencie (AML riziko). `prehlad` write nemá logAudit. **Zadanie (Finance):** odstrániť Hotovosť option, doplniť logAudit na prehlad.
 
 ### G13 — Práva subjektu neúplné: obmedzenie (18) + námietka (21)
-Žiadny mechanizmus „freeze" spracovania ani námietky (najmä voči monitor oprávnenému záujmu). **Zadanie (DB/Klienti):** doplniť.
+**Stav:** 🟡 ČIASTOČNE. Podanie žiadosti UŽ funguje — `/api/gdpr/request` prijíma typy `restriction` aj `objection` (zaeviduje, admin spracuje do 30 dní = legálne). **Odložené (vedome, nie dead-scaffolding):** technické VYNÚTENIE „freeze" (flag enforcovaný pri každom čítaní) je veľký zásah; pre malú RK je manuálne spracovanie žiadosti dostatočné. Flag column dodať až s reálnym enforcement.
 
 ### G14 — GDPR erasure musí vynechať faktúry (overiť cascade)
 Faktúry = 10r retencia (prebíja výmaz). Overiť že cascade delete klienta nezmaže `faktury`. **Zadanie (DB):** overenie.
@@ -79,8 +80,9 @@ Faktúry = 10r retencia (prebíja výmaz). Overiť že cascade delete klienta ne
 - **G16** ⚠️ NEMENIŤ NASLEPO: odkaz „108/2024" v zmluve (r. 308) NIE je jasná chyba — **108/2024 Z.z. je NOVÝ zákon o ochrane spotrebiteľa (účinný 7/2024)**, ktorý nahradil 102/2014. Zmena na 102/2014 by zaviedla odkaz na starý zákon. **Treba právne overiť** správny zákon + §, neopravovať naslepo.
 - **G17** Provízie: DPH-status makléra (platiteľ?), evidencia výplaty provízie.
 - **G18** AML hranica: text `aml-poucenie` 10 000 € vs interný proces 15K — zladiť.
-- **G19** Consent-refresh mail: one-click unsubscribe link + odkaz na privacy policy.
-- **G20** Obchod: pole „spôsob úschovy kúpnej ceny" (notár/advokát/banka) — AML stopa peňazí.
+- **G19** ✅ OPRAVENÉ 2026-06-04: consent-refresh mail má one-click unsubscribe (`/api/consent-unsubscribe`, HMAC token, odvolá súhlas) + odkaz na /gdpr. (`G23` cookie-tracker audit check pridaný do audit-all.)
+- **G20** 🟡 ODLOŽENÉ (vedome): pole „spôsob úschovy" je AML-relevantné, ale samotný stĺpec bez UI poľa v obchode = mŕtve lešenie. Dorobiť spolu s UI v ObchodTab (zadanie pre obchody doménu).
+- **G23** ✅ OPRAVENÉ 2026-06-04: `scripts/audit-cookie-trackers.sh` (auto-beží v audit-all) — fail ak pribudne tracker bez zapnutého cookie banneru.
 - **G21** Reverse charge cezhranične — dokumentovať ako známe obmedzenie.
 - **G22** DPH `dphRates.ts`: položka 1993 rate kozmetická chyba.
 - **G23** Cookie audit check: fail ak pribudne `gtag/fbq/...` bez zapnutia banneru.

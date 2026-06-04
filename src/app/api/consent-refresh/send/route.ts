@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
   const results = await Promise.allSettled(list.map(async (r) => {
     const token = signConsentToken(r.id, PURPOSE, 60);
     const link = `${origin}/api/consent-confirm?token=${encodeURIComponent(token)}`;
+    const unsubLink = `${origin}/api/consent-unsubscribe?token=${encodeURIComponent(token)}`;
     const html = `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;color:#1d1d1f">
 <p>Dobrý deň${r.meno ? `, ${String(r.meno).split(" ")[0]}` : ""},</p>
 <p>prajeme Vám krásne sviatky! 🎄</p>
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
 <p style="text-align:center;margin:28px 0">
 <a href="${link}" style="background:#1d1d1f;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600;display:inline-block">Áno, chcem zostať v kontakte</a>
 </p>
-<p style="font-size:12px;color:#86868b">Vianema s.r.o. · Tento e-mail ste dostali ako náš klient. Ak si neželáte ďalšiu komunikáciu, odpovedzte „ODHLÁSIŤ".</p>
+<p style="font-size:12px;color:#86868b">Vianema s.r.o. · Tento e-mail ste dostali ako náš klient. · <a href="${unsubLink}" style="color:#86868b">Odhlásiť sa z marketingu</a> · <a href="${origin}/gdpr" style="color:#86868b">Ochrana údajov</a></p>
 </div>`;
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
