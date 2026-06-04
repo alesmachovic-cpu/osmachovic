@@ -18,7 +18,8 @@ Legenda vlastníkov: **DB/Klienti** (Petra/klienti-owner) · **Security** (secur
 **Zákon:** GDPR čl. 17 (výmaz), čl. 15/20 (export), § 78 zák. 18/2018 (rodné číslo).
 **Zadanie (DB/Klienti):** erasure doplniť o anonymizáciu/zmazanie `vyhradne_zmluvy` (pozor na prípadnú retenciu zmlúv); export doplniť o `vyhradne_zmluvy` + `consents`. **Compliance-critical → CEO červené upozornenie pred zmenou.**
 
-### G2 — Anon RLS leak na monitor snapshots (PII súkromníkov)
+### G2 — Anon RLS leak na monitor snapshots (PII súkromníkov) ✅ OPRAVENÉ 2026-06-04
+**Hotové:** migr. 106 dropla `anon_read_monitor_snapshots` + `anon_read_monitor_disap`. Čítanie ide cez API (service_role) — anon policy bola zbytočný leak. Overené: audit-anon-rls ✓, audit-all 20=20.
 **Overené:** migr. 035 — `anon_read_monitor_snapshots` aj `anon_read_monitor_disap` majú `FOR SELECT TO anon USING (true)`. Snapshot JSONB obsahuje `predajca_meno`/`predajca_telefon`. → PII čitateľné **anonymným** kľúčom. Porušuje aj CLAUDE.md („Žiadny USING (true) FOR anon").
 **Zadanie (Security):** zrušiť anon SELECT policy, povoliť len `authenticated`/`service_role`. Rýchly RLS fix, netreba rozhodnutie CEO.
 
