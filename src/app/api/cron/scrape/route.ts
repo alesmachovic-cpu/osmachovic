@@ -557,7 +557,6 @@ async function processFilter(
         predajca_typ_method: cls?.method === "v2" ? (cls.signals.length > 0 ? "rule_v2" : null) : null,
         poschodie: listing.poschodie ?? null,
         stav: listing.stav ?? null,
-        raw_data: listing.raw_data || {},
         last_seen_at: new Date().toISOString(),
         is_active: true,
       };
