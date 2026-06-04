@@ -26,12 +26,15 @@ export async function GET(req: NextRequest) {
       .maybeSingle();
     if (!klient) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
 
-    const [nabery, obhliadky, dokumenty, udalosti] = await Promise.all([
+    const [nabery, obhliadky, dokumenty, udalosti, zmluvy, suhlasy] = await Promise.all([
       sb.from("naberove_listy").select("*").eq("klient_id", klientId),
       sb.from("obhliadky").select("*").or(`predavajuci_klient_id.eq.${klientId},kupujuci_klient_id.eq.${klientId}`),
       // dokumenty: len metadata — NIE šifrované bloby (OP/LV scany) v JSON exporte
       sb.from("klient_dokumenty").select("id, name, type, mime, size, created_at").eq("klient_id", klientId),
       sb.from("klient_udalosti").select("*").eq("klient_id", klientId),
+      // G1: vyhradne_zmluvy obsahujú rodné číslo + PII vlastníkov — patria do exportu.
+      sb.from("vyhradne_zmluvy").select("*").eq("klient_id", klientId),
+      sb.from("consents").select("id, purpose, granted, granted_at, withdrawn_at, source, created_at").eq("klient_id", klientId),
     ]);
 
     await sb.from("audit_log").insert({
@@ -51,6 +54,8 @@ export async function GET(req: NextRequest) {
       obhliadky: obhliadky.data ?? [],
       dokumenty: dokumenty.data ?? [],
       udalosti: udalosti.data ?? [],
+      vyhradne_zmluvy: zmluvy.data ?? [],
+      suhlasy: suhlasy.data ?? [],
       note: "Export osobných údajov dotknutej osoby podľa čl. 15 a 20 GDPR. Skenované dokumenty (OP, LV) sú uvedené len ako zoznam — kópie poskytneme na vyžiadanie.",
     });
   }

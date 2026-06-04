@@ -159,6 +159,19 @@ export async function POST(req: NextRequest) {
   const d5 = await sb.from("klient_udalosti").delete().eq("klient_id", klientId);
   if (d5.error) errors.push(`udalosti: ${d5.error.message}`); else counts.udalosti = d5.count ?? 0;
 
+  // 🔒 G1: vyhradne_zmluvy.majitelia obsahuje rodné číslo + PII vlastníkov.
+  // Zmluvu NEmažeme (môže mať retenciu pre právne nároky), ale anonymizujeme
+  // PII v majitelia (zmaže rodné číslo, meno, bydlisko, kontakt) — GDPR čl. 17
+  // + § 78 zák. 18/2018 (rodné číslo). Údaje o nehnuteľnosti + zmluva ostávajú.
+  const { data: zmluvy } = await sb.from("vyhradne_zmluvy").select("id, majitelia").eq("klient_id", klientId);
+  for (const z of zmluvy ?? []) {
+    const pocet = Array.isArray(z.majitelia) ? z.majitelia.length : 0;
+    const anon = Array.from({ length: pocet || 1 }, () => ({ anonymized: true, anonymized_at: new Date().toISOString() }));
+    const { error: vzErr } = await sb.from("vyhradne_zmluvy").update({ majitelia: anon }).eq("id", z.id);
+    if (vzErr) errors.push(`vyhradne_zmluvy ${z.id}: ${vzErr.message}`);
+  }
+  counts.vyhradne_zmluvy_anonymizovane = (zmluvy ?? []).length;
+
   // 5) Anonymizuj klient row (nemazať — môže byť referenced v faktúrach pre 10y retention)
   const { error: anonErr } = await sb.from("klienti").update({
     meno: "[anonymized — GDPR erasure]",

@@ -12,7 +12,8 @@ Legenda vlastníkov: **DB/Klienti** (Petra/klienti-owner) · **Security** (secur
 
 ## 🔴 P0 — zákonné riziko, riešiť hneď
 
-### G1 — Rodné číslo prežíva GDPR výmaz + chýba v exporte
+### G1 — Rodné číslo prežíva GDPR výmaz + chýba v exporte ✅ OPRAVENÉ 2026-06-04
+**Hotové:** erasure teraz anonymizuje `vyhradne_zmluvy.majitelia` (zmaže RČ/meno/bydlisko/kontakt, zmluvu-škrupinu + nehnuteľnosť nechá); export doplnený o `vyhradne_zmluvy` + `consents`. Overené: tsc, audit-all 20=20.
 **Overené:** `vyhradne_zmluvy.majitelia` (JSONB, migr. 068) ukladá `{meno, datum_narodenia, rc, bydlisko...}`. `gdpr/erasure/route.ts` sa `vyhradne_zmluvy` **vôbec nedotýka** (0 výskytov) a klient sa len anonymizuje (nie DELETE → cascade sa nespustí). RČ + meno + adresa vlastníkov ostanú po výmaze. Chýba aj v `gdpr/export`.
 **Zákon:** GDPR čl. 17 (výmaz), čl. 15/20 (export), § 78 zák. 18/2018 (rodné číslo).
 **Zadanie (DB/Klienti):** erasure doplniť o anonymizáciu/zmazanie `vyhradne_zmluvy` (pozor na prípadnú retenciu zmlúv); export doplniť o `vyhradne_zmluvy` + `consents`. **Compliance-critical → CEO červené upozornenie pred zmenou.**
