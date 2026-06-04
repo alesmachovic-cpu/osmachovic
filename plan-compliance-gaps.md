@@ -43,7 +43,8 @@ Legenda vlastníkov: **DB/Klienti** (Petra/klienti-owner) · **Security** (secur
 ### G6 — Poistenie zodpovednosti verejne sľúbené, systém needviduje
 VOP (bod 4) + etický kódex tvrdia poistenie; `firma_info.poistovna` prázdne, nikam sa nevkladá. **Rovnaký typ nepravdy ako odstránený „Penetračné testy Q3".** **Zadanie:** zaevidovať reálnu poistku, alebo odstrániť verejný sľub. **+ regression check: žiadne verejné tvrdenie o licencii/poistení/členstve bez naplneného `firma_info` poľa.**
 
-### G7 — E-podpis označený „právne záväzný" bez uvedenia limitov
+### G7 — E-podpis označený „právne záväzný" bez uvedenia limitov ✅ OPRAVENÉ 2026-06-04
+**Hotové:** text v zmluve PDF zmenený na „jednoduchý elektronický podpis (OTP + časová pečiatka + IP)" + dodatok že pri listinách vyžadujúcich úradné overenie (KZ, vklad) nenahradza úradné osvedčenie. (OTP metadata už zmluva obsahovala.) Follow-up: OTP metadata aj do obhliadkového PDF (drobnosť). Overené: tsc.
 OTP + IP + timestamp = jednoduchý elektronický podpis (eIDAS čl. 3/10) — platný, ale PDF zmluvy tvrdí „právne záväzný" bez uvedenia že KZ vyžaduje úradné overenie. Obhliadkové PDF navyše nevypisuje OTP metadata. **Zadanie (Náberáky):** upraviť text (jednoduchý e-podpis + limity), doplniť OTP metadata do obhliadkového PDF.
 
 ### G8 — RoPA (záznamy o spracovateľských činnostiach, čl. 30) chýba
@@ -74,7 +75,7 @@ Faktúry = 10r retencia (prebíja výmaz). Overiť že cascade delete klienta ne
 
 ## 🟡 P2 — roadmapa
 
-- **G16** Chybný odkaz „108/2024" → 102/2014 v zmluve (`vyhradna-zmluva/pdf` r. 308).
+- **G16** ⚠️ NEMENIŤ NASLEPO: odkaz „108/2024" v zmluve (r. 308) NIE je jasná chyba — **108/2024 Z.z. je NOVÝ zákon o ochrane spotrebiteľa (účinný 7/2024)**, ktorý nahradil 102/2014. Zmena na 102/2014 by zaviedla odkaz na starý zákon. **Treba právne overiť** správny zákon + §, neopravovať naslepo.
 - **G17** Provízie: DPH-status makléra (platiteľ?), evidencia výplaty provízie.
 - **G18** AML hranica: text `aml-poucenie` 10 000 € vs interný proces 15K — zladiť.
 - **G19** Consent-refresh mail: one-click unsubscribe link + odkaz na privacy policy.
