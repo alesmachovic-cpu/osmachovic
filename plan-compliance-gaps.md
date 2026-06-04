@@ -40,7 +40,8 @@ Legenda vlastníkov: **DB/Klienti** (Petra/klienti-owner) · **Security** (secur
 
 ## 🟠 P1 — riešiť v rámci týždňov
 
-### G6 — Poistenie zodpovednosti verejne sľúbené, systém needviduje
+### G6 — Poistenie zodpovednosti verejne sľúbené, systém needviduje ✅ OPRAVENÉ 2026-06-04
+**Hotové:** etický kódex + obchodné podmienky prevedené na async + `getFirmaInfo` → poistenie sa zobrazí **len keď je `firma_info.poistovna` vyplnené** (data-driven, ako už robí o-nas). Keď CEO doplní reálnu poistku, automaticky sa ukáže; pokým je prázdne, žiadne nepravdivé tvrdenie. Overené: tsc 0 chýb, audit-all 20=20. **Pozn.: zákon 170/2024 môže poistenie pre RK vyžadovať — over u právnika (G5).**
 VOP (bod 4) + etický kódex tvrdia poistenie; `firma_info.poistovna` prázdne, nikam sa nevkladá. **Rovnaký typ nepravdy ako odstránený „Penetračné testy Q3".** **Zadanie:** zaevidovať reálnu poistku, alebo odstrániť verejný sľub. **+ regression check: žiadne verejné tvrdenie o licencii/poistení/členstve bez naplneného `firma_info` poľa.**
 
 ### G7 — E-podpis označený „právne záväzný" bez uvedenia limitov ✅ OPRAVENÉ 2026-06-04
