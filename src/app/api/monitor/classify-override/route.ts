@@ -26,10 +26,11 @@ export async function POST(req: NextRequest) {
 
   const sb = getSupabaseAdmin();
 
-  // 1) Načítaj aktuálny inzerát
+  // 1) Načítaj aktuálny inzerát (bez PII — GDPR data-min: meno/telefón/popis
+  //    sa už neukladajú, takže nie sú k dispozícii ani pre override).
   const { data: row, error: fetchErr } = await sb
     .from("monitor_inzeraty")
-    .select("id, portal, external_id, predajca_meno, predajca_telefon, popis")
+    .select("id, portal, external_id")
     .eq("id", inzeratId)
     .maybeSingle();
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
@@ -55,65 +56,13 @@ export async function POST(req: NextRequest) {
   }
   if (updRes.error) return NextResponse.json({ error: updRes.error.message }, { status: 500 });
 
-  // 3) Pridaj do rk_directory pre training (silentne ignoruj duplikáty cez UNIQUE constraint)
-  const dirRows: Array<Record<string, unknown>> = [];
-  if (row.predajca_telefon) {
-    dirRows.push({
-      telefon: row.predajca_telefon, typ, pridal_user_id: auth.user.id, poznamka: body.poznamka || null,
-    });
-  }
-  if (row.predajca_meno) {
-    dirRows.push({
-      meno: row.predajca_meno, typ, pridal_user_id: auth.user.id, poznamka: body.poznamka || null,
-    });
-  }
-  // Extract domain from popis
-  const domainMatch = (row.popis || "").match(/[a-z0-9._%+-]+@([a-z0-9.-]+\.[a-z]{2,})/i);
-  if (domainMatch) {
-    dirRows.push({
-      email_domain: domainMatch[1].toLowerCase(), typ, pridal_user_id: auth.user.id, poznamka: body.poznamka || null,
-    });
-  }
-  let dirAdded = 0;
-  let dirTableMissing = false;
-  if (dirRows.length > 0) {
-    // Insertujeme po jednom — UNIQUE constraints na (telefon,typ) a (email_domain,typ)
-    // môžu duplikovať, ignorujeme chyby per-row.
-    for (const r of dirRows) {
-      const { error } = await sb.from("rk_directory").insert(r);
-      if (!error) {
-        dirAdded++;
-      } else if (/relation "rk_directory" does not exist|Could not find the table/i.test(error.message)) {
-        dirTableMissing = true;
-        break; // tabuľka neexistuje (mig 041 nie je aplikovaná)
-      }
-      // 23505 = unique violation, ignorujeme — chytí sa per-row
-    }
-  }
-
-  // 4) Spočítaj koľko ďalších inzerátov by sa mohlo preklasifikovať vďaka
-  //    novému rk_directory záznamu (informačný count pre UI).
-  let cascadeCount = 0;
-  if (row.predajca_telefon) {
-    const { count } = await sb
-      .from("monitor_inzeraty")
-      .select("id", { count: "exact", head: true })
-      .eq("predajca_telefon", row.predajca_telefon)
-      .neq("id", inzeratId);
-    cascadeCount = count || 0;
-  }
-
+  // GDPR data-min: do rk_directory už NEUKLADÁME meno/telefón scrapnutých osôb.
+  // Override sa aplikuje len na tento konkrétny inzerát (predajca_typ_override),
+  // ktorý má pri ďalšom scrape behu prednosť pred algoritmom.
   return NextResponse.json({
     ok: true,
     inzerat_id: inzeratId,
     new_typ: typ,
-    rk_directory_added: dirAdded,
-    rk_directory_missing: dirTableMissing,
-    cascade_count: cascadeCount,
-    message: dirTableMissing
-      ? "Override zaznamenaný (rk_directory tabuľka ešte nie je vytvorená — spusť migráciu 041)."
-      : cascadeCount > 0
-      ? `Override zaznamenaný. ${cascadeCount} ďalších inzerátov sa pri ďalšom scrape preklasifikuje.`
-      : "Override zaznamenaný.",
+    message: "Override zaznamenaný pre tento inzerát.",
   });
 }

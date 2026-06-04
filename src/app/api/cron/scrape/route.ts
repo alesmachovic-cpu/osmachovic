@@ -14,6 +14,7 @@ import {
 } from "@/lib/monitor";
 import { classify, toLegacyDbEnum, type ClassifierResult, type ClassifierDbContext } from "@/lib/monitor/classifier";
 import type { ScrapedInzerat, MonitorFilter, ScrapeResult } from "@/lib/monitor";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 export const maxDuration = 30; // Vercel hobby limit
@@ -115,6 +116,22 @@ function matchesFilter(listing: ScrapedInzerat, filter: MonitorFilter): boolean 
   }
 
   return true;
+}
+
+/**
+ * Poskladá nadpis inzerátu z FAKTOV o objekte — nie z pôvodného titulku
+ * portálu (ten môže obsahovať meno predajcu / RK značku / kontakt).
+ * GDPR data-min: do DB ukladáme len neosobný, fakticky odvodený nadpis.
+ * Napr. "Byt · 2-izb · Bratislava-Petržalka · 149 900 €".
+ */
+const TYP_LABEL: Record<string, string> = { byt: "Byt", dom: "Dom", pozemok: "Pozemok", iny: "Nehnuteľnosť" };
+function buildNazovZFaktov(l: ScrapedInzerat): string {
+  const parts: string[] = [TYP_LABEL[l.typ || ""] || "Nehnuteľnosť"];
+  if (l.izby) parts.push(`${l.izby}-izb`);
+  if (l.plocha) parts.push(`${l.plocha} m²`);
+  if (l.lokalita) parts.push(l.lokalita);
+  if (l.cena) parts.push(`${l.cena.toLocaleString("sk-SK")} €`);
+  return parts.join(" · ");
 }
 
 export async function GET(request: Request) {
@@ -220,6 +237,15 @@ export async function GET(request: Request) {
     const totalNew = results.reduce((s, r) => s + r.new_count, 0);
     const totalFound = results.reduce((s, r) => s + r.total_found, 0);
 
+    // Audit trail behu scrape (GDPR — evidencia spracúvania). Bez PII.
+    await logAudit({
+      action: "monitor.scrape",
+      actor_id: null,
+      actor_name: isInternal ? "monitor/manual" : "cron/scrape",
+      target_type: "monitor_inzeraty",
+      detail: { filters: results.length, total_found: totalFound, new: totalNew },
+    });
+
     return NextResponse.json({
       message: `Spracované ${results.length} filtre: ${totalFound} inzerátov, ${totalNew} nových`,
       duration_ms: Date.now() - startTime,
@@ -306,7 +332,7 @@ async function processFilter(
       const externalIds = nehnListings.map((l) => l.external_id);
       const { data: existing } = await sb
         .from("monitor_inzeraty")
-        .select("external_id, predajca_typ, predajca_meno")
+        .select("external_id, predajca_typ")
         .eq("portal", "nehnutelnosti.sk")
         .in("external_id", externalIds);
 
@@ -342,7 +368,6 @@ async function processFilter(
         const e = existingMap.get(listing.external_id);
         if (e && e.predajca_typ) {
           listing.predajca_typ = e.predajca_typ as typeof listing.predajca_typ;
-          if (e.predajca_meno) listing.predajca_meno = e.predajca_meno as string;
         }
       }
     }
@@ -396,36 +421,16 @@ async function processFilter(
     //     existujúci predajca_typ_override — ten má prednosť pred algoritmom.
     const classifierResults = new Map<string, ClassifierResult>();
     if (allListings.length > 0) {
-      // Batch fetch phone counts za 30 dni
-      const phones = Array.from(new Set(allListings.map(l => l.predajca_telefon).filter(Boolean) as string[]));
-      const names = Array.from(new Set(allListings.map(l => l.predajca_meno).filter(Boolean) as string[]));
-      const ago30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-
+      // Phone/name counts — GDPR data-min: telefón/meno sa už NEUKLADAJÚ do DB,
+      // takže historický 30-dňový count nie je možný. Počítame výskyt LEN v rámci
+      // aktuálneho behu (transientne, z pamäte). Zachytí makléra, ktorý v jednom
+      // scrape behu inzeruje viacero nehnuteľností s rovnakým kontaktom.
       const phoneCountMap = new Map<string, number>();
       const nameCountMap = new Map<string, number>();
       const overrideByExternalId = new Map<string, string>();
-
-      if (phones.length > 0) {
-        const { data: phoneRows } = await sb
-          .from("monitor_inzeraty")
-          .select("predajca_telefon")
-          .in("predajca_telefon", phones)
-          .gte("last_seen_at", ago30)
-          .eq("is_active", true);
-        (phoneRows || []).forEach((r: { predajca_telefon: string | null }) => {
-          if (r.predajca_telefon) phoneCountMap.set(r.predajca_telefon, (phoneCountMap.get(r.predajca_telefon) || 0) + 1);
-        });
-      }
-      if (names.length > 0) {
-        const { data: nameRows } = await sb
-          .from("monitor_inzeraty")
-          .select("predajca_meno")
-          .in("predajca_meno", names)
-          .gte("last_seen_at", ago30)
-          .eq("is_active", true);
-        (nameRows || []).forEach((r: { predajca_meno: string | null }) => {
-          if (r.predajca_meno) nameCountMap.set(r.predajca_meno, (nameCountMap.get(r.predajca_meno) || 0) + 1);
-        });
+      for (const l of allListings) {
+        if (l.predajca_telefon) phoneCountMap.set(l.predajca_telefon, (phoneCountMap.get(l.predajca_telefon) || 0) + 1);
+        if (l.predajca_meno) nameCountMap.set(l.predajca_meno, (nameCountMap.get(l.predajca_meno) || 0) + 1);
       }
 
       // Načítaj override-y a klasifikácie z minulosti (per portal+external_id)
@@ -536,17 +541,17 @@ async function processFilter(
         portal: listing.portal,
         external_id: listing.external_id,
         url: listing.url,
-        nazov: listing.nazov,
+        // GDPR data-min: nadpis z faktov o objekte, NIE z pôvodného titulku
+        // portálu (môže obsahovať meno/kontakt predajcu). PII polia (meno,
+        // telefón, popis, raw_data) sa zámerne neukladajú.
+        nazov: buildNazovZFaktov(listing),
         typ: listing.typ,
         lokalita: listing.lokalita,
         cena: listing.cena,
         mena: listing.mena || "EUR",
         plocha: listing.plocha,
         izby: listing.izby,
-        popis: listing.popis,
         foto_url: listing.foto_url,
-        predajca_meno: listing.predajca_meno,
-        predajca_telefon: listing.predajca_telefon,
         predajca_typ: listing.predajca_typ,
         predajca_typ_confidence: cls?.confidence ?? null,
         predajca_typ_method: cls?.method === "v2" ? (cls.signals.length > 0 ? "rule_v2" : null) : null,

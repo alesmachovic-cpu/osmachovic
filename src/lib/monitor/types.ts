@@ -11,13 +11,17 @@ export interface ScrapedInzerat {
   mena?: string;
   plocha?: number;
   izby?: number;
-  popis?: string;
   foto_url?: string;
+  predajca_typ?: string; // 'sukromny' | 'realitka' | 'developer'
+  poschodie?: string;    // "4/8", "prízemie", "podkrovie"
+  stav?: string;         // "novostavba", "po rekonštrukcii", "pôvodný stav"
+
+  // ⚠️ TRANSIENTNÉ polia (GDPR data-min) — parsery ich vyextrahujú do pamäte
+  // a klasifikátor ich použije POČAS scrape behu, ale do DB sa NIKDY neukladajú.
+  // Nikde ich nezapisuj do monitor_inzeraty (stĺpce boli odstránené migr. 106).
+  popis?: string;
   predajca_meno?: string;
   predajca_telefon?: string;
-  predajca_typ?: string; // 'sukromny' | 'realitka' | 'developer'
-  poschodie?: string;   // "4/8", "prízemie", "podkrovie"
-  stav?: string;        // "novostavba", "po rekonštrukcii", "pôvodný stav"
   raw_data?: Record<string, unknown>;
 }
 

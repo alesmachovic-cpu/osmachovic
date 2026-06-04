@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
 import { useAuth } from "@/components/AuthProvider";
-import PreCallBriefModal from "@/components/PreCallBriefModal";
 import PriceSparkline from "@/components/PriceSparkline";
 import AnalyzyPage from "@/app/analyzy/page";
 
@@ -21,8 +20,6 @@ interface Inzerat {
   plocha: number;
   izby: number;
   foto_url: string;
-  predajca_meno: string;
-  predajca_telefon: string;
   predajca_typ: string | null;
   first_seen_at: string;
   last_seen_at: string;
@@ -183,7 +180,6 @@ function LokalitaInput({ value, onChange, placeholder }: { value: string; onChan
 /* ── Hlavná stránka ── */
 function MonitorContent() {
   const router = useRouter();
-  const [briefFor, setBriefFor] = useState<{ id: string; url?: string } | null>(null);
   const [inzeraty, setInzeraty] = useState<Inzerat[]>([]);
   const [filtre, setFiltre] = useState<Filter[]>([]);
   const [total, setTotal] = useState(0);
@@ -455,29 +451,6 @@ function MonitorContent() {
     }
   };
 
-  const [reclassifying, setReclassifying] = useState(false);
-  const runReclassify = async () => {
-    if (!confirm("Re-klasifikovať všetky aktívne inzeráty cez AI classifier v2? Môže trvať 1–2 minúty.")) return;
-    setReclassifying(true);
-    try {
-      const res = await fetch("/api/monitor/reclassify-all", {
-        method: "POST",
-        credentials: "include",
-      });
-      const d = await res.json();
-      if (res.ok) {
-        showToast(`Hotovo: ${d.updated} preklasifikovaných, ${d.skipped} preskočených (override)`);
-        await loadInzeraty();
-      } else {
-        showToast(d.error || "Chyba pri re-klasifikácii", "error");
-      }
-    } catch {
-      showToast("Chyba pri re-klasifikácii", "error");
-    } finally {
-      setReclassifying(false);
-    }
-  };
-
   if (loading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "120px 0" }}>
@@ -516,27 +489,6 @@ function MonitorContent() {
           </p>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          {isSuperAdmin && (
-            <button
-              onClick={runReclassify}
-              disabled={reclassifying}
-              style={{
-                ...S.btnSecondary,
-                opacity: reclassifying ? 0.4 : 1,
-                cursor: reclassifying ? "not-allowed" : "pointer",
-                display: "flex", alignItems: "center", gap: "6px",
-                fontSize: "12px",
-              }}
-              title="Re-klasifikovať všetky inzeráty cez classifier v2"
-            >
-              {reclassifying ? (
-                <>
-                  <span style={{ width: "12px", height: "12px", border: "2px solid var(--border)", borderTopColor: "var(--text-primary)", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
-                  Klasifikujem...
-                </>
-              ) : "🤖 Re-klasifikovať"}
-            </button>
-          )}
           <button
             onClick={runScrape}
             disabled={scraping || aktivneFiltre === 0}
@@ -837,17 +789,6 @@ function MonitorContent() {
                         </span>
                       )}
                       <PriceSparkline inzeratId={i.id} currentPrice={i.cena} />
-                      <button onClick={(e) => {
-                        e.preventDefault(); e.stopPropagation();
-                        setBriefFor({ id: i.id, url: i.url });
-                      }} style={{
-                        marginLeft: "auto",
-                        fontSize: "11px", fontWeight: 600, color: "#7c2d12",
-                        background: "#fed7aa", border: "none",
-                        padding: "3px 10px", borderRadius: "6px", cursor: "pointer",
-                      }} title="Pre-call brief — čo povedať predajcovi pred zavolaním">
-                        📞 Brief
-                      </button>
                       {i.predajca_typ !== "firma" && (
                         <button
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleOverride(i.id, "rk"); }}
@@ -1181,13 +1122,6 @@ function MonitorContent() {
         select:focus, input:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-light) !important; }
       `}</style>
 
-      {briefFor && (
-        <PreCallBriefModal
-          inzeratId={briefFor.id}
-          sourceUrl={briefFor.url}
-          onClose={() => setBriefFor(null)}
-        />
-      )}
     </div>
   );
 }

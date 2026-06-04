@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status,nazov,obec,ulica")
       .or("status.eq.aktivny,status.is.null"),
     sb.from("monitor_inzeraty")
-      .select("id,portal,url,nazov,typ,lokalita,cena,plocha,izby,predajca_meno,predajca_telefon")
+      .select("id,portal,url,nazov,typ,lokalita,cena,plocha,izby")
       .eq("is_active", true),
   ]);
 
@@ -70,9 +70,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     portal: m.portal,
     url: m.url,
     nazov: m.nazov,
-    predavajuci: m.predajca_meno
-      ? { id: "", meno: m.predajca_meno, telefon: m.predajca_telefon ?? null }
-      : undefined,
+    // GDPR data-min: monitor neukladá kontakt predajcu. Maklér nájde kontakt
+    // priamo v inzeráte cez `url`.
+    predavajuci: undefined,
   }));
 
   const matches = [...neh, ...monitorNeh]
