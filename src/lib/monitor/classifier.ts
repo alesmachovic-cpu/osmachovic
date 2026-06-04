@@ -133,12 +133,16 @@ const SOFT_RK_PHRASES: readonly string[] = [
   "ponúkame na predaj", "ponukame na predaj",
   "ponúkame vám", "ponukame vam",
   "ponúkame Vám",
-  "kontaktujte ma", "kontaktujte nás", "kontaktujte nas",
+  // POZN: „kontaktujte ma" (1. os. j. č.) NIE je RK — píše ho súkromník.
+  // Necháme len plurál „kontaktujte nás".
+  "kontaktujte nás", "kontaktujte nas",
   "rezervovať obhliadku", "rezervovat obhliadku",
 ];
 
-/** Marketingové prefixy v názve typické pre RK na reality.sk / topreality.sk. */
-const MARKETING_PREFIX_RE = /^\s*(top|exkluzívne|exkluzivne|exkluzívna|exkluzivna|na predaj|predaj|ponúkame|ponukame|profi klient|hit|super|luxusný|luxusny)\b/i;
+/** Marketingové prefixy v názve typické pre RK na reality.sk / topreality.sk.
+ *  POZN: „na predaj"/„predaj" zámerne NIE sú v zozname — píšu ich aj súkromníci
+ *  („Na predaj 3-izbový byt"), boli zdrojom falošných RK klasifikácií. */
+const MARKETING_PREFIX_RE = /^\s*(top|exkluzívne|exkluzivne|exkluzívna|exkluzivna|ponúkame|ponukame|profi klient|hit|super|luxusný|luxusny)\b/i;
 
 /** Známe developerské projekty — ak je v názve, ide takmer vždy o RK / developera. */
 const KNOWN_DEVELOPER_PROJECTS: readonly string[] = [

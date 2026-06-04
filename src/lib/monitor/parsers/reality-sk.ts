@@ -47,12 +47,13 @@ export const realitySkParser: PortalParser = {
     if (filter.search_url) return filter.search_url;
 
     const typSlug = filter.typ ? TYP_URL[filter.typ] || "" : "";
+    const seg = filter.ponuka_typ === "prenajom" ? "prenajom" : "predaj";
     // Bez lokality: celý slovenský trh pre daný typ
     // S lokalitou: pokusíme sa vytvoriť slug, ale fallback na celé SK
     if (typSlug) {
-      return `${BASE_URL}/${typSlug}/predaj/`;
+      return `${BASE_URL}/${typSlug}/${seg}/`;
     }
-    return `${BASE_URL}/vyhladavanie/predaj/`;
+    return `${BASE_URL}/vyhladavanie/${seg}/`;
   },
 
   parseListings(html: string): ScrapedInzerat[] {

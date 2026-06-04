@@ -95,7 +95,7 @@ function matchesFilter(listing: ScrapedInzerat, filter: MonitorFilter): boolean 
   // Kontrolujeme URL + názov + popis (popis obsahuje "prenájom" aj keď URL nie).
   const textLow = ((listing.url || "") + " " + (listing.nazov || "") + " " + (listing.popis || ""))
     .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (/\bprena?jom\b|\bpodna?jom\b|\bnajom\b|na[-_]prenaj/i.test(textLow)) return false;
+  void textLow; // predaj/prenájom sa NEzahadzuje — ukladáme oboje, len tag cez ponuka_typ
 
   // Cena — ak máme cena_od/do, vyžadujeme aby listing cena bola v rozsahu.
   // Ak listing nemá cenu (undefined), nechávame ju ako potenciálne relevantnú (nechytí všetko).
@@ -126,11 +126,13 @@ function matchesFilter(listing: ScrapedInzerat, filter: MonitorFilter): boolean 
  */
 const TYP_LABEL: Record<string, string> = { byt: "Byt", dom: "Dom", pozemok: "Pozemok", iny: "Nehnuteľnosť" };
 function buildNazovZFaktov(l: ScrapedInzerat): string {
-  const parts: string[] = [TYP_LABEL[l.typ || ""] || "Nehnuteľnosť"];
+  const parts: string[] = [];
+  if (l.ponuka_typ === "prenajom") parts.push("Prenájom");
+  parts.push(TYP_LABEL[l.typ || ""] || "Nehnuteľnosť");
   if (l.izby) parts.push(`${l.izby}-izb`);
   if (l.plocha) parts.push(`${l.plocha} m²`);
   if (l.lokalita) parts.push(l.lokalita);
-  if (l.cena) parts.push(`${l.cena.toLocaleString("sk-SK")} €`);
+  if (l.cena) parts.push(`${l.cena.toLocaleString("sk-SK")} €${l.ponuka_typ === "prenajom" ? "/mes" : ""}`);
   return parts.join(" · ");
 }
 
@@ -183,14 +185,22 @@ export async function GET(request: Request) {
         break;
       }
 
-      const result = await processFilter(sb, filter);
-      results.push(result);
+      // Segmentácia: 'oboje' → scrapni predaj aj prenájom (2 prechody).
+      const segments: Array<"predaj" | "prenajom"> =
+        filter.ponuka_typ === "prenajom" ? ["prenajom"]
+        : filter.ponuka_typ === "oboje" ? ["predaj", "prenajom"]
+        : ["predaj"];
 
       // Aktualizuj updated_at filtra (aby sa rotovali)
       await sb
         .from("monitor_filtre")
         .update({ updated_at: new Date().toISOString() })
         .eq("id", filter.id);
+
+      for (const segment of segments) {
+      if (Date.now() - startTime > 22000) break;
+      const result = await processFilter(sb, { ...filter, ponuka_typ: segment });
+      results.push(result);
 
       // Loguj výsledok scrape-u
       await sb.from("monitor_scrape_log").insert({
@@ -232,6 +242,7 @@ export async function GET(request: Request) {
           }
         }
       }
+      } // koniec segment loop
     }
 
     const totalNew = results.reduce((s, r) => s + r.new_count, 0);
@@ -305,6 +316,20 @@ async function processFilter(
     const allListings: ScrapedInzerat[] = [];
     for (const { listings } of portalResults) {
       allListings.push(...listings);
+    }
+
+    // 2-ponuka. Otaguj ponuka_typ (predaj/prenájom). Segment scrapovania je
+    // filter.ponuka_typ (rozriešené orchestrátorom na konkrétnu hodnotu). Parser
+    // mohol nastaviť presnejšie (bazos zo slugu) — to rešpektujeme. Navyše opravíme
+    // zjavné „leaky" (prenájom v predaj-liste) podľa textu.
+    const segment: "predaj" | "prenajom" = filter.ponuka_typ === "prenajom" ? "prenajom" : "predaj";
+    for (const l of allListings) {
+      if (!l.ponuka_typ) l.ponuka_typ = segment;
+      const t = ((l.nazov || "") + " " + (l.popis || "") + " " + (l.url || ""))
+        .toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      if (/\bprenajom\b|\bpodnajom\b|na prenajom|k prenajmu|mesacne|\/mes\b|eur\/mes/.test(t)) {
+        l.ponuka_typ = "prenajom";
+      }
     }
 
     // 2a. Lokalita injection: portály ktoré URL-filtrujú lokalitou (bazos cez
@@ -521,13 +546,12 @@ async function processFilter(
       }
     }
 
-    // Post-parse filter — portály v search URL čiastočne rešpektujú filter kritéria
-    // (cena/lokalita/typ), ale nie všetky a nie spoľahlivo. Aplikujeme striktný
-    // post-filter lokality, typu, ceny, plochy, izieb + vyradíme prenájmy.
-    // RK (firma) sa odhodí len ak má filter `len_sukromni=true` (default).
-    // Ak je `len_sukromni=false` → ukladáme aj RK pre analýzy cien.
+    // Post-parse filter — portály v search URL čiastočne rešpektujú kritériá
+    // (cena/lokalita/typ), nie však spoľahlivo. Aplikujeme post-filter lokality,
+    // typu, ceny, plochy, izieb.
+    // UKLADÁME VŠETKO (súkromník aj RK, predaj aj prenájom) — pre kompletnú trhovú
+    // analýzu. `len_sukromni` NEZAHADZUJE — ovplyvňuje len notifikácie (nižšie).
     const filteredListings = allListings
-      .filter((l) => !filter.len_sukromni || l.predajca_typ !== "firma")
       .filter((l) => matchesFilter(l, filter));
     totalFound = filteredListings.length;
 
@@ -553,6 +577,7 @@ async function processFilter(
         izby: listing.izby,
         foto_url: listing.foto_url,
         predajca_typ: listing.predajca_typ,
+        ponuka_typ: listing.ponuka_typ || "predaj",
         predajca_typ_confidence: cls?.confidence ?? null,
         predajca_typ_method: cls?.method === "v2" ? (cls.signals.length > 0 ? "rule_v2" : null) : null,
         poschodie: listing.poschodie ?? null,
@@ -603,9 +628,14 @@ async function processFilter(
             new Date(row.first_seen_at).getTime() > Date.now() - 60000;
           if (isNew) {
             newCount++;
-            // Notifikácia (push/email) ide len o súkromných predajcov — RK
-            // sa zbierajú výhradne pre analýzy cien, žiadne notifikácie.
-            if (listing.predajca_typ !== "firma") {
+            // Notifikácia ide len o leady: PREDAJ + súkromník (nie RK, nie prenájom).
+            // RK aj prenájmy sa ukladajú pre analýzu, ale nespamujú notifikácie.
+            // `len_sukromni=false` filter (čisto analytický) notifikácie nevydáva.
+            if (
+              filter.len_sukromni !== false &&
+              listing.predajca_typ !== "firma" &&
+              listing.ponuka_typ !== "prenajom"
+            ) {
               newItems.push({ ...listing, db_id: row.id });
             }
           } else {

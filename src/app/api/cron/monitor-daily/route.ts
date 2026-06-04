@@ -34,6 +34,7 @@ interface MonitorRow {
   first_seen_at: string;
   last_seen_at: string;
   is_active: boolean;
+  ponuka_typ: string | null;
 }
 
 function eurPerM2(cena: number | null, plocha: number | null): number | null {
@@ -151,7 +152,7 @@ export async function GET(request: Request) {
   try {
     const { data: candidates, error } = await sb
       .from("monitor_inzeraty")
-      .select("id, cena, plocha, lokalita, typ, izby, first_seen_at, last_seen_at, is_active")
+      .select("id, cena, plocha, lokalita, typ, izby, first_seen_at, last_seen_at, is_active, ponuka_typ")
       .eq("is_active", true)
       .lte("last_seen_at", threshold);
     if (error) throw error;
@@ -186,7 +187,9 @@ export async function GET(request: Request) {
 
         const classification = classify(dom, firstPrice, lastPrice);
         const conf = confidence(dom, classification, priceDropped);
-        const estimatedSale = classification === "likely_sold" ? estimateSalePrice(lastPrice, dom) : null;
+        // Odhad realizačnej ceny dáva zmysel len pri PREDAJI (nie pri prenájme).
+        const estimatedSale = (classification === "likely_sold" && c.ponuka_typ !== "prenajom")
+          ? estimateSalePrice(lastPrice, dom) : null;
         const estimatedDiscount = estimatedSale && firstPrice > 0
           ? Math.round(((firstPrice - estimatedSale) / firstPrice) * 100 * 100) / 100
           : null;
@@ -278,10 +281,12 @@ async function updateMarketSentiments(today: string): Promise<number> {
   const sb = getSupabaseAdmin();
 
   // Načítaj všetky aktívne inzeráty s validnými dátami
+  // Cenové sentimenty počítame LEN z predaja — nájomné ceny by zničili mediány.
   const { data: active } = await sb
     .from("monitor_inzeraty")
     .select("id, lokalita, typ, izby, cena, plocha, first_seen_at")
     .eq("is_active", true)
+    .eq("ponuka_typ", "predaj")
     .not("cena", "is", null)
     .not("lokalita", "is", null)
     .not("typ", "is", null);
@@ -292,6 +297,7 @@ async function updateMarketSentiments(today: string): Promise<number> {
   const { data: todayNew } = await sb
     .from("monitor_inzeraty")
     .select("id, lokalita, typ, izby")
+    .eq("ponuka_typ", "predaj")
     .gte("first_seen_at", today)
     .not("lokalita", "is", null);
   const { data: todayDisap } = await sb

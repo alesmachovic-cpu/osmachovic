@@ -19,7 +19,8 @@ export const toprealitySkParser: PortalParser = {
     if (filter.search_url) return filter.search_url;
 
     const typSlug = filter.typ ? TYP_URL[filter.typ] || "nehnutelnosti" : "nehnutelnosti";
-    let url = `${BASE_URL}/predaj-${typSlug}`;
+    const seg = filter.ponuka_typ === "prenajom" ? "prenajom" : "predaj";
+    let url = `${BASE_URL}/${seg}-${typSlug}`;
 
     if (filter.lokalita) {
       const slug = filter.lokalita

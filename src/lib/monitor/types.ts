@@ -13,6 +13,7 @@ export interface ScrapedInzerat {
   izby?: number;
   foto_url?: string;
   predajca_typ?: string; // 'sukromny' | 'realitka' | 'developer'
+  ponuka_typ?: "predaj" | "prenajom"; // os predaj/prenájom
   poschodie?: string;    // "4/8", "prízemie", "podkrovie"
   stav?: string;         // "novostavba", "po rekonštrukcii", "pôvodný stav"
 
@@ -42,7 +43,8 @@ export interface MonitorFilter {
   notify_email: boolean;
   notify_telegram: boolean;
   is_active: boolean;
-  len_sukromni?: boolean;  // ak true, scraper uloží len predajca_typ=sukromny
+  len_sukromni?: boolean;  // ak true → notifikácie len pre súkromníkov (NIE filter ukladania)
+  ponuka_typ?: "predaj" | "prenajom" | "oboje"; // ktorý segment scrapovať
   makler_id?: string | null;
 }
 

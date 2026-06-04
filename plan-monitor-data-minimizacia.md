@@ -36,7 +36,7 @@ Alternatíva (A): doslova prestať čítať → jednoduchšie, ale klasifikácia
 
 ## Acceptance
 - [x] `monitor_inzeraty` nemá meno/telefón/popis/raw_data (migr. 106 aplikovaná na dev).
-- [ ] Po scrape behu v DB žiadne meno/telefón (overiť LIVE scrape behom — čaká).
+- [x] Po scrape behu v DB žiadne meno/telefón — OVERENÉ live na dev (21 nových riadkov, nadpis z faktov "Byt · 4-izb · 80 m² · … · 239 990 €", 0 PII stĺpcov).
 - [x] UI: nadpis z faktov + link, žiadny kontakt (Brief tlačidlo odstránené).
 - [x] `notifyKupujuciMatches` neposiela kontakt (posiela len objekt + link).
 - [x] typecheck `src/` čistý, audit bez novej regresie (20 = baseline, monitor ✗0).

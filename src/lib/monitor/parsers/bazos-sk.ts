@@ -75,8 +75,9 @@ export const bazosSkParser: PortalParser = {
     if (filter.search_url) return filter.search_url;
 
     const typSlug = filter.typ ? TYP_URL[filter.typ] || "" : "";
-    // Base URL: https://reality.bazos.sk/byty/predaj/
-    let url = typSlug ? `${BASE_URL}/${typSlug}/predaj/` : `${BASE_URL}/byty/predaj/`;
+    const seg = filter.ponuka_typ === "prenajom" ? "prenajom" : "predaj";
+    // Base URL: https://reality.bazos.sk/byty/predaj/ (alebo /prenajom/)
+    let url = typSlug ? `${BASE_URL}/${typSlug}/${seg}/` : `${BASE_URL}/byty/${seg}/`;
 
     // Bazos hlokalita akceptuje len mesto, nie mestskú časť.
     // Z "Bratislava - Ružinov" vezmeme len "Bratislava" pre URL — MČ filtruje
@@ -112,12 +113,13 @@ export const bazosSkParser: PortalParser = {
       if (seenIds.has(externalId)) continue;
       seenIds.add(externalId);
 
-      // Skip prenájmy / podnájmy — bazos niekedy v /predaj/ výsledkoch
-      // zobrazuje aj boosted prenájmy (slug obsahuje "prenajom"/"podnajom").
+      // Detekcia prenájom/predaj zo slugu — NEzahadzujeme, len otagujeme.
+      // Orchestrátor (scrape route) nastaví ponuka_typ podľa scrapovaného segmentu;
+      // tu len opravíme zjavné „leaky" (prenájom v predaj-liste a naopak).
       const slugLow = relUrl.toLowerCase();
-      if (slugLow.includes("prenajom") || slugLow.includes("prenájom") || slugLow.includes("podnajom")) {
-        continue;
-      }
+      const ponuka_typ: "predaj" | "prenajom" =
+        (slugLow.includes("prenajom") || slugLow.includes("prenájom") || slugLow.includes("podnajom"))
+          ? "prenajom" : "predaj";
 
       // Title z href textu (druhá časť URL) alebo z anchor textu
       const titleMatch = block.match(/href="\/inzerat\/\d+\/[^"]+"[^>]*>([^<]+)<\/a>/);
@@ -205,6 +207,7 @@ export const bazosSkParser: PortalParser = {
         popis,
         predajca_meno: sellerName || undefined,
         predajca_typ,
+        ponuka_typ,
         poschodie,
         stav,
         raw_data: {},

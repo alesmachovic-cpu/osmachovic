@@ -28,6 +28,7 @@ export const bytySkParser: PortalParser = {
     // byty.sk má deterministický portálový filter pre súkromné osoby v URL:
     //   /predaj/<lokalita>/sukromna-osoba/   (interné value=18)
     // Portál filtruje sám — spoľahlivejšie ako post-filter na našej strane.
+    const seg = filter.ponuka_typ === "prenajom" ? "prenajom" : "predaj";
     if (filter.len_sukromni) {
       if (filter.lokalita) {
         const slug = filter.lokalita
@@ -36,14 +37,14 @@ export const bytySkParser: PortalParser = {
           .replace(/[\s-]+/g, "-")
           .replace(/[^a-z0-9-]/g, "")
           .replace(/^-|-$/g, "");
-        return `${BASE_URL}/predaj/${slug}/sukromna-osoba/`;
+        return `${BASE_URL}/${seg}/${slug}/sukromna-osoba/`;
       }
-      return `${BASE_URL}/predaj/sukromna-osoba/`;
+      return `${BASE_URL}/${seg}/sukromna-osoba/`;
     }
 
     // Fallback bez len_sukromni — pôvodná URL (bez lokality, byty.sk ju odmieta)
     const typSlug = filter.typ ? TYP_URL[filter.typ] || "nehnutelnosti" : "nehnutelnosti";
-    return `${BASE_URL}/${typSlug}/predaj/`;
+    return `${BASE_URL}/${typSlug}/${seg}/`;
   },
 
   parseListings(html: string): ScrapedInzerat[] {
