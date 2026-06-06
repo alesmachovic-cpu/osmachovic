@@ -1062,7 +1062,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
                       }}
                       style={{
                         display: "block", width: "100%", marginBottom: "6px",
-                        padding: "10px 12px", background: "#fff", border: "1px solid #93C5FD",
+                        padding: "10px 12px", background: "var(--bg-surface)", border: "1px solid #93C5FD",
                         borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer",
                         textAlign: "left", fontWeight: "500",
                       }}>
@@ -1466,12 +1466,14 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
             </div>
           )}
 
-          {/* Odkaz na nehnuteľnosť */}
+          {/* Odkaz na nehnuteľnosť — predávajúca vec, čistému kupujúcemu netreba */}
+          {typKlienta !== "kupujuci" && (
           <div>
             <div style={labelSt}>Odkaz na nehnuteľnosť</div>
             <input style={inputSt} placeholder="https://nehnutelnosti.sk/... alebo realit.sk/..." value={odkaz} onChange={e => setOdkaz(e.target.value)} />
             <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>Link na inzerát — studený náber, Google Maps pin</div>
           </div>
+          )}
           </>
           )}
 
@@ -1507,7 +1509,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
                       } catch { setOdporucilResults([]); }
                     }} />
                   {odporucilResults.length > 0 && (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, background: "#fff", border: "1px solid var(--border)", borderRadius: "8px", marginTop: "4px", maxHeight: "180px", overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", marginTop: "4px", maxHeight: "180px", overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
                       {odporucilResults.map(k => (
                         <div key={k.id} onClick={() => { setOdporucilId(k.id); setOdporucilQuery(k.meno); setOdporucilResults([]); }}
                           style={{ padding: "8px 12px", cursor: "pointer", fontSize: "13px", borderBottom: "1px solid var(--border)", color: "var(--text-primary)" }}>
