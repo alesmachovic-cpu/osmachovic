@@ -54,6 +54,9 @@ function calcMatch(k: Klient, n: Nehnutelnost, objednavky: Objednavka[]): { scor
   if (k.typ !== "kupujuci" && k.typ !== "oboje") return { score: 0, reasons: [], obj: null };
 
   const obj = objednavky.find(o => o.klient_id === k.id) ?? null;
+  // Bez objednávky aj bez lokality klienta by sa párovalo len cez rozpočet →
+  // 30 % na všetko v cene (falošné zhody zaplavia /matching). Vtedy nepárujeme.
+  if (!obj && !k.lokalita) return { score: 0, reasons: [], obj: null };
   const klientForMatch: KlientForMatch = { id: k.id, lokalita: k.lokalita, rozpocet_max: k.rozpocet_max };
   const objForMatch: ObjednavkaForMatch = obj
     ? toObjForMatch(obj)

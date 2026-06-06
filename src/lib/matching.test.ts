@@ -88,6 +88,20 @@ describe("vypocitajSkore", () => {
     const { reasons } = vypocitajSkore(obj, baseNeh, klient); // baseNeh 195000 <= 220000
     expect(reasons).toContain("Cena je v rozpočte");
   });
+
+  it("druh ako spojený string 'byt, rodinny_dom' — typ sedí (handoff D)", () => {
+    // ObjednavkaForm ukladá multi-druh ako jeden string → musí sa splitnúť
+    const obj: ObjednavkaForMatch = { ...baseObj, druh: "byt, rodinny_dom" };
+    const { reasons } = vypocitajSkore(obj, baseNeh); // baseNeh.typ = "3-izbovy-byt" → "byt" sedí
+    expect(reasons).toContain("Typ nehnuteľnosti sedí");
+  });
+
+  it("cena pod dolnou hranicou (cena_od) — malý bonus, nie plný (handoff E)", () => {
+    // cena_od 150000, nehnuteľnosť 90000 → pod očakávaným rozsahom
+    const { reasons } = vypocitajSkore(baseObj, { ...baseNeh, cena: 90000 });
+    expect(reasons).toContain("Cena pod očakávaným rozsahom");
+    expect(reasons).not.toContain("Cena je v rozpočte");
+  });
 });
 
 describe("skoreUroven", () => {

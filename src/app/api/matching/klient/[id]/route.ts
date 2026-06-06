@@ -45,6 +45,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!klient || klient.company_id !== scope.company_id) {
     return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
   }
+  // Bez lokality by sa profil pároval len cez rozpočet → 30 % na všetko (falošné
+  // zhody). Vtedy nevraciame nič — widget ukáže výzvu doplniť objednávku.
+  if (!klient.lokalita) {
+    return NextResponse.json([]);
+  }
 
   const [{ data: nehnutelnosti }, { data: monitorItems }] = await Promise.all([
     sb.from("nehnutelnosti")

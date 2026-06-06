@@ -51,7 +51,11 @@ export function vypocitajSkore(
 
   // Typ nehnuteľnosti
   if (o.druh && n.typ) {
-    const druhArr = Array.isArray(o.druh) ? o.druh : [o.druh];
+    // druh môže byť pole, alebo spojený string ("byt, rodinny_dom") z ObjednavkaForm
+    // → splitneme rovnako ako form, inak multi-druh nikdy nesedí (handoff 2026-06-06).
+    const druhArr = Array.isArray(o.druh)
+      ? o.druh
+      : o.druh.split(/[,/]/).map(s => s.trim()).filter(Boolean);
     const typLow = n.typ.toLowerCase();
     const typMatch = druhArr.some(d => {
       const dLow = d.toLowerCase();
@@ -68,8 +72,14 @@ export function vypocitajSkore(
   // má stupňovaný postih — symetricky k lokalite/izbám, inak by drahé
   // nehnuteľnosti vychádzali ako dobrá zhoda (Aleš 2026-06-06).
   const maxCena = o.cena_do ?? klient?.rozpocet_max ?? null;
+  const minCena = o.cena_od ?? null;
   if (maxCena && n.cena != null) {
-    if (n.cena <= maxCena) {
+    if (minCena && n.cena < minCena) {
+      // Pod dolnou hranicou rozpočtu — kupujúci chce drahšie (iná kategória).
+      // Len malý bonus, nie plný — nie je to "v rozpočte" ako zamýšľal (handoff 2026-06-06).
+      score += 8;
+      reasons.push("Cena pod očakávaným rozsahom");
+    } else if (n.cena <= maxCena) {
       score += 30;
       reasons.push("Cena je v rozpočte");
     } else if (n.cena <= maxCena * 1.1) {

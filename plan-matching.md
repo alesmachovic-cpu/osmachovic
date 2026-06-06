@@ -26,6 +26,13 @@ Audit 2026-06-06. **Scope tohto okna: len vývoj.** Bezpečnosť (auth/scope) a 
 - [ ] **B3b** Hook `useZhodyPreKlienta(klientId)` v `useMatching.ts`.
 - [ ] **B3c** `MatchingWidget`: kupujúci bez objednávky → BuyerWidget cez klientId (profil) namiesto fallbacku „Vytvoriť objednávku". Empty state hint na doplnenie objednávky.
 
+## Handoff z okna Kupujúci (2026-06-06) — HOTOVÉ (vitest 15/15)
+- [x] **D** multi-druh: `vypocitajSkore` splitne `druh` string ("byt, rodinny_dom") → typ sedí pre každý druh (predtým multi-druh nikdy nesedel).
+- [x] **E** cena_od: nehnuteľnosť pod dolnou hranicou rozpočtu dostane len malý bonus (+8), nie plný +30.
+- [x] **Pseudo-lokalita**: klient bez objednávky AJ bez lokality sa nepáruje (predtým 30 % na všetko cez rozpočet → falošné zhody). Fix v page.tsx + klient/[id].
+- [~] **Slice**: `nehnutelnost/[id]` limit — ODLOŽENÉ. Moja necommitnutá zmena sa stratila pri multi-okno revertе (security okno aktívne mení túto route na requireUser). Odovzdané security oknu, nech limit/slice pridá spolu s auth (žiadna kolízia). Prompt pripravený.
+- [x] **Prahy**: ZhodyDrawer, ZaujemcoviaChip, ZaujemcoviaDrawer napojené na `skoreUroven` (jediný zdroj prahov).
+
 ## Upozornenie (iná doména — nemením z tohto okna)
 - `kupujuci/page.tsx:249` číta `poziadavky.pocet_izieb`, ale ObjednavkaForm ukladá `izby` → počet izieb sa na karte kupujúceho nezobrazí. Patrí do kupujuci domény (bolo rozrobené v inom okne).
 
