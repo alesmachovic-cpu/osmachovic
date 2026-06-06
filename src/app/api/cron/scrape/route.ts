@@ -463,22 +463,36 @@ async function processFilter(
       // ktorý sa prvýkrát objaví naraz s mnohými inzerátmi.
       const ago30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
       const inzerentDbMap = new Map<string, number>();
+      const inzerentLokMap = new Map<string, Set<string>>(); // inzerent → rôzne lokality
+      // Lokality v aktuálnom behu (pre nový účet, čo ešte nie je v DB)
+      for (const l of allListings) {
+        if (l.inzerent_id && l.lokalita) {
+          if (!inzerentLokMap.has(l.inzerent_id)) inzerentLokMap.set(l.inzerent_id, new Set());
+          inzerentLokMap.get(l.inzerent_id)!.add(l.lokalita.toLowerCase().trim());
+        }
+      }
       const inzerentIds = Array.from(inzerentBatchMap.keys());
       if (inzerentIds.length > 0) {
         const { data: inzRows } = await sb
           .from("monitor_inzeraty")
-          .select("inzerent_id")
+          .select("inzerent_id, lokalita")
           .in("inzerent_id", inzerentIds)
           .gte("last_seen_at", ago30)
           .eq("is_active", true);
-        (inzRows || []).forEach((r: { inzerent_id: string | null }) => {
-          if (r.inzerent_id) inzerentDbMap.set(r.inzerent_id, (inzerentDbMap.get(r.inzerent_id) || 0) + 1);
+        (inzRows || []).forEach((r: { inzerent_id: string | null; lokalita: string | null }) => {
+          if (!r.inzerent_id) return;
+          inzerentDbMap.set(r.inzerent_id, (inzerentDbMap.get(r.inzerent_id) || 0) + 1);
+          if (r.lokalita) {
+            if (!inzerentLokMap.has(r.inzerent_id)) inzerentLokMap.set(r.inzerent_id, new Set());
+            inzerentLokMap.get(r.inzerent_id)!.add(r.lokalita.toLowerCase().trim());
+          }
         });
       }
       const inzerentCount = (id?: string): number => {
         if (!id) return 0;
         return Math.max(inzerentDbMap.get(id) || 0, inzerentBatchMap.get(id) || 0);
       };
+      const inzerentDistinctLok = (id?: string): number => (id ? (inzerentLokMap.get(id)?.size || 0) : 0);
 
       // Načítaj override-y a klasifikácie z minulosti (per portal+external_id)
       // Defensive: ak migrácia 041 ešte nebola spustená, predajca_typ_override stĺpec
@@ -543,6 +557,7 @@ async function processFilter(
           phone_count_30d: listing.predajca_telefon ? phoneCountMap.get(listing.predajca_telefon) || 0 : 0,
           name_count_30d: listing.predajca_meno ? nameCountMap.get(listing.predajca_meno) || 0 : 0,
           inzerent_count_30d: inzerentCount(listing.inzerent_id),
+          inzerent_distinct_lokalit: inzerentDistinctLok(listing.inzerent_id),
           listed_on_n_portals: 1, // TODO: prepojiť po canonical_id dedup (Etapa F)
           in_rk_directory: inDirectory,
         };
