@@ -134,6 +134,12 @@ Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne 
 - **Obchody** (`api/obchody`) = **Klienti & Pipeline** (stav obchodu od ÚZ po vklad); zmluvné dokumenty k obchodu → **Náberáky**.
 - **Zdieľané utility** (`api/locale`, `api/weather`, `api/ulica-search`, `api/api-status`, `app/nastavenia`): meniť len po dohode; default správca = Operatíva.
 
+**Pravidlá určovania vlastníka (dispečer) — záväzné:**
+1. Najprv over **kontext nálezu** (ktorá stránka, ktoré UI, ktorý endpoint) — až potom urči vlastníka. Nikdy nie z jedného grep výskytu.
+2. **Pozor na homonymá** (objednávka = dopyt kupujúceho `api/objednavky` vs. fotoprodukcia `api/produkcia-objednavky`; podpis; kalendár; parse…). Over reálnu cestu kódu po klik: komponent → fetch → route.
+3. Keď nie si istý na 100 %, **spýtaj sa / ukáž kandidátov** — neoznačuj to ako fakt.
+4. Nikdy neprezentuj „pravdepodobného vlastníka" ako istotu.
+
 ## Tri hlavné princípy (Boris Cherny)
 1. **Jednoduchosť** — minimálny kód. Ak vieš niečo zmazať namiesto pridať, sprav to.
 2. **Žiadne band-aidy** — hľadaj koreňovú príčinu, nie rýchle záplaty.
