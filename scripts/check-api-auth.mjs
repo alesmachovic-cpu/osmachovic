@@ -44,6 +44,11 @@ const TIER1_MUST_HAVE_AUTH = new Set([
   "src/app/api/obchody/route.ts",
   // 2026-06-06 — objednavky kupujúcich (PII): GET bol verejný (P0 leak).
   "src/app/api/objednavky/route.ts",
+  // 2026-06-06 — matching routes: GET bez auth + bez company_id scope cez service role
+  //   → cross-tenant leak mien/telefónov kupujúcich aj predávajúcich (P0 leak).
+  "src/app/api/matching/objednavka/[id]/route.ts",
+  "src/app/api/matching/nehnutelnost/[id]/route.ts",
+  "src/app/api/matching/summary/route.ts",
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -108,8 +113,18 @@ function findHandlerIssues(src, filePath) {
     const match = re.exec(src);
     if (!match) continue;
 
-    // Extract handler body
-    let i = src.indexOf("{", match.index);
+    // Najprv preskoč PARAM LIST (môže obsahovať destrukturalizáciu `{ params }`,
+    // inak by sme telo funkcie hľadali od nesprávneho `{`). Skoč za zatváraciu `)`.
+    const paren = src.indexOf("(", match.index);
+    let pdepth = 1, p = paren + 1;
+    while (p < src.length && pdepth > 0) {
+      if (src[p] === "(") pdepth++;
+      else if (src[p] === ")") pdepth--;
+      p++;
+    }
+
+    // Extract handler body — prvé `{` AŽ ZA zatváracou `)` param listu.
+    let i = src.indexOf("{", p);
     if (i < 0) continue;
     let depth = 1;
     let j = i + 1;
