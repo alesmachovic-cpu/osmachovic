@@ -24,7 +24,9 @@ const OBJ_STEPS = [
   { key: "hotovo", label: "Hotovo", num: 3 },
 ];
 
-// Štatusy ktoré majú zmysel pre kupujúceho (filtruje aj zoznam aj výber)
+// Bežné stavy kupujúceho. Jediné použitie: pri výbere klienta sa status-badge
+// zobrazí len ak klient NIE je v tomto zozname (upozornenie na nezvyčajný stav).
+// Nefiltruje zoznam ani výber — len rozhoduje o zobrazení badge.
 const KUPUJUCI_STATUSY = new Set([
   "novy", "novy_kontakt", "aktivny", "volat_neskor", "nedovolal", "nechce_rk", "uzavrety", "caka_na_schvalenie",
 ]);
@@ -74,6 +76,18 @@ function KupujuciInner() {
     fetch("/api/makleri?aktivny=true").then(r => r.json()).then(data => setMakleri(Array.isArray(data) ? data : []));
   }, []);
 
+  // 2026-06-06 (B6 fix): myMaklerUuid sa MUSÍ načítať keď je user dostupný.
+  // Predtým ho riešil len loadData() na mount — ak useAuth() ešte nemal usera,
+  // uuid ostalo null navždy a filter "moji klienti" sa ticho neaplikoval
+  // (fail-open → ukázal všetkých). Fail-open je zámerný (viď maklerMap.ts), tu
+  // len zaručíme spoľahlivé načítanie uuid hneď ako user dorazí.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    getMaklerUuid(user.id).then(uuid => { if (!cancelled) setMyMaklerUuid(uuid); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
   // Ak prišiel cez ?klient_id=X (z karty klienta — "+ Pridať preferencie"),
   // hneď otvor formulár objednávky pre tohto konkrétneho klienta — nech
   // Aleš nemusí klikať cez "objednávka / bez objednávky" menu.
@@ -97,8 +111,7 @@ function KupujuciInner() {
     setLoadError(false);
     const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000));
     try {
-      const uuid = user?.id ? await Promise.race([getMaklerUuid(user.id), timeout]) : null;
-      setMyMaklerUuid(uuid as string | null);
+      // myMaklerUuid rieši samostatný useEffect naviazaný na user.id (B6 fix).
       const [klientiData, objData] = await Promise.race([
         Promise.all([
           fetch("/api/klienti").then(r => r.json()),
@@ -215,7 +228,14 @@ function KupujuciInner() {
         {!loading && kupujuciKlienti.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             {kupujuciKlienti
-              .map(k => ({ klient: k, obj: objednavky.find(o => o.klient_id === k.id) || null }))
+              .flatMap(k => {
+                // B5 fix: klient môže mať viac objednávok — zobraz každú ako
+                // samostatný riadok (predtým `find` ukázal len prvú a zvyšok sa stratil).
+                const kObj = objednavky.filter(o => o.klient_id === k.id);
+                return kObj.length > 0
+                  ? kObj.map(obj => ({ klient: k, obj }))
+                  : [{ klient: k, obj: null as Record<string, unknown> | null }];
+              })
               .sort((a, b) => (a.obj ? 0 : 1) - (b.obj ? 0 : 1))
               .map(({ klient: k, obj }) => {
                 if (obj) {
@@ -229,7 +249,7 @@ function KupujuciInner() {
                   const izby = poziadavky.pocet_izieb ? `${String(poziadavky.pocet_izieb)} izieb` : null;
                   const meta = [lokalitaText, izby, cenaText].filter(Boolean).join(" · ");
                   return (
-                    <div key={k.id} style={{
+                    <div key={obj.id as string} style={{
                       display: "flex", alignItems: "center", gap: "12px",
                       padding: "14px 16px", background: "var(--bg-surface)",
                       border: "1px solid var(--border)",
