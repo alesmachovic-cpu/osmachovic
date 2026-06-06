@@ -404,12 +404,29 @@ async function processFilter(
       }
     }
 
-    // 2c. Bazos enrichment — pre listingy klasifikované ako "sukromny" (podľa
-    //     mena predajcu) skontrolujeme detail stránku. Makléri často používajú
-    //     osobné meno, ale v popise majú "+ provízia RK". List page popis býva
-    //     orezaný, detail page ma plný text.
-    //     STROP: detail fetch je drahý (1 HTTP/inzerát). Max 36 kandidátov,
-    //     po 12 súbežne, aby sme dobehli v 30s limite (predtým 70 paralelne → timeout).
+    // AUTORITATÍVNE výsledky z detail-stránok (ground-truth) — klasifikátor ich
+    // NESMIE prepísať. Kľúč = `${portal}:${external_id}`.
+    const authoritativeKeys = new Set<string>();
+
+    // 2c. Reality.sk enrichment — AUTORITATÍVNE na VŠETKÝCH reality listingoch.
+    //     Detail stránka má štruktúrny štítok: link /realitna-kancelaria/ ⇒ firma,
+    //     inak ⇒ sukromny. Ground-truth pre reality.sk — beží PRVÉ (najhodnotnejšie)
+    //     a je nedotknuteľné klasifikátorom. STROP: 40, po 10 súbežne.
+    const realityListings = allListings.filter((l) => l.portal === "reality.sk").slice(0, 40);
+    if (realityListings.length > 0) {
+      await mapCapped(realityListings, 10, async (listing) => {
+        try {
+          const isAgency = await fetchRealitySkIsAgency(listing.url);
+          listing.predajca_typ = isAgency ? "firma" : "sukromny";
+          authoritativeKeys.add(`${listing.portal}:${listing.external_id}`);
+        } catch { /* fail-safe: ponechaj existujúci predajca_typ (neautoritatívne) */ }
+      });
+    }
+
+    // 2d. Bazos enrichment — pre listingy klasifikované ako "sukromny" skontrolujeme
+    //     detail stránku na RK markery. Ak detail potvrdí RK → firma (autoritatívne).
+    //     Nenájdenie markerov NIE je dôkaz súkromníka (maklér môže byť skrytý) →
+    //     neautoritatívne, klasifikátor doháda. STROP: 36, po 12 súbežne.
     const bazosCandidates = allListings
       .filter((l) => l.portal === "bazos.sk" && l.predajca_typ === "sukromny")
       .slice(0, 36);
@@ -417,23 +434,11 @@ async function processFilter(
       await mapCapped(bazosCandidates, 12, async (listing) => {
         try {
           const isFirma = await isBazosListingFirma(listing.url);
-          if (isFirma) listing.predajca_typ = "firma";
-        } catch { /* fail-safe: keep sukromny */ }
-      });
-    }
-
-    // 2d. Reality.sk enrichment — AUTORITATÍVNE na VŠETKÝCH reality listingoch.
-    //     Detail stránka má štruktúrny štítok: link /realitna-kancelaria/ ⇒ firma,
-    //     inak ⇒ sukromny. Toto je ground-truth pre reality.sk, preto ho púšťame
-    //     na každý inzerát (nie len nové) a prepisuje parser/klasifikátor.
-    //     STROP: max 40, po 10 súbežne (30s rozpočet). Zlyhanie → ponecháme stav.
-    const realityListings = allListings.filter((l) => l.portal === "reality.sk").slice(0, 40);
-    if (realityListings.length > 0) {
-      await mapCapped(realityListings, 10, async (listing) => {
-        try {
-          const isAgency = await fetchRealitySkIsAgency(listing.url);
-          listing.predajca_typ = isAgency ? "firma" : "sukromny";
-        } catch { /* fail-safe: ponechaj existujúci predajca_typ */ }
+          if (isFirma) {
+            listing.predajca_typ = "firma";
+            authoritativeKeys.add(`${listing.portal}:${listing.external_id}`); // potvrdené RK
+          }
+        } catch { /* fail-safe: keep sukromny (neautoritatívne) */ }
       });
     }
 
@@ -566,6 +571,20 @@ async function processFilter(
             method: "v2",
           });
           listing.predajca_typ = toLegacyDbEnum(override as "rk" | "sukromny") as typeof listing.predajca_typ;
+          continue;
+        }
+
+        // Autoritatívny výsledok z detail-stránky portálu (reality agentúrny štítok
+        // / potvrdené bazos RK) — ground-truth. Klasifikátor ho NESMIE prepísať.
+        if (authoritativeKeys.has(key)) {
+          const at: "rk" | "sukromny" = listing.predajca_typ === "firma" ? "rk" : "sukromny";
+          classifierResults.set(key, {
+            predajca_typ: at,
+            confidence: 1.0,
+            raw_score: 99,
+            signals: [{ id: "detail_authoritative", side: at, weight: 99, reason: at === "rk" ? "Detail stránka portálu: realitná kancelária" : "Detail stránka portálu: bez agentúry → súkromník" }],
+            method: "v2",
+          });
           continue;
         }
 

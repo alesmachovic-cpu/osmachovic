@@ -608,11 +608,31 @@ function MonitorContent() {
             <select value={viewTyp} onChange={e => setViewTyp(e.target.value)} style={{ ...S.select, width: "auto", minWidth: "140px" }}>
               {TYPY.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
-            <select value={viewPonuka} onChange={e => setViewPonuka(e.target.value)} style={{ ...S.select, width: "auto", minWidth: "140px" }}>
-              <option value="">Predaj + prenájom</option>
-              <option value="predaj">Len predaj</option>
-              <option value="prenajom">Len prenájom</option>
-            </select>
+            {/* Predaj / prenájom — viditeľný segmentovaný prepínač */}
+            <div style={{ display: "inline-flex", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", overflow: "hidden", height: "38px" }}>
+              {[
+                { v: "", label: "Všetko" },
+                { v: "predaj", label: "Predaj" },
+                { v: "prenajom", label: "Prenájom" },
+              ].map((o, idx) => {
+                const active = viewPonuka === o.v;
+                return (
+                  <button
+                    key={o.v || "all"}
+                    onClick={() => setViewPonuka(o.v)}
+                    style={{
+                      padding: "0 14px", border: "none", cursor: "pointer", fontSize: "13px",
+                      fontWeight: active ? 700 : 500,
+                      borderLeft: idx > 0 ? "1px solid var(--border-subtle)" : "none",
+                      background: active ? (o.v === "prenajom" ? "#cffafe" : o.v === "predaj" ? "#e0e7ff" : "var(--text-primary)") : "var(--bg-base)",
+                      color: active ? (o.v === "prenajom" ? "#0e7490" : o.v === "predaj" ? "#3730a3" : "var(--bg-base)") : "var(--text-secondary)",
+                    }}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
             <select value={sort} onChange={e => setSort(e.target.value)} style={{ ...S.select, width: "auto", minWidth: "140px" }}>
               {SORT_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
