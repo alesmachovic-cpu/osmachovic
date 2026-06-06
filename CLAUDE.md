@@ -22,6 +22,11 @@ Test/staging: **https://dev.amgd.sk**
 - Keď niečo neviem alebo si neistý, povedz to priamo. Žiadne "isto budeš zvládať".
 - Som realitný maklér, nie programátor — vysvetľuj rozhodnutia rečou ktorá dáva zmysel realiťákovi.
 
+## 🧠 Buď kritický — nie áno-pán
+- **Žiadne automatické áno.** Pri každom mojom zadaní aj pri každom svojom riešení sa najprv spýtaj: aký je skutočný cieľ za zadaním (čo tým naozaj chcem dosiahnuť), nie len doslovné znenie.
+- Keď vidíš slabinu, riziko alebo jednoduchšiu/lepšiu cestu — **povedz to priamo PRED implementáciou** a navrhni alternatívu. Platí to rovnako na tvoje vlastné návrhy: over, že riešia reálny cieľ.
+- Cieľ je **najlepší výsledok, nie odpor zo zásady.** Tam, kde je zadanie zjavne správne, nehľadaj problém umelo — kritickosť má slúžiť výsledku, nie kontrariánstvu.
+
 ## 🔒 ZLATÉ PRAVIDLO: Bezpečnosť 100%, vždy, bez výnimky
 
 **Bezpečnostný baseline NESMIE klesnúť ani o jeden bod, ani na minútu.** Nie len pri security-súvisiacich commitoch — pri **každom** commite, **každej** zmene, **každej** novej feature. UI refactor, drobný fix, kozmetika — všetko prechádza tým istým gate-om.
@@ -86,6 +91,22 @@ Ak akákoľvek zmena (vrátane "len UI", "len refactor", "len kozmetika") **vyž
    Ak akýkoľvek `✗`, **NEROBí commit** — najprv oprav alebo pridaj do allowlist s odôvodnením. Žiadne "tváriť že robíme".
 9. **NIKDY alias-swap** medzi Vercel preview a production deployment cez API. Lekcia z 20.5.2026: prepol som `vianema.amgd.sk` na preview deployment ktorý nemal `NEXT_PUBLIC_*` env vars (per-environment) → klient JS dostal undefined → 1h výpadok. Pre PROD deploy do `funny-stonebraker` projektu: VŽDY `vercel deploy --prod` (target=production) z fresh clone main, NIKDY alias swap.
 10. Nikdy neoznač úlohu ako hotovú bez verifikácie.
+
+## 🪟 Viac okien naraz — disciplína (DÔLEŽITÉ, číta KAŽDÉ okno)
+
+Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne (kupujúci / analyza / právo / security / …). **Všetky zdieľajú ten istý adresár a git repo** (`/Users/alesmachovic/Code/os-machovic`, branch `dev`). Necommitnuté zmeny aj commity sa preto medzi oknami miešajú. Aby sa **žiadne okno nepomýlilo**:
+
+1. **Svoj scope ber z chatu, NIE z pamäte.** Memory je zdieľaná; záznam „toto okno = X" napísalo INÉ okno o sebe — nevzťahuj ho na seba. Keď nevieš svoj scope, spýtaj sa Aleša.
+2. **Rob len vo svojej doméne. Keď nájdeš niečo mimo svojej kompetencie** (napr. security, právo, iná doména), **NEopravuj to tu** — namiesto toho:
+   - **(a) upozorni Aleša** na nález: čo to je, prečo je to dôležité, aké je riziko (pri security/práve použi 🔴 banner podľa protokolu nižšie);
+   - **(b) priprav hotový copy-paste prompt pre správne okno** — sebestačný, s presnými súbormi/riadkami a už overenými faktami, nech cieľové okno nezačína od nuly.
+3. **Commituj LEN svoje konkrétne súbory** — `git add cesta/k/suboru`, **NIKDY `git add -A` ani `git add .`**. Inak zahrnieš rozrobenú prácu iného okna.
+4. **Pred commitom vždy `git status`** a over, že stage-uješ len svoje. Vo working tree môžu byť `M`/`??` súbory iných okien — **nedotýkaj sa ich**, nestage-uj ich, nevracaj späť.
+5. **Po `git push` over `git log origin/dev`**, že tvoj commit tam reálne je. „Everything up-to-date" často znamená, že iné okno už pushlo (a odnieslo aj tvoj commit) — nie že push zlyhal.
+6. **Baseline/audit porovnania**: stashuj LEN svoj súbor (`git stash push <file>`), nie celý working tree — inak do baseline zamiešaš cudzie zmeny.
+7. **NIKDY `git checkout`/`switch` na iný branch** — prepol by si súbory pod rukami ostatným oknám. Všetci sme na `dev`.
+
+> Reálny incident 2026-06-06: počas práce na kupujúci (commit 9e9aeaa) iné okno pushlo `13f27ab` (analyza) a odnieslo aj môj commit. Nič sa nerozbilo len preto, že commit bol čistý (`git add` len 1 súbor). Tieto pravidlá to robia spoľahlivým, nie šťastím.
 
 ## Tri hlavné princípy (Boris Cherny)
 1. **Jednoduchosť** — minimálny kód. Ak vieš niečo zmazať namiesto pridať, sprav to.
