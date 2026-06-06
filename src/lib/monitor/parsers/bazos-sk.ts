@@ -1,7 +1,7 @@
 /* ── Parser pre bazos.sk (reality.bazos.sk) ── */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
-import { detectFirma, extractPoschodie, extractStav } from "./shared";
+import { detectFirma, extractPoschodie, extractStav, extractIzby, extractPlocha, extractTyp } from "./shared";
 
 const PORTAL = "bazos.sk";
 const BASE_URL = "https://reality.bazos.sk";
@@ -170,24 +170,13 @@ export const bazosSkParser: PortalParser = {
         predajca_typ = "firma";
       }
 
-      // Typ from URL
-      let typ = "iny";
-      if (relUrl.includes("/inzerat/")) {
-        // Bazos kategorizuje cez URL segments — /byty/, /domy/, /pozemky/ — ale listing URL je /inzerat/ID/slug
-        // Detekujeme z názvu / slugu
-        const slugLower = relUrl.toLowerCase();
-        if (slugLower.match(/byt|izb|garsonka/)) typ = "byt";
-        else if (slugLower.match(/dom|chalupa|chata/)) typ = "dom";
-        else if (slugLower.match(/pozemk|parcela|zeme/)) typ = "pozemok";
-      }
+      // Typ — z názvu, slugu aj popisu (robustný helper so slovnými hranicami).
+      const metaText = `${nazov} ${relUrl.replace(/[-/]/g, " ")} ${popis || ""}`;
+      const typ = extractTyp(metaText);
 
-      // Area parsing z názvu (napr. "3i 68m2" alebo "4-izbový byt 74 m²")
-      const areaMatch = nazov.match(/(\d{2,3})\s*m[²2]/i);
-      const plocha = areaMatch ? parseFloat(areaMatch[1]) : undefined;
-
-      // Rooms from name
-      const roomMatch = nazov.match(/(\d+)\s*[-]?\s*izb/i) || nazov.match(/\b(\d+)i\b/);
-      const izby = roomMatch ? parseInt(roomMatch[1]) : undefined;
+      // Plocha + izby — helpery so sanity hranicami (plocha 8–3000 m², izby 1–9).
+      const plocha = extractPlocha(`${nazov} ${popis || ""}`);
+      const izby = extractIzby(`${nazov} ${popis || ""}`);
 
       // Poschodie + stav z titulu + popisu
       const poschodie = extractPoschodie(`${nazov} ${popis || ""}`);

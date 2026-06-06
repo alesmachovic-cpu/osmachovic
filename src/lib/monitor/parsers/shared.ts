@@ -82,3 +82,72 @@ export function extractStav(text: string): string | undefined {
   if (t.includes("developer") || t.includes("developersky")) return "novostavba";
   return undefined;
 }
+
+/** Normalizuj text: lowercase, bez diakritiky. */
+function norm(text: string): string {
+  return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+/**
+ * Extrahuje počet izieb z textu (názov + popis). Sanity hranice 1–9.
+ * Pokrýva: "3-izb", "3 izb", "3i", "3izb", slovné (jedno/dvoj/troj/štvor/päť-izbový),
+ * "garsónka" → 1. Vracia undefined ak sa nedá spoľahlivo určiť.
+ */
+export function extractIzby(text: string): number | undefined {
+  const t = norm(text);
+  // Slovné číslovky pred "izb"
+  const slovne: Array<[RegExp, number]> = [
+    [/garson|garzon|1\s*\+\s*kk|jednoizb/, 1],
+    [/dvojizb/, 2], [/trojizb/, 3], [/stvorizb/, 4], [/patizb/, 5], [/sestizb/, 6],
+  ];
+  for (const [re, n] of slovne) if (re.test(t)) return n;
+  // "N-izb", "N izb", "Nizb" (N = 1..9)
+  const m1 = t.match(/\b([1-9])\s*[-\s]?\s*izb/);
+  if (m1) return parseInt(m1[1]);
+  // "Ni" tesne (napr. "3i 68m2") — len ak za ním NEnasleduje písmeno (aby sme
+  // nechytili napr. "3input"); a len malé N (1..7).
+  const m2 = t.match(/\b([1-7])\s*i\b/);
+  if (m2) return parseInt(m2[1]);
+  // "N + kk" / "N+1"
+  const m3 = t.match(/\b([1-6])\s*\+\s*(?:kk|1)\b/);
+  if (m3) return parseInt(m3[1]);
+  return undefined;
+}
+
+/**
+ * Extrahuje úžitkovú plochu (m²) z textu. Sanity hranice 8–3000 m².
+ * Preferuje číslo bezprostredne pred "m²"/"m2". Vracia undefined ak mimo hraníc.
+ */
+export function extractPlocha(text: string): number | undefined {
+  const t = norm(text);
+  // Všetky výskyty "<číslo> m²/m2" — jednotka POVINNÁ (inak by "200 m od lesa"
+  // vyzeralo ako plocha). Akceptuje m2, m², m^2.
+  const re = /(\d{1,4}(?:[.,]\d+)?)\s*m\s*(?:2|²|\^2)/g;
+  let m: RegExpExecArray | null;
+  const candidates: number[] = [];
+  while ((m = re.exec(t)) !== null) {
+    const n = parseFloat(m[1].replace(",", "."));
+    if (Number.isFinite(n) && n >= 8 && n <= 3000) candidates.push(n);
+  }
+  // Ak je viac kandidátov (napr. plocha + pozemok), vezmeme najmenší rozumný
+  // (úžitková plocha bytu/domu býva menšia ako plocha pozemku v tom istom inzeráte).
+  if (candidates.length > 0) return Math.min(...candidates);
+  return undefined;
+}
+
+/**
+ * Odvodí typ nehnuteľnosti (byt/dom/pozemok/iny) z textu (názov/slug/popis).
+ * Poradie: pozemok → dom → byt → iny. Slovné hranice znižujú false-positive
+ * (napr. "nábytok" neobsahuje \bbyt).
+ */
+export function extractTyp(text: string): "byt" | "dom" | "pozemok" | "iny" {
+  const t = norm(text);
+  // 1) Dom (skôr ako pozemok — „rodinný dom + pozemok 800 m²" je dom so záhradou).
+  if (/(rodinny dom|rodinneho domu|\bdom\b|\bdomu\b|\bdome\b|chalup|\bchata\b|\bchaty\b|\bvila\b|\bvily\b|dvojdom|radovy dom)/.test(t)) return "dom";
+  // 2) Pozemok (len keď to nie je dom).
+  if (/(\bpozemok\b|\bpozemky\b|\bpozemku\b|parcela|orna poda|stavebny pozemok)/.test(t)) return "pozemok";
+  // 3) Byt — kľúčové slová alebo počet izieb (Ni / N-izb) ⇒ takmer vždy byt.
+  if (/\bbyt/.test(t) || /izbov/.test(t) || /garson|garzon|apartman|mezonet/.test(t)
+      || /\b[1-9]\s*-?\s*izb/.test(t) || /\b[1-7]\s*i\b/.test(t)) return "byt";
+  return "iny";
+}
