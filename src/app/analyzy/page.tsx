@@ -46,7 +46,10 @@ type AnalyzaData = {
   by_portal: Record<string, number>;
   by_typ: Record<string, number>;
   predajcovia: { sukromni: number; realitky: number; ostatni: number };
-  cenova_analyza?: { predaj: SegmentStats; prenajom: SegmentStats };
+  cenova_analyza?: {
+    lokality: Array<{ key: string; count: number }>;
+    data: Record<string, { predaj: SegmentStats; prenajom: SegmentStats }>;
+  };
   motivated_sellers: MotivatedSeller[];
   sales_stats: {
     avg_dom: number | null;
@@ -106,6 +109,7 @@ function AnalyzyInner() {
   const [error, setError] = useState<string | null>(null);
   const [cenaPonuka, setCenaPonuka] = useState<"predaj" | "prenajom">("predaj");
   const [cenaTyp, setCenaTyp] = useState<"vsetko" | "byt" | "dom" | "pozemok">("byt");
+  const [cenaLok, setCenaLok] = useState<string>("__all__");
 
   useEffect(() => {
     fetch("/api/monitor/analyza")
@@ -214,7 +218,9 @@ function AnalyzyInner() {
 
       {/* Cenová analýza — súkromník vs RK */}
       {data.cenova_analyza && (() => {
-        const seg = data.cenova_analyza[cenaPonuka];
+        const ca = data.cenova_analyza!;
+        const lokData = ca.data[cenaLok] ?? ca.data["__all__"];
+        const seg = lokData[cenaPonuka];
         const triple: SegTriple = cenaTyp === "vsetko" ? seg : (seg.by_typ[cenaTyp] ?? seg);
         const jePrenajom = cenaPonuka === "prenajom";
         const fmtEm2 = (n: number | null) => n == null ? "—" : (jePrenajom ? `${n} €/m²/mes` : `${n.toLocaleString("sk-SK")} €/m²`);
@@ -242,7 +248,16 @@ function AnalyzyInner() {
             <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "14px" }}>
               Ponukové ceny aktívnych inzerátov (za koľko sa inzeruje, nie finálna predajná).
             </div>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px", alignItems: "center" }}>
+              {/* Lokalita — kvôli presnosti (BA centrum ≠ dedina) */}
+              <select
+                value={cenaLok}
+                onChange={(e) => setCenaLok(e.target.value)}
+                style={{ height: "32px", padding: "0 10px", border: "1px solid var(--border)", borderRadius: "8px", background: "var(--bg-base)", color: "var(--text-primary)", fontSize: "13px", fontWeight: 600, cursor: "pointer", maxWidth: "260px" }}
+              >
+                <option value="__all__">📍 Celé Slovensko ({ca.data["__all__"][cenaPonuka].all.count})</option>
+                {ca.lokality.map(l => <option key={l.key} value={l.key}>{l.key} ({l.count})</option>)}
+              </select>
               <Seg opts={[["predaj", "Predaj"], ["prenajom", "Prenájom"]]} val={cenaPonuka} set={(v) => setCenaPonuka(v as "predaj" | "prenajom")} />
               <Seg opts={[["vsetko", "Všetko"], ["byt", "Byt"], ["dom", "Dom"], ["pozemok", "Pozemok"]]} val={cenaTyp} set={(v) => setCenaTyp(v as typeof cenaTyp)} />
             </div>
