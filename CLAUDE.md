@@ -140,10 +140,16 @@ Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne 
 3. Keď nie si istý na 100 %, **spýtaj sa / ukáž kandidátov** — neoznačuj to ako fakt.
 4. Nikdy neprezentuj „pravdepodobného vlastníka" ako istotu.
 
+**🛰️ Komunikácia medzi oknami — VŽDY cez MD (hub-and-spoke, záväzné):**
+- **Žiadne priame okno↔okno správy.** Keď okno potrebuje čokoľvek od iného okna (otázka, handoff, závislosť, nález mimo svojej domény, koordinácia timingu) → pošle to **MD oknu**, MD posúdi, určí vlastníka a prepošle. Nikdy nie priamo druhému oknu.
+- **Dôvod:** pri 6+ oknách je priama mesh komunikácia (každý s každým) chaos — stratené správy, duplicitné úlohy, nik nevidí celý obraz. MD je jediný router a drží register pravdy.
+- **MD je jediný, kto smie písať doménovým oknám úlohy** a jediný, komu okná reportujú. Aj „skoordinuj sa s druhým oknom" rieši MD, nie okná medzi sebou.
+- Keď MD okno práve nie je otvorené: pošli správu MD (zaradí sa do fronty, doručí sa keď MD ožije) a počkaj — nepíš priamo inému oknu „medzitým".
+
 **Bug triáž + report-back (záväzné):**
 - **Chyby/bugy hlási Aleš MD oknu** (nie priamo doménovému oknu). MD určí vlastníka, overí kontext, zistí či to už niekto rieši, a pošle úlohu správnemu oknu.
 - **Po dokončení zadanej úlohy okno reportuje SPÄŤ do MD** (cez `send_message` na MD session): „hotovo" + zmenené súbory + commit hash. MD skontroluje výsledok a koordináciu medzi oknami.
-- Cross-window bug (viac okien) → MD rozdelí na časti s **jasne oddelenými** zodpovednosťami (kto tvar dát, kto auth, kto UI) a koordinuje timing, nech sa fixy stretnú.
+- Cross-window bug (viac okien) → MD rozdelí na časti s **jasne oddelenými** zodpovednosťami (kto tvar dát, kto auth, kto UI) a **koordinuje timing cez seba** (okná sa nedohadujú priamo).
 
 **🚨 Security ≠ Právo/GDPR — sú to DVE samostatné okná. Nikdy ich nezlievaj do jedného „security okna".**
 - **`Bezpecnost`** (Security & Auth) = technická vrstva: chýbajúci `requireUser`, RLS/scope/`company_id` filter, IDOR, secrets v kóde, rate-limit, 2FA, **technické odstránenie PII z logov/kódu**.
