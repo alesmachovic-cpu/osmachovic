@@ -158,6 +158,10 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
       alert("Vyber aspoň jeden kraj — bez lokality matching nedá zmysluplné zhody.");
       return;
     }
+    if (!cenaDo || Number(cenaDo) <= 0) {
+      alert("Zadaj cenu DO (horný rozpočet) — bez nej matching nevie ohraničiť zhody.");
+      return;
+    }
     setSaving(true);
     const payload: Record<string, unknown> = {
       klient_id: klient.id,
@@ -383,7 +387,7 @@ export default function ObjednavkaForm({ klient, onBack, onSubmit, simplified = 
         </div>
       )}
 
-      <button onClick={handleSubmit} disabled={saving || druhy.length === 0 || kraje.length === 0 || !!savedId} style={{
+      <button onClick={handleSubmit} disabled={saving || druhy.length === 0 || kraje.length === 0 || !cenaDo || !!savedId} style={{
         width: "100%", padding: "16px", borderRadius: "12px", border: "none",
         background: druhy.length === 0 ? "#D1D5DB" : remoteSignMode ? "#1d4ed8" : "#374151",
         color: "#fff", fontSize: "15px", fontWeight: "700",

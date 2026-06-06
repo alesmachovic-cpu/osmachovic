@@ -568,8 +568,8 @@ export default function KlientDetailPage() {
       });
     });
 
-    // Nehnuteľnosti
-    inzeratyArr.forEach((n: Record<string, unknown>) => {
+    // Nehnuteľnosti — NIE pre čistého kupujúceho (rovnaký vzor ako náberák vyššie)
+    if (klientData?.typ !== "kupujuci") inzeratyArr.forEach((n: Record<string, unknown>) => {
       const nStatus = String(n.status || "koncept");
       const nAddr = String(n.obec || n.ulica || "bez adresy");
       const nTitle = nStatus === "aktivny"
@@ -2589,7 +2589,7 @@ export default function KlientDetailPage() {
                 { key: "nehnutelnost", label: "🏡 Nehnuteľnosti" },
                 { key: "objednavka", label: "📋 Objednávky" },
                 { key: "dokument", label: "📄 Dokumenty" },
-              ].filter(f => !isCistyKupujuci || f.key !== "naber").map(f => (
+              ].filter(f => !isCistyKupujuci || (f.key !== "naber" && f.key !== "nehnutelnost")).map(f => (
                 <button key={f.key} onClick={() => setTimelineFilter(f.key)} style={{
                   padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
                   cursor: "pointer", border: "1px solid var(--border)",
