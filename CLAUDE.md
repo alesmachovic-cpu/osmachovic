@@ -140,6 +140,11 @@ Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne 
 3. Keď nie si istý na 100 %, **spýtaj sa / ukáž kandidátov** — neoznačuj to ako fakt.
 4. Nikdy neprezentuj „pravdepodobného vlastníka" ako istotu.
 
+**Bug triáž + report-back (záväzné):**
+- **Chyby/bugy hlási Aleš MD oknu** (nie priamo doménovému oknu). MD určí vlastníka, overí kontext, zistí či to už niekto rieši, a pošle úlohu správnemu oknu.
+- **Po dokončení zadanej úlohy okno reportuje SPÄŤ do MD** (cez `send_message` na MD session): „hotovo" + zmenené súbory + commit hash. MD skontroluje výsledok a koordináciu medzi oknami.
+- Cross-window bug (viac okien) → MD rozdelí na časti s **jasne oddelenými** zodpovednosťami (kto tvar dát, kto auth, kto UI) a koordinuje timing, nech sa fixy stretnú.
+
 **🚨 Security ≠ Právo/GDPR — sú to DVE samostatné okná. Nikdy ich nezlievaj do jedného „security okna".**
 - **`Bezpecnost`** (Security & Auth) = technická vrstva: chýbajúci `requireUser`, RLS/scope/`company_id` filter, IDOR, secrets v kóde, rate-limit, 2FA, **technické odstránenie PII z logov/kódu**.
 - **`Pravo`** (GDPR / Compliance / Právo) = právna vrstva: súhlasy, výmaz, retention, AML/KYC, zákonné náležitosti faktúr/zmlúv, a **posúdenie GDPR dopadu** (oznamovacia povinnosť ÚOOÚ, dopad na dotknuté osoby).
