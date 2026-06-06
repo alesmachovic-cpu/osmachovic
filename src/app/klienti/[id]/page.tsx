@@ -538,8 +538,8 @@ export default function KlientDetailPage() {
       });
     }
 
-    // Nábery
-    naberyArr.forEach((n: Record<string, unknown>) => {
+    // Nábery — NIE pre čistého kupujúceho (ten náberák nemá; konzistentné s isCistyKupujuci v UI)
+    if (klientData?.typ !== "kupujuci") naberyArr.forEach((n: Record<string, unknown>) => {
       events.push({
         id: `naber-${n.id}`,
         type: "naber",
@@ -2589,7 +2589,7 @@ export default function KlientDetailPage() {
                 { key: "nehnutelnost", label: "🏡 Nehnuteľnosti" },
                 { key: "objednavka", label: "📋 Objednávky" },
                 { key: "dokument", label: "📄 Dokumenty" },
-              ].map(f => (
+              ].filter(f => !isCistyKupujuci || f.key !== "naber").map(f => (
                 <button key={f.key} onClick={() => setTimelineFilter(f.key)} style={{
                   padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
                   cursor: "pointer", border: "1px solid var(--border)",
