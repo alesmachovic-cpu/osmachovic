@@ -42,6 +42,8 @@ const TIER1_MUST_HAVE_AUTH = new Set([
   "src/app/api/ulohy/route.ts",
   "src/app/api/klient-dokumenty/route.ts",
   "src/app/api/obchody/route.ts",
+  // 2026-06-06 — objednavky kupujúcich (PII): GET bol verejný (P0 leak).
+  "src/app/api/objednavky/route.ts",
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────
