@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useZhodyPreObjednavku, useZaujemcoviaPreNehnutelnost } from "@/hooks/useMatching";
 import type { ZhodaItem, ZaujemcaItem } from "@/hooks/useMatching";
+import { skoreUroven } from "@/lib/matching";
 
 type Props = {
   klientTyp: string;
@@ -14,10 +15,10 @@ type Props = {
 };
 
 function scoreBadge(score: number) {
-  // Apple-style: minimum farieb. Zelená iba pre top match (≥85%), ostatné
-  // sú neutrálne tmavošedé. Lebo "tento match je výborný" je legit signal,
-  // ale 70% nie je dôvod na farebné štvorčeky.
-  if (score >= 85) return { bg: "#064E3B", fg: "#86efac" };
+  // Apple-style: minimum farieb. Zelená iba pre výborný match (jednotný prah
+  // ≥80 cez skoreUroven), ostatné sú neutrálne tmavošedé — 70% nie je dôvod
+  // na farebné štvorčeky.
+  if (skoreUroven(score) === "vyborna") return { bg: "#064E3B", fg: "#86efac" };
   return { bg: "#374151", fg: "#D1D5DB" };
 }
 

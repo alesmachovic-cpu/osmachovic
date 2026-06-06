@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useZhodyPreObjednavku } from "@/hooks/useMatching";
 import type { ZhodaItem } from "@/hooks/useMatching";
+import { skoreUroven } from "@/lib/matching";
 
 type Props = {
   objednavkaId: string;
@@ -10,8 +11,9 @@ type Props = {
 };
 
 function scoreColors(score: number) {
-  if (score >= 80) return { dot: "🟢", border: "#10B981", bg: "#F0FDF4", text: "#065F46" };
-  if (score >= 50) return { dot: "🟡", border: "#F59E0B", bg: "#FFFBEB", text: "#92400E" };
+  const u = skoreUroven(score);
+  if (u === "vyborna") return { dot: "🟢", border: "#10B981", bg: "#F0FDF4", text: "#065F46" };
+  if (u === "dobra") return { dot: "🟡", border: "#F59E0B", bg: "#FFFBEB", text: "#92400E" };
   return { dot: "⚪", border: "#E5E7EB", bg: "#F9FAFB", text: "#374151" };
 }
 

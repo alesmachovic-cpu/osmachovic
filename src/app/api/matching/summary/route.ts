@@ -19,9 +19,9 @@ export async function GET(req: NextRequest) {
   // 🐛 BUG FIX 2026-05-22: fallback na klient.lokalita keď obj.lokalita je prázdne
   const klientIds = [...new Set(((objednavky ?? []) as Array<{ klient_id: string | null }>).map(o => o.klient_id).filter(Boolean) as string[])];
   const { data: klientiData } = klientIds.length > 0
-    ? await sb.from("klienti").select("id,lokalita").in("id", klientIds)
+    ? await sb.from("klienti").select("id,lokalita,rozpocet_max").in("id", klientIds)
     : { data: [] };
-  const klientMap = new Map<string, KlientForMatch>((klientiData ?? []).map(k => [k.id, { id: k.id, lokalita: k.lokalita, rozpocet_max: null }]));
+  const klientMap = new Map<string, KlientForMatch>((klientiData ?? []).map(k => [k.id, { id: k.id, lokalita: k.lokalita, rozpocet_max: k.rozpocet_max }]));
 
   const result: Record<string, { totalMatches: number; topScore: number; daysSinceCreated: number }> = {};
 

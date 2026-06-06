@@ -35,8 +35,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // Fallback: keď obj.lokalita je prázdne, použijeme klient.lokalita ("Vlčince, Žilina").
   let klientForMatch: KlientForMatch | undefined;
   if (obj.klient_id) {
-    const { data: k } = await sb.from("klienti").select("id,lokalita").eq("id", obj.klient_id).maybeSingle();
-    if (k) klientForMatch = { id: k.id, lokalita: k.lokalita, rozpocet_max: null };
+    const { data: k } = await sb.from("klienti").select("id,lokalita,rozpocet_max").eq("id", obj.klient_id).maybeSingle();
+    if (k) klientForMatch = { id: k.id, lokalita: k.lokalita, rozpocet_max: k.rozpocet_max };
   }
 
   // Interné nehnuteľnosti

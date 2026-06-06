@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { skoreUroven } from "@/lib/matching";
 import type { Klient, Nehnutelnost } from "@/lib/database.types";
 
 interface Objednavka {
@@ -160,9 +161,10 @@ export default function MatchingPage() {
     : (focusKlientId ? klienti.find(k => k.id === focusKlientId)?.meno : null);
 
   function scoreColor(s: number) {
-    if (s >= 80) return { color: "var(--text-primary)", bg: "#D1FAE5", ring: "#10B981" };
-    if (s >= 50) return { color: "var(--text-secondary)", bg: "#DBEAFE", ring: "#3B82F6" };
-    return { color: "var(--text-secondary)", bg: "#FEF3C7", ring: "#F59E0B" };
+    const u = skoreUroven(s);
+    if (u === "vyborna") return { color: "var(--text-primary)", bg: "#D1FAE5", ring: "#10B981" };
+    if (u === "dobra") return { color: "var(--text-secondary)", bg: "#FEF3C7", ring: "#F59E0B" };
+    return { color: "var(--text-secondary)", bg: "#F3F4F6", ring: "#9CA3AF" };
   }
 
   const filters = [

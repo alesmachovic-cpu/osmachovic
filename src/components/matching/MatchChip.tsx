@@ -1,5 +1,7 @@
 "use client";
 
+import { skoreUroven } from "@/lib/matching";
+
 type Props = {
   totalMatches: number;
   topScore: number;
@@ -13,11 +15,12 @@ export function MatchChip({ totalMatches, topScore, daysSinceCreated, onClick }:
   let border = "#E5E7EB";
   let icon = "⚪";
 
+  const u = skoreUroven(topScore);
   if (totalMatches === 0 && daysSinceCreated > 7) {
     bg = "#FEF2F2"; color = "#991B1B"; border = "#FECACA"; icon = "⚠";
-  } else if (topScore >= 80) {
+  } else if (u === "vyborna") {
     bg = "#F0FDF4"; color = "#065F46"; border = "#BBF7D0"; icon = "🟢";
-  } else if (topScore >= 50) {
+  } else if (u === "dobra") {
     bg = "#FFFBEB"; color = "#92400E"; border = "#FDE68A"; icon = "🟡";
   }
 

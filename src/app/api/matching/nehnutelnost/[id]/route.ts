@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { vypocitajSkore } from "@/lib/matching";
-import type { ObjednavkaForMatch, NehnutelnostForMatch } from "@/lib/matching";
+import type { ObjednavkaForMatch, NehnutelnostForMatch, KlientForMatch } from "@/lib/matching";
 
 export const runtime = "nodejs";
 
@@ -19,15 +19,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   type ObjWithKupujuci = ObjednavkaForMatch & { kupujuci?: { id: string; meno: string; telefon: string | null } };
   const obs = (objednavky ?? []) as ObjWithKupujuci[];
 
+  // Klienti objednávok — kontakt + lokalita pre fallback. Lokalitu posielame do
+  // vypocitajSkore (3. arg), aby skóre bolo symetrické s objednavka/[id] a summary
+  // (objednávka s prázdnou lokalitou padne na klient.lokalita rovnako z oboch strán).
+  const km = new Map<string, { id: string; meno: string; telefon: string | null; lokalita: string | null; rozpocet_max: number | null }>();
   if (obs.length > 0) {
     const klientIds = [...new Set(obs.map(o => o.klient_id))];
-    const { data: klienti } = await sb.from("klienti").select("id,meno,telefon").in("id", klientIds);
-    const km = new Map((klienti ?? []).map(k => [k.id, k]));
-    for (const o of obs) o.kupujuci = km.get(o.klient_id) ?? undefined;
+    const { data: klienti } = await sb.from("klienti").select("id,meno,telefon,lokalita,rozpocet_max").in("id", klientIds);
+    for (const k of klienti ?? []) km.set(k.id, k);
+    for (const o of obs) {
+      const k = km.get(o.klient_id);
+      o.kupujuci = k ? { id: k.id, meno: k.meno, telefon: k.telefon } : undefined;
+    }
   }
 
   const matches = obs
-    .map(o => ({ objednavka: o, score: vypocitajSkore(o, neh as NehnutelnostForMatch).score }))
+    .map(o => {
+      const k = km.get(o.klient_id);
+      const klient: KlientForMatch | undefined = k ? { id: k.id, lokalita: k.lokalita, rozpocet_max: k.rozpocet_max } : undefined;
+      return { objednavka: o, score: vypocitajSkore(o, neh as NehnutelnostForMatch, klient).score };
+    })
     .filter(m => m.score >= 30)
     .sort((a, b) => b.score - a.score);
 
