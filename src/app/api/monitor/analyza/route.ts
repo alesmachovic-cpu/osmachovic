@@ -110,7 +110,10 @@ export async function GET() {
   });
   // Lokality — normalizovaný kľúč (trim + zložené medzery). Zobrazujeme len tie
   // s aspoň 3 inzerátmi (menej = nereprezentatívny medián), top 30 podľa počtu.
-  const lokKey = (s: string | null) => (s || "").replace(/\s+/g, " ").trim();
+  // Normalizácia: zlúč staré "Reality " prefixy (reality.sk artefakt na starých
+  // riadkoch) s čistými, zlož medzery. Tým sa "Reality Bratislava-Ružinov" a
+  // "Bratislava-Ružinov" počítajú ako jedna lokalita.
+  const lokKey = (s: string | null) => (s || "").replace(/^\s*reality\s+/i, "").replace(/\s+/g, " ").trim();
   const lokCounts = new Map<string, number>();
   for (const r of activeRows) {
     const k = lokKey(r.lokalita);
