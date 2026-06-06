@@ -1,3 +1,5 @@
+import { distanceKm } from "./geocode";
+
 export type ObjednavkaForMatch = {
   id: string;
   klient_id: string;
@@ -105,13 +107,7 @@ export function vypocitajSkore(
   // Toto rieši "Petržalka-Háje → Dvory 1km lepšie ako Dúbravka 7km lepšie ako Senec 20km".
   let geoApplied = false;
   if (o.lat != null && o.lng != null && n.lat != null && n.lng != null) {
-    const R = 6371;
-    const toRad = (deg: number) => deg * Math.PI / 180;
-    const dLat = toRad(n.lat - o.lat);
-    const dLng = toRad(n.lng - o.lng);
-    const a = Math.sin(dLat / 2) ** 2 +
-              Math.cos(toRad(o.lat)) * Math.cos(toRad(n.lat)) * Math.sin(dLng / 2) ** 2;
-    const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const km = distanceKm(o.lat, o.lng, n.lat, n.lng);
 
     if (km <= 1) {
       score += 25;

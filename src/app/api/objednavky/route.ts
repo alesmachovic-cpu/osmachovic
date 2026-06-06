@@ -3,8 +3,28 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { getUserScope } from "@/lib/scope";
 import { logAudit } from "@/lib/audit";
+import { geocodeAddress } from "@/lib/geocode";
 
 export const runtime = "nodejs";
+
+/**
+ * Geokóduj objednávku z lokality — LEN pri jednoznačnej lokalite (práve 1 okres,
+ * alebo 1 kraj bez okresov). Pri viacerých okresoch vrátime null → matching padne
+ * na text-based porovnanie (zvládne zoznam lokalít). Geo (vzdialenosť v km) dáva
+ * zmysel len pre jeden bod, inak by jeden okres skresľoval ostatné.
+ */
+async function geocodeObjednavka(lokalita: unknown): Promise<{ lat: number; lng: number } | null> {
+  if (!lokalita || typeof lokalita !== "object") return null;
+  const lok = lokalita as { kraje?: unknown; okresy?: unknown };
+  const okresy = Array.isArray(lok.okresy) ? lok.okresy.filter(Boolean).map(String) : [];
+  const kraje = Array.isArray(lok.kraje) ? lok.kraje.filter(Boolean).map(String) : [];
+  let query: string | null = null;
+  if (okresy.length === 1) query = okresy[0];
+  else if (okresy.length === 0 && kraje.length === 1) query = kraje[0];
+  if (!query) return null;
+  const r = await geocodeAddress(query);
+  return r ? { lat: r.lat, lng: r.lng } : null;
+}
 
 // GET /api/objednavky[?klient_id=X]
 // B1 fix: requireUser + company scope. Objednávky obsahujú PII kupujúcich
@@ -51,9 +71,11 @@ export async function POST(req: NextRequest) {
 
   // company_id NIKDY z body — vždy zo scope.
   const { company_id: _ignored, ...rest } = body;
+  // Geo: jednoznačná lokalita → súradnice pre vzdialenostný matching.
+  const geo = await geocodeObjednavka(rest.lokalita);
   const { data, error } = await sb
     .from("objednavky")
-    .insert({ ...rest, company_id: scope.company_id })
+    .insert({ ...rest, ...(geo ?? {}), company_id: scope.company_id })
     .select("id")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -88,7 +110,16 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Objednávka nenájdená" }, { status: 404 });
   }
 
-  const { data, error } = await sb.from("objednavky").update(rest).eq("id", id).select().single();
+  // Ak sa mení lokalita, pregeokóduj (alebo vyčisti súradnice ak už nie je
+  // jednoznačná — staré single-bod GPS by ináč ostali nesprávne).
+  const updatePayload: Record<string, unknown> = { ...rest };
+  if ("lokalita" in rest) {
+    const geo = await geocodeObjednavka(rest.lokalita);
+    updatePayload.lat = geo?.lat ?? null;
+    updatePayload.lng = geo?.lng ?? null;
+  }
+
+  const { data, error } = await sb.from("objednavky").update(updatePayload).eq("id", id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await logAudit({

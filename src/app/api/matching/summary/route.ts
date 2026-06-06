@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
 
   const sb = getSupabaseAdmin();
   const [{ data: objednavky }, { data: nehnutelnosti }] = await Promise.all([
-    sb.from("objednavky").select("id,klient_id,druh,poziadavky,lokalita,cena_od,cena_do,created_at").in("id", ids),
-    sb.from("nehnutelnosti").select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status"),
+    sb.from("objednavky").select("id,klient_id,druh,poziadavky,lokalita,cena_od,cena_do,created_at,lat,lng").in("id", ids),
+    sb.from("nehnutelnosti").select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status,lat,lng"),
   ]);
 
   // 🐛 BUG FIX 2026-05-22: fallback na klient.lokalita keď obj.lokalita je prázdne

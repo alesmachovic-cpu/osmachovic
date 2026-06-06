@@ -12,11 +12,11 @@ Audit 2026-06-06. **Scope tohto okna: len vývoj.** Bezpečnosť (auth/scope) a 
 
 ## Schválené Alešom 2026-06-06 — väčšie, po fázach
 
-### #3 Geo — dotiahnuť (vzdialenosť v km namiesto textových názvov)
-- [ ] **A1** Načítať `lat,lng` v 3 matching routes (objednavky, nehnutelnosti, monitor SELECT-y) + mapovať `lat/lng` pre monitor inzeráty.
-- [ ] **A2** Geokódovať objednávky pri save (`/api/objednavky` POST/PATCH) — z lokality (obec > okres > kraj) cez `geocodeAddress`. Dnes sa geokódujú len nehnuteľnosti.
-- [ ] **A3** Refaktor: inline haversine v `matching.ts` → `distanceKm` z `geocode.ts` (DRY).
-- [ ] **A4** (neskôr) Backfill skript pre existujúce objednávky bez súradníc (Nominatim 1 req/s).
+### #3 Geo — dotiahnuť (vzdialenosť v km namiesto textových názvov) — HOTOVÉ A1–A3 (vitest 13/13)
+- [x] **A1** `lat,lng` v 3 matching routes + mapovanie pre monitor inzeráty.
+- [x] **A2** Geokódovanie objednávok pri save (`/api/objednavky` POST/PATCH). Len jednoznačná lokalita (1 okres alebo 1 kraj bez okresov) → 1 GPS bod; viac okresov = null → text matching. PATCH pregeokóduje pri zmene lokality.
+- [x] **A3** Refaktor inline haversine → `distanceKm` z `geocode.ts`.
+- [ ] **A4** (voliteľné, neskôr) Backfill skript pre existujúce objednávky bez súradníc (Nominatim 1 req/s). Bez neho geo funguje len pre nové/editované objednávky; staré padajú na text fallback.
 
 ### #2 Zjednotiť výpočet — jeden zdroj pravdy + matching na každom kupujúcom
 - [ ] **B1** `page.tsx`: zmazať `calcMatch`, volať `vypocitajSkore`. Klient bez objednávky → pseudo-objednávka z profilu (lokalita, rozpočet) cez `klient` fallback.

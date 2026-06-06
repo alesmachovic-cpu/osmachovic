@@ -100,3 +100,22 @@ describe("skoreUroven", () => {
     expect(skoreUroven(0)).toBe("slaba");
   });
 });
+
+describe("vypocitajSkore — geo (vzdialenosť v km)", () => {
+  // Petržalka cca 48.12 / 17.10. Keď majú obj aj neh GPS, použije sa vzdialenosť
+  // a text-based lokalita sa preskočí.
+  const objGeo: ObjednavkaForMatch = { ...baseObj, lat: 48.12, lng: 17.10 };
+
+  it("nehnuteľnosť ~0.6 km → geo bonus", () => {
+    const neh: NehnutelnostForMatch = { ...baseNeh, lat: 48.125, lng: 17.105 };
+    const { reasons } = vypocitajSkore(objGeo, neh);
+    expect(reasons.some(r => r.includes("km"))).toBe(true);
+    expect(reasons.some(r => r.includes("Presne v lokalite"))).toBe(true);
+  });
+
+  it("nehnuteľnosť ~300 km (Prešov) → geo postih", () => {
+    const neh: NehnutelnostForMatch = { ...baseNeh, lat: 48.99, lng: 21.24 };
+    const { reasons } = vypocitajSkore(objGeo, neh);
+    expect(reasons.some(r => r.includes("km od preferencie"))).toBe(true);
+  });
+});

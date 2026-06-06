@@ -10,8 +10,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const sb = getSupabaseAdmin();
 
   const [{ data: neh }, { data: objednavky }] = await Promise.all([
-    sb.from("nehnutelnosti").select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status").eq("id", id).single(),
-    sb.from("objednavky").select("id,klient_id,druh,poziadavky,lokalita,cena_od,cena_do,created_at"),
+    sb.from("nehnutelnosti").select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status,lat,lng").eq("id", id).single(),
+    sb.from("objednavky").select("id,klient_id,druh,poziadavky,lokalita,cena_od,cena_do,created_at,lat,lng"),
   ]);
 
   if (!neh) return NextResponse.json({ error: "Nehnuteľnosť nenájdená" }, { status: 404 });

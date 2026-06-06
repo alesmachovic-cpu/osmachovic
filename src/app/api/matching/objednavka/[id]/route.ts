@@ -19,12 +19,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const sb = getSupabaseAdmin();
 
   const [{ data: obj }, { data: nehnutelnosti }, { data: monitorItems }] = await Promise.all([
-    sb.from("objednavky").select("id,klient_id,druh,poziadavky,lokalita,cena_od,cena_do").eq("id", id).single(),
+    sb.from("objednavky").select("id,klient_id,druh,poziadavky,lokalita,cena_od,cena_do,lat,lng").eq("id", id).single(),
     sb.from("nehnutelnosti")
-      .select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status,nazov,obec,ulica")
+      .select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status,nazov,obec,ulica,lat,lng")
       .or("status.eq.aktivny,status.is.null"),
     sb.from("monitor_inzeraty")
-      .select("id,portal,url,nazov,typ,lokalita,cena,plocha,izby")
+      .select("id,portal,url,nazov,typ,lokalita,cena,plocha,izby,lat,lng")
       .eq("is_active", true),
   ]);
 
@@ -63,6 +63,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     plocha: m.plocha,
     izby: m.izby,
     lokalita: m.lokalita,
+    lat: m.lat,
+    lng: m.lng,
     kraj: null,
     okres: null,
     status: null,
