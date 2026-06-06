@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { skoreUroven } from "@/lib/matching";
+import { skoreUroven, vypocitajSkore } from "@/lib/matching";
+import type { ObjednavkaForMatch, NehnutelnostForMatch, KlientForMatch } from "@/lib/matching";
 import type { Klient, Nehnutelnost } from "@/lib/database.types";
 
 interface Objednavka {
@@ -23,80 +24,43 @@ interface Match {
   reasons: string[];
 }
 
-function calcMatch(k: Klient, n: Nehnutelnost, objednavky: Objednavka[]): { score: number; reasons: string[]; obj: Objednavka | null } {
-  let score = 0;
-  const reasons: string[] = [];
+// Mapovanie DB záznamov na matching typy. lat/lng nie sú v ručných database.types
+// (migrácia 086 ich pridala len do DB), ale dáta zo `select *` ich obsahujú.
+function toNehForMatch(n: Nehnutelnost): NehnutelnostForMatch {
+  const geo = n as Nehnutelnost & { lat?: number | null; lng?: number | null };
+  return {
+    id: n.id, klient_id: n.klient_id, typ: n.typ, cena: n.cena,
+    plocha: n.plocha, izby: n.izby, lokalita: n.lokalita,
+    kraj: n.kraj, okres: n.okres, status: n.status,
+    lat: geo.lat ?? null, lng: geo.lng ?? null,
+  };
+}
 
+function toObjForMatch(o: Objednavka): ObjednavkaForMatch {
+  const geo = o as Objednavka & { lat?: number | null; lng?: number | null };
+  return {
+    id: o.id, klient_id: o.klient_id, druh: o.druh,
+    poziadavky: o.poziadavky, lokalita: o.lokalita,
+    cena_od: o.cena_od, cena_do: o.cena_do,
+    lat: geo.lat ?? null, lng: geo.lng ?? null,
+  };
+}
+
+// Jeden zdroj pravdy: ten istý vypocitajSkore ako widgety + API routes (predtým
+// mala stránka vlastný algoritmus s inými číslami). Klient bez objednávky →
+// pseudo-objednávka z profilu (lokalita, rozpočet), aby sa matching zobrazil na
+// každom kupujúcom (Aleš 2026-06-06).
+function calcMatch(k: Klient, n: Nehnutelnost, objednavky: Objednavka[]): { score: number; reasons: string[]; obj: Objednavka | null } {
   if (k.typ !== "kupujuci" && k.typ !== "oboje") return { score: 0, reasons: [], obj: null };
 
   const obj = objednavky.find(o => o.klient_id === k.id) ?? null;
+  const klientForMatch: KlientForMatch = { id: k.id, lokalita: k.lokalita, rozpocet_max: k.rozpocet_max };
+  const objForMatch: ObjednavkaForMatch = obj
+    ? toObjForMatch(obj)
+    : { id: `profil-${k.id}`, klient_id: k.id, druh: null, poziadavky: null, lokalita: null, cena_od: null, cena_do: null };
 
-  // Typ nehnuteľnosti z objednávky
-  if (obj?.druh && n.typ) {
-    const druhLower = obj.druh.toLowerCase();
-    const typLower = n.typ.toLowerCase();
-    if (druhLower === typLower || druhLower.includes(typLower) || typLower.includes(druhLower)) {
-      score += 25;
-      reasons.push("Typ nehnuteľnosti sedí");
-    }
-  }
-
-  // Rozpočet
-  const maxCena = obj?.cena_do ?? k.rozpocet_max;
-  if (maxCena && n.cena != null) {
-    if (n.cena <= maxCena) {
-      score += 30;
-      reasons.push("Cena je v rozpočte");
-    } else if (n.cena <= maxCena * 1.1) {
-      score += 12;
-      reasons.push("Cena mierne nad rozpočtom");
-    }
-  }
-
-  // Lokalita z objednávky (môže byť {kraje,okresy} alebo string[]) alebo z klienta
-  const rawLok = obj?.lokalita;
-  const objLokality: string[] = Array.isArray(rawLok)
-    ? rawLok
-    : rawLok
-      ? [...(rawLok.kraje ?? []), ...(rawLok.okresy ?? [])]
-      : [];
-  if (objLokality.length > 0 && n.lokalita) {
-    const nLow = n.lokalita.toLowerCase();
-    const match = objLokality.some(lok => {
-      const lokLow = lok.toLowerCase();
-      return nLow.includes(lokLow) || lokLow.includes(nLow);
-    });
-    if (match) {
-      score += 25;
-      reasons.push("Lokalita zodpovedá");
-    }
-  } else if (k.lokalita && n.lokalita) {
-    const kWords = k.lokalita.toLowerCase().split(/[\s,]+/);
-    const nWords = n.lokalita.toLowerCase().split(/[\s,]+/);
-    const overlap = kWords.some(w => nWords.some(nw => nw.includes(w) || w.includes(nw)));
-    if (overlap) {
-      score += 25;
-      reasons.push("Lokalita zodpovedá");
-    }
-  }
-
-  // Izby z požiadaviek
-  if (obj?.poziadavky && n.izby != null) {
-    const poz = obj.poziadavky;
-    const izbyArr = (poz.izby ?? poz.pocet_izieb ?? poz.rooms) as number[] | undefined;
-    if (Array.isArray(izbyArr) && izbyArr.includes(n.izby)) {
-      score += 10;
-      reasons.push(`${n.izby}-izbový vyhovuje`);
-    }
-  }
-
-  // Bonus za aktívnu objednávku
-  if (obj) {
-    score += 10;
-    reasons.push("Má objednávku");
-  }
-
-  return { score: Math.min(score, 100), reasons, obj };
+  const { score, reasons } = vypocitajSkore(objForMatch, toNehForMatch(n), klientForMatch);
+  return { score, reasons, obj };
 }
 
 function fmtCena(c: number | null) {
@@ -315,6 +279,11 @@ export default function MatchingPage() {
                     <span style={{ fontWeight: "600", fontSize: "13px", color: "var(--accent)" }}>
                       {m.nehnutelnost.nazov}
                     </span>
+                    {!m.objednavka && (
+                      <span style={{ fontSize: "10px", fontWeight: "600", color: "var(--text-muted)", background: "var(--bg-elevated)", padding: "2px 7px", borderRadius: "6px", border: "1px solid var(--border)" }}>
+                        z profilu — doplň objednávku
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "3px" }}>
                     {m.nehnutelnost.lokalita} · {m.nehnutelnost.cena != null ? `${m.nehnutelnost.cena.toLocaleString("sk")} €` : "—"}

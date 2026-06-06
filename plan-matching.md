@@ -19,11 +19,9 @@ Audit 2026-06-06. **Scope tohto okna: len vývoj.** Bezpečnosť (auth/scope) a 
 - [ ] **A4** (voliteľné, neskôr) Backfill skript pre existujúce objednávky bez súradníc (Nominatim 1 req/s). Bez neho geo funguje len pre nové/editované objednávky; staré padajú na text fallback.
 
 ### #2 Zjednotiť výpočet — jeden zdroj pravdy + matching na každom kupujúcom
-- [ ] **B1** `page.tsx`: zmazať `calcMatch`, volať `vypocitajSkore`. Klient bez objednávky → pseudo-objednávka z profilu (lokalita, rozpočet) cez `klient` fallback.
-- [ ] **B2** Hint maklerovi „doplň kritériá pre presnejší matching" tam, kde chýba objednávka/dáta.
-- [ ] **B3** (väčšie) Widget na karte kupujúceho funguje aj bez objednávky — rozšíriť API/widget.
-
-**Poznámka:** A1 + B1 sú prepojené cez lat/lng v `/api/klienti|nehnutelnosti|objednavky` (page.tsx je client-side). Riešiť pri B1.
+- [x] **B1** `page.tsx` volá `vypocitajSkore` (jeden zdroj pravdy). Mapovanie Nehnutelnost/Objednavka → *ForMatch (lat/lng cez cast). Klient bez objednávky → pseudo-objednávka z profilu (lokalita + rozpočet). Odstránený umelý bonus „+10 má objednávku". Vedľajší efekt: rešpektuje status → predané/archivované zmiznú z /matching.
+- [x] **B2** Jemný štítok „z profilu — doplň objednávku" pri zhodách bez objednávky.
+- [ ] **B3** (väčšie, na rozhodnutie) Widget na karte kupujúceho funguje aj bez objednávky — rozšíriť API/widget. /matching stránka už každého kupujúceho pokrýva, takže B3 je nice-to-have.
 
 ## Upozornenie (iná doména — nemením z tohto okna)
 - `kupujuci/page.tsx:249` číta `poziadavky.pocet_izieb`, ale ObjednavkaForm ukladá `izby` → počet izieb sa na karte kupujúceho nezobrazí. Patrí do kupujuci domény (bolo rozrobené v inom okne).
