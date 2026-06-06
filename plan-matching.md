@@ -16,12 +16,15 @@ Audit 2026-06-06. **Scope tohto okna: len vývoj.** Bezpečnosť (auth/scope) a 
 - [x] **A1** `lat,lng` v 3 matching routes + mapovanie pre monitor inzeráty.
 - [x] **A2** Geokódovanie objednávok pri save (`/api/objednavky` POST/PATCH). Len jednoznačná lokalita (1 okres alebo 1 kraj bez okresov) → 1 GPS bod; viac okresov = null → text matching. PATCH pregeokóduje pri zmene lokality.
 - [x] **A3** Refaktor inline haversine → `distanceKm` z `geocode.ts`.
-- [ ] **A4** (voliteľné, neskôr) Backfill skript pre existujúce objednávky bez súradníc (Nominatim 1 req/s). Bez neho geo funguje len pre nové/editované objednávky; staré padajú na text fallback.
+- [~] **A4** ZRUŠENÉ (Aleš 2026-06-06): existujúce objednávky sú testovacie dáta, nahradia sa novými. Backfill netreba — nové objednávky sa geokódujú automaticky (A2).
 
 ### #2 Zjednotiť výpočet — jeden zdroj pravdy + matching na každom kupujúcom
 - [x] **B1** `page.tsx` volá `vypocitajSkore` (jeden zdroj pravdy). Mapovanie Nehnutelnost/Objednavka → *ForMatch (lat/lng cez cast). Klient bez objednávky → pseudo-objednávka z profilu (lokalita + rozpočet). Odstránený umelý bonus „+10 má objednávku". Vedľajší efekt: rešpektuje status → predané/archivované zmiznú z /matching.
 - [x] **B2** Jemný štítok „z profilu — doplň objednávku" pri zhodách bez objednávky.
-- [ ] **B3** (väčšie, na rozhodnutie) Widget na karte kupujúceho funguje aj bez objednávky — rozšíriť API/widget. /matching stránka už každého kupujúceho pokrýva, takže B3 je nice-to-have.
+### #2 B3 — matching widget na karte kupujúceho aj bez objednávky (SCHVÁLENÉ 2026-06-06)
+- [ ] **B3a** Nový endpoint `/api/matching/klient/[id]` — matching cez profil klienta (lokalita + rozpočet). **MUSÍ mať requireUser + company scope** (na rozdiel od starých matching routes — toto je vzor ako majú vyzerať; staré rieši security okno).
+- [ ] **B3b** Hook `useZhodyPreKlienta(klientId)` v `useMatching.ts`.
+- [ ] **B3c** `MatchingWidget`: kupujúci bez objednávky → BuyerWidget cez klientId (profil) namiesto fallbacku „Vytvoriť objednávku". Empty state hint na doplnenie objednávky.
 
 ## Upozornenie (iná doména — nemením z tohto okna)
 - `kupujuci/page.tsx:249` číta `poziadavky.pocet_izieb`, ale ObjednavkaForm ukladá `izby` → počet izieb sa na karte kupujúceho nezobrazí. Patrí do kupujuci domény (bolo rozrobené v inom okne).

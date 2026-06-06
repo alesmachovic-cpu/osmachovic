@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useZhodyPreObjednavku, useZaujemcoviaPreNehnutelnost } from "@/hooks/useMatching";
+import { useZhodyPreObjednavku, useZhodyPreKlienta, useZaujemcoviaPreNehnutelnost } from "@/hooks/useMatching";
 import type { ZhodaItem, ZaujemcaItem } from "@/hooks/useMatching";
 import { skoreUroven } from "@/lib/matching";
 
@@ -135,12 +135,17 @@ function SellerWidget({ nehnutelnostId, onPlanovatObhliadku, klientId }: {
 }
 
 function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
-  objednavkaId: string;
+  objednavkaId: string | null;
   onPlanovatObhliadku?: Props["onPlanovatObhliadku"];
   klientId: string;
 }) {
   const router = useRouter();
-  const { data, loading } = useZhodyPreObjednavku(objednavkaId, 3);
+  // S objednávkou → presný matching cez kritériá; bez nej → cez profil klienta (B3).
+  const { data: objData, loading: l1 } = useZhodyPreObjednavku(objednavkaId, 3);
+  const { data: klData, loading: l2 } = useZhodyPreKlienta(objednavkaId ? null : klientId, 3);
+  const data = objData ?? klData;
+  const loading = l1 || l2;
+  const bezObjednavky = !objednavkaId;
 
   const top3 = (data ?? []).slice(0, 3);
 
@@ -148,7 +153,7 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid var(--border)" }}>
         <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-primary)" }}>
-          🎯 Ponuky — {loading ? "…" : `${top3.length} zhôd`}
+          🎯 Ponuky{bezObjednavky ? " (z profilu)" : ""} — {loading ? "…" : `${top3.length} zhôd`}
         </span>
         <button onClick={() => router.push(`/nastroje?tab=matching&objednavka=${objednavkaId}`)}
           style={{ fontSize: "11px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
@@ -160,10 +165,10 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
 
       {!loading && top3.length === 0 && (
         <div style={{ padding: "16px 14px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
-          Žiadne zhody.<br />
+          {bezObjednavky ? "Žiadne zhody z profilu." : "Žiadne zhody."}<br />
           <button onClick={() => router.push(`/kupujuci?klient_id=${klientId}`)}
             style={{ marginTop: "6px", fontSize: "11px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-            Upraviť kritériá →
+            {bezObjednavky ? "Doplniť objednávku →" : "Upraviť kritériá →"}
           </button>
         </div>
       )}
@@ -221,22 +226,24 @@ function BuyerWidget({ objednavkaId, onPlanovatObhliadku, klientId }: {
 
 export function MatchingWidget({ klientTyp, nehnutelnostId, objednavkaId, klientId, onPlanovatObhliadku }: Props) {
   const isSeller = (klientTyp === "predavajuci" || klientTyp === "oboje") && !!nehnutelnostId;
-  const isBuyer = klientTyp === "kupujuci" && !!objednavkaId;
-  const isBuyerFallback = klientTyp === "oboje" && !nehnutelnostId && !!objednavkaId;
+  const isKupujuciTyp = klientTyp === "kupujuci" || klientTyp === "oboje";
 
   if (isSeller) {
     return <SellerWidget nehnutelnostId={nehnutelnostId!} onPlanovatObhliadku={onPlanovatObhliadku} klientId={klientId} />;
   }
-  if (isBuyer || isBuyerFallback) {
-    return <BuyerWidget objednavkaId={objednavkaId!} onPlanovatObhliadku={onPlanovatObhliadku} klientId={klientId} />;
+  // Kupujúci (aj "oboje" bez nehnuteľnosti) → matching cez objednávku, alebo cez
+  // profil klienta keď objednávku ešte nemá (B3). Matching teda na karte každého
+  // kupujúceho, nielen tých s objednávkou.
+  if (isKupujuciTyp) {
+    return <BuyerWidget objednavkaId={objednavkaId ?? null} onPlanovatObhliadku={onPlanovatObhliadku} klientId={klientId} />;
   }
-  const isKupujuci = klientTyp === "kupujuci" || klientTyp === "oboje";
+  // Predávajúci bez nehnuteľnosti — nemá čo párovať, ponúkni pridať inzerát.
   return (
     <div style={{ padding: "16px 14px", fontSize: "12px", color: "var(--text-muted)", textAlign: "center" }}>
       🎯 Matching<br />
-      <button onClick={() => window.location.href = isKupujuci ? `/kupujuci?klient_id=${klientId}` : `/naber?klient_id=${klientId}`}
+      <button onClick={() => window.location.href = `/naber?klient_id=${klientId}`}
         style={{ marginTop: "6px", fontSize: "11px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-        {isKupujuci ? "Vytvoriť objednávku →" : "Pridať inzerát →"}
+        Pridať inzerát →
       </button>
     </div>
   );

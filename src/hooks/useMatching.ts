@@ -61,6 +61,25 @@ export function useZhodyPreObjednavku(id: string | null, limit = 5) {
   return { data, loading };
 }
 
+// Matching pre kupujúceho BEZ objednávky — cez profil klienta (lokalita + rozpočet).
+// Vracia rovnaký tvar ZhodaItem[] ako useZhodyPreObjednavku.
+export function useZhodyPreKlienta(klientId: string | null, limit = 5) {
+  const [data, setData] = useState<ZhodaItem[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!klientId) { setData(null); return; }
+    setLoading(true);
+    fetch(`/api/matching/klient/${klientId}?limit=${limit}`)
+      .then(r => r.json())
+      .then(setData)
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [klientId, limit]);
+
+  return { data, loading };
+}
+
 export type ZaujemcaItem = {
   objednavka: {
     id: string;
