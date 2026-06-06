@@ -155,6 +155,20 @@ Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne 
 
 > Pri **úniku osobných údajov** platí: technickú dieru zavrie `Bezpecnost`, ale právne posúdenie (či a komu hlásiť) **vždy** dostane aj `Pravo`. Jedno okno na oboje = chyba smerovania.
 
+## 🚀 Deploy gate + push-konflikt protokol (viac okien naraz)
+
+**Deploy gate (koordinuje MD/koordinačné okno):**
+- Každý `git push` na `dev` = **1 Vercel auto-deploy**. Limit Hobby = **100 deployov/deň**. (Stav 2026-06-06: ~16 za 6 h → veľká rezerva, nie je to akútne.)
+- **Dávkuj pushe** — nepushuj po každej mikro-zmene; nazbieraj logický celok a pushni raz. Z 5 pushov spravíš 1 deploy.
+- **NIKDY `vercel deploy --prod` po pushe** — auto-deploy to spraví sám; manuálny = 2× deploy + riziko výpadku env (viď Lessons learned 2026-05-21/23).
+- MD sleduje strop: pri ~60–70 deployoch/deň dá oknám echo nech spomalia. Pod tým nikoho neobmedzuje.
+
+**Push-konflikt protokol (keď push „zlyhá"):**
+- `! [rejected] ... (fetch first)` = **iné okno pushlo skôr**, nič sa neprepísalo. Tvoj commit je stále lokálne.
+- Riešenie: `git pull --rebase origin dev` → over `git status` (tvoje súbory sú stále tvoje) → `git push`. **NIE `merge`, NIKDY `git checkout`/`switch`.**
+- Konflikt je nepravdepodobný (okná menia rôzne súbory). Ak predsa nastane na **cudzom** súbore → nedotýkaj sa ho, zavolaj Aleša.
+- Vercel „cez seba" sa riešiť nemusí: `dev.amgd.sk` vždy ukazuje **najnovší úspešný** deploy; zlyhaný build alias nezhodí.
+
 ## Tri hlavné princípy (Boris Cherny)
 1. **Jednoduchosť** — minimálny kód. Ak vieš niečo zmazať namiesto pridať, sprav to.
 2. **Žiadne band-aidy** — hľadaj koreňovú príčinu, nie rýchle záplaty.
