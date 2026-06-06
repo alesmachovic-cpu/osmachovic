@@ -31,6 +31,9 @@ export interface ClassifierDbContext {
   phone_count_30d?: number;
   /** Počet aktívnych inzerátov za posledných 30 dní s rovnakým menom predajcu. */
   name_count_30d?: number;
+  /** Počet aktívnych inzerátov za 30 dní s rovnakým inzerent_id (účet predajcu).
+   *  Najsilnejší dostupný signál pre RK na portáloch bez štruktúrneho štítku (bazos). */
+  inzerent_count_30d?: number;
   /** Či je rovnaký inzerát (canonical_id) publikovaný na 2+ portáloch. */
   listed_on_n_portals?: number;
   /** Manuálne zaradenie do RK — z tabuľky rk_directory podľa telefónu / mena / domény. */
@@ -330,6 +333,44 @@ export function classify(input: ClassifierInput): ClassifierResult {
       weight: 0.25,
       reason: `Rovnaký telefón v 2 inzerátoch za 30 dní.`,
       evidence: "2",
+    });
+  }
+
+  // B1b. Inzerent (účet predajcu) má viac inzerátov za 30 dní — najsilnejší
+  // dostupný RK signál na portáloch bez štruktúrneho štítku (bazos). Po data-min
+  // nahrádza mŕtvy telefónový signál; ID účtu nie je kontakt ani meno.
+  const inzerentCount = input.db?.inzerent_count_30d ?? 0;
+  if (inzerentCount >= 5) {
+    signals.push({
+      id: "rk_inzerent_volume_high",
+      side: "rk",
+      weight: 0.8,
+      reason: `Ten istý inzerent (účet) má ${inzerentCount} aktívnych inzerátov za 30 dní.`,
+      evidence: String(inzerentCount),
+    });
+  } else if (inzerentCount >= 3) {
+    signals.push({
+      id: "rk_inzerent_volume_med",
+      side: "rk",
+      weight: 0.55,
+      reason: `Ten istý inzerent (účet) má ${inzerentCount} inzerátov za 30 dní.`,
+      evidence: String(inzerentCount),
+    });
+  } else if (inzerentCount === 2) {
+    signals.push({
+      id: "rk_inzerent_volume_low",
+      side: "rk",
+      weight: 0.3,
+      reason: `Ten istý inzerent (účet) má 2 inzeráty za 30 dní.`,
+      evidence: "2",
+    });
+  } else if (inzerentCount === 1) {
+    signals.push({
+      id: "sukromny_inzerent_unique",
+      side: "sukromny",
+      weight: 0.5,
+      reason: `Inzerent (účet) má len 1 inzerát za 30 dní — typické pre súkromníka.`,
+      evidence: "1",
     });
   }
 

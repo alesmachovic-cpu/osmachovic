@@ -157,8 +157,12 @@ export const bazosSkParser: PortalParser = {
       const popis = popisMatch?.[1]?.replace(/<[^>]*>/g, "").trim().slice(0, 500) || undefined;
 
       // Predajca: odeslatakci('rating','USER_ID','PROFILE_ID','NAME_URLENCODED')
-      const sellerMatch = block.match(/odeslatakci\('rating','[^']+','[^']+','([^']+)'\)/);
-      const sellerNameRaw = sellerMatch?.[1] || "";
+      // USER_ID = anonymné ID účtu predajcu → inzerent_id (NIE kontakt/meno).
+      // Slúži na počet inzerátov účtu (RK detekcia). NAME je transientné (klasifikácia).
+      const sellerMatch = block.match(/odeslatakci\('rating','([^']*)','[^']*','([^']+)'\)/);
+      const userId = sellerMatch?.[1] || "";
+      const inzerent_id = userId ? `bazos:${userId}` : undefined;
+      const sellerNameRaw = sellerMatch?.[2] || "";
       const sellerName = sellerNameRaw ? decodeBazosName(sellerNameRaw) : "";
       // RK detekcia: najprv striktná na meno predajcu (detectPredajca),
       // potom shared detectFirma aj na názov + popis (zachytí "RK", "exkluzívne", "v ponuke"
@@ -195,6 +199,7 @@ export const bazosSkParser: PortalParser = {
         foto_url,
         popis,
         predajca_meno: sellerName || undefined,
+        inzerent_id,
         predajca_typ,
         ponuka_typ,
         poschodie,

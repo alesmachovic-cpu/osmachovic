@@ -14,6 +14,9 @@ export interface ScrapedInzerat {
   foto_url?: string;
   predajca_typ?: string; // 'sukromny' | 'realitka' | 'developer'
   ponuka_typ?: "predaj" | "prenajom"; // os predaj/prenájom
+  // Anonymné ID účtu predajcu na portáli (napr. "bazos:12345"). NIE kontakt/meno.
+  // Slúži len na počet "koľko inzerátov má tento účet" → RK detekcia.
+  inzerent_id?: string;
   poschodie?: string;    // "4/8", "prízemie", "podkrovie"
   stav?: string;         // "novostavba", "po rekonštrukcii", "pôvodný stav"
 
