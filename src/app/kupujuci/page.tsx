@@ -29,6 +29,9 @@ const OBJ_STEPS = [
 // Nefiltruje zoznam ani výber — len rozhoduje o zobrazení badge.
 const KUPUJUCI_STATUSY = new Set([
   "novy", "novy_kontakt", "aktivny", "volat_neskor", "nedovolal", "nechce_rk", "uzavrety", "caka_na_schvalenie",
+  // K6 fix: reálne kupujúce stavy (taxonómia per Aleš 2026-05-23) — inak dostal kupujúci falošný badge "nezvyčajný stav"
+  "caka_na_hypoteku", "zaujem_o_konkretnu", "zaujem_konkretna_nasa", "zaujem_konkretna_ina_rk",
+  "kapacita_schvalena", "hypo_konzultacia", "rezervacia", "podpis_kz", "uz_kupil", "turista", "odlozene", "nereaguje",
 ]);
 
 export default function KupujuciPage() {
@@ -516,7 +519,8 @@ function KupujuciInner() {
   // HOTOVO
   return (
     <div style={{ maxWidth: "720px" }}>
-      <Stepper steps={OBJ_STEPS} currentStep="hotovo" onStepClick={k => setStep(k as Step)} />
+      {/* K5 fix: na "hotovo" Stepper zámerne BEZ onStepClick — skok späť na Formulár vytváral duplicitnú objednávku. Navigácia ide cez tlačidlá nižšie. */}
+      <Stepper steps={OBJ_STEPS} currentStep="hotovo" />
       <div style={{
         background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "20px",
         padding: "48px 32px", textAlign: "center",
