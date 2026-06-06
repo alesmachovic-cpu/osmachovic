@@ -1180,7 +1180,7 @@ function MonitorContent() {
 }
 
 const MONITOR_TABS = [
-  { key: "scraping", label: "Scraping", icon: "📡" },
+  { key: "scraping", label: "Monitor", icon: "📡" },
   { key: "analyza",  label: "AI Analýza", icon: "📈" },
 ] as const;
 
