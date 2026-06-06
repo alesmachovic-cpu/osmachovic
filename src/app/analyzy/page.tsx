@@ -36,12 +36,17 @@ function formatEvidence(ev: Record<string, unknown>): string {
   return parts.length > 0 ? parts.join(" · ") : Object.keys(ev).join(", ");
 }
 
+type Cena = { count: number; median_cena: number | null; median_eur_m2: number | null };
+type SegTriple = { all: Cena; sukromnik: Cena; rk: Cena };
+type SegmentStats = SegTriple & { by_typ: Record<string, SegTriple> };
+
 type AnalyzaData = {
   total_active: number;
   new_this_week: number;
   by_portal: Record<string, number>;
   by_typ: Record<string, number>;
   predajcovia: { sukromni: number; realitky: number; ostatni: number };
+  cenova_analyza?: { predaj: SegmentStats; prenajom: SegmentStats };
   motivated_sellers: MotivatedSeller[];
   sales_stats: {
     avg_dom: number | null;
@@ -99,6 +104,8 @@ function AnalyzyInner() {
   const [data, setData] = useState<AnalyzaData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cenaPonuka, setCenaPonuka] = useState<"predaj" | "prenajom">("predaj");
+  const [cenaTyp, setCenaTyp] = useState<"vsetko" | "byt" | "dom" | "pozemok">("byt");
 
   useEffect(() => {
     fetch("/api/monitor/analyza")
@@ -204,6 +211,69 @@ function AnalyzyInner() {
           ))}
         </div>
       </div>
+
+      {/* Cenová analýza — súkromník vs RK */}
+      {data.cenova_analyza && (() => {
+        const seg = data.cenova_analyza[cenaPonuka];
+        const triple: SegTriple = cenaTyp === "vsetko" ? seg : (seg.by_typ[cenaTyp] ?? seg);
+        const jePrenajom = cenaPonuka === "prenajom";
+        const fmtEm2 = (n: number | null) => n == null ? "—" : (jePrenajom ? `${n} €/m²/mes` : `${n.toLocaleString("sk-SK")} €/m²`);
+        const fmtMc = (n: number | null) => n == null ? "—" : (jePrenajom ? `${n.toLocaleString("sk-SK")} €/mes` : fmtCena(n));
+        const cols: Array<{ key: keyof SegTriple; label: string; color: string }> = [
+          { key: "sukromnik", label: "👤 Súkromník", color: "#7c3aed" },
+          { key: "rk", label: "🏢 RK", color: "#2563eb" },
+          { key: "all", label: "Spolu", color: "var(--text-muted)" },
+        ];
+        const Seg = ({ opts, val, set }: { opts: Array<[string, string]>; val: string; set: (v: string) => void }) => (
+          <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: "8px", overflow: "hidden" }}>
+            {opts.map(([v, l], i) => (
+              <button key={v} onClick={() => set(v)} style={{
+                padding: "6px 12px", border: "none", borderLeft: i ? "1px solid var(--border)" : "none", cursor: "pointer",
+                fontSize: "12px", fontWeight: val === v ? 700 : 500,
+                background: val === v ? "var(--text-primary)" : "var(--bg-base)",
+                color: val === v ? "var(--bg-base)" : "var(--text-secondary)",
+              }}>{l}</button>
+            ))}
+          </div>
+        );
+        return (
+          <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "12px", padding: "20px", marginBottom: "20px" }}>
+            <div style={{ fontSize: "14px", fontWeight: "600", marginBottom: "4px" }}>Cenová analýza — súkromník vs realitka</div>
+            <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "14px" }}>
+              Ponukové ceny aktívnych inzerátov (za koľko sa inzeruje, nie finálna predajná).
+            </div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
+              <Seg opts={[["predaj", "Predaj"], ["prenajom", "Prenájom"]]} val={cenaPonuka} set={(v) => setCenaPonuka(v as "predaj" | "prenajom")} />
+              <Seg opts={[["vsetko", "Všetko"], ["byt", "Byt"], ["dom", "Dom"], ["pozemok", "Pozemok"]]} val={cenaTyp} set={(v) => setCenaTyp(v as typeof cenaTyp)} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr 1fr", gap: "10px 16px", alignItems: "center" }}>
+              <div />
+              {cols.map(c => <div key={c.key} style={{ fontSize: "12px", fontWeight: 700, color: c.color, textAlign: "right" }}>{c.label}</div>)}
+
+              <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Medián €/m²</div>
+              {cols.map(c => <div key={c.key} style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", textAlign: "right" }}>{fmtEm2(triple[c.key].median_eur_m2)}</div>)}
+
+              <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Medián ceny</div>
+              {cols.map(c => <div key={c.key} style={{ fontSize: "14px", color: "var(--text-primary)", textAlign: "right" }}>{fmtMc(triple[c.key].median_cena)}</div>)}
+
+              <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Počet inzerátov</div>
+              {cols.map(c => <div key={c.key} style={{ fontSize: "13px", color: "var(--text-muted)", textAlign: "right" }}>{triple[c.key].count}</div>)}
+            </div>
+            {triple.sukromnik.median_eur_m2 != null && triple.rk.median_eur_m2 != null && (
+              <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px solid var(--border)", fontSize: "13px", color: "var(--text-secondary)" }}>
+                {(() => {
+                  const s = triple.sukromnik.median_eur_m2!, r = triple.rk.median_eur_m2!;
+                  const diff = Math.round(((s - r) / r) * 100);
+                  if (diff === 0) return "Súkromníci a realitky pýtajú približne rovnako.";
+                  return diff < 0
+                    ? `👤 Súkromníci pýtajú v priemere o ${Math.abs(diff)} % menej za m² než realitky.`
+                    : `👤 Súkromníci pýtajú v priemere o ${diff} % viac za m² než realitky.`;
+                })()}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Motivovaní predajcovia */}
       {data.motivated_sellers.length > 0 && (
