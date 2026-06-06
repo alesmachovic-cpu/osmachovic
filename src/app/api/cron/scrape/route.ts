@@ -513,6 +513,23 @@ async function processFilter(
         } catch { /* migrácia 041 nie je aplikovaná — preskočíme override */ }
       }
 
+      // UČENIE — override-y na úrovni účtu predajcu (inzerent_id). Maklér raz
+      // označí účet ako RK/súkromník → platí pre všetky jeho budúce inzeráty.
+      const overrideByInzerentId = new Map<string, string>();
+      if (inzerentIds.length > 0) {
+        try {
+          const { data: inzClass, error } = await sb
+            .from("inzerent_klasifikacia")
+            .select("inzerent_id, typ")
+            .in("inzerent_id", inzerentIds);
+          if (!error) {
+            (inzClass || []).forEach((r: { inzerent_id: string; typ: string }) => {
+              if (r.typ) overrideByInzerentId.set(r.inzerent_id, r.typ);
+            });
+          }
+        } catch { /* migrácia 111 nie je aplikovaná — preskočíme učenie */ }
+      }
+
       // RK directory — telefóny/mená/domény ktoré už sú potvrdené ako RK
       let rkPhones = new Set<string>();
       let rkNames = new Set<string>();
@@ -532,15 +549,20 @@ async function processFilter(
       // Klasifikuj každý listing
       for (const listing of allListings) {
         const key = `${listing.portal}:${listing.external_id}`;
-        const override = overrideByExternalId.get(key);
+        // Override-y: konkrétny inzerát (external_id) má prednosť pred účtom (inzerent_id);
+        // oba sú manuálne rozhodnutia makléra → plná istota.
+        const override =
+          overrideByExternalId.get(key) ||
+          (listing.inzerent_id ? overrideByInzerentId.get(listing.inzerent_id) : undefined);
 
         // Ak existuje manuálny override, použijeme ho s plnou confidence — bez ďalšieho výpočtu
         if (override === "rk" || override === "sukromny") {
+          const fromAccount = !overrideByExternalId.get(key);
           classifierResults.set(key, {
             predajca_typ: override as "rk" | "sukromny",
             confidence: 1.0,
             raw_score: 99,
-            signals: [{ id: "manual_override", side: override === "rk" ? "rk" : "sukromny", weight: 99, reason: "Manuálny override maklérom" }],
+            signals: [{ id: "manual_override", side: override === "rk" ? "rk" : "sukromny", weight: 99, reason: fromAccount ? "Účet predajcu ručne označený maklérom" : "Manuálny override maklérom" }],
             method: "v2",
           });
           listing.predajca_typ = toLegacyDbEnum(override as "rk" | "sukromny") as typeof listing.predajca_typ;

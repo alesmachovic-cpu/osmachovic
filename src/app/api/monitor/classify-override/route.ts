@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   //    sa už neukladajú, takže nie sú k dispozícii ani pre override).
   const { data: row, error: fetchErr } = await sb
     .from("monitor_inzeraty")
-    .select("id, portal, external_id")
+    .select("id, portal, external_id, inzerent_id")
     .eq("id", inzeratId)
     .maybeSingle();
   if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
@@ -56,13 +57,54 @@ export async function POST(req: NextRequest) {
   }
   if (updRes.error) return NextResponse.json({ error: updRes.error.message }, { status: 500 });
 
-  // GDPR data-min: do rk_directory už NEUKLADÁME meno/telefón scrapnutých osôb.
-  // Override sa aplikuje len na tento konkrétny inzerát (predajca_typ_override),
-  // ktorý má pri ďalšom scrape behu prednosť pred algoritmom.
+  // 3) UČENIE — zapamätaj klasifikáciu pre celý účet predajcu (inzerent_id) a
+  //    kaskádovo preklasifikuj všetky jeho inzeráty. inzerent_id je anonymné ID
+  //    účtu (NIE kontakt/meno) → GDPR-bezpečné. Scraper to potom rešpektuje
+  //    pre budúce inzeráty toho účtu. Plne vratné (opačný override prepíše).
+  let cascadeCount = 0;
+  let learned = false;
+  if (row.inzerent_id) {
+    const { error: upErr } = await sb
+      .from("inzerent_klasifikacia")
+      .upsert(
+        { inzerent_id: row.inzerent_id, typ, pridal_user_id: auth.user.id, poznamka: body.poznamka || null, updated_at: new Date().toISOString() },
+        { onConflict: "inzerent_id" }
+      );
+    // Ak tabuľka ešte neexistuje (migr. 111 neaplikovaná) → ticho preskoč učenie.
+    if (!upErr || !/inzerent_klasifikacia|does not exist|Could not find/i.test(upErr.message)) {
+      if (!upErr) {
+        learned = true;
+        // Kaskáda: preklasifikuj všetky inzeráty toho istého účtu okrem aktuálneho.
+        const { data: cascaded } = await sb
+          .from("monitor_inzeraty")
+          .update({ predajca_typ: dbEnum, predajca_typ_override: typ, predajca_typ_method: "manual", predajca_typ_confidence: 1.0 })
+          .eq("inzerent_id", row.inzerent_id)
+          .neq("id", inzeratId)
+          .select("id");
+        cascadeCount = cascaded?.length || 0;
+      }
+    }
+  }
+
+  // Forenzný trail — manuálna klasifikácia je privilegovaná akcia (učenie + kaskáda).
+  await logAudit({
+    action: "monitor.classify_override",
+    actor_id: auth.user.id,
+    target_type: "monitor_inzeraty",
+    target_id: inzeratId,
+    detail: { new_typ: typ, learned, cascade_count: cascadeCount, inzerent_id: row.inzerent_id ?? null },
+  });
+
   return NextResponse.json({
     ok: true,
     inzerat_id: inzeratId,
     new_typ: typ,
-    message: "Override zaznamenaný pre tento inzerát.",
+    learned,
+    cascade_count: cascadeCount,
+    message: learned
+      ? (cascadeCount > 0
+          ? `Zapamätané pre celý účet — ${cascadeCount} ďalších inzerátov preklasifikovaných.`
+          : "Zapamätané pre celý účet predajcu.")
+      : "Override zaznamenaný pre tento inzerát.",
   });
 }
