@@ -108,6 +108,32 @@ Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne 
 
 > Reálny incident 2026-06-06: počas práce na kupujúci (commit 9e9aeaa) iné okno pushlo `13f27ab` (analyza) a odnieslo aj môj commit. Nič sa nerozbilo len preto, že commit bol čistý (`git add` len 1 súbor). Tieto pravidlá to robia spoľahlivým, nie šťastím.
 
+## 🗂️ Register okien / kompetencie (jediný zdroj pravdy)
+
+**Toto je záväzná mapa „kto vlastní čo". Spravuje ju KOORDINAČNÉ okno (MD). Každé okno si na štarte nájde svoj riadok a drží sa svojich ciest.** Keď nájdeš chybu mimo svojho riadku → neopravuj, upozorni Aleša + priprav prompt pre správne okno (pozri „🪟 Viac okien naraz").
+
+| Okno | Doména | Vlastní (kľúčové cesty) | NErobí → odovzdáva |
+|---|---|---|---|
+| **Koordinácia (MD)** | Kompetencie, onboarding okien, register | `CLAUDE.md` (sekcia Register), prekryvy hraníc | Nepíše doménový kód — pripraví prompt domén. oknu |
+| **Klienti & Pipeline** | Klienti, kupujúci, voľní, obchody/pipeline | `app/klienti`, `app/kupujuci`, `app/volni-klienti`, `api/klienti*`, `api/klient-dokumenty`, `api/klient-udalosti`, `api/objednavky`, `api/obchody`, `lib/scope.ts`, `lib/maklerMap.ts` | Parse dokumentov → Náberáky; GDPR/AML texty → Compliance |
+| **Nehnuteľnosti & Portfólio** | Portfólio, inzeráty, matching, kalkulačka | `app/nehnutelnosti`, `app/portfolio`, `app/matching`, `app/inzerat`, `app/kalkulator`, `api/nehnutelnosti`, `api/inzerat`, `api/matching`, `api/fotky`, `api/pricing` | Property Story copy → AI |
+| **Náberáky, Zmluvy & Dokumenty** | Nábery, zmluvy, podpis, parse LV/posudkov | `app/naber`, `app/podpis`, `api/nabery`, `api/naber-pdf`, `api/naber-analyza`, `api/parse-doc`, `api/parse-pdf`, `api/parse-lv`, `api/vyhradna-zmluva`, `api/sign`, `api/objednavka-pdf`, `NaberyForm`, `VyhradnaZmluvaModal` | AI model vrstva → AI; právny text zmlúv → Compliance |
+| **Obhliadky & Kalendár** | Obhliadky, kolízie, kalendár | `app/kalendar`, `app/kolize`, `api/obhliadky`, `api/kolize`, `api/calendar`, `api/calendar-sync`, `useKoliziaCheck` | OAuth/token vrstva Google → Google; podpisová komponenta → Náberáky |
+| **Financie** | Faktúry, provízie, náklady, odberatelia | `app/faktury`, `app/provizie-maklerov`, `app/uctovny-prehlad`, `app/prehlad-financii`, `app/pravidelne-naklady`, `app/naklady`, `app/odberatelia`, `app/potvrdenie-provizii`, `api/faktury`, `api/maklerske-provizie`, `api/makler-provizie-pct`, `api/odberatelia`, `api/dodavatel`, `api/billing`, `api/firma-info`, `api/ico-lookup` | Zákonné náležitosti faktúr/DPH → Compliance (🔴 protokol) |
+| **Monitor & Analýza** | Scraping konkurencie, AI analýza okolia/trhu | `app/monitor`, `app/analyzy`, `api/monitor`, `api/analyze`, `api/analyze-url`, `api/analyze-pdf`, `api/analyzy-trhu`, `api/okolie-analysis`, `api/market-sentiments`, `cron/scrape`, `lib/monitor` | AI model vrstva → AI |
+| **AI nástroje** | Copywriter, fill, generate, property story | `app/ai-writer`, `app/nastroje`, `api/ai-writer`, `api/ai-analyze`, `api/ai-fill`, `api/generate`, `api/property-story`, `lib/ai` | Parse routes (parse-doc/lv) → Náberáky |
+| **Google integrácia** | Drive, Gmail, OAuth, token/connect | `app/gmail`, `app/disk`, `api/google`, `api/auth/google`, `api/email`, `lib/google.ts`, `useGoogleConnected` | Calendar business logika → Obhliadky |
+| **Operatíva & Manažér** | Dashboard, push, úlohy, štatistiky, tím | `app/manazer`, `app/operativa`, `app/notifikacie`, `app/upozornenia`, `app/log`, `app/ulohy`, `app/statistiky`, `app/vytazenost`, `app/tim`, `app/produkcia`, `api/manazer`, `api/push`, `api/notifications`, `api/ulohy`, `api/logy`, `api/makleri`, `api/pobocky`, `api/dashboard`, `api/prehlad` | — |
+| **Security & Auth** | Auth, session, RLS, audit, users | `app/auth`, `app/pridat-heslo`, `app/reset-password`, `app/registracia`, `app/admin`, `api/auth`, `api/users`, `api/user-scope`, `api/audit`, `api/admin`, `middleware.ts`, `lib/auth`, `lib/audit`, RLS migrácie | — (cross-cutting, 🔴 protokol) |
+| **GDPR / Compliance / Právo** | Súhlasy, výmaz, AML, zákonné náležitosti | `app/(legal)`, `app/gdpr`, `app/klientska-zona`, `app/odklik`, `api/gdpr`, `api/consents`, `api/consent-confirm`, `api/consent-refresh`, `api/consent-unsubscribe` + právne náležitosti faktúr/zmlúv/AML | — (cross-cutting, 🔴 protokol) |
+
+**Vyriešené prekryvy (kanonický vlastník):**
+- **Podpis** (`app/podpis`, `api/sign`) = **Náberáky** vlastní podpisovú primitívu; Obhliadky ju len volajú pre protokoly.
+- **Calendar**: **Obhliadky** vlastnia business logiku (`api/calendar`, `api/calendar-sync`); **Google** vlastní OAuth/token vrstvu (`lib/google.ts`, `api/auth/google`).
+- **Parse-doc/lv/pdf** = **Náberáky** vlastnia parse endpointy; **AI** vlastní len model/prompt vrstvu (`lib/ai`), ktorú parse volá.
+- **Obchody** (`api/obchody`) = **Klienti & Pipeline** (stav obchodu od ÚZ po vklad); zmluvné dokumenty k obchodu → **Náberáky**.
+- **Zdieľané utility** (`api/locale`, `api/weather`, `api/ulica-search`, `api/api-status`, `app/nastavenia`): meniť len po dohode; default správca = Operatíva.
+
 ## Tri hlavné princípy (Boris Cherny)
 1. **Jednoduchosť** — minimálny kód. Ak vieš niečo zmazať namiesto pridať, sprav to.
 2. **Žiadne band-aidy** — hľadaj koreňovú príčinu, nie rýchle záplaty.
@@ -279,7 +305,7 @@ Beží automaticky v CI cez `.github/workflows/security.yml` → job `api-auth-g
 - **Vercel auto-deploy z `dev` branch FUNGUJE** (pôvodne som si myslel že je rozbitý — bola to moja chyba pozorovania). Production Branch v Vercel je nastavený na `dev`, GitHub webhook beží, každý `git push` automaticky spustí deploy (source: "git"). **NIKDY nerob `vercel deploy --prod --yes` po pushe** — to robí 2× deploy (jeden git, jeden cli) a vyčerpá 100/day limit free tier. Sám push stačí. Ako overiť: `curl api.vercel.com/v6/deployments` cez Vercel API token → `source: "git"` = auto-deploy beží.
 
 ## Lessons learned (2026-05-22)
-- **Pracovný adresár NIE je Desktop.** Aktívny projekt žije v `/Users/alesmachovic/Code/os-machovic` (mimo iCloud). Desktop sync sa vypol 2026-05-22 a `~/Desktop/os-machovic` zmizla. Adresár `/Users/alesmachovic/os-machovic` je marcový boilerplate (11-bajtový CLAUDE.md, prázdne `src/`) — **NIE** je to projekt, nezamieňať. Po reset session: `cd /Users/alesmachovic/Code/os-machovic`, prečítaj `CLAUDE.md`, `ls plan*.md`, `git status`, `git log -5 --oneline` — neopytuj sa "kde je projekt".
+- **Pracovný adresár NIE je Desktop.** Aktívny projekt žije v `/Users/alesmachovic/Code/os-machovic` (mimo iCloud). `~/Desktop/os-machovic` je dnes **živý symlink** na `Code/os-machovic` (nie samostatná kópia) — je jedno cez ktorú cestu vojdeš, je to ten istý repo. Adresár `/Users/alesmachovic/os-machovic` je marcový boilerplate (11-bajtový CLAUDE.md, prázdne `src/`) — **NIE** je to projekt, nezamieňať. Po reset session: `cd /Users/alesmachovic/Code/os-machovic`, prečítaj `CLAUDE.md`, `ls plan*.md`, `git status`, `git log -5 --oneline` — neopytuj sa "kde je projekt".
 - **Plány rozdeľuj podľa domény, nie chronologicky.** Keď sa rieši viac súvisiacich vecí naraz (matching + kupujúci), maj **samostatný `plan-<doména>.md`** pre každú. `plan.md` je len pre aktuálny bug sweep. Zachová to fokus pri resetoch — pri otázke "kde sme skončili" stačí otvoriť relevantný plan-*.md a pokračovať. Spájať sa to dá až keď je každá doména hotová.
 - **Audit fails ≠ blocked commit ak sú pre-existing.** CLAUDE.md pravidlo 8 ("ak akýkoľvek ✗, NEROBí commit") platí len pre **regression**. Pred commitom: stash zmeny → spusti `audit-all.sh` na čistom stave (baseline) → unstash → spusti znova → porovnaj počty failov. Ak nepribudol nový fail, commit je OK. Vždy uveď baseline vs current počty fail-ov v commit message.
 
