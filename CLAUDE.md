@@ -140,6 +140,21 @@ Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne 
 3. Keď nie si istý na 100 %, **spýtaj sa / ukáž kandidátov** — neoznačuj to ako fakt.
 4. Nikdy neprezentuj „pravdepodobného vlastníka" ako istotu.
 
+**🚨 Security ≠ Právo/GDPR — sú to DVE samostatné okná. Nikdy ich nezlievaj do jedného „security okna".**
+- **`Bezpecnost`** (Security & Auth) = technická vrstva: chýbajúci `requireUser`, RLS/scope/`company_id` filter, IDOR, secrets v kóde, rate-limit, 2FA, **technické odstránenie PII z logov/kódu**.
+- **`Pravo`** (GDPR / Compliance / Právo) = právna vrstva: súhlasy, výmaz, retention, AML/KYC, zákonné náležitosti faktúr/zmlúv, a **posúdenie GDPR dopadu** (oznamovacia povinnosť ÚOOÚ, dopad na dotknuté osoby).
+
+**Smerovanie častých cross-cutting nálezov:**
+| Nález | Kam |
+|---|---|
+| API bez `requireUser` / bez `company_id` filtra, IDOR, leak dát cez endpoint | **Bezpecnost** |
+| Secrets v kóde, slabý rate-limit, session/2FA diera | **Bezpecnost** |
+| **PII v console/logoch alebo leak osobných údajov** | **Bezpecnost** (zavrie dieru) **+ Pravo** (posúdi GDPR dopad/hlásenie) — ide do OBOCH |
+| Súhlasy, cookie consent, právo na výmaz, retention, AML/KYC | **Pravo** |
+| Zákonné náležitosti faktúry/DPH, znenie zmlúv/poučení | **Pravo** (🔴 protokol) |
+
+> Pri **úniku osobných údajov** platí: technickú dieru zavrie `Bezpecnost`, ale právne posúdenie (či a komu hlásiť) **vždy** dostane aj `Pravo`. Jedno okno na oboje = chyba smerovania.
+
 ## Tri hlavné princípy (Boris Cherny)
 1. **Jednoduchosť** — minimálny kód. Ak vieš niečo zmazať namiesto pridať, sprav to.
 2. **Žiadne band-aidy** — hľadaj koreňovú príčinu, nie rýchle záplaty.
