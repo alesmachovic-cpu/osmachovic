@@ -754,7 +754,9 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
 
     // Validácia adresy — lokalita musí byť vybraná z dropdownu
     const addrErrors: typeof fieldErrors = {};
-    if (!isValidLokalita) {
+    // K7 fix: lokalitu validuj len keď je pole reálne viditeľné (status novy_kontakt).
+    // Inak sa pri edite klienta s iným statusom (pole skryté) save ticho zasekol bez viditeľnej príčiny.
+    if (status === "novy_kontakt" && !isValidLokalita) {
       addrErrors.lokalita = "Vyber mesto / mestskú časť zo zoznamu";
     }
     // Ulica a číslo sú povinné až pri dohodnutom nábere, nie pri vytváraní kontaktu

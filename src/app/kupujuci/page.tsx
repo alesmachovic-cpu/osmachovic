@@ -182,10 +182,23 @@ function KupujuciInner() {
           <div>
             <h2 style={{ fontSize: "20px", fontWeight: "700", margin: "0 0 3px", color: "var(--text-primary)" }}>Kupujúci</h2>
             <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: 0 }}>
-              {kupujuciKlienti.length} kupujúcich · {objednavky.length} objednávok
+              {filtered.length} kupujúcich · {objednavky.filter(o => filtered.some(k => k.id === o.klient_id)).length} objednávok
             </p>
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            {/* K4 fix: prepínač moji/všetci — zoznam teraz rešpektuje filterMakler (predtým ukazoval vždy všetkých firmy) */}
+            {makleri.length > 0 && (
+              <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={{
+                padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+                borderRadius: "10px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
+                appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+                backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+              }}>
+                <option value="mine">Moji klienti</option>
+                <option value="all">Všetci</option>
+                {makleri.map(m => <option key={m.id} value={m.id}>{m.meno}</option>)}
+              </select>
+            )}
             <button onClick={() => { setIsSimplified(false); setEditingObjednavka(null); setSelectedKlient(null); setStep("klient"); }}
               style={{ padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}
               title="Vytvor klienta + záväznú objednávku v jednom kroku">
@@ -212,7 +225,7 @@ function KupujuciInner() {
         )}
 
         {/* ZLÚČENÝ ZOZNAM: kupujúci s objednávkou (modrastí, hore) + bez objednávky (biele, dole) */}
-        {!loading && kupujuciKlienti.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <div style={{
             padding: "60px", textAlign: "center", color: "var(--text-muted)",
             background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px",
@@ -228,9 +241,9 @@ function KupujuciInner() {
             </button>
           </div>
         )}
-        {!loading && kupujuciKlienti.length > 0 && (
+        {!loading && filtered.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {kupujuciKlienti
+            {filtered
               .flatMap(k => {
                 // B5 fix: klient môže mať viac objednávok — zobraz každú ako
                 // samostatný riadok (predtým `find` ukázal len prvú a zvyšok sa stratil).
