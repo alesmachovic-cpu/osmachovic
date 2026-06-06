@@ -157,7 +157,6 @@ function DnesMamTile({ userId }: { userId?: string }) {
         ulohy: Array.isArray(ulo) ? ulo.length : 0,
       });
     }).catch(() => setData({ obhliadky: 0, nabery: 0, ulohy: 0 }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   const items = [

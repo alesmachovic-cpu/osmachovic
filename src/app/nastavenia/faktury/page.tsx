@@ -152,7 +152,6 @@ export default function NastaveniaFakturyPage() {
         requestAnimationFrame(redrawCanvas);
       }
     } catch { /* ignoruj zlý JSON */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.podpis_data]);
 
   function getCanvasPos(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>): [number, number] {

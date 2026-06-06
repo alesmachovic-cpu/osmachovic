@@ -513,7 +513,6 @@ function LoginScreen({ accounts: _accounts, onLogin, onVerify2fa, onGoogleLogin 
         widgetIdRef.current = null;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnstileSiteKey]);
 
   async function handleSubmit(e?: React.FormEvent) {

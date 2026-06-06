@@ -32,8 +32,8 @@ function applyCropAndEnhance(
   // Rotate in 90° steps
   const steps = ((rotation / 90) % 4 + 4) % 4;
 
-  let srcW = img.naturalWidth;
-  let srcH = img.naturalHeight;
+  const srcW = img.naturalWidth;
+  const srcH = img.naturalHeight;
 
   // Crop coords are in displayed (possibly rotated) space → convert to natural
   // We work with the crop in the display coordinate space, then back-project
@@ -252,7 +252,7 @@ export default function DocumentScannerModal({ open, onClose, docLabel, onSave }
     const maxH = steps % 2 === 0 ? img.naturalHeight : img.naturalWidth;
 
     setCropRect(prev => {
-      let { x, y, w, h } = prev;
+      const { x, y, w, h } = prev;
       const MIN = 40;
       switch (draggingHandle) {
         case 0: { // top-left
