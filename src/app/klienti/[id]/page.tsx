@@ -890,7 +890,8 @@ export default function KlientDetailPage() {
   function getWorkflowStep(): number {
     if (!klient) return 0;
     if (klient.status === "uzavrety") return 4;
-    if (inzeraty.length > 0 || (klient.status as string) === "inzerovany") return 3;
+    // F-B: ráta len AKTÍVNE inzeráty (nie archivované/predané) — inak pipeline klamala
+    if (inzeraty.some(i => { const s = (i as Record<string, unknown>).status; return s !== "archivovany" && s !== "predany"; }) || (klient.status as string) === "inzerovany") return 3;
     if (klient.status === "nabrany" || nabery.length > 0) return 2;
     if (klient.status === "dohodnuty_naber") return 1;
     return 0;
@@ -1186,8 +1187,10 @@ export default function KlientDetailPage() {
             {klient.typ === "oboje" && (
               <>
                 <button disabled={!isOwner} onClick={async () => {
-                  if (!confirm(`Nechať ${klient.meno} iba ako kupujúceho?\n\nZmizne zo sekcie Klienti.`)) return;
-                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "kupujuci" });
+                  const visiace = nabery.length + inzeraty.length;
+                  if (!confirm(`Nechať ${klient.meno} iba ako kupujúceho?\n\nZmizne zo sekcie Klienti (predávajúci).${visiace > 0 ? `\n\n⚠️ Má ${visiace} náberákov/nehnuteľností — ostanú v DB, len skryté.` : ""}`)) return;
+                  // F-D: prenes kupujúci stav do `status`, vyčisti predajný `status_kupujuci` (inak sa stavy zlejú / skorumpujú)
+                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "kupujuci", status: klient.status_kupujuci || "novy_kontakt", status_kupujuci: null });
                   loadAll();
                 }} style={{
                   padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
@@ -1195,8 +1198,9 @@ export default function KlientDetailPage() {
                   fontWeight: "600", cursor: "pointer", ...lockSt,
                 }}>iba kupujúci</button>
                 <button disabled={!isOwner} onClick={async () => {
-                  if (!confirm(`Nechať ${klient.meno} iba ako predávajúceho?\n\nZmizne zo sekcie Kupujúci.`)) return;
-                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "predavajuci" });
+                  if (!confirm(`Nechať ${klient.meno} iba ako predávajúceho?\n\nZmizne zo sekcie Kupujúci.${objednavky.length > 0 ? `\n\n⚠️ Má ${objednavky.length} objednávok — ostanú v DB, len skryté.` : ""}`)) return;
+                  // F-D: vyčisti kupujúci `status_kupujuci` (predaj vedie `status`) — inak ostane mŕtve pole
+                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "predavajuci", status_kupujuci: null });
                   loadAll();
                 }} style={{
                   padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
@@ -1472,6 +1476,8 @@ export default function KlientDetailPage() {
               { value: "novy_kontakt", label: "Nový kontakt" },
               { value: "dohodnuty_naber", label: "Dohodnutý náber" },
               ...(klient.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
+              ...(klient.status === "inzerovany" ? [{ value: "inzerovany", label: "Inzerovaný" }] : []),
+              ...(klient.status === "uzavrety" ? [{ value: "uzavrety", label: "Uzavretý" }] : []),
               { value: "volat_neskor", label: "Volať neskôr" },
               { value: "nedovolal", label: "Nedovolal" },
               { value: "nechce_rk", label: "Nechce RK" },
