@@ -296,14 +296,9 @@ function KlientiContent() {
     if (newStatus === "dohodnuty_naber" || newStatus === "volat_neskor") {
       setStatusMiesto(k.lokalita || "");
       setStatusDatum("");
-      // Pre-fill ulica/číslo z poznámky
-      const addrMatch = k.poznamka?.match(/Adresa:\s*(.+?)(?:,|\n|$)/);
-      if (addrMatch) {
-        const parts = addrMatch[1].trim().split(/\s+/);
-        const cislo = parts.pop() || "";
-        if (/^\d/.test(cislo)) { setStatusUlica(parts.join(" ")); setStatusCislo(cislo); }
-        else { setStatusUlica(addrMatch[1].trim()); setStatusCislo(""); }
-      } else { setStatusUlica(""); setStatusCislo(""); }
+      // Ulicu/číslo necháme PRÁZDNE — maklér ich vyplní ručne. Pre-fill z poznámky
+      // ("Adresa: …") ťahal do poľa Ulica mestskú časť/lokalitu a mýlil maklérov.
+      setStatusUlica(""); setStatusCislo("");
       setStatusAddrError("");
       setStatusModal({ klient: k, status: newStatus });
       return;

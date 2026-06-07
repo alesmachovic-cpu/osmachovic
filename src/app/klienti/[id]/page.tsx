@@ -744,17 +744,9 @@ export default function KlientDetailPage() {
     ) {
       setPendingStatus(newStatus);
       setNaberMiesto(klient.lokalita || "");
-      // Pre-fill ulica/číslo z poznámky ak existuje
-      const addrMatch = klient.poznamka?.match(/Adresa:\s*(.+?)(?:,|\n|$)/);
-      if (addrMatch) {
-        const parts = addrMatch[1].trim().split(/\s+/);
-        const cislo = parts.pop() || "";
-        setNaberUlica(parts.join(" "));
-        setNaberCislo(/^\d/.test(cislo) ? cislo : "");
-        if (!/^\d/.test(cislo)) setNaberUlica(addrMatch[1].trim());
-      } else {
-        setNaberUlica(""); setNaberCislo("");
-      }
+      // Ulicu/číslo necháme PRÁZDNE — maklér ich vyplní ručne. Pre-fill z poznámky
+      // ("Adresa: …") ťahal do poľa Ulica mestskú časť/lokalitu a mýlil maklérov.
+      setNaberUlica(""); setNaberCislo("");
       setNaberAddrError("");
       setShowDatePicker(true);
       return;
