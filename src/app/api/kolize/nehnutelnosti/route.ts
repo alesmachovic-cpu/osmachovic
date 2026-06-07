@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from "@/lib/auth/requireUser";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 const getSb = () => getSupabaseAdmin();
 
 export async function POST(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   try {
     const { lokalita, typ_nehnutelnosti, izby, nazov, cena, nehnutelnost_id, makler_email, makler_meno } = await req.json();
     const kolize: Array<Record<string, unknown>> = [];

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -274,6 +275,7 @@ function staticBenchmarkPerM2(lokalita: string): number {
 }
 
 export async function POST(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   let body: InputParams;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
 

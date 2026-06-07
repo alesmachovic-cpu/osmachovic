@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/requireUser";
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   const { searchParams } = new URL(req.url);
   const klientId = searchParams.get("klient_id");
   const sb = getSupabaseAdmin();

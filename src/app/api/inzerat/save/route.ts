@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { getUserScope, canEditRecord } from "@/lib/scope";
 import { VIANEMA_COMPANY_ID } from "@/lib/auth/companyScope";
@@ -42,6 +43,7 @@ async function autoGeocodePayload(payload: Record<string, unknown>): Promise<voi
  * mohli verifikovať vlastníctvo.
  */
 export async function POST(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   try {
     const body = await req.json();
     const { payload, editId, user_id: userId } = body as {

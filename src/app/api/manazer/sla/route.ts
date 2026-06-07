@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { notifyUser, userIdFromMaklerId, brandedEmailHtml } from "@/lib/notify";
 
@@ -17,7 +18,8 @@ export const runtime = "nodejs";
  *     → manažér iba potvrdí (zruší critical flag, klient zostáva u makléra
  *       bez napomenutia, počítadlo ostáva)
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   try {
     const sb = getSupabaseAdmin();
 
@@ -51,6 +53,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const __auth = await requireUser(request as NextRequest); if (__auth.error) return __auth.error;
   try {
     const sb = getSupabaseAdmin();
     const body = await request.json();

@@ -1,9 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireUser } from "@/lib/auth/requireUser";
 import { NextRequest, NextResponse } from 'next/server';
 
 const getSb = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 export async function POST(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   try {
     const { nehnutelnost_id, akcia, poznamka } = await req.json();
 

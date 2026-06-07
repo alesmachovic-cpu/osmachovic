@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -9,6 +10,7 @@ export const runtime = "nodejs";
  * Použité v UI na poll po odoslaní SMS — keď klient podpíše, modal sa zavre.
  */
 export async function GET(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   const t = req.nextUrl.searchParams.get("entity_type");
   const id = req.nextUrl.searchParams.get("entity_id");
   if (!t || !id) return NextResponse.json({ error: "params required" }, { status: 400 });

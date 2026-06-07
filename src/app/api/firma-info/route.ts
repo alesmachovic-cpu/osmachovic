@@ -20,7 +20,8 @@ function pickFields(input: Record<string, unknown>) {
   return out;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   const sb = getSupabaseAdmin();
   const { data, error } = await sb.from("firma_info").select("*").eq("id", 1).maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

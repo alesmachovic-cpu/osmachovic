@@ -4,7 +4,8 @@ import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   const sb = getSupabaseAdmin();
   const { data, error } = await sb
     .from("pravidelne_naklady")

@@ -6,6 +6,7 @@ import { logAudit } from "@/lib/audit";
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   const userId = req.nextUrl.searchParams.get("user_id");
   // Bez user_id NIČ nevraciame — odberatelia sú per-makler.
   if (!userId) return NextResponse.json([]);

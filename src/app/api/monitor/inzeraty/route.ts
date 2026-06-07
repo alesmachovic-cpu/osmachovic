@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -19,6 +20,7 @@ const SUPER_ADMIN_EMAILS = [
 ];
 
 export async function DELETE(request: Request) {
+  const __auth = await requireUser(request as NextRequest); if (__auth.error) return __auth.error;
   let body: { ids?: string[]; actorEmail?: string; actorLoginEmail?: string };
   try {
     body = await request.json();

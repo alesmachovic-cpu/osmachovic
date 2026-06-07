@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 function getSupabase() {
@@ -6,7 +7,8 @@ function getSupabase() {
 }
 
 // GET: Vráti cached eventy z Supabase logy tabuľky
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   try {
     const supabase = getSupabase();
     const { data } = await supabase
@@ -27,6 +29,7 @@ export async function GET() {
 
 // POST: Uloží eventy do cache (volané z externého syncu alebo manuálne)
 export async function POST(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   try {
     const supabase = getSupabase();
     const { events } = await req.json();

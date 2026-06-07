@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
@@ -171,6 +172,7 @@ function buildLines(ctx: NonNullable<Awaited<ReturnType<typeof fetchObhliadkaCon
 }
 
 export async function GET(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
@@ -188,6 +190,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
   let body: { obhliadkaId?: string; to?: string; maklerMeno?: string; maklerEmail?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Neplatný JSON" }, { status: 400 }); }
   if (!body.obhliadkaId || !body.to) return NextResponse.json({ error: "obhliadkaId and to required" }, { status: 400 });
