@@ -243,6 +243,7 @@ function KlientiContent() {
 
   const filtered = klienti.filter(k => {
     if (!PREDAVAJUCI_TYPY.has(k.typ ?? "")) return false;
+    if (k.je_volny) return false; // F-H: uvoľnený klient patrí do "Voľní", nie do zoznamu/počítadiel predávajúcich
     // Makler filter
     if (filterMakler === "mine") {
       if (!myMaklerUuid) return false;
@@ -268,6 +269,7 @@ function KlientiContent() {
   // Counts based on ALL klienti (with makler filter but without status filter)
   const allForCounts = klienti.filter(k => {
     if (!PREDAVAJUCI_TYPY.has(k.typ ?? "")) return false;
+    if (k.je_volny) return false; // F-H: uvoľnený klient patrí do "Voľní", nie do zoznamu/počítadiel predávajúcich
     if (filterMakler === "mine") {
       if (!myMaklerUuid) return false;
       if (k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;

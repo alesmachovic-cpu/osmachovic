@@ -932,22 +932,29 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
         };
         const existingEventId = (editKlient as { calendar_event_id?: string } | null)?.calendar_event_id;
         if (isEdit && existingEventId) {
-          await fetch("/api/google/calendar", {
+          const res = await fetch("/api/google/calendar", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ...body, eventId: existingEventId }),
           });
+          // F-F: nezahltávaj 401/chybu — upozorni že event sa neaktualizoval
+          if (!res.ok) alert("Google Kalendár sa nepodarilo aktualizovať — termín skontroluj ručne.");
         } else {
           const res = await fetch("/api/google/calendar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           });
-          const json = await res.json().catch(() => null);
-          const newEventId = json?.event?.id;
-          const targetId = (isEdit ? editKlient?.id : (resultData?.[0] as { id?: string } | undefined)?.id) as string | undefined;
-          if (newEventId && targetId && authUser?.id) {
-            await klientUpdate(authUser.id, targetId, { calendar_event_id: newEventId });
+          // F-F: pri 401 (Google nepripojený) sa predtým event ticho nevytvoril — maklér si myslel že má termín v kalendári
+          if (!res.ok) {
+            alert("Klient je uložený, ale Google Kalendár nie je pripojený — termín si pridaj do kalendára ručne.");
+          } else {
+            const json = await res.json().catch(() => null);
+            const newEventId = json?.event?.id;
+            const targetId = (isEdit ? editKlient?.id : (resultData?.[0] as { id?: string } | undefined)?.id) as string | undefined;
+            if (newEventId && targetId && authUser?.id) {
+              await klientUpdate(authUser.id, targetId, { calendar_event_id: newEventId });
+            }
           }
         }
       } catch { /* silent */ }
@@ -959,9 +966,10 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
       setSaveError(error.message || "Nepodarilo sa uložiť klienta");
       return;
     }
-    setTelefon(""); setMeno(""); setEmail(""); setStatus(defaultStatusForTyp("kupujuci"));
+    // F-E: reset na defaultTyp okna (nie natvrdo "kupujuci") — inak séria predávajúcich po uložení spadla na kupujúceho
+    setTelefon(""); setMeno(""); setEmail(""); setStatus(defaultStatusForTyp(defaultTyp));
     setStatusKupujuci("");
-    setTypKlienta("kupujuci"); setTypNehnutelnosti("");
+    setTypKlienta(defaultTyp); setTypNehnutelnosti("");
     setZaujemNehnutelnostId(null); setZaujemInaRk("");
     setHypoTyp(null); setHypoMeno(null); setHypoFirma(null); setHypoPoradcaId(null);
     setOdlozeneDo(""); setRkNazov("");
@@ -1143,14 +1151,15 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
                   <div>
                     <div style={labelSt}>Status — predaj *</div>
                     <select value={status} onChange={e => setStatus(e.target.value)} style={selectSt}>
-                      {STATUSY_PREDAVAJUCI.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      {STATUSY_PREDAVAJUCI.filter(o => !STATUSY_OBOJE_OMIT.has(o.value)).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       {status === "nabrany" && <option value="nabrany">Nabraný</option>}
                     </select>
                   </div>
                   <div>
                     <div style={labelSt}>Status — kúpa *</div>
                     <select value={statusKupujuci || "novy_kontakt"} onChange={e => setStatusKupujuci(e.target.value)} style={selectSt}>
-                      {STATUSY_KUPUJUCI.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      {/* F-G: OBOJE klient nemá mať turista/nechce_rk/realitna_kancelaria (STATUSY_OBOJE_OMIT) */}
+                      {STATUSY_KUPUJUCI.filter(o => !STATUSY_OBOJE_OMIT.has(o.value)).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                 </div>
