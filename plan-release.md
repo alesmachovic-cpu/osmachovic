@@ -6,6 +6,19 @@
 
 ---
 
+## ✅ DEŇ 1 (2026-06-07) — HOTFIXY HOTOVÉ, vianema čistá
+
+**Akútna časť uzavretá.** Na prode (`main`) sa cez 4 hotfix commity zavreli VŠETKY anonymné klientske-PII diery (curl-overené 401, 17:15–18:23 UTC):
+- `b5c7be9` S3 klient-udalosti + S7 cron · `162948d` S4 + matching×3 · `03faf5c` 17 kat.A routes (vrát. BULK objednavky) · `f1d31d0` makler-provizie-pct + pobocky + calendar
+- ✅ GDPR: incident uzavretý — **NEOZNAMOVAŤ ÚOOÚ** (Pravo finálne, jediný bulk=objednavky pseudonymné). Advokátska poistka pred go-live.
+- ✅ Compliance na dev: zásady v2.1+v2.2, RoPA, DPA, retencia, breach záznam.
+- ✅ Erasure gombík opravený (na dev).
+- **Deferred do veľkého releasu** (NEquery-ujú klientske PII): monitor/market/AI/okolie/fotky/google-disconnect/api-status + cross-tenant scope (objednavky.company_id).
+
+**ZOSTÁVA = veľký release (B): dev→main + DB reconciliation.** Čaká na schema dump (Aleš spustí 3 queries na vianeme) → zladovací skript → záloha → migrácia → deploy → smoke test → go-live s klientmi. To je projekt na ďalšie dni, NIE dnes.
+
+---
+
 ## 🔴 KONSOLIDOVANÝ STAV (2026-06-07) — Bezpecnost + Pravo = NO-GO, podmienečne GO
 
 **KOREŇOVÝ PROBLÉM (overené git + curl):** `main` je **91 commitov ZA `dev`**, merge dev→main NEPREBEHOL. Všetky security/GDPR fixy (S3, S7, F1, F2, F3, F4, F10, breach register) sú LEN na `dev`. `vianema.amgd.sk` beží zo starého `main` → **S3 a S7 sú ŽIVÉ diery na prode TERAZ** (curl 200 bez auth). Kým dáta fiktívne = len zraniteľnosť; **prvý reálny klient = reálny GDPR breach (ÚOOÚ 72h).**
