@@ -1271,19 +1271,22 @@ export default function KlientDetailPage() {
                 // 🔒 M1: re-auth modal namiesto blocking confirm()
                 const proof = await reAuth.prompt({
                   title: `Anonymizovať klienta ${klient.meno || ""}?`,
-                  description: "Meno, telefón, email a poznámky budú nenávratne zmazané (GDPR čl. 17). Náberáky a obhliadky zostanú evidované bez identifikovateľných údajov. Operácia je nevratná — pre potvrdenie zadaj heslo alebo 2FA kód.",
+                  description: "GDPR výmaz (čl. 17): osobné údaje, dokumenty, náberáky, obhliadky a história sa nenávratne zmažú. AML doklady (kópia OP, identifikácia) ostávajú 5 rokov podľa zákona. Faktúry ostávajú anonymizované. Drive priečinok treba zmazať ručne. Operácia je nevratná — potvrď heslom alebo 2FA kódom.",
                   dangerLabel: "Anonymizovať",
                 });
                 if (!proof) return;
-                const r = await fetch("/api/klienti/anonymize", {
+                // MD cesta A (2026-06-07): bezpečný endpoint — rieši AML retenciu + company scope + audit.
+                const r = await fetch("/api/gdpr/erasure", {
                   method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id: klient.id, ...proof }),
+                  body: JSON.stringify({ klient_id: klient.id, ...proof }),
                 });
+                const resBody = await r.json().catch(() => ({}));
                 if (!r.ok) {
-                  const body = await r.json().catch(() => ({}));
-                  alert(body.error || "Chyba pri anonymizácii");
+                  alert(resBody.error || "Chyba pri anonymizácii");
                   return;
                 }
+                // Erasure vracia pripomienku na ručné zmazanie Drive priečinka (OP/LV scany)
+                if (resBody.message) alert(resBody.message);
                 // 🔥 #5 fix (2026-05-21): namiesto window.location.reload() (ktorý
                 // spôsobil flicker na LoginScreen počas re-bootstrap session),
                 // updateneme klient state in-place + reloadneme timeline.
