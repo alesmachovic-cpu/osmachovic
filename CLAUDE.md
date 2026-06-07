@@ -13,8 +13,8 @@
 - **Google integrácia** — Drive (dokumenty klientov), Gmail (komunikácia), Calendar (termíny)
 - **Operatíva** — produkcia tímu, vyťaženosť, štatistiky, push notifikácie
 
-Produkcia: **https://vianema.amgd.sk**
-Test/staging: **https://dev.amgd.sk**
+„Produkcia": **https://vianema.amgd.sk** — POZOR: zatiaľ **interné test/demo prostredie len pre maklérov, s fiktívnymi dátami**, NIE ostrá verejná prevádzka s reálnymi klientmi. (Smeruje k ostrej prevádzke — preto security baseline držíme plný už teraz.)
+Vývoj: **https://dev.amgd.sk** — osobné vývojové prostredie Aleša, tiež fiktívne dáta.
 
 ## Jazyk a štýl komunikácie
 - **Komunikuj so mnou v slovenčine.**
@@ -39,7 +39,9 @@ Test/staging: **https://dev.amgd.sk**
 - Tri known gaps (HSTS, dev password protect, CSP nonce) sú evidované, ale **nepribúdajú** ďalšie gaps — to je pevný limit.
 - Pri novej API route / DB migrácii / session emitteri: vyžadované checks z "Security Regression Guardian Mode" sekcie sú **nezjednateľné**, nie nice-to-have.
 
-**Prečo:** Vianema má reálnych klientov, reálne osobné údaje (AML/KYC, OP, listy vlastníctva), reálne peniaze (provízie, faktúry). Jeden security breach = okamžitý koniec firmy + GDPR pokuty + osobná zodpovednosť Aleša ako CEO. Žiadna feature, žiadna deadline, žiadny "rýchly fix" toto neprebije.
+**Prečo:** Vianema síce **zatiaľ beží len ako interný test medzi maklérmi s fiktívnymi dátami** (žiadni reálni klienti zatiaľ → dnešná diera = oprava kódu, NIE GDPR breach), ale **smeruje k ostrej prevádzke** s reálnymi klientmi, reálnymi osobnými údajmi (AML/KYC, OP, listy vlastníctva) a reálnymi peniazmi (provízie, faktúry). Preto staviame security správne **od začiatku** — keď príde ostrá prevádzka, baseline už musí byť pevný a disciplína zabehnutá. Jeden security breach v ostrej prevádzke = koniec firmy + GDPR pokuty + osobná zodpovednosť Aleša ako CEO. Baseline preto **nerozvoľňujeme** ani v test fáze.
+
+> **Dôsledok pre okná (dôležité, šetrí zbytočnú paniku):** kým sú dáta fiktívne/testovacie, bezpečnostná diera = **oprava kódu**, nie GDPR incident — NEspúšťaj breach/oznamovací protokol (ÚOOÚ, 72h) pre test dáta. GDPR/breach protokol sa aktivuje až keď budú v systéme **reálne osobné údaje reálnych osôb**. Technickú prísnosť (requireUser, scope, audit, RLS) ale držíme rovnako aj teraz.
 
 ## 🔴 ZAMRZNUTÝ BASELINE: Bezpečnosť + Právo/Compliance (platí na `dev` aj `main`)
 
