@@ -15,7 +15,13 @@
 - ✅ Erasure gombík opravený (na dev).
 - **Deferred do veľkého releasu** (NEquery-ujú klientske PII): monitor/market/AI/okolie/fotky/google-disconnect/api-status + cross-tenant scope (objednavky.company_id).
 
-**ZOSTÁVA = veľký release (B): dev→main + DB reconciliation.** Čaká na schema dump (Aleš spustí 3 queries na vianeme) → zladovací skript → záloha → migrácia → deploy → smoke test → go-live s klientmi. To je projekt na ďalšie dni, NIE dnes.
+**ZOSTÁVA = veľký release (B): dev→main + DB reconciliation.** Schema dump HOTOVÝ (`security-audit/vianema-prod-schema-2026-06-07.txt`) → reconcile skript NÁVRH (`security-audit/vianema-reconcile-2026-06-07.sql`, 7 tabuliek + 36 stĺpcov + 41 indexov chýba) → review → TEST na kópii → záloha → migrácia → deploy → smoke test → go-live. Projekt na ďalšie dni.
+
+**Go-live fast-follow (z Pravo RoPA revízie, NEurgentné — test dáta):**
+- → Klienti: F11 anonymize cron nečistí PII v `produkcia_objednavky` (snapshot_*) + `kolizny_log` (čl. 5/1/e). Doplniť.
+- → Bezpecnost: `/api/parse-lv` + `/api/ai-fill` bez requireUser (cost-abuse) — over či dev rieši, inak doplniť.
+- → **Náberáky** (okno nebeží — pre keď ožije; po právnikovi, 🔴 protokol): obhliadkový list PDF má „súhlasím so spracovaním OÚ", ale základ je oprávnený záujem/zmluva → zosúladiť znenie až po potvrdení právnika (otázka 1 v pravnik-cover-balik.md).
+- Compliance balík (RoPA/DPA/zásady/incident) = KOMPLETNÝ, čaká na CEO review + ratifikáciu právnikom.
 
 ---
 
