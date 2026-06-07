@@ -10,7 +10,7 @@
 --   3) Skript je idempotentný (IF NOT EXISTS / DROP POLICY IF EXISTS) — bezpečný re-run.
 --   4) BEZ rollback-anon migrácií (070/095) — tie sem zámerne nepatria.
 --
--- OBSAH: 1) 7 chýbajúcich tabuliek (plné DDL + RLS z dev migrácií)
+-- OBSAH: 1) 6 chýbajúcich tabuliek (plné DDL + RLS z dev migrácií)
 --        2) 36 chýbajúcich stĺpcov (vrát. backfill objednavky.company_id)
 --        3) 23 chýbajúcich indexov
 --        4) RLS zladenie existujúcich tabuliek (service_role doplnky)
@@ -19,7 +19,7 @@
 
 BEGIN;
 
--- ════════ 1) CHÝBAJÚCE TABUĽKY (7) — plné DDL vrátane PK/FK/CHECK/RLS ════════
+-- ════════ 1) CHÝBAJÚCE TABUĽKY (6) — plné DDL vrátane PK/FK/CHECK/RLS ════════
 
 -- ── 1.1 audit_runs (migr. 071) ──
 CREATE TABLE IF NOT EXISTS audit_runs (
@@ -72,40 +72,13 @@ DROP POLICY IF EXISTS "inzerent_klasifikacia_all_service" ON inzerent_klasifikac
 CREATE POLICY "inzerent_klasifikacia_all_service" ON inzerent_klasifikacia
   TO service_role USING (true) WITH CHECK (true);
 
--- ── 1.4 klient_preferencie (dev DB introspection — bez migr. súboru!) ──
--- ⚠️ REVIEW: táto tabuľka NEMÁ migračný súbor v repo, existuje len v dev DB (0 riadkov).
---    DDL nižšie je zrekonštruované z information_schema. Over PK/FK pred prod.
---    POZN: dev nemá FK na klienti(id) ani company_id (over či to tak má ostať).
-CREATE TABLE IF NOT EXISTS klient_preferencie (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  klient_id uuid NOT NULL,
-  company_id uuid NOT NULL,
-  druh text[] NOT NULL,
-  pocet_izieb_min smallint, pocet_izieb_max smallint,
-  vymera_min integer, vymera_max integer,
-  typ_konstrukcie text[], poschodie text, vyzaduje_vytah boolean DEFAULT false,
-  orientacia text[], stav text[], zariadenie text,
-  kraj text, okres text, obec text, mestska_cast text, ulice text[],
-  max_km_od_centra smallint, ma_balkon boolean, ma_pivnicu boolean,
-  ma_parkovacie boolean, zahrada_min_m2 integer,
-  cena_min integer, cena_max integer,
-  predava_vlastnu boolean, vlastna_predaj_suma integer, vlastna_predaj_horizont text,
-  hotovost_eur integer, hypoteka_eur integer, hypoteka_banka text, hypoteka_predschvalena text,
-  casovy_horizont text, mhd_pristup boolean, mhd_max_metrov smallint,
-  blizko_skoly boolean, blizko_obchodov boolean, ticha_lokalita boolean, domace_zvierata boolean,
-  poznamka text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE klient_preferencie ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS anon_read_klient_preferencie ON klient_preferencie;
-CREATE POLICY anon_read_klient_preferencie ON klient_preferencie
-  FOR SELECT TO anon USING (false);  -- anon zablokovaný (USING false)
-DROP POLICY IF EXISTS service_role_all_klient_preferencie ON klient_preferencie;
-CREATE POLICY service_role_all_klient_preferencie ON klient_preferencie
-  TO service_role USING (true) WITH CHECK (true);
+-- ── (1.4 klient_preferencie ODSTRÁNENÉ — MD rozhodnutie 2026-06-07) ──
+-- Tabuľka existuje len v dev DB (0 riadkov), NEMÁ migračný súbor a grep src/ = 0
+-- výskytov (kód ju nepoužíva). Nepridávame nepoužívanú zrekonštruovanú tabuľku na
+-- prod naslepo. Ak sa feature preferencií kupujúceho niekedy doplní → riadna dev
+-- migrácia, ktorá pôjde na prod štandardným spôsobom.
 
--- ── 1.5 parse_failures (migr. 102) ──
+-- ── 1.4 parse_failures (migr. 102) ──
 CREATE TABLE IF NOT EXISTS parse_failures (
   id uuid primary key default gen_random_uuid(),
   klient_id uuid references klienti(id) on delete set null,
@@ -123,7 +96,7 @@ CREATE INDEX IF NOT EXISTS parse_failures_unreviewed_idx ON parse_failures (revi
 ALTER TABLE parse_failures ENABLE ROW LEVEL SECURITY;
 -- (len service_role)
 
--- ── 1.6 qa_smoke_runs (migr. 076) ──
+-- ── 1.5 qa_smoke_runs (migr. 076) ──
 CREATE TABLE IF NOT EXISTS qa_smoke_runs (
   id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   started_at   timestamptz NOT NULL DEFAULT now(),
@@ -141,7 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_qa_smoke_runs_started ON qa_smoke_runs (started_a
 CREATE INDEX IF NOT EXISTS idx_qa_smoke_runs_status ON qa_smoke_runs (status, started_at DESC);
 ALTER TABLE qa_smoke_runs ENABLE ROW LEVEL SECURITY;
 
--- ── 1.7 user_pobocky (migr. 087) — manažér N pobočiek ──
+-- ── 1.6 user_pobocky (migr. 087) — manažér N pobočiek ──
 CREATE TABLE IF NOT EXISTS public.user_pobocky (
   user_id    text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   pobocka_id text NOT NULL REFERENCES public.pobocky(id) ON DELETE CASCADE,
@@ -291,4 +264,27 @@ COMMIT;
 --   B) Alternatíva ak je projekt na Supabase Pro: Branching (preview branch) — pozor,
 --      branch klonuje schému, NIE nutne plné dáta → slabšie pokrytie objednavky backfillu.
 --   Odporúčam A (scratch s reálnym dumpom) — jediný čo otestuje backfill a NOT NULL na ostrých dátach.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- PRE-FLIGHT (read-only) — SPUSTI SAMOSTATNE PRED skriptom (na scratch ALEBO prod).
+-- Overuje riziká ktoré by skript inak nechali padnúť. Nič nemení (len SELECT).
+-- MD flag: 3 UNIQUE indexy padnú ak existujú duplicity; objednavky.company_id
+-- SET NOT NULL padne ak po backfille ostanú NULL. Ak je akýkoľvek počet > 0 →
+-- NErieš silou, nahlás MD, najprv sa vyriešia dáta.
+-- ────────────────────────────────────────────────────────────────────────────
+-- SELECT 'dup_faktury_cislo' AS kontrola, COUNT(*) AS konflikty FROM (
+--   SELECT company_id, cislo_faktury FROM faktury WHERE cislo_faktury IS NOT NULL
+--   GROUP BY company_id, cislo_faktury HAVING COUNT(*) > 1) x
+-- UNION ALL SELECT 'dup_faktury_vs', COUNT(*) FROM (
+--   SELECT company_id, variabilny_symbol FROM faktury WHERE variabilny_symbol IS NOT NULL
+--   GROUP BY company_id, variabilny_symbol HAVING COUNT(*) > 1) x
+-- UNION ALL SELECT 'dup_klient_dok', COUNT(*) FROM (
+--   SELECT klient_id, name, COALESCE(size,0) FROM klient_dokumenty
+--   GROUP BY klient_id, name, COALESCE(size,0) HAVING COUNT(*) > 1) x
+-- UNION ALL SELECT 'objednavky_unbackfillable', COUNT(*) FROM objednavky o
+--   WHERE NOT EXISTS (SELECT 1 FROM klienti k WHERE k.id = o.klient_id)
+-- UNION ALL SELECT 'objednavky_total', COUNT(*) FROM objednavky;
+-- ────────────────────────────────────────────────────────────────────────────
+-- OČAKÁVANÉ: prvé 4 riadky = 0. Ak nie → STOP, nahlás MD (dáta sa riešia pred releasom).
 -- ════════════════════════════════════════════════════════════════════════════
