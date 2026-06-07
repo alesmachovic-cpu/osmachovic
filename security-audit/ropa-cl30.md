@@ -15,6 +15,11 @@
 > Tento RoPA je vyhotovený automatizovaným auditom kódu — pred ostrou prevádzkou ho má
 > skontrolovať konateľ a ratifikovať právnik.
 
+> **Legenda stavu subprocesora (jednotná, používaná v celom RoPA):**
+> - **aktívny** — subprocesor reálne prijíma osobné údaje v aktuálnej prevádzke (env nastavené, kód volá).
+> - **kód pripravený — NEAKTÍVNY na prode (env nenastavené, overí Bezpecnost)** — integrácia je v kóde hotová, no bez nastavených env premenných na prode reálne neprebieha žiadny prenos údajov; pred aktiváciou doplniť DPA a zaktualizovať privacy policy. Faktický stav env overuje okno Bezpecnost.
+> - **zámerne neuvedený** — subprocesor sa pre danú činnosť úmyselne nepoužíva (napr. AI provider zakázaný na PII), uvedené pre úplnosť/transparentnosť.
+
 ---
 
 ## A. Identifikácia prevádzkovateľa a sprostredkovateľa
@@ -27,10 +32,12 @@
 - **Kontakt pre ochranu údajov:** privacy@vianema.sk
 - **Zodpovedná osoba (DPO):** neurčená — spoločnosť nemá zákonnú povinnosť určiť DPO podľa čl. 37 GDPR (kontaktný bod: privacy@vianema.sk)
 
+> **Odvetvová regulácia (zák. č. 170/2024 Z. z. o realitnom sprostredkovaní):** hlavná činnosť prevádzkovateľa (realitné sprostredkovanie) podlieha zákonu č. 170/2024 Z. z. Z neho plynú aj povinnosti s presahom do spracúvania a poskytovania údajov (povinné predzmluvné informácie klientovi, poistenie zodpovednosti za škodu, registrácia realitného sprostredkovateľa, odborná spôsobilosť). **Presné náležitosti a ich premietnutie do zmlúv/poučení a do tohto RoPA overí právnik** pred ostrou prevádzkou.
+
 ### Sprostredkovateľ (processor) — čl. 30 ods. 2
 - **Obchodné meno:** Machovic s. r. o. — prevádzkovateľ CRM systému „os-machovic" (poskytovateľ SaaS, technická prevádzka, hosting, údržba, AI integrácie)
 - **Postavenie:** spracúva osobné údaje výlučne na základe pokynov prevádzkovateľa (čl. 28 GDPR; sprostredkovateľská zmluva — viď samostatný register DPA)
-- **Ďalší sprostredkovatelia (subprocesori):** Supabase Inc., Vercel Inc., Resend Inc., Google LLC, Anthropic PBC, OpenAI (LLC), Stripe Inc., Twilio Inc. / Smslogic s. r. o., ScrapingBee SAS — úplný register a stav DPA viď samostatný dokument „Register DPA".
+- **Ďalší sprostredkovatelia (subprocesori):** Supabase Inc., Vercel Inc., Resend Inc., Google LLC, Anthropic PBC, OpenAI (LLC), Stripe Inc., Twilio Inc. / Smslogic s. r. o., ScrapingBee SAS — úplný register, stav (podľa legendy vyššie) a stav DPA viď samostatný dokument „Register DPA".
 
 ### Poznámka k vrstvenej štruktúre
 Vianema je prevádzkovateľ (určuje účely a prostriedky spracúvania osobných údajov svojich klientov). Machovic je sprostredkovateľ (čl. 28), ktorý technicky prevádzkuje CRM a využíva ďalších subprocesorov. Tento RoPA je vedený za prevádzkovateľa Vianema; pre Machovic ako sprostredkovateľa slúži zároveň ako záznam podľa čl. 30 ods. 2 (kategórie spracúvania vykonávané v mene prevádzkovateľa).
@@ -63,6 +70,11 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 - **Upload guardy** (kontrola MIME, veľkosti, base64 limit) na všetkých nahrávacích endpointoch.
 - **Politika AI providerov** — identifikačné/klientske dokumenty spracúva výhradne **Anthropic** (SCC/DPA, zero-/krátka retencia); Gemini a OpenAI sú zakázané na PII a používajú sa len na neosobné údaje (copywriting, trhová/okolitá analýza).
 
+**Posúdenie oprávneného záujmu (LIA / balančný test) pri čl. 6 ods. 1 písm. f**
+- Pri každej činnosti opretej o **oprávnený záujem (čl. 6 ods. 1 písm. f)** je podľa zásady zodpovednosti (čl. 5 ods. 2) **povinné vykonať a zdokumentovať trojstupňový test proporcionality** (legitímnosť záujmu — nevyhnutnosť spracúvania — prevaha záujmu prevádzkovateľa nad záujmami/právami dotknutej osoby), vrátane zohľadnenia **práva namietať podľa čl. 21**.
+- **Najmä pri:** Č.16 (scraping a profilovanie tretích osôb — oprávnený záujem hraničný), Č.2 a Č.13 (spoluvlastníci z LV — tretie osoby mimo klientskeho vzťahu). Tam je LIA kritická a musí byť doložená písomne.
+- LIA je vedená buď stručne pri jednotlivej činnosti, alebo v **samostatnej prílohe LIA (to-do — pripraviť pred ostrou prevádzkou, ratifikuje právnik)**.
+
 **Organizačné opatrenia**
 - Politika uchovávania (`retention-policy.md`); automatická anonymizácia neaktívnych klientov (cron F11 `/api/cron/retention-anonymize`, default DRY-RUN); výnimka z výmazu pre AML/účtovné doklady; rámec posúdenia porušenia ochrany údajov (`gdpr-breach-decision-framework.md`).
 
@@ -73,7 +85,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 ## C. Register spracovateľských činností
 
 > Pre každú činnosť: (a) účel · (b) kategórie dotknutých osôb a údajov · (c) kategórie príjemcov · (d) prenosy do tretích krajín a záruky · (e) lehoty uchovávania · (f) bezpečnostné opatrenia (nad rámec spoločných v časti B) · právny základ · zdroj údajov.
-> Pôvodných 56 objavených činností je konsolidovaných do **20 spracovateľských činností** (zlúčené duplicity: 3× elektronický podpis → 1; viaceré AI parse routy → 1; PDF generovanie naviazané na materskú činnosť; samostatne ponechané rôzne Google scopy a marketingové súhlasy kvôli odlišnému právnemu základu/prenosu).
+> Pôvodných 56 objavených činností je konsolidovaných do **22 spracovateľských činností** (zlúčené duplicity: viaceré AI parse routy → 1; PDF generovanie naviazané na materskú činnosť; samostatne ponechané rôzne Google scopy a marketingové súhlasy kvôli odlišnému právnemu základu/prenosu). Elektronický podpis cez OTP je vedený ako samostatná činnosť **Č.21** (jednotný podpisový kanál SMS/e-mail pre náberový list aj objednávku — predtým sľubovaná konsolidácia „3× podpis → 1" je týmto fakticky zrealizovaná). Doplnené samostatné činnosti **Č.21** (elektronický podpis cez OTP) a **Č.22** (objednávky fotoprodukcie/videa).
 
 ---
 
@@ -84,7 +96,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** makléri a manažéri prevádzkovateľa (app-scope `company_id` + rola) · Machovic s. r. o. (sprostredkovateľ) · Supabase Inc. (DB) · Vercel Inc. (hosting).
 **(d) Prenos do 3. krajín:** Supabase — EÚ (Frankfurt), bez prenosu. Vercel — USA: EU-US DPF + SCC.
 **(e) Retencia:** počas spolupráce; následne 7 rokov od poslednej aktivity, potom anonymizácia (cron F11). Klienti v aktívnom obchode → zákonná retencia (AML/dane).
-**Právny základ:** čl. 6 ods. 1 písm. b (zmluva/predzmluvné vzťahy) pri aktívnych klientoch; čl. 6 ods. 1 písm. f (oprávnený záujem — dlhý realitný cyklus, opakovaný obchod) pri uchovaní kontaktu neaktívnych.
+**Právny základ:** čl. 6 ods. 1 písm. b (zmluva/predzmluvné vzťahy) pri aktívnych klientoch; čl. 6 ods. 1 písm. f (oprávnený záujem — dlhý realitný cyklus, opakovaný obchod) pri uchovaní kontaktu neaktívnych. Pri písm. f sa uplatní LIA podľa časti B.
 **Osobitná kategória:** nie (poznámka môže incidentálne obsahovať — bez cielenej kontroly obsahu).
 **Zdroj údajov:** priamo od dotknutej osoby; časť cez odporúčanie iného klienta.
 **(f) Špecifické opatrenia:** PATCH cross-tenant guard (`eq company_id`) + audit log každej zmeny polí; XSS sanitizácia voľného textu; `anonymized_at` realizuje právo na výmaz/anonymizáciu (čl. 17).
@@ -98,8 +110,8 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** makléri/manažéri (scope firmy) · Machovic · Supabase · Vercel.
 **(d) Prenos:** Supabase EÚ (bez prenosu); Vercel USA — DPF + SCC.
 **(e) Retencia:** 7 rokov od poslednej aktivity klienta, resp. po dobu obchodu; potom anonymizácia/výmaz (`lv_data` sa pri anonymizácii nuluje).
-**Právny základ:** čl. 6 ods. 1 písm. f (oprávnený záujem — previerka vlastníckych pomerov, obhajoba nárokov). **Údaje nezískané od dotknutej osoby → informačná povinnosť podľa čl. 14 GDPR.**
-**Osobitná kategória:** ak LV obsahuje rodné číslo spoluvlastníka → § 78 ods. 4 zák. 18/2018 Z. z. (osobitné posúdenie zákonnosti). Inak nie čl. 9.
+**Právny základ:** čl. 6 ods. 1 písm. f (oprávnený záujem — previerka vlastníckych pomerov, obhajoba nárokov). **Údaje nezískané od dotknutej osoby → informačná povinnosť podľa čl. 14 GDPR.** **LIA povinná (čl. 5 ods. 2):** ide o tretie osoby mimo klientskeho vzťahu — test proporcionality + zohľadnenie práva namietať (čl. 21) doložiť (viď časť B / príloha LIA).
+**Osobitná kategória:** **Osobitná kategória (čl. 9): NIE.** Ak LV obsahuje rodné číslo spoluvlastníka → ide o **osobitný identifikátor podľa § 78 zák. 18/2018 Z. z.** (osobitné posúdenie zákonnosti), nie o čl. 9.
 **Zdroj údajov:** verejný register — kataster (katasterportal.sk), parsovaný LV (čl. 14).
 **(f) Špecifické opatrenia:** anonymizácia `lv_data` cez F11. **GDPR riziko (čl. 14):** spracúvanie údajov osôb mimo klientskeho vzťahu — viď zoznam medzier.
 
@@ -109,10 +121,10 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(a) Účel:** Záznam požiadaviek kupujúceho (druh, lokalita, rozpočet, parametre) pre párovanie s portfóliom; pri jednoznačnej lokalite geokódovanie na súradnice pre vzdialenostný matching.
 **(b) Dotknuté osoby:** kupujúci klienti · záujemcovia o kúpu.
 **Kategórie údajov:** väzba na klienta (kontakt cez `klient_id`) · druh hľadanej nehnuteľnosti · lokalita (kraje/okresy) · geosúradnice odvodené z lokality · cenový rozpočet · parametre dopytu (plocha, izby, stav, konštrukcia, vykurovanie, termín, záloha) · elektronický podpis kupujúceho (base64 obrázok).
-**(c) Príjemcovia:** makléri/manažéri (scope) · Machovic · Supabase · Vercel · Google LLC (geocoding — len názov okresu/kraja, **bez identity klienta**).
-**(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC; Google (geocoding) USA — DPF + SCC (prenáša sa len lokalita, nie identita).
+**(c) Príjemcovia:** makléri/manažéri (scope) · Machovic · Supabase · Vercel · **OpenStreetMap/Nominatim — geokódovanie len názvu lokality/okresu, bez identity klienta** (geokóder volaný v `lib/geocode.ts`).
+**(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC; **OpenStreetMap/Nominatim — Veľká Británia, rozhodnutie o primeranosti (UK adequacy decision)** (prenáša sa len lokalita, nie identita klienta). *(Zladené s Č.8 a privacy policy v2.2 — všade UK adequacy.)*
 **(e) Retencia:** naviazané na klienta — počas spolupráce + 7 rokov od poslednej aktivity (anonymizácia/CASCADE cron F11). Podpis 7 rokov.
-**Právny základ:** čl. 6 ods. 1 písm. b (predzmluvný/zmluvný vzťah sprostredkovania kúpy); čl. 6 ods. 1 písm. f (uchovanie podpisu ako dôkazu úkonu).
+**Právny základ:** čl. 6 ods. 1 písm. b (predzmluvný/zmluvný vzťah sprostredkovania kúpy); čl. 6 ods. 1 písm. f (uchovanie podpisu ako dôkazu úkonu — LIA podľa časti B).
 **Osobitná kategória:** nie (elektronický podpis je stopa úkonu, nie biometria na identifikáciu → nie čl. 9).
 **Zdroj údajov:** priamo od dotknutej osoby; geosúradnice generované systémom.
 
@@ -125,7 +137,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** oprávnení makléri (`canEditRecord` scope) a manažéri · Machovic · Supabase · Vercel.
 **(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC.
 **(e) Retencia:** naviazané na klienta — anonymizácia free-text PII po 7 rokoch nečinnosti (F11); CASCADE pri zmazaní klienta.
-**Právny základ:** čl. 6 ods. 1 písm. f (evidencia priebehu sprostredkovania, dôkaz o službe); pri aktívnom obchode aj písm. b.
+**Právny základ:** čl. 6 ods. 1 písm. f (evidencia priebehu sprostredkovania, dôkaz o službe — LIA podľa časti B); pri aktívnom obchode aj písm. b.
 **Osobitná kategória:** nie (riziko neúmyselného zápisu citlivého údaja vo voľnom texte — bez obsahovej kontroly).
 **Zdroj údajov:** generované maklérom; obsah z komunikácie s dotknutou osobou.
 
@@ -138,7 +150,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** makléri/manažéri (company scope) · Machovic · Supabase · Vercel · notár a financujúca banka (v rámci realitnej transakcie, mimo CRM, v SR/EÚ).
 **(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC.
 **(e) Retencia:** po dobu obchodu a následne podľa premlčacích lehôt (spravidla do 10 r.) na obhajobu nárokov; finančné údaje (provízia) prelínajú s účtovnou retenciou 10 r.
-**Právny základ:** čl. 6 ods. 1 písm. b (zmluva o sprostredkovaní) pre vlastného klienta; čl. 6 ods. 1 písm. f (evidencia transakcie, obhajoba nárokov) vrátane mena kupujúceho ako tretej osoby.
+**Právny základ:** čl. 6 ods. 1 písm. b (zmluva o sprostredkovaní) pre vlastného klienta; čl. 6 ods. 1 písm. f (evidencia transakcie, obhajoba nárokov — LIA podľa časti B) vrátane mena kupujúceho ako tretej osoby. **Odvetvová regulácia:** realitné sprostredkovanie podlieha zák. č. 170/2024 Z. z. — povinné predzmluvné informácie, poistenie zodpovednosti, registrácia a odborná spôsobilosť sprostredkovateľa (presné náležitosti overí právnik).
 **Osobitná kategória:** nie.
 **Zdroj údajov:** generované maklérom; meno kupujúceho od kupujúceho/z rezervačnej zmluvy.
 **(f) Špecifické opatrenia:** company scope (S6 guard) + audit. **Bezpečnostný nález (mimo právnej vrstvy → okno Bezpečnosť):** RLS na `obchod_ulohy`/migr. 045 je `USING(true)` — reálna izolácia len aplikačná.
@@ -152,7 +164,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** makléri a manažéri (`isManager` gate) · Machovic · Supabase · Vercel.
 **(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC.
 **(e) Retencia:** `klienti_history` po dobu existencie vzťahu/firmy ako interný audit presunov (CASCADE pri zmazaní klienta); SLA flagy sa nulujú pri prebratí/vrátení.
-**Právny základ:** čl. 6 ods. 1 písm. f (oprávnený záujem — riadenie kvality, férové prerozdeľovanie, kontrola výkonu maklérov). Voči maklérom (zamestnanci/spolupracovníci) oprávnený záujem na evidencii pracovného výkonu — **pri ostrej prevádzke informovať dotknutých zamestnancov o monitoringu.**
+**Právny základ:** čl. 6 ods. 1 písm. f (oprávnený záujem — riadenie kvality, férové prerozdeľovanie, kontrola výkonu maklérov; LIA podľa časti B). Voči maklérom (zamestnanci/spolupracovníci) oprávnený záujem na evidencii pracovného výkonu — **pri ostrej prevádzke informovať dotknutých zamestnancov o monitoringu.**
 **Osobitná kategória:** nie.
 **Zdroj údajov:** generované systémom (SLA logika) a maklérmi/manažérmi.
 
@@ -165,7 +177,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** dotknutá osoba (príjemca JSON exportu) · manažment (role super_admin/majitel/manazer, RBAC) · Machovic · Supabase · Vercel.
 **(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC; samotný export sa odovzdá dotknutej osobe.
 **(e) Retencia:** export sa negeneruje natrvalo (on-demand); samotná akcia exportu je auditovaná (`klient.gdpr_export`).
-**Právny základ:** čl. 6 ods. 1 písm. c (zákonná povinnosť — práva čl. 15/20) pre GDPR export; čl. 6 ods. 1 písm. f (manažérsky reporting) pre CSV.
+**Právny základ:** čl. 6 ods. 1 písm. c (zákonná povinnosť — práva čl. 15/20) pre GDPR export; čl. 6 ods. 1 písm. f (manažérsky reporting — LIA podľa časti B) pre CSV.
 **Osobitná kategória:** nie.
 **Zdroj údajov:** agregované z existujúcich záznamov.
 **(f) Špecifické opatrenia:** tenant guard (`eq company_id`) + RBAC + audit; cross-tenant IDOR na exporte zafixovaný.
@@ -176,10 +188,10 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(a) Účel:** Vedenie evidencie nehnuteľností v predaji/prenájme (typ, lokalita, ulica, plocha, cena, stav, vybavenie); tvorba a uloženie inzerátu vrátane fotografií do verejného Supabase Storage bucketu pre prezentáciu nehnuteľnosti.
 **(b) Dotknuté osoby:** predávajúci klienti (vlastníci, väzba `klient_id`) · makléri · **potenciálne tretie osoby zachytené na fotografiách** (tváre, ŠPZ, osobné predmety/dokumenty).
 **Kategórie údajov:** identifikátory klienta/makléra · adresa nehnuteľnosti · geolokácia (auto-geocode) · cena, plocha, dispozícia, stav, vybavenie · meno hypotekárneho poradcu (ak vyplnené) · fotografie nehnuteľnosti (môžu nepriamo obsahovať PII tretích osôb).
-**(c) Príjemcovia:** makléri/manažéri firmy · Machovic · Supabase (DB + Storage) · Vercel · OpenStreetMap/Nominatim (geokódovanie — prijíma adresný reťazec) · **verejnosť/inzertné portály** (po publikovaní sú fotky a cena verejne dostupné cez public URL).
-**(d) Prenos:** Supabase EÚ (DB + Storage). Vercel USA — DPF + SCC. **Public URL znamená technickú dostupnosť fotodokumentácie komukoľvek na internete (aj mimo EÚ) bez ďalšej kontroly prístupu.** Nominatim — over zmluvný režim/lokalitu poskytovateľa.
+**(c) Príjemcovia:** makléri/manažéri firmy · Machovic · Supabase (DB + Storage) · Vercel · **OpenStreetMap/Nominatim** (geokódovanie — prijíma adresný reťazec) · **verejnosť/inzertné portály** (po publikovaní sú fotky a cena verejne dostupné cez public URL).
+**(d) Prenos:** Supabase EÚ (DB + Storage). Vercel USA — DPF + SCC. **Public URL znamená technickú dostupnosť fotodokumentácie komukoľvek na internete (aj mimo EÚ) bez ďalšej kontroly prístupu.** **OpenStreetMap/Nominatim — Veľká Británia, rozhodnutie o primeranosti (UK adequacy decision)** (prenáša sa len adresný reťazec).
 **(e) Retencia:** počas aktívnosti inzerátu + v rámci dokumentácie k nehnuteľnosti (7 r. / po dobu obchodu); po stiahnutí inzerátu fotky zmazať (DELETE maže large+thumb).
-**Právny základ:** čl. 6 ods. 1 písm. b (plnenie zmluvy — prezentácia) + čl. 6 ods. 1 písm. f (oprávnený záujem na predaji). **Pri fotkách tretích osôb je nutné anonymizovať/rozmazať tváre a ŠPZ pred publikáciou.**
+**Právny základ:** čl. 6 ods. 1 písm. b (plnenie zmluvy — prezentácia) + čl. 6 ods. 1 písm. f (oprávnený záujem na predaji — LIA podľa časti B). **Pri fotkách tretích osôb je nutné anonymizovať/rozmazať tváre a ŠPZ pred publikáciou.**
 **Osobitná kategória:** nie.
 **Zdroj údajov:** od subjektu / vytvorené maklérom; geocode generovaný systémom.
 **(f) Špecifické opatrenia:** `requireUser` + `company_id` scope (P0 fix 2026-05-24) + audit na PATCH/DELETE; upload má `requireUser` + MIME/size guard. **Nálezy pre okno Bezpečnosť:** verejný bucket `inzerat-fotky`; legacy fallback `VIANEMA_COMPANY_ID` v `inzerat/save`. Viď zoznam medzier (rozmazanie fotiek tretích osôb).
@@ -193,7 +205,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** makléri firmy (kontakty pri zhode, company scope) · Machovic · Supabase · Vercel.
 **(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC. Bez AI/LLM subprocesora (čisto algoritmus/SQL).
 **(e) Retencia:** matching je derivovaná operácia v reálnom čase (neukladá vlastné PII). **`pricing_estimates` — lehota nie je v politike definovaná (medzera):** odporúčaná väzba na životný cyklus dokumentov k nehnuteľnosti (7 r.) alebo anonymizácia identifikátorov po uzavretí.
-**Právny základ:** čl. 6 ods. 1 písm. f (sprostredkovanie — párovanie ponuky a dopytu, cenotvorba); čl. 6 ods. 1 písm. b pre cenový odhad pre vlastného klienta. Pre scraped tretie osoby viď Č.16.
+**Právny základ:** čl. 6 ods. 1 písm. f (sprostredkovanie — párovanie ponuky a dopytu, cenotvorba; LIA podľa časti B); čl. 6 ods. 1 písm. b pre cenový odhad pre vlastného klienta. Pre scraped tretie osoby viď Č.16.
 **Osobitná kategória:** nie.
 **Zdroj údajov:** od subjektov (klienti) + zo scrapingu (`monitor_inzeraty`) pre kandidátov + agregáty.
 **(f) Špecifické opatrenia:** matching routes `requireUser` + cross-tenant guard. **Nálezy pre okno Bezpečnosť:** `/api/pricing/estimate` bez `requireUser`; `monitor_inzeraty` sa číta bez company filtra.
@@ -207,7 +219,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** Vianema (makléri v scope) · Machovic · Supabase · Vercel.
 **(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC (sync do Google je samostatná činnosť Č.11).
 **(e) Retencia:** 7 rokov od vytvorenia, potom anonymizácia free-text PII (F11); nová obhliadka resetuje retenčnú lehotu účastníkov.
-**Právny základ:** čl. 6 ods. 1 písm. f (evidencia obhliadok, právna ochrana/preukázanie sprostredkovania); pri aktívnom obchode aj písm. b.
+**Právny základ:** čl. 6 ods. 1 písm. f (evidencia obhliadok, právna ochrana/preukázanie sprostredkovania; LIA podľa časti B); pri aktívnom obchode aj písm. b.
 **Osobitná kategória:** nie.
 **Zdroj údajov:** od dotknutej osoby (kupujúci na obhliadke) alebo z karty klienta.
 **(f) Špecifické opatrenia:** `requireUser` + scope `company_id`; PATCH/DELETE strict re-auth + `canEditRecord`; anon RLS (pôvodne migr. 024) revoknuté (072/077). **GDPR riziko:** pri zadaní kupujúceho sa automaticky vytvorí/aktualizuje záznam v `klienti` (typ=kupujuci, zdroj=obhliadka) bez explicitného informovania dotknutej osoby — viď medzery.
@@ -221,7 +233,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** Google LLC (Calendar) · maklér · Vianema/Machovic · Vercel.
 **(d) Prenos:** **Google LLC — USA: EU-US DPF + SCC.** Údaje klienta (meno/telefón/adresa) vložené do eventu sa prenášajú do Google.
 **(e) Retencia:** dáta žijú v Google Kalendári makléra podľa nastavení účtu / do zmazania (DELETE maže event v Google); v CRM len `calendar_event_id`. Auto-detekcia je dočasné spracovanie.
-**Právny základ:** čl. 6 ods. 1 písm. f (organizácia termínov makléra, úplnosť evidencie); pri aktívnom klientovi aj písm. b.
+**Právny základ:** čl. 6 ods. 1 písm. f (organizácia termínov makléra, úplnosť evidencie; LIA podľa časti B); pri aktívnom klientovi aj písm. b.
 **Osobitná kategória:** nie.
 **Zdroj údajov:** generované systémom z údajov obhliadky/CRM; auto-detect číta Google Kalendár makléra (sekundárny zdroj).
 **(f) Špecifické opatrenia:** auto-detect už má `requireUser` + ownership (P0 fix 2026-05-20). **Nálezy pre okno Bezpečnosť (IDOR):** `/api/google/calendar`, `/api/calendar-sync` (ukladá event vrátane telefónu do `logy` ako `calendar_pending`) a `/api/calendar/events` (cache eventov s PII v `logy`) berú `userId` z query bez overenia.
@@ -235,7 +247,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** makléri/manažér Vianema · Machovic · Supabase · Vercel · Resend Inc. (notifikačný e-mail o kolízii, ak odoslaný).
 **(d) Prenos:** Supabase EÚ; **notifikačný e-mail cez Resend Inc. — USA: EU-US DPF.**
 **(e) Retencia:** **politika neuvádza samostatnú lehotu (medzera)** — odporúčanie: viazať na životnosť súvisiacich záznamov, resp. mazať/anonymizovať vyriešené kolízie staršie než stanovené obdobie. Aktuálne sa nemažú automaticky.
-**Právny základ:** čl. 6 ods. 1 písm. f (integrita CRM, prevencia dvojitého náberu, ochrana provízneho nároku).
+**Právny základ:** čl. 6 ods. 1 písm. f (integrita CRM, prevencia dvojitého náberu, ochrana provízneho nároku; LIA podľa časti B).
 **Osobitná kategória:** nie.
 **Zdroj údajov:** generované systémom z údajov zadaných pri zakladaní klienta/nehnuteľnosti.
 **(f) Špecifické opatrenia:** pri anonymizácii klienta (F11) overiť anonymizáciu aj `kolizny_log`. **Nálezy pre okno Bezpečnosť:** `kolize` GET bez `requireUser` a bez `company_id` filtra (cross-tenant leak); `kolize/check` a `kolize/nehnutelnosti` bez auth; `kolize/schvalit` používa anon kľúč.
@@ -247,10 +259,12 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(b) Dotknuté osoby:** predávajúci klienti (majitelia) · užívatelia nehnuteľnosti odlišní od majiteľa · konatelia/jednatelia (PO) · spoluvlastníci z LV · makléri.
 **Kategórie údajov:** meno a priezvisko majiteľa · telefón/e-mail majiteľa · meno a kontakt užívateľa · meno konateľa · adresa a identifikácia nehnuteľnosti (kraj/okres/obec/k.ú./ulica/súpisné/parcela/č. bytu) · predajná cena, provízia, podmienky · dátum a doba platnosti zmluvy · `lv_data` (mená spoluvlastníkov, podiely, dátum narodenia) · **RODNÉ ČÍSLO vlastníkov (`vyhradne_zmluvy.majitelia` JSONB — pole `rc`)** · príznak GDPR súhlasu · podpis (`podpis_data`) + metadáta (IP, UA, čas, príjemca) · poznámky (voľný text).
 **(c) Príjemcovia:** Machovic · Supabase · Vercel · priradený maklér a manažér/majiteľ RK v scope firmy · notár/kataster (pri následnom obchode, údaje zo zmluvy).
-**(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC. (Generovanie PDF a e-mailové odoslanie sú Č.14.)
+**(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC. (Generovanie PDF a e-mailové odoslanie sú Č.14; elektronický podpis cez OTP je Č.21.)
 **(e) Retencia:** dokumenty k nehnuteľnosti 7 rokov od poslednej aktivity / po dobu obchodu; **podpísaná zmluva (ÚZ/RZ/KZ/výhradná) po dobu premlčacích lehôt (spravidla do 10 r.)** na uplatnenie/obhajobu nárokov. Pri GDPR výmaze sa PII v poli `majitelia` (vrátane rodného čísla) anonymizuje/zmaže, údaje o nehnuteľnosti a zmluva ostávajú (G1 fix). Anonymizácia free-text cez F11.
-**Právny základ:** čl. 6 ods. 1 písm. b (predzmluvné vzťahy a plnenie zmluvy o sprostredkovaní) pre údaje klienta; čl. 6 ods. 1 písm. f (uplatnenie/obhajoba nárokov, opakovaný obchod, spoluvlastníci z LV → čl. 14). **Pre rodné číslo: § 78 zák. 18/2018 Z. z. v spojení s AML (čl. 6 ods. 1 písm. c).**
-**Osobitná kategória:** **ÁNO — rodné číslo (§ 78 zák. 18/2018), najcitlivejší PII bod domény;** dátum narodenia spoluvlastníkov ako citlivý identifikátor z verejného registra (čl. 14). Nie čl. 9 (zdravie/biometria).
+**Právny základ:** čl. 6 ods. 1 písm. b (predzmluvné vzťahy a plnenie zmluvy o sprostredkovaní) pre údaje klienta; čl. 6 ods. 1 písm. f (uplatnenie/obhajoba nárokov, opakovaný obchod, spoluvlastníci z LV → čl. 14; LIA pre spoluvlastníkov povinná, viď časť B). **Pre rodné číslo: § 78 zák. 18/2018 Z. z. v spojení s AML (čl. 6 ods. 1 písm. c).** **Odvetvová regulácia:** zmluva o realitnom sprostredkovaní podlieha zák. č. 170/2024 Z. z. (povinné náležitosti, predzmluvné informácie, poistenie zodpovednosti, registrácia, odborná spôsobilosť — presné znenie a náležitosti overí právnik).
+**Osobitná kategória:**
+— **Osobitná kategória (čl. 9): NIE** (žiadne údaje o zdraví/biometrii).
+— **Osobitný identifikátor (§ 78 zák. 18/2018): ÁNO — rodné číslo** vlastníkov (najcitlivejší PII bod domény). Dátum narodenia spoluvlastníkov je citlivý identifikátor z verejného registra (čl. 14).
 **Zdroj údajov:** od dotknutej osoby (vlastník/užívateľ) + z katastra/LV (spoluvlastníci — čl. 14).
 **(f) Špecifické opatrenia:** `/api/nabery` a `/api/vyhradna-zmluva` — `requireUser` + filter `company_id` + `canEditRecord` + audit (create/update/sign/delete). Po podpise záznam uzamknutý (integrita). LIST endpoint nevracia `podpis_data`/`podpis_meta`. RLS na `vyhradne_zmluvy` len service_role. **🔴 Akákoľvek zmena znenia/poľa `rc` spadá pod červený protokol (právo/compliance).**
 
@@ -263,24 +277,28 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** klient (príjemca e-mailu s PDF) · Resend Inc. (doručenie e-mailu) · Machovic · Supabase · Vercel.
 **(d) Prenos:** **Resend Inc. — USA: EU-US DPF.** E-mail vrátane PDF prílohy s plným PII (vrátane dátumov narodenia spoluvlastníkov) prechádza cez Resend (USA).
 **(e) Retencia:** PDF náberového listu/objednávky sa negeneruje natrvalo (on-demand → kopíruje retenciu materského záznamu, 7 r. / do premlčania). Uložené PDF obhliadkového listu (`list_pdf_base64`) 7 rokov, potom anonymizácia/zmazanie (F11). Logy doručenia u Resend podľa jeho politiky.
-**Právny základ:** čl. 6 ods. 1 písm. b (kópia zmluvného podkladu/exkluzivita) + čl. 6 ods. 1 písm. f (komunikácia a evidencia).
-**Osobitná kategória:** dátum narodenia spoluvlastníkov (čl. 14), bez rodného čísla.
+**Právny základ:** čl. 6 ods. 1 písm. b (kópia zmluvného podkladu/exkluzivita) + čl. 6 ods. 1 písm. f (komunikácia a evidencia; LIA podľa časti B). **⚠️ Otvorený bod — obhliadkový list (právny základ na rozhodnutí právnika):** generovaný PDF text obhliadkového listu dnes obsahuje formuláciu „súhlasím so spracovaním", čo implikuje **súhlas (čl. 6 ods. 1 písm. a)**; tento RoPA naopak uvádza ako základ **čl. 6 ods. 1 písm. b + f**. Ide o rozpor medzi textom dokumentu a deklarovaným právnym základom — **právny základ obhliadkového listu je OTVORENÝ a rozhodne ho právnik.** Samotný PDF text sa v tomto kroku neprepisuje (zmena znenia s právnym účinkom spadá pod červený protokol).
+**Osobitná kategória:**
+— **Osobitná kategória (čl. 9): NIE.**
+— **Osobitný identifikátor (§ 78 zák. 18/2018): NIE** v tomto PDF (rodné číslo sa do týchto dokumentov negeneruje); dátum narodenia spoluvlastníkov je citlivý identifikátor z verejného registra (čl. 14).
 **Zdroj údajov:** generované systémom z materského záznamu (klient + nehnuteľnosť + obhliadka).
-**(f) Špecifické opatrenia:** `naber-pdf` GET/POST volá `assertCanReadNaber` (session + scope + `company_id`). **Nálezy pre okno Bezpečnosť (IDOR):** `GET /api/obhliadky/pdf?id=` a `GET /api/objednavka-pdf` bez `requireUser` — PDF so všetkými kontaktmi dostupné cez UUID. **Právny súlad textu:** PDF obhliadkového listu obsahuje vetu o „súhlase so spracovaním" — zosúladiť so skutočným právnym základom (oprávnený záujem, nie súhlas). Viď medzery.
+**(f) Špecifické opatrenia:** `naber-pdf` GET/POST volá `assertCanReadNaber` (session + scope + `company_id`). **Nálezy pre okno Bezpečnosť (IDOR):** `GET /api/obhliadky/pdf?id=` a `GET /api/objednavka-pdf` bez `requireUser` — PDF so všetkými kontaktmi dostupné cez UUID. **Právny súlad textu:** rozpor „súhlas" vs deklarovaný základ (písm. b/f) — viď bod (e) a zoznam medzier; rozhodnutie o právnom základe je na právnikovi.
 
 ---
 
-### Č.15 — AI extrakcia údajov z klientskych dokumentov (parse-doc / parse-pdf / parse-lv)
-**(a) Účel:** Automatické vyplnenie polí náberového listu/nehnuteľnosti z nahraného dokumentu (LV, znalecký posudok, kúpna/rezervačná zmluva, nadobúdací doklad, energetický certifikát) cez Anthropic Claude — extrakcia parametrov nehnuteľnosti aj údajov vlastníkov/spoluvlastníkov.
+### Č.15 — AI extrakcia údajov z klientskych dokumentov a z voľného textu správy klienta (parse-doc / parse-pdf / parse-lv / ai-fill)
+**(a) Účel:** (1) Automatické vyplnenie polí náberového listu/nehnuteľnosti z nahraného dokumentu (LV, znalecký posudok, kúpna/rezervačná zmluva, nadobúdací doklad, energetický certifikát) cez Anthropic Claude — extrakcia parametrov nehnuteľnosti aj údajov vlastníkov/spoluvlastníkov; (2) **AI extrakcia štruktúrovaných údajov z voľného textu správy/e-mailu klienta** (`/api/ai-fill`) — z textovej správy klienta sa vytiahnu kontaktné a dopytové polia (meno, telefón, e-mail, typ, lokalita, rozpočet, poznámka).
 **(b) Dotknuté osoby:** predávajúci/kupujúci klienti · **spoluvlastníci a tretie osoby uvedené v dokumente** (z katastra, zmlúv, posudkov; znalec).
-**Kategórie údajov:** obsah celého nahraného dokumentu — mená, dátumy narodenia, adresy/bydliská, čísla bytov/parciel, IČO, IBAN, ceny; pri LV: mená vlastníkov, podiely, dátumy narodenia, adresy, ťarchy/právne vady (záložné práva, vecné bremená, exekúcie); pri zmluve/OP potenciálne rodné číslo a kópia dokladu (ak je takýto dokument nahraný).
-**(c) Príjemcovia:** Machovic · **Anthropic PBC (AI parsing klientskych dokumentov — Claude Haiku/Sonnet)** · Supabase (uloženie výsledku do `lv_data`) · Vercel.
-**(d) Prenos:** **ÁNO — Anthropic PBC (USA): Štandardné zmluvné doložky (SCC)/DPA.** Obsah dokumentu s PII vlastníkov sa odosiela do USA. **Gemini a OpenAI sú z PII parse flow zámerne odstránené (F2, 2026-06-03)** — free Gemini tier môže trénovať na dátach a chýba DPA.
-**(e) Retencia:** nahraný súbor sa nespracúva trvalo — odošle sa na inferenciu a vráti sa extrahovaný JSON; aplikácia súbor neukladá (uloží sa len výsledné pole do náberového listu → retencia 7 r. / do premlčania). Anthropic podľa DPA dáta z API neuchováva na tréning a maže v krátkej lehote. Pri zlyhaní len metadáta (`logParseFailure`), nie obsah.
-**Právny základ:** čl. 6 ods. 1 písm. b (príprava/plnenie zmluvy) pre klienta; čl. 6 ods. 1 písm. f (efektívne spracovanie podkladov) pre tretie osoby z dokumentu (kataster → čl. 14). Pri rodnom čísle — § 78 zák. 18/2018.
-**Osobitná kategória:** možná — § 78 (rodné číslo, ak je v dokumente). LV štandardne neuvádza rodné číslo a `parse-lv` ho neextrahuje; spracúva sa však celý surový obsah dokumentu.
-**Zdroj údajov:** od dotknutej osoby (dokument nahráva maklér v jej mene), z verejného registra (LV/kataster — čl. 14), od tretích strán v zmluvách/posudkoch.
-**(f) Špecifické opatrenia:** `parse-doc`/`parse-pdf` majú `requireUser` + `assertFileSize` + `assertMime` + base64 guard + kill-switch `aiParseDisabled`; `maxDuration` 300 s pre `parse-doc`. **Princíp minimalizácie:** maklér má nahrávať len potrebné strany. **Nález pre okno Bezpečnosť:** `/api/parse-lv` nemá `requireUser` (POST bez auth).
+**Kategórie údajov:** obsah celého nahraného dokumentu — mená, dátumy narodenia, adresy/bydliská, čísla bytov/parciel, IČO, IBAN, ceny; pri LV: mená vlastníkov, podiely, dátumy narodenia, adresy, ťarchy/právne vady (záložné práva, vecné bremená, exekúcie); pri zmluve/OP potenciálne rodné číslo a kópia dokladu (ak je takýto dokument nahraný). **Pri `ai-fill`:** obsah voľnej textovej správy/e-mailu klienta vrátane jeho kontaktných údajov (meno, telefón, e-mail) a požiadaviek.
+**(c) Príjemcovia:** Machovic · **Anthropic PBC (AI parsing klientskych dokumentov — Claude Haiku/Sonnet; AI extrakcia z voľného textu — Claude Haiku)** · Supabase (uloženie výsledku do `lv_data`) · Vercel.
+**(d) Prenos:** **ÁNO — Anthropic PBC (USA): Štandardné zmluvné doložky (SCC)/DPA.** Obsah dokumentu (resp. správy klienta pri `ai-fill`) s PII sa odosiela do USA. **Gemini a OpenAI sú z PII parse/extrakčného flow zámerne neuvedené/odstránené (F2, 2026-06-03)** — free Gemini tier môže trénovať na dátach a chýba DPA.
+**(e) Retencia:** nahraný súbor sa nespracúva trvalo — odošle sa na inferenciu a vráti sa extrahovaný JSON; aplikácia súbor neukladá (uloží sa len výsledné pole do náberového listu → retencia 7 r. / do premlčania). **Pri `ai-fill`: extrahovaný JSON výsledok sa neukladá natrvalo** — vráti sa do formulára na použitie maklérom; do DB sa uloží až vtedy, keď maklér z neho vytvorí klienta/dopyt (vtedy preberá retenciu Č.1/Č.3). Anthropic podľa DPA dáta z API neuchováva na tréning a maže v krátkej lehote. Pri zlyhaní len metadáta (`logParseFailure`), nie obsah.
+**Právny základ:** čl. 6 ods. 1 písm. b (príprava/plnenie zmluvy) pre klienta; čl. 6 ods. 1 písm. f (efektívne spracovanie podkladov / extrakcia z komunikácie klienta — LIA podľa časti B) pre tretie osoby z dokumentu (kataster → čl. 14) a pre `ai-fill`. Pri rodnom čísle — § 78 zák. 18/2018.
+**Osobitná kategória:**
+— **Osobitná kategória (čl. 9): NIE** (žiadne údaje o zdraví/biometrii).
+— **Osobitný identifikátor (§ 78 zák. 18/2018): MOŽNÝ — rodné číslo**, ak je v nahranom dokumente. LV štandardne neuvádza rodné číslo a `parse-lv` ho neextrahuje; spracúva sa však celý surový obsah dokumentu.
+**Zdroj údajov:** od dotknutej osoby (dokument nahráva maklér v jej mene; resp. správa klienta pri `ai-fill`), z verejného registra (LV/kataster — čl. 14), od tretích strán v zmluvách/posudkoch.
+**(f) Špecifické opatrenia:** `parse-doc`/`parse-pdf` majú `requireUser` + `assertFileSize` + `assertMime` + base64 guard + kill-switch `aiParseDisabled`; `maxDuration` 300 s pre `parse-doc`. **Princíp minimalizácie:** maklér má nahrávať len potrebné strany a do `ai-fill` vkladať len relevantný text. **Nálezy pre okno Bezpečnosť:** `/api/parse-lv` nemá `requireUser` (POST bez auth); `/api/ai-fill` posiela voľný text klienta do Anthropic — overiť `requireUser` na endpointe.
 
 ---
 
@@ -294,10 +312,14 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** Machovic · Supabase (neosobné údaje o objekte) · **ScrapingBee SAS (SaaS scraping — obsah stránok vrátane PII predajcu cez ňu prechádza v PRENOSE, neukladá sa)** · **Anthropic PBC (manuálna URL analýza — dostáva text + fotku vrátane prípadného PII predajcu)** · Vercel · realitné portály (zdroj) · makléri Vianema (notifikácia o leade).
 **(d) Prenos:** **ScrapingBee SAS — mimo zoznamu subprocesorov v privacy policy (medzera — doplniť DPA + posúdiť lokalitu/záruky).** Anthropic PBC (USA) — SCC (manuálna URL analýza). Vercel (USA) — DPF + SCC. Supabase — EÚ (neosobné dáta). Klasifikácia samotná je deterministický kód bez externého AI.
 **(e) Retencia:** **PII predajcu (meno/telefón/popis): NULOVÁ — nikdy sa neukladá** (data-minimizácia, migr. 106 DROP COLUMN; overené v kóde). Manuálna URL analýza nič neukladá do DB (výsledok len v odpovedi). Neosobné `monitor_inzeraty`: **bez explicitnej lehoty (medzera)** — odporúčaná retencia napr. 12–24 mes. od last_seen. Audit behu scrape (`monitor.scrape`) append-only bez PII.
-**Právny základ:** čl. 6 ods. 1 písm. f (oprávnený záujem RK na prehľade konkurencie a trhu). **Pri PII tretích osôb je oprávnený záujem hraničný → vyžaduje test proporcionality a informačnú povinnosť podľa čl. 14;** riziko výrazne zmiernené tým, že PII sa NEUKLADÁ (čl. 5 ods. 1 písm. c) — výnimka čl. 14 ods. 5 písm. b je obhájiteľná. **Profilovanie (čl. 4 bod 4)** — nejde o automatizované rozhodovanie s právnym účinkom (čl. 22; rozhoduje človek), ale treba ho pokryť informačnou povinnosťou.
+**Právny základ:** čl. 6 ods. 1 písm. f (oprávnený záujem RK na prehľade konkurencie a trhu). **Pri PII tretích osôb je oprávnený záujem HRANIČNÝ → vyžaduje sa povinný a doložený test proporcionality (LIA, čl. 5 ods. 2 — viď časť B / príloha LIA) a informačná povinnosť podľa čl. 14.** **Pozor na argumentačné rozdelenie (oprava oproti predchádzajúcej verzii):**
+— **Neukladanie PII nie je samo o sebe výnimkou z čl. 14;** je to argument k zásade **minimalizácie údajov (čl. 5 ods. 1 písm. c)** a k zmierneniu rizika.
+— **Transientné spracúvanie PII predajcu počas behu + profilovanie predajcu** napriek neukladaniu **podlieha čl. 6 ods. 1 písm. f a vyžaduje LIA.**
+— **Informačná povinnosť podľa čl. 14 sa splní** buď **verejným oznámením** (privacy notice pre dotknutých predajcov), alebo **individuálne odôvodnenou výnimkou podľa čl. 14 ods. 5 písm. b** (neprimeranosť úsilia) — výnimku treba zdokumentovať, nie len predpokladať.
+**Profilovanie (čl. 4 bod 4)** — nejde o automatizované rozhodovanie s právnym účinkom (čl. 22; rozhoduje človek), ale treba ho pokryť informačnou povinnosťou (čl. 14) a v LIA.
 **Osobitná kategória:** nie.
 **Zdroj údajov:** scraping verejne dostupných inzerátov (nie od dotknutej osoby — čl. 14); priamy fetch (reality.sk, bazos.sk) alebo cez ScrapingBee (ostatné).
-**(f) Špecifické opatrenia:** manuálna URL analýza má `requireUser(strict)` + SSRF allowlist domén. **Najcitlivejšia časť RoPA z hľadiska tretích osôb.** Medzery: (1) ScrapingBee v privacy policy; (2) retencia `monitor_inzeraty`; (3) do AI pri URL analýze ide nedataminimizovaný text inzerátu vrátane mena predajcu; (4) profilovanie predajcov výslovne uviesť v čl. 14 oznámení.
+**(f) Špecifické opatrenia:** manuálna URL analýza má `requireUser(strict)` + SSRF allowlist domén. **Najcitlivejšia časť RoPA z hľadiska tretích osôb.** Medzery: (1) ScrapingBee v privacy policy + DPA; (2) retencia `monitor_inzeraty`; (3) do AI pri URL analýze ide nedataminimizovaný text inzerátu vrátane mena predajcu; (4) profilovanie predajcov výslovne uviesť v čl. 14 oznámení; (5) doložiť LIA.
 
 ---
 
@@ -308,7 +330,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(c) Príjemcovia:** Machovic · **Google LLC (Gemini)** / **OpenAI (GPT-4o fallback)** — dostávajú len neosobné údaje o objekte/trhu (adresa pri analýze okolia) · Supabase (uloženie analýzy).
 **(d) Prenos:** **Google LLC (Gemini, USA) — EU-US DPF + SCC; OpenAI (USA) — EU-US DPF.** Posielajú sa LEN neosobné údaje (adresa pri analýze okolia) — v súlade s politikou AI providerov (Gemini/OpenAI len na nie-PII).
 **(e) Retencia:** `analyzy_trhu` — **bez explicitnej lehoty (medzera);** obsah neosobný okrem FK `klient_id` (pri výmaze klienta `ON DELETE SET NULL` → ostáva anonymná trhová analýza). Odporúčaná väzba na retenciu klienta (7 r.). Endpointy okolia samé nič neukladajú.
-**Právny základ:** čl. 6 ods. 1 písm. f (trhová analýza/cenotvorba); pri vlastnom klientovi čl. 6 ods. 1 písm. b (ocenenie pre klienta). Dáta do AI sú neosobné → minimálny GDPR dopad na AI vrstvu.
+**Právny základ:** čl. 6 ods. 1 písm. f (trhová analýza/cenotvorba; LIA podľa časti B); pri vlastnom klientovi čl. 6 ods. 1 písm. b (ocenenie pre klienta). Dáta do AI sú neosobné → minimálny GDPR dopad na AI vrstvu.
 **Osobitná kategória:** nie.
 **Zdroj údajov:** generované systémom z údajov o nehnuteľnosti + agregáty z `monitor_inzeraty`.
 **(f) Špecifické opatrenia:** **Nález pre okno Bezpečnosť:** `okolie-analysis` a `naber-analyza` nemajú `requireUser` (POST bez auth, spúšťa platené AI volania).
@@ -316,16 +338,17 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 ---
 
 ### Č.18 — Faktúry, odberatelia, dodávateľský profil makléra a billing predplatného (finančná doména)
-**(a) Účel:** Vystavovanie a evidencia odberateľských faktúr za realitné služby (nemenný účtovný/daňový doklad); správa číselníka odberateľov; uloženie identity makléra ako dodávateľa (hlavička, bankové spojenie, podpis); generovanie PDF faktúry (rozpis DPH, platobné QR Pay by Square); správa predplatného CRM cez Stripe; evidencia províznych sadzieb a výpočet provízií; evidencia pravidelných nákladov firmy.
-**(b) Dotknuté osoby:** odberatelia — fyzické osoby (živnostníci/SZČO a nepodnikajúce FO) · kontaktné osoby odberateľa (PO) · makléri/SZČO (dodávateľ, provízne sadzby) · realitná kancelária ako zákazník SaaS a jej fakturačná osoba (billing).
-**Kategórie údajov:** identifikačné údaje odberateľa (názov/meno, adresa, IČO, DIČ, IČ DPH — `odberatel_snapshot` + tabuľka `odberatelia`) · kontakt odberateľa (e-mail, telefón) · číslo faktúry, VS · finančné údaje (suma bez DPH, DPH, celkom, dátumy vystavenia/dodania/splatnosti, forma a stav úhrady) · položky faktúry (voľný text — môže obsahovať meno klienta/adresu) · snapshot dodávateľa (meno, adresa, IČO/DIČ/IČ DPH, IBAN, banka, SWIFT, e-mail, telefón, **obrázok podpisu**) · provízne percentá/medziprovízia + meno makléra · údaje o storne · billing: názov a e-mail firmy, Stripe customer/subscription ID, plán, platnosť.
-**(c) Príjemcovia:** Machovic · Supabase · Vercel · **Stripe Inc. (spracovanie platieb predplatného)** · odberateľ/príjemca faktúry (vidí údaje dodávateľa vrátane IBAN a podpisu na faktúre) · daňový/účtovný poradca (mimo systému) · Finančná správa / ÚOOÚ pri kontrole.
-**(d) Prenos:** Supabase EÚ (bez prenosu). Vercel USA — DPF + SCC. **Stripe Inc. — USA: EU-US DPF/SCC (medzera — Stripe chýba v zozname subprocesorov v privacy policy).** Anthropic/OpenAI/Gemini sa pri faktúrach NEpoužívajú.
-**(e) Retencia:** **faktúry + účtovné doklady 10 rokov** — § 76 zák. 222/2004 Z. z. (DPH) + § 35 zák. 431/2002 Z. z. (účtovníctvo). Faktúra je append-only/nemenná po vystavení (PATCH dovoľuje meniť len zaplatene/datum_uhrady/poznamka; oprava len storno + nová faktúra; mazanie = soft-delete, fyzicky ostáva 10 r.). **Žiadna GDPR erasure** na faktúrach v rámci lehoty (čl. 17 ods. 3 písm. b). Číselník odberateľov mazateľný (faktúry držia immutable snapshot). Dodávateľský profil po dobu spolupráce (snapshot na faktúre 10 r.). Billing po dobu zmluvného vzťahu + 10 r. účtovná retencia faktúr za predplatné. Provízne sadzby po dobu spolupráce; pri premietnutí do účtovníctva 10 r.
-**Právny základ:** čl. 6 ods. 1 písm. c (zákonná povinnosť — DPH a účtovníctvo) + čl. 6 ods. 1 písm. b (plnenie zmluvy/fakturácia). Podpis dodávateľa: písm. b/f (riadne vyhotovenie dokladu). Pravidelné náklady: prevažne mimo osobných údajov FO (písm. f, pri účtovnom premietnutí písm. c).
+**(a) Účel:** Vystavovanie a evidencia odberateľských faktúr za realitné služby (nemenný účtovný/daňový doklad); správa číselníka odberateľov; uloženie identity makléra ako dodávateľa (hlavička, bankové spojenie, podpis); generovanie PDF faktúry (rozpis DPH ak je dodávateľ platiteľom DPH, platobné QR Pay by Square); správa predplatného CRM cez Stripe; evidencia províznych sadzieb a výpočet provízií; evidencia pravidelných nákladov firmy; finančný/prehľadový záznam makléra (`prehlad_zaznamy`).
+**(b) Dotknuté osoby:** odberatelia — fyzické osoby (živnostníci/SZČO a nepodnikajúce FO) · kontaktné osoby odberateľa (PO) · makléri/SZČO (dodávateľ, provízne sadzby, prehľadové záznamy) · realitná kancelária ako zákazník SaaS a jej fakturačná osoba (billing).
+**Kategórie údajov:** identifikačné údaje odberateľa (názov/meno, adresa, IČO, DIČ, IČ DPH — `odberatel_snapshot` + tabuľka `odberatelia`) · kontakt odberateľa (e-mail, telefón) · číslo faktúry, VS · finančné údaje (suma bez DPH, DPH, celkom, dátumy vystavenia/dodania/splatnosti, forma a stav úhrady) · položky faktúry (voľný text — môže obsahovať meno klienta/adresu) · snapshot dodávateľa (meno, adresa, IČO/DIČ/IČ DPH, IBAN, banka, SWIFT, e-mail, telefón, **obrázok podpisu**) · provízne percentá/medziprovízia + meno makléra · údaje o storne · **prehľadové záznamy `prehlad_zaznamy`** (finančný/prehľadový záznam makléra: typ príjem/výdaj, dátum, popis, suma, stav úhrady; väzba `user_id` makléra a `faktura_id`) · billing: názov a e-mail firmy, Stripe customer/subscription ID, plán, platnosť.
+**(c) Príjemcovia:** Machovic · Supabase · Vercel · **Stripe Inc. (spracovanie platieb predplatného — kód pripravený, NEAKTÍVNY na prode)** · odberateľ/príjemca faktúry (vidí údaje dodávateľa vrátane IBAN a podpisu na faktúre) · daňový/účtovný poradca (mimo systému) · Finančná správa / ÚOOÚ pri kontrole.
+**(d) Prenos:** Supabase EÚ (bez prenosu). Vercel USA — DPF + SCC. **Stripe Inc. — USA: EU-US DPF/SCC — stav: „kód pripravený — NEAKTÍVNY na prode (env nenastavené, overí Bezpecnost)".** Checkout predplatného bez nastaveného Stripe price ID zlyhá, takže reálny prenos údajov do Stripe aktuálne neprebieha; pred aktiváciou doplniť Stripe do zoznamu subprocesorov v privacy policy + DPA. Anthropic/OpenAI/Gemini sa pri faktúrach **zámerne neuvádzajú** (nepoužívajú sa).
+**(e) Retencia:** **faktúry + účtovné doklady 10 rokov** — § 76 zák. 222/2004 Z. z. (DPH) + § 35 zák. 431/2002 Z. z. (účtovníctvo). Faktúra je append-only/nemenná po vystavení (PATCH dovoľuje meniť len zaplatene/datum_uhrady/poznamka; oprava len storno + nová faktúra; mazanie = soft-delete, fyzicky ostáva 10 r.). **Žiadna GDPR erasure** na faktúrach v rámci lehoty (čl. 17 ods. 3 písm. b). `prehlad_zaznamy` viazané na faktúru sa pri storne nemažú (zostávajú ako účtovný/prehľadový záznam, len sa označia ako nezapočítavané do príjmov). Číselník odberateľov mazateľný (faktúry držia immutable snapshot). Dodávateľský profil po dobu spolupráce (snapshot na faktúre 10 r.). Billing po dobu zmluvného vzťahu + 10 r. účtovná retencia faktúr za predplatné. Provízne sadzby po dobu spolupráce; pri premietnutí do účtovníctva 10 r.
+**Právny základ:** čl. 6 ods. 1 písm. c (zákonná povinnosť — DPH a účtovníctvo) + čl. 6 ods. 1 písm. b (plnenie zmluvy/fakturácia). Podpis dodávateľa: písm. b/f (riadne vyhotovenie dokladu). Pravidelné náklady a prehľadové záznamy: prevažne mimo osobných údajov FO (písm. f, pri účtovnom premietnutí písm. c).
+**Daňové spresnenie (DPH):** **rozpis DPH sa na faktúre aplikuje LEN ak je dodávateľ platiteľom DPH** (`firma_info.platca_dph = true`). **V aktuálnom stave je `firma_info.platca_dph = false` (default v `getFirmaInfo.ts` aj migr. 079) → faktúra sa vystavuje bez rozpisu DPH** (neplatiteľ). Pri prechode na platiteľa DPH sa aktivuje rozpis sadzieb a táto poznámka sa upraví.
 **Osobitná kategória:** nie (obrázok podpisu nie je biometrický údaj v zmysle čl. 9 — nie je to technické spracúvanie na jedinečnú identifikáciu).
-**Zdroj údajov:** od dotknutej osoby (odberateľ/dodávateľ); z verejného registra cez `/api/ico-lookup` (názov, adresa, DIČ, IČ DPH podľa IČO); generované systémom (číslo faktúry, VS, výpočet DPH); od Stripe (webhook eventy).
-**(f) Špecifické opatrenia:** `requireUser` na GET/POST/PATCH/DELETE faktúr/odberateľov; audit (`faktura.*`, `odberatel.*`, `dodavatel.upsert`, `provizie.*`, `billing.*`); `company_id` scope; M1 re-auth pri storne; snapshot dodávateľa = integrita nemennej faktúry; Stripe webhook overuje podpis `STRIPE_WEBHOOK_SECRET`. **Nálezy pre okno Bezpečnosť (IDOR):** `GET /api/faktury/pdf?id=` (PDF s PII oboch strán + IBAN + podpis cez UUID — task_2bd71f5d), `GET /api/dodavatel` (IBAN/SWIFT/podpis cez `?user_id`), `makler-provizie-pct` GET, `pravidelne-naklady` GET bez `requireUser`.
+**Zdroj údajov:** od dotknutej osoby (odberateľ/dodávateľ); z verejného registra cez `/api/ico-lookup` (názov, adresa, DIČ, IČ DPH podľa IČO); generované systémom (číslo faktúry, VS, výpočet DPH ak platiteľ); od Stripe (webhook eventy — po aktivácii).
+**(f) Špecifické opatrenia:** `requireUser` na GET/POST/PATCH/DELETE faktúr/odberateľov; audit (`faktura.*`, `odberatel.*`, `dodavatel.upsert`, `provizie.*`, `billing.*`); `company_id` scope; `prehlad_zaznamy` filtrované podľa `user_id` makléra; M1 re-auth pri storne; snapshot dodávateľa = integrita nemennej faktúry; Stripe webhook overuje podpis `STRIPE_WEBHOOK_SECRET` (po aktivácii). **Nálezy pre okno Bezpečnosť (IDOR):** `GET /api/faktury/pdf?id=` (PDF s PII oboch strán + IBAN + podpis cez UUID — task_2bd71f5d), `GET /api/dodavatel` (IBAN/SWIFT/podpis cez `?user_id`), `makler-provizie-pct` GET, `pravidelne-naklady` GET bez `requireUser`.
 
 ---
 
@@ -333,11 +356,13 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **(a) Účel:** Splnenie zákonnej povinnosti povinnej osoby (RK podľa § 5 ods. 1 písm. h zák. 297/2008 Z. z.) — identifikovať a overiť totožnosť klienta-FO a klienta-PO vrátane štatutára a konečného užívateľa výhod (KÚV) pred uzavretím obchodného vzťahu; uchovať AML dokumentáciu v zákonnej lehote a riadiť kolíziu s právom na výmaz; procesný AML gate v životnom cykle obchodu (blokovanie KZ bez dokončenej AML kontroly).
 **(b) Dotknuté osoby:** predávajúci a kupujúci klienti (FO) · spoluvlastníci/ďalší účastníci obchodu z LV · zákonní zástupcovia a splnomocnené osoby · štatutárni zástupcovia/konatelia klienta-PO · koneční užívatelia výhod (KÚV).
 **Kategórie údajov:** meno a priezvisko · dátum narodenia · **RODNÉ ČÍSLO (§ 78 zák. 18/2018)** · adresa trvalého pobytu · štátna príslušnosť · číslo dokladu totožnosti (OP/pas) · **kópia/scan dokladu totožnosti vrátane fotografie a podpisu (`text_content` + `data_base64`, šifrované AES-256-GCM)** · pri PO: obchodné meno, sídlo, IČO, údaje štatutára a KÚV, výpis z OR · stav AML úloh obchodu + audit pokusu o obídenie (`kz.aml_blocked`).
-**(c) Príjemcovia:** Machovic (processor) · Supabase (DB, EÚ Frankfurt) · **Finančná spravodajská jednotka SR / NAKA** (pri hlásení neobvyklej obchodnej operácie, § 15) · ÚOOÚ a orgány dohľadu AML (na vyžiadanie) · Anthropic PBC (LEN ak sa identifikačný/AML dokument posiela na AI parse — výhradne Anthropic; Gemini/OpenAI zakázané na PII).
+**(c) Príjemcovia:** Machovic (processor) · Supabase (DB, EÚ Frankfurt) · **Finančná spravodajská jednotka SR / NAKA** (pri ohlásení neobvyklej obchodnej operácie — § 17 zák. 297/2008, presné ustanovenie ohlásenia **overí právnik**) · ÚOOÚ a orgány dohľadu AML (na vyžiadanie) · Anthropic PBC (LEN ak sa identifikačný/AML dokument posiela na AI parse — výhradne Anthropic; Gemini/OpenAI zámerne neuvedené/zakázané na PII).
 **(d) Prenos:** primárne úložisko (`klient_dokumenty` v Supabase) v EÚ (Frankfurt) — **prenos mimo EHP nevzniká.** Hosting Vercel (EU edge + USA) — DPF + SCC. Pri AI parse identifikačného dokumentu prenos do USA (Anthropic PBC) na základe SCC.
 **(e) Retencia:** **5 rokov po skončení obchodného vzťahu (§ 20 zák. 297/2008 Z. z.).** Technicky: `aml_retention=true`; **pri GDPR výmaze klienta sa AML doklady NEMAŽÚ** (čl. 17 ods. 3 písm. b), nastaví sa `retention_do = koniec vzťahu + 5 r.`; po vypršaní maže retention cron (`klient_dokumenty.aml_retention_expired`, default DRY-RUN). Audit AML procesu append-only po dobu existencie firmy.
-**Právny základ:** čl. 6 ods. 1 písm. c (zákonná povinnosť — zák. 297/2008, § 7, 8, 10, 15, 20). Pre rodné číslo § 78 zák. 18/2018 v spojení s AML. Výnimka z práva na výmaz: čl. 17 ods. 3 písm. b. Audit trail: čl. 6 ods. 1 písm. f + accountability (čl. 5 ods. 2).
-**Osobitná kategória:** **najcitlivejšia kategória v systéme** — rodné číslo (§ 78) + kópia OP (podobizeň, podpis). Osobitná kategória čl. 9 sa priamo na účel identifikácie nespracúva, ale režim zaobchádzania je najvyššej citlivosti.
+**Právny základ:** čl. 6 ods. 1 písm. c (zákonná povinnosť — zák. 297/2008 Z. z.): **identifikácia klienta § 7, overenie identifikácie § 11, (základná) starostlivosť vo vzťahu ku klientovi § 10, ohlásenie neobvyklej obchodnej operácie § 17 (presné ustanovenie overí právnik), uchovávanie údajov § 20.** Pre rodné číslo § 78 zák. 18/2018 v spojení s AML. Výnimka z práva na výmaz: čl. 17 ods. 3 písm. b. Audit trail: čl. 6 ods. 1 písm. f + accountability (čl. 5 ods. 2).
+**Osobitná kategória:**
+— **Osobitná kategória (čl. 9): NIE** — na účel identifikácie sa osobitná kategória priamo nespracúva (kópia OP obsahuje podobizeň a podpis, no nejde o spracúvanie biometrie na jedinečnú identifikáciu v zmysle čl. 9).
+— **Osobitný identifikátor (§ 78 zák. 18/2018): ÁNO — rodné číslo.** Spolu s kópiou OP ide o **najcitlivejšiu kategóriu v systéme** — režim zaobchádzania najvyššej citlivosti.
 **Zdroj údajov:** priamo od dotknutej osoby (predloženie dokladu); pri spoluvlastníkoch/KÚV čiastočne z verejného registra (kataster, OR) — čl. 14.
 **(f) Špecifické opatrenia:** `text_content` aj `data_base64` šifrované **AES-256-GCM** (`lib/cryptoDocs.ts`, kľúč `DOC_ENCRYPTION_KEY`, IV per záznam). `/api/klient-dokumenty` po F1 fixe (2026-06-03) vynucuje `requireUser` + scope (`company_id`, vlastník) — pred fixom cross-tenant IDOR na najcitlivejšej tabuľke. **Forenzný audit KAŽDÉHO prístupu k dešifrovaným dokumentom** (`klient_dokumenty.read`, F8 fix) — kto/kedy/IP, pre rozsah pri ohlasovaní porušenia (čl. 33/34). AML gate (`/api/obchody/[id]`): hard blocker (403 + audit) pri nesplnených AML úlohách (§ 10). **🔴 Akákoľvek zmena spracúvania rodného čísla/kópie OP spadá pod červený protokol.** **Medzera:** nezosúladenie AML 5 r. vs dokumenty k nehnuteľnosti 7 r. — overiť u právnika (F6/F14).
 
@@ -366,19 +391,54 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 — *Audit log:* **append-only po dobu existencie firmy** (nemenný, migr. 080) — nemaže sa.
 — *Pokusy o prihlásenie:* krátkodobo (okno rate-limitu ~15 min); vhodné periodické čistenie.
 — *In-app notifikácie:* bez explicitnej lehoty (kandidát na doplnenie).
-**Právny základ:** súhlas dotknutej osoby (čl. 6 ods. 1 písm. a) pre marketing + jeho odvolanie (čl. 7 ods. 3); ePrivacy (zák. 351/2011 — one-click unsubscribe). Evidencia súhlasov a audit: čl. 7, čl. 5 ods. 2 (accountability), čl. 32 (bezpečnosť), čl. 6 ods. 1 písm. f. Google integrácie, notifikácie, účty, login: čl. 6 ods. 1 písm. f/b (prevádzka CRM, pracovný vzťah, bezpečnosť). Re-permission oslovenie existujúceho klienta: čl. 6 ods. 1 písm. f / príprava súhlasu písm. a.
-**Osobitná kategória:** nie (Drive/Gmail obsah môže nepriamo obsahovať rodné číslo/č. OP — § 78; audit log nemá obsahovať osobitné kategórie).
+**Právny základ:** súhlas dotknutej osoby (čl. 6 ods. 1 písm. a) pre marketing + jeho odvolanie (čl. 7 ods. 3); ePrivacy (zák. 351/2011 — one-click unsubscribe). Evidencia súhlasov a audit: čl. 7, čl. 5 ods. 2 (accountability), čl. 32 (bezpečnosť), čl. 6 ods. 1 písm. f. Google integrácie, notifikácie, účty, login: čl. 6 ods. 1 písm. f/b (prevádzka CRM, pracovný vzťah, bezpečnosť; LIA pri písm. f podľa časti B). Re-permission oslovenie existujúceho klienta: čl. 6 ods. 1 písm. f / príprava súhlasu písm. a.
+**Osobitná kategória:**
+— **Osobitná kategória (čl. 9): NIE.**
+— **Osobitný identifikátor (§ 78 zák. 18/2018): NEPRIAMO ÁNO — rodné číslo / č. OP** sa môžu vyskytnúť v obsahu Drive/Gmail súborov (LV, OP, zmluvy). Audit log nemá obsahovať osobitné kategórie ani osobitné identifikátory.
 **Zdroj údajov:** od subjektu (klik klienta, údaje makléra, prepojenie Google účtu); generované systémom (audit, notifikácie); od adminov (pozvánky, účty).
 **(f) Špecifické opatrenia:** verejné consent endpointy autorizované cez HMAC token (`verifyConsentToken`); `consent-refresh` admin-only, default dry-run, max 300 príjemcov; odoslanie e-mailu neresetuje retenciu (zámerne); `notifyManagers` fail-closed na `company_id`; účty — M1 re-auth pri zmene role/hesla; in-app/notifikácie IDOR fix (`?user_id` len super_admin); OAuth tokeny šifrované (`encryptToken`). **Nálezy pre okno Bezpečnosť:** `/api/google/drive`, `/api/google/gmail`, `/api/google/calendar` a `push/subscribe` berú `userId` z query/body bez `requireUser` (IDOR); `email/kolizia` bez auth; **PII v logoch — `auth/google/callback` loguje `google_email`+`userId` cez `console.log`** (→ okno Bezpečnosť na odstránenie + Pravo na posúdenie GDPR dopadu).
 
 ---
 
+### Č.21 — Elektronický podpis cez OTP (SMS/e-mail jednorazový kód) — náberový list a objednávka
+**(a) Účel:** Diaľkový elektronický podpis náberového listu alebo objednávky kupujúceho: maklér iniciuje podpis, podpisujúcej osobe sa pošle odkaz na verejnú stránku `/podpis/{token}` + jednorazový overovací kód (OTP), osoba kód zadá a dokument podpíše. Slúži ako dôkaz prejavu vôle a úkonu podpisu. *(Konsolidácia — jeden podpisový kanál pre náberový list aj objednávku; tým sa fakticky realizuje skôr sľubovaná konsolidácia „3× podpis → 1".)*
+**(b) Dotknuté osoby:** podpisujúci predávajúci (pri náberovom liste) a kupujúci (pri objednávke); maklér iniciujúci podpis.
+**Kategórie údajov:** telefón **alebo** e-mail príjemcu podpisu (na doručenie OTP/odkazu) · **hash OTP kódu a hash podpisového tokenu** (SHA-256, nikdy plaintext) · väzba na entitu (`entity_type` naber/objednavka + `entity_id`) · **IP adresa a user-agent z okamihu podpisu** (`signed_ip`, `signed_user_agent`) · časové známky (požiadanie, expirácia, použitie, podpis) · stav a provider doručenia (`sms_status`/`sms_provider`/`sms_error`) · identifikátor makléra, ktorý podpis vyžiadal.
+**(c) Príjemcovia:** Machovic · Supabase (`signature_otps`, len service_role) · Vercel · **doručovateľ kódu podľa kanála:** pri SMS **Twilio Inc. (USA)** — *stav: „kód pripravený — NEAKTÍVNY na prode (env nenastavené, overí Bezpecnost)"*; pri e-maile **Resend Inc. (USA)** — *aktívny*.
+**(d) Prenos:** Supabase EÚ (úložisko `signature_otps`, bez prenosu). Vercel USA — DPF + SCC. **Twilio Inc. — USA: EU-US DPF/SCC — „kód pripravený — NEAKTÍVNY na prode".** Bez nastavených `TWILIO_*` env premenných `sendSms` vráti „manual" režim (maklér oznámi kód klientovi ručne) a žiadne dáta sa do Twilio neodošlú; **pozor — default kanál podpisu je `sms`**, preto pri budúcom nastavení Twilio env sa telefón príjemcu reálne začne prenášať do USA (vtedy doplniť Twilio do subprocesorov v privacy policy + DPA). **Resend Inc. — USA: EU-US DPF — aktívny** (e-mail s odkazom a OTP).
+**(e) Retencia:** záznam OTP/tokenu v `signature_otps` má **TTL 15 minút** (`expires_at`); kód/token sú uložené len ako hash a sú jednorazové (use-once + limit pokusov). Forenzné metadáta podpisu (IP, UA, čas) zostávajú naviazané na podpísanú entitu (náberový list/objednávka) podľa jej retencie (7 r. / do premlčania). Logy doručenia u Twilio/Resend podľa ich politiky.
+**Právny základ:** čl. 6 ods. 1 písm. b (vykonanie úkonu podpisu ako súčasť predzmluvného/zmluvného vzťahu); čl. 6 ods. 1 písm. f (preukázateľnosť a integrita podpisu — IP/UA/čas ako dôkaz úkonu; LIA podľa časti B).
+**Osobitná kategória:** nie (OTP/token a metadáta podpisu nie sú osobitnou kategóriou ani osobitným identifikátorom).
+**Zdroj údajov:** od dotknutej osoby (podpisujúci); telefón/e-mail z karty entity zadaný maklérom; IP/UA zachytené pri podpise.
+**(f) Špecifické opatrenia:** OTP aj token hashované (SHA-256); `signature_otps` RLS len service_role; TTL 15 min; jednorazovosť + max počet pokusov; pri zlyhaní doručenia „manual" fallback (kód sa nezobrazí verejne, vráti sa iniciujúcemu maklérovi). **🔴 Zmena kanála/textu podpisu alebo rozsahu metadát podpisu má právny účinok — posúdiť cez červený protokol.**
+
+---
+
+### Č.22 — Evidencia objednávok fotoprodukcie / videa (produkcia_objednavky)
+**(a) Účel:** Evidencia produkčných objednávok k nehnuteľnosti predávajúceho klienta (foto-video, homestaging, energetický certifikát) — workflow od konceptu po dodanie; uchovanie snapshotu kontaktných údajov klienta v čase objednávky, aby história objednávky zostala čitateľná aj po anonymizácii klienta.
+**(b) Dotknuté osoby:** predávajúci klienti (objednávateľ produkcie) · makléri (zadávateľ objednávky).
+**Kategórie údajov:** **snapshot kontaktu klienta v čase objednávky — `snapshot_meno`, `snapshot_telefon`, `snapshot_lokalita`** · väzby `klient_id` a `makler_id` · typ produkcie (foto_video/homestaging/certifikat) · stav workflow · detaily objednávky (JSONB) · termíny (plánovaný/odoslaný/dokončený) · odkaz na výstup (`deliverable_url`).
+**(c) Príjemcovia:** makléri/manažéri firmy (company scope) · Machovic · Supabase · Vercel · produkčný tím/dodávateľ produkcie (v rámci realizácie objednávky).
+**(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC.
+**(e) Retencia:** naviazané na nehnuteľnosť/klienta a životný cyklus objednávky. **⚠️ Medzera (odovzdané oknu „Klienti" na opravu):** retenčný cron F11 (`/api/cron/retention-anonymize`) anonymizuje `klienti`, `klient_dokumenty` a `obhliadky`, ale **NEČISTÍ snapshot polia v `produkcia_objednavky` (`snapshot_meno`/`snapshot_telefon`/`snapshot_lokalita`)** — po anonymizácii klienta tieto kontaktné PII v tabuľke **pretrvávajú mimo definovanej retencie**. Treba doplniť anonymizáciu/nulovanie snapshotov do F11 (vlastník: okno Klienti & Pipeline).
+**Právny základ:** čl. 6 ods. 1 písm. b (objednávka služby ako súčasť plnenia voči predávajúcemu klientovi) + čl. 6 ods. 1 písm. f (interná evidencia objednávok a histórie produkcie; LIA podľa časti B).
+**Osobitná kategória:** nie.
+**Zdroj údajov:** z karty klienta (snapshot v čase objednávky) + zadané maklérom.
+**(f) Špecifické opatrenia:** company scope (`company_id`) + väzba `makler_id`; RLS na `produkcia_objednavky`. **Nález pre okno Klienti & Pipeline:** doplniť snapshot polia do retenčného/anonymizačného cronu (F11).
+
+---
+
 ## D. Súhrn
 
-- **Počet konsolidovaných spracovateľských činností:** 20 (z 56 objavených, po zlúčení duplicít).
-- **Činnosti so spracovaním osobitných identifikátorov (rodné číslo, § 78):** Č.13, Č.15, Č.19, Č.20 (nepriamo Drive).
-- **Činnosti s prenosom mimo EÚ (USA):** Č.1, 3, 5–18, 20 (Vercel/Resend/Google/Anthropic/OpenAI/Stripe/ScrapingBee) — viď Register DPA.
-- **Činnosti so spracovaním údajov tretích osôb mimo klientskeho vzťahu (čl. 14):** Č.2, Č.13, Č.15, Č.16 (najvýznamnejšie Č.16 — scraping).
+- **Počet konsolidovaných spracovateľských činností:** 22 (z 56 objavených, po zlúčení duplicít; doplnené Č.21 elektronický podpis cez OTP a Č.22 objednávky fotoprodukcie/videa).
+- **Činnosti so spracovaním osobitných identifikátorov (rodné číslo, § 78 zák. 18/2018 — NIE osobitná kategória čl. 9):** Č.2 (ak je RČ na LV), Č.13, Č.15, Č.19, Č.20 (nepriamo cez Drive).
+- **Činnosti s prenosom mimo EÚ:**
+  — *USA (Vercel/Resend/Google/Anthropic/OpenAI):* Č.1, 3, 5–22 (podľa činnosti).
+  — *USA — „kód pripravený — NEAKTÍVNY na prode (env nenastavené, overí Bezpecnost)":* **Stripe Inc.** (Č.18) a **Twilio Inc.** (Č.21). Tieto sa reálne neaktivujú, kým nie sú nastavené env premenné; pred aktiváciou doplniť do subprocesorov v privacy policy + DPA. (Twilio pozor: default kanál podpisu = `sms`.)
+  — *Veľká Británia — rozhodnutie o primeranosti (UK adequacy):* **OpenStreetMap/Nominatim** (Č.3, Č.8 — geokódovanie len lokality/adresy, bez identity klienta).
+  — viď Register DPA.
+- **Činnosti so spracovaním údajov tretích osôb mimo klientskeho vzťahu (čl. 14, s povinnou LIA):** Č.2, Č.13, Č.15, Č.16 (najvýznamnejšie Č.16 — scraping).
 - **Činnosti bez osobných údajov (mimo vecnej pôsobnosti GDPR, uvedené pre úplnosť):** agregované trhové sentimenty/snapshoty (`market_sentiments`) — neosobné agregáty.
+- **Otvorené body na rozhodnutie právnika:** (1) právny základ obhliadkového listu — súhlas vs písm. b/f (Č.14); (2) presné ustanovenie ohlásenia NOO podľa zák. 297/2008 (Č.19); (3) náležitosti podľa zák. č. 170/2024 Z. z. o realitnom sprostredkovaní (časť A, Č.5, Č.13); (4) samostatná príloha LIA pre činnosti s čl. 6 ods. 1 písm. f.
 
 *Tento RoPA sa aktualizuje pri každej zmene spracovateľskej činnosti, pridaní subprocesora alebo zmene zákonných lehôt. Zmeny právneho/compliance baseline podliehajú červenému protokolu so súhlasom konateľa.*
