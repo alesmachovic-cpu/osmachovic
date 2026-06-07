@@ -7,10 +7,19 @@ import { getUserScope, canEditRecord } from "@/lib/scope";
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const klientId = req.nextUrl.searchParams.get("klient_id");
   if (!klientId) return NextResponse.json({ error: "klient_id required" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
+  // 🔒 S3 hotfix — história interakcií je PII; klient musí patriť firme callera (cross-tenant guard).
+  const { data: owner } = await sb.from("klienti").select("company_id").eq("id", klientId).maybeSingle();
+  if (!owner || (owner.company_id !== auth.user.company_id && auth.user.role !== "platform_admin")) {
+    return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+  }
+
   const { data, error } = await sb
     .from("klient_udalosti")
     .select("*")

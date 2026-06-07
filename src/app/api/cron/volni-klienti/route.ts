@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser } from "@/lib/auth/requireUser";
+import { getUserScope } from "@/lib/scope";
 import { sendPushToAll } from "@/lib/monitor";
 import { notifyUser, notifyManagers, userIdFromMaklerId, brandedEmailHtml } from "@/lib/notify";
 
@@ -41,14 +43,21 @@ export const maxDuration = 60;
 export async function GET(request: Request) {
   const startTime = Date.now();
 
-  // Auth
+  // 🔒 S7 hotfix — Vercel/externý cron cez CRON_SECRET, ALEBO prihlásený admin/manažér.
+  // __internal__ bypass ODSTRÁNENÝ — bola to verejná diera (ktokoľvek ?key=__internal__
+  // spustil uvoľňovanie klientov + push/email). Chýbajúci secret = zamietni (nie povoľ).
   const authHeader = request.headers.get("authorization");
   const { searchParams } = new URL(request.url);
   const queryKey = searchParams.get("key");
   const cronSecret = process.env.CRON_SECRET;
-  const isInternal = queryKey === "__internal__";
-  if (cronSecret && !isInternal && authHeader !== `Bearer ${cronSecret}` && queryKey !== cronSecret) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const validCronSecret = !!cronSecret && (authHeader === `Bearer ${cronSecret}` || queryKey === cronSecret);
+  if (!validCronSecret) {
+    const auth = await requireUser(request as NextRequest);
+    if (auth.error) return auth.error;
+    const scope = await getUserScope(auth.user.id);
+    if (!scope?.isManager) {
+      return NextResponse.json({ error: "Len admin/manažér môže spustiť SLA cron" }, { status: 403 });
+    }
   }
 
   try {
