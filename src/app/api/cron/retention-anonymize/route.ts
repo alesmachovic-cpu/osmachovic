@@ -70,6 +70,21 @@ export async function GET(request: NextRequest) {
   const obhToAnon = (oldObhliadky ?? []).filter(o =>
     o.kupujuci_meno || o.kupujuci_telefon || o.kupujuci_email || o.email_sent_to || o.podpis_data);
 
+  // F11 (Pravo RoPA 2026-06-07): produkcia_objednavky drží snapshot PII klienta
+  // (meno/telefón/lokalita v čase objednávky) → anonymizuj staršie ako retention.
+  const { data: oldProdukcia } = await sb
+    .from("produkcia_objednavky")
+    .select("id, snapshot_meno, snapshot_telefon, snapshot_lokalita")
+    .lt("created_at", cutoff);
+  const prodToAnon = (oldProdukcia ?? []).filter(p => p.snapshot_meno || p.snapshot_telefon || p.snapshot_lokalita);
+
+  // kolizny_log.poznamka je free-text (môže obsahovať meno/kontakt) → anonymizuj staré.
+  const { data: oldKolizie } = await sb
+    .from("kolizny_log")
+    .select("id, poznamka")
+    .lt("created_at", cutoff);
+  const kolToAnon = (oldKolizie ?? []).filter(k => k.poznamka);
+
   if (!enabled) {
     return NextResponse.json({
       ok: true,
@@ -78,6 +93,8 @@ export async function GET(request: NextRequest) {
       candidates_count: toAnon.length,
       aml_docs_expired_count: expiredAmlIds.length,
       obhliadky_anonymize_count: obhToAnon.length,
+      produkcia_anonymize_count: prodToAnon.length,
+      kolizny_log_anonymize_count: kolToAnon.length,
       candidates: toAnon.map(k => ({ id: k.id, typ: k.typ, status: k.status, last_engagement_at: k.last_engagement_at })),
       note: "DRY-RUN — žiadne dáta sa nezmenili. Pre reálnu anonymizáciu nastav RETENTION_ANONYMIZE_ENABLED=true.",
       ran_at: new Date().toISOString(),
@@ -154,10 +171,38 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Anonymizuj snapshot PII v starých produkcia_objednavky (F11).
+  let prodAnonymized = 0;
+  if (prodToAnon.length) {
+    const prodIds = prodToAnon.map(p => p.id);
+    const dProd = await sb.from("produkcia_objednavky").update({
+      snapshot_meno: null, snapshot_telefon: null, snapshot_lokalita: null,
+    }).in("id", prodIds);
+    if (dProd.error) errors.push(`produkcia: ${dProd.error.message}`);
+    else {
+      prodAnonymized = prodIds.length;
+      await logAudit({ action: "produkcia_objednavka.retention_anonymized", actor_id: null, actor_name: "cron/retention", target_id: null, target_type: "produkcia_objednavka", detail: { count: prodAnonymized, retention_years: years }, ip_address: undefined });
+    }
+  }
+
+  // Anonymizuj free-text poznámku v starých kolizny_log (F11).
+  let kolAnonymized = 0;
+  if (kolToAnon.length) {
+    const kolIds = kolToAnon.map(k => k.id);
+    const dKol = await sb.from("kolizny_log").update({ poznamka: null }).in("id", kolIds);
+    if (dKol.error) errors.push(`kolizny_log: ${dKol.error.message}`);
+    else {
+      kolAnonymized = kolIds.length;
+      await logAudit({ action: "kolizny_log.retention_anonymized", actor_id: null, actor_name: "cron/retention", target_id: null, target_type: "kolizny_log", detail: { count: kolAnonymized, retention_years: years }, ip_address: undefined });
+    }
+  }
+
   return NextResponse.json({
     ok: errors.length === 0,
     dry_run: false,
     obhliadky_anonymized: obhAnonymized,
+    produkcia_anonymized: prodAnonymized,
+    kolizny_log_anonymized: kolAnonymized,
     retention_years: years,
     anonymized,
     aml_docs_deleted: amlDeleted,
