@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
+import { obchodScopeById } from "@/lib/scope";
 
 export const runtime = "nodejs";
+
+/** Cross-tenant guard — obchod (parent) musí patriť firme callera. Vráti null ak OK, inak error response. */
+async function assertObchodCompany(obchodId: string, companyId: string, role: string) {
+  const obchodCompany = await obchodScopeById(obchodId);
+  if (!obchodCompany || (obchodCompany !== companyId && role !== "platform_admin")) {
+    return NextResponse.json({ error: "Obchod nenájdený" }, { status: 404 });
+  }
+  return null;
+}
 
 /** GET /api/obchody/[id]/ulohy — zoznam úloh obchodu */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -10,6 +20,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (auth.error) return auth.error;
 
   const { id } = await params;
+  const guard = await assertObchodCompany(id, auth.user.company_id, auth.user.role);
+  if (guard) return guard;
 
   const sb = getSupabaseAdmin();
   const { data, error } = await sb
@@ -28,6 +40,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (auth.error) return auth.error;
 
   const { id } = await params;
+  const guard = await assertObchodCompany(id, auth.user.company_id, auth.user.role);
+  if (guard) return guard;
 
   let body: {
     kategoria?: string;
@@ -48,6 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .from("obchod_ulohy")
     .insert({
       obchod_id: id,
+      company_id: auth.user.company_id,  // 🔒 S6 — bez tohto bol NULL (chýbal tenant tag)
       kategoria: body.kategoria ?? "akcia",
       nazov:     body.nazov,
       popis:     body.popis ?? null,

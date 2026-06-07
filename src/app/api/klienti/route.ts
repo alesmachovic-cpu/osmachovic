@@ -173,10 +173,13 @@ export async function PATCH(req: NextRequest) {
   const scope = await getUserScope(userId);
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
 
+  // 🔒 S5 cross-tenant guard — company_id scope (read/write konzistencia s GET).
+  // canEditRecord() pre admin/majiteľa firmu NEkontroluje, preto musí byť tu.
   const { data: existing } = await sb
     .from("klienti")
     .select("id, makler_id, anonymized_at")
     .eq("id", id)
+    .eq("company_id", scope.company_id)
     .single();
   if (!existing) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
   if (existing.anonymized_at) {
@@ -192,7 +195,7 @@ export async function PATCH(req: NextRequest) {
   const patch: Record<string, unknown> = { ...cleanRest };
   if (scope.isAdmin && bodyMakler) patch.makler_id = bodyMakler; // delegate
 
-  const { data, error } = await sb.from("klienti").update(patch).eq("id", id).select().single();
+  const { data, error } = await sb.from("klienti").update(patch).eq("id", id).eq("company_id", scope.company_id).select().single();
   if (error) {
     // P0 fix 2026-05-24a: schema cache miss → 400 namiesto 500.
     if (error.code === "PGRST204" || /column|schema cache/i.test(error.message)) {
@@ -266,8 +269,10 @@ export async function DELETE(req: NextRequest) {
     }, { status: reAuth.status });
   }
 
-  const { error } = await sb.from("klienti").delete().eq("id", id);
+  // 🔒 S5 cross-tenant guard — admin smie mazať len klienta vlastnej firmy.
+  const { error, count } = await sb.from("klienti").delete({ count: "exact" }).eq("id", id).eq("company_id", scope.company_id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!count) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
   await logAudit({ action: "klient.delete", actor_id: userId, target_id: id, target_type: "klient", ip_address: req.headers.get("x-forwarded-for") || undefined });
   return NextResponse.json({ ok: true });
 }
