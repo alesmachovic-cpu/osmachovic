@@ -50,14 +50,20 @@ Stĺpec „Stav DPA" = či máme doloženú zmluvu/DPA a či je subprocesor uved
 
 Aktuálna privacy policy (`src/app/gdpr/page.tsx`, v2.1) v sekcii 9 „Prenosy mimo EÚ/EHP" uvádza **len 5 subprocesorov:** Supabase, Vercel, Resend, Google, Anthropic.
 
-**Chýbajú (treba doplniť pred ostrou prevádzkou):**
-1. **OpenAI** — fallback AI na neosobné údaje (USA, DPF).
-2. **Stripe Inc.** — platby predplatného (USA, DPF/SCC).
-3. **Twilio Inc.** — SMS doručenie OTP (USA, DPF + SCC) — alebo Smslogic (EÚ), podľa nasadeného `SMS_PROVIDER`.
-4. **ScrapingBee SAS** — scraping (lokalita/SCC na overenie).
-5. (Posúdiť) **Nominatim/OSM** — geokódovanie.
+**FINÁLNE ROZHODNUTIE (2026-06-07, po potvrdení CEO):**
+- ✅ **DO sekcie 9 doplniť: OpenAI** (fallback AI na neosobné údaje, USA/DPF) + **Nominatim/OSM**
+  (geokódovanie adries nehnuteľností).
+- ❌ **Stripe — NEPRIDÁVAŤ:** CEO potvrdil, že platby predplatného zatiaľ NEBEŽIA (mimo platby). Pridať
+  až keď sa billing zapne.
+- ❌ **Twilio — NEPRIDÁVAŤ:** CEO rieši OTP **emailom** (= Resend, už v sekcii 9 nepriamo cez Resend),
+  SMS cez Twilio sa nepoužíva. (Fast-follow: odstrániť závislosť na sendSms path — vlastník Náberáky.)
+- 🟡 **ScrapingBee — NIE do sekcie 9** (sekcia 9 je o údajoch NAŠICH klientov; ScrapingBee spracúva
+  VEREJNÉ konkurenčné inzeráty, nie klientske OÚ). Ostáva v tomto registri + v RoPA Č.16; potenciálne
+  PII tretích osôb (predajcovia) z inzerátov rieši samostatná **informačná povinnosť čl. 14 (G26)**,
+  navyše sa po migr. 106 NEUKLADÁ. Či je kľúč na prode nastavený overí Bezpecnost (Vercel env).
 
-> Zmena sekcie 9 privacy policy = zmena právneho/compliance baseline → **červený protokol** (súhlas konateľa) pred nasadením.
+> Doplnenie sekcie 9 (OpenAI + Nominatim) = zmena právneho textu → **červený protokol**: čaká na
+> výslovný súhlas CEO (cez MD), potom Compliance upraví text a ukáže finálne znenie pred commitom.
 
 ---
 
