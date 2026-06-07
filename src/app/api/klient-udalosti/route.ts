@@ -2,14 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
-import { getUserScope, canEditRecord } from "@/lib/scope";
+import { getUserScope, canEditRecord, klientScopeById } from "@/lib/scope";
 import { touchEngagement } from "@/lib/engagement";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const klientId = req.nextUrl.searchParams.get("klient_id");
   if (!klientId) return NextResponse.json({ error: "klient_id required" }, { status: 400 });
+
+  // 🔒 Cross-tenant guard — história interakcií je PII; klient musí patriť firme callera.
+  const klientCompany = await klientScopeById(klientId);
+  if (!klientCompany || (klientCompany !== auth.user.company_id && auth.user.role !== "platform_admin")) {
+    return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+  }
 
   const sb = getSupabaseAdmin();
   const { data, error } = await sb

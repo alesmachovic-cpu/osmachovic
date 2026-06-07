@@ -49,6 +49,11 @@ const TIER1_MUST_HAVE_AUTH = new Set([
   "src/app/api/matching/objednavka/[id]/route.ts",
   "src/app/api/matching/nehnutelnost/[id]/route.ts",
   "src/app/api/matching/summary/route.ts",
+  // 2026-06-07 — Klienti/Obchody audit (S3/S4/S6): GET/POST bez auth alebo bez company scope.
+  "src/app/api/klient-udalosti/route.ts",
+  "src/app/api/volni-klienti/route.ts",
+  "src/app/api/obchody/[id]/ulohy/route.ts",
+  "src/app/api/obchody/[id]/ulohy/[ulohaId]/route.ts",
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────

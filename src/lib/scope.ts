@@ -55,6 +55,24 @@ export async function getUserScope(userId: string | null | undefined): Promise<U
 }
 
 /**
+ * Cross-tenant guard helpery — vrátia company_id PARENT záznamu (alebo null ak
+ * neexistuje). Volajúci porovná s auth.user.company_id (platform_admin výnimka).
+ * Spoločná vrstva pre routes ktoré pristupujú k záznamom cez ?klient_id / [id]
+ * cez service-role (RLS ich nezachytí). Vznik: 2026-06-07 (S3/S4/S6 fixy).
+ */
+export async function klientScopeById(klientId: string): Promise<string | null> {
+  const sb = getSupabaseAdmin();
+  const { data } = await sb.from("klienti").select("company_id").eq("id", klientId).maybeSingle();
+  return (data?.company_id as string | null) ?? null;
+}
+
+export async function obchodScopeById(obchodId: string): Promise<string | null> {
+  const sb = getSupabaseAdmin();
+  const { data } = await sb.from("obchody").select("company_id").eq("id", obchodId).maybeSingle();
+  return (data?.company_id as string | null) ?? null;
+}
+
+/**
  * Vlastnícky check pre záznam s makler_id (klient, nehnuteľnosť, obhliadka,
  * náberový list). Prístup povolený keď:
  *   - admin/majiteľ — vždy
