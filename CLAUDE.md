@@ -116,7 +116,7 @@ Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne 
 | Okno | Doména | Vlastní (kľúčové cesty) | NErobí → odovzdáva |
 |---|---|---|---|
 | **Koordinácia (MD)** | Kompetencie, onboarding okien, register | `CLAUDE.md` (sekcia Register), prekryvy hraníc | Nepíše doménový kód — pripraví prompt domén. oknu |
-| **Klienti & Pipeline** | Klienti, kupujúci, voľní, obchody/pipeline | `app/klienti`, `app/kupujuci`, `app/volni-klienti`, `api/klienti*`, `api/klient-dokumenty`, `api/klient-udalosti`, `api/objednavky`, `api/obchody`, `lib/scope.ts`, `lib/maklerMap.ts` | Parse dokumentov → Náberáky; GDPR/AML texty → Compliance |
+| **Klienti & Pipeline** *(okno „Klienti")* | **Predávajúci + kupujúci + voľní + „oboje"** klienti, obchody/pipeline | `app/klienti`, `app/kupujuci`, `app/volni-klienti`, `api/klienti*`, `api/klient-dokumenty`, `api/klient-udalosti`, `api/objednavky`, `api/obchody`, `lib/scope.ts`, `lib/maklerMap.ts` | Parse dokumentov → Náberáky; GDPR/AML texty → Compliance |
 | **Nehnuteľnosti & Portfólio** | Portfólio, inzeráty, matching, kalkulačka | `app/nehnutelnosti`, `app/portfolio`, `app/matching`, `app/inzerat`, `app/kalkulator`, `api/nehnutelnosti`, `api/inzerat`, `api/matching`, `api/fotky`, `api/pricing` | Property Story copy → AI |
 | **Náberáky, Zmluvy & Dokumenty** | Nábery, zmluvy, podpis, parse LV/posudkov | `app/naber`, `app/podpis`, `api/nabery`, `api/naber-pdf`, `api/naber-analyza`, `api/parse-doc`, `api/parse-pdf`, `api/parse-lv`, `api/vyhradna-zmluva`, `api/sign`, `api/objednavka-pdf`, `NaberyForm`, `VyhradnaZmluvaModal` | AI model vrstva → AI; právny text zmlúv → Compliance |
 | **Obhliadky & Kalendár** | Obhliadky, kolízie, kalendár | `app/kalendar`, `app/kolize`, `api/obhliadky`, `api/kolize`, `api/calendar`, `api/calendar-sync`, `useKoliziaCheck` | OAuth/token vrstva Google → Google; podpisová komponenta → Náberáky |
@@ -133,6 +133,7 @@ Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne 
 - **Calendar**: **Obhliadky** vlastnia business logiku (`api/calendar`, `api/calendar-sync`); **Google** vlastní OAuth/token vrstvu (`lib/google.ts`, `api/auth/google`).
 - **Parse-doc/lv/pdf** = **Náberáky** vlastnia parse endpointy; **AI** vlastní len model/prompt vrstvu (`lib/ai`), ktorú parse volá.
 - **Obchody** (`api/obchody`) = **Klienti & Pipeline** (stav obchodu od ÚZ po vklad); zmluvné dokumenty k obchodu → **Náberáky**.
+- **Predávajúci vs kupujúci** = **JEDNO okno (Klienti & Pipeline)** — NEdeliť podľa typu klienta. Klient je jedna entita, zdieľa kód (`app/klienti`, `api/klienti`, detail `app/klienti/[id]`) a môže byť „oboje" (predávajúci aj kupujúci naraz). Hranica je *entita klienta vs kupujúci dopyt* (`api/objednavky`/matching), nie *typ klienta* — ale aj dopyt drží to isté okno. Dve okná podľa typu = kolízie na zdieľaných súboroch.
 - **Zdieľané utility** (`api/locale`, `api/weather`, `api/ulica-search`, `api/api-status`, `app/nastavenia`): meniť len po dohode; default správca = Operatíva.
 
 **Pravidlá určovania vlastníka (dispečer) — záväzné:**
