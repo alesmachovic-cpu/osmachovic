@@ -64,11 +64,13 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
       if (!res.ok) throw new Error(await res.text());
       const parsed = await res.json();
 
-      // Ulož do klienta cez API endpoint (ownership check)
+      // Ulož parsované dáta do klienta cez API endpoint (ownership check)
       await klientUpdate(userId, klientId, { lv_data: parsed });
-      console.log("[LVSection] LV uložené do DB, volám onParsed...");
+      // Ulož aj samotný LV súbor do Dokumentov (šifrované, aml_retention=false default).
+      // Právny základ: plnenie zmluvy + oprávnený záujem (verdikt Pravo 2026-06-07).
+      const docRes = await saveKlientDokument({ klient_id: klientId, name: file.name, type: "List vlastníctva", source: "naber", mime: file.type, data_base64: base64 });
+      if (docRes.error) console.warn("[LVSection] LV súbor sa neuložil do Dokumentov:", docRes.error);
       onParsed(parsed);
-      console.log("[LVSection] onParsed hotové, rodičovský modal by mal byť otvorený");
     } catch (e) {
       setErr("Chyba pri analýze LV: " + (e as Error).message.slice(0, 120));
     } finally {
@@ -964,6 +966,9 @@ export default function KlientDetailPage() {
       if (!res.ok) throw new Error(await res.text());
       const parsed = await res.json();
       if (user?.id) await klientUpdate(user.id, klient.id, { lv_data: parsed });
+      // Ulož aj samotný LV súbor do Dokumentov (šifrované, aml_retention=false default) — verdikt Pravo 2026-06-07
+      const docRes = await saveKlientDokument({ klient_id: klient.id, name: file.name, type: "List vlastníctva", source: "naber", mime: file.type, data_base64: base64 });
+      if (docRes.error) console.warn("[handleQuickLvUpload] LV súbor sa neuložil do Dokumentov:", docRes.error);
       setKlient(k => k ? { ...k, lv_data: parsed } : k);
       setShowLVPrompt(false);
 
