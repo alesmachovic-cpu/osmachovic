@@ -116,3 +116,22 @@ Faktúry = 10r retencia (prebíja výmaz). Overiť že cascade delete klienta ne
 - Vytvoriť `memory/role-compliance.md` (playbook ho označuje ako mandatory, neexistuje).
 - Regression check na verejné tvrdenia (G6).
 - Cookie tracker audit check (G23).
+
+## RoPA audit nálezy (2026-06-07) — G8 dorobené, nové compliance medzery
+**G8 RoPA HOTOVÉ (návrh):** `security-audit/ropa-cl30.md` (čl. 30, 20 spracovateľských činností) +
+`security-audit/register-dpa.md` (čl. 28, register subprocesorov). Návrh — čaká revíziu CEO + právnika.
+
+Nové compliance medzery odhalené pri stavbe RoPA:
+- **G24 — Subprocesori chýbajú v zásadách sekcia 9:** OpenAI, Stripe, Twilio (SMS), ScrapingBee, (posúdiť) Nominatim/OSM sa reálne používajú, ale nie sú v privacy policy. **Doplnenie = 🔴 červený protokol (súhlas CEO).** Detail v register-dpa.md.
+- **G25 — Hlavná sprostredkovateľská zmluva Vianema↔Machovic (čl. 28) nie je doložená** — uzavrieť písomne, uložiť do `legal/dpa/`. (P0 pred ostrou prevádzkou.)
+- **G26 — čl. 14 pre tretie osoby:** spoluvlastníci z LV (kataster) + scrapovaní predajcovia (Monitor) sú spracúvaní bez ich vedomia — doložiť informačnú povinnosť/výnimku čl. 14 ods. 5.
+- **G27 — Obhliadkový list PDF tvrdí „súhlas so spracovaním"**, no základ je oprávnený záujem (čl. 6/1/f) — zavádzajúci právny titul, zosúladiť znenie. (Náberáky + Compliance.)
+- **G28 — Auto-vznik klientskej karty bez informovania** (kupujúci na obhliadke → záznam v klienti) — doplniť transparentnosť pri prvom spracovaní.
+- **G29 — Chýbajúce retenčné lehoty:** pricing_estimates, monitor_inzeraty, analyzy_trhu, kolizny_log, signature_otps, in-app notifikácie — doplniť do retention-policy + cleanup.
+- **G30 — AML retencia 5 r. vs dokumenty k nehnuteľnosti 7 r.** — overiť konzistenciu u právnika (súvisí F6/F14).
+
+> **Bezpečnostné nálezy z RoPA discovery → odovzdané MD/Bezpecnosti (NIE compliance okno):** rad
+> kandidátnych nechránených GET endpointov (faktury/pdf, obhliadky/pdf, objednavka-pdf, dodavatel,
+> google/*, parse-lv, pricing/estimate, okolie-analysis, naber-analyza, kolize, email/kolizia),
+> RLS USING(true) politiky (migr. 045/026/036), PII v logoch (google callback, calendar-sync).
+> Treba overiť (časť môže byť whitelisted/authed) v rámci kompletného skenu anonymných endpointov.
