@@ -74,9 +74,11 @@ export async function GET(request: NextRequest) {
   // (meno/telefón/lokalita v čase objednávky) → anonymizuj staršie ako retention.
   const { data: oldProdukcia } = await sb
     .from("produkcia_objednavky")
-    .select("id, snapshot_meno, snapshot_telefon, snapshot_lokalita")
+    .select("id, snapshot_meno, snapshot_telefon, snapshot_lokalita, details")
     .lt("created_at", cutoff);
-  const prodToAnon = (oldProdukcia ?? []).filter(p => p.snapshot_meno || p.snapshot_telefon || p.snapshot_lokalita);
+  const prodToAnon = (oldProdukcia ?? []).filter(p =>
+    p.snapshot_meno || p.snapshot_telefon || p.snapshot_lokalita ||
+    (p.details && typeof p.details === "object" && Object.keys(p.details as Record<string, unknown>).length > 0));
 
   // kolizny_log.poznamka je free-text (môže obsahovať meno/kontakt) → anonymizuj staré.
   const { data: oldKolizie } = await sb
@@ -177,6 +179,7 @@ export async function GET(request: NextRequest) {
     const prodIds = prodToAnon.map(p => p.id);
     const dProd = await sb.from("produkcia_objednavky").update({
       snapshot_meno: null, snapshot_telefon: null, snapshot_lokalita: null,
+      details: null, // Pravo (A) 2026-06-07: vynuluj celý details jsonb — PII v ownerContact/otherAgentName/notes/highlights, free-form → robustné len celé
     }).in("id", prodIds);
     if (dProd.error) errors.push(`produkcia: ${dProd.error.message}`);
     else {
