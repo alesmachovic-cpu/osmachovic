@@ -332,6 +332,7 @@ export default function KlientDetailPage() {
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [produkciaObjednavky, setProdukciaObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
+  const [obchod, setObchod] = useState<Record<string, unknown> | null>(null); // F-C: stav obchodu pre pipeline kroky 5-8
   const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "produkcia" | "obhliadky" | "dokumenty" | "historia" | "obchod">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
@@ -477,7 +478,7 @@ export default function KlientDetailPage() {
     setLoading(true);
 
     // Paralelné načítanie cez API routes (service_role, RLS-safe)
-    const [klientJson, naberyData, objednavkyData, inzeratyData, obhliadkyJson, docs, udalostiData, produkciaData, vzData] = await Promise.all([
+    const [klientJson, naberyData, objednavkyData, inzeratyData, obhliadkyJson, docs, udalostiData, produkciaData, vzData, obchodyData] = await Promise.all([
       fetch(`/api/klienti?id=${id}`).then(r => r.json()),
       fetch(`/api/nabery?klient_id=${id}`).then(r => r.json()),
       fetch(`/api/objednavky?klient_id=${id}`).then(r => r.json()),
@@ -487,6 +488,7 @@ export default function KlientDetailPage() {
       fetch(`/api/klient-udalosti?klient_id=${id}`).then(r => r.json()),
       fetch(`/api/produkcia-objednavky?klient_id=${id}`).then(r => r.json()),
       fetch(`/api/vyhradna-zmluva?klient_id=${id}`).then(r => r.ok ? r.json() : []),
+      fetch(`/api/obchody?klient_id=${id}`).then(r => r.ok ? r.json() : []), // F-C: stav obchodu
     ]);
 
     const klientData = klientJson?.klient ?? null;
@@ -502,6 +504,8 @@ export default function KlientDetailPage() {
     setObjednavky(objednavkyArr);
     setProdukciaObjednavky(produkciaArr);
     setInzeraty(inzeratyArr);
+    const obchodyArr = Array.isArray(obchodyData) ? obchodyData : [];
+    setObchod((obchodyArr[0] as Record<string, unknown>) ?? null); // F-C: najnovší obchod klienta
     const vzArr = Array.isArray(vzData) ? vzData : (vzData ? [vzData] : []);
     setVzPodpisana(vzArr.some((v: Record<string, unknown>) => !!v.podpisane_at));
 
@@ -897,6 +901,18 @@ export default function KlientDetailPage() {
     return 0;
   }
 
+  // F-C: stav obchodu → pipeline kroky 5-8 (Rezervácia/Podpis KZ/Vklad/Predaný).
+  // -1 = klient ešte nemá obchod (kroky 5-7 ostanú neaktívne, čo je správne).
+  function getObchodStep(): number {
+    if (!obchod) return -1;
+    const s = obchod.status as string;
+    if (s === "ukoncene") return 8;
+    if (s === "vklad") return 7;
+    if (s === "podpisane") return 6;
+    if (s === "v_procese" || s === "pred_podpisom_kz") return 5;
+    return -1;
+  }
+
   // Pri OBOJE klientovi vedie predaj `status` a kúpu samostatný `status_kupujuci`.
   // Pri čistých kupujúcich vedie `status` kupujúcu pipeline (status_kupujuci je NULL).
   // Pri predávajúcich/prenajímateľoch nemá kupujúca strana zmysel.
@@ -931,6 +947,7 @@ export default function KlientDetailPage() {
   const initials = klient.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
   const statusColor = STATUS_COLORS[klient.status] || "#6B7280";
   const workflowStep = getWorkflowStep();
+  const obchodStep = getObchodStep();
   const kupujuciStep = getKupujuciStep();
 
   // Rýchle nahratie LV priamo z banneru/promptu
@@ -1816,15 +1833,17 @@ export default function KlientDetailPage() {
                   {COMBINED_STEPS.map((step, i) => {
                     let isCompleted: boolean;
                     let isCurrent: boolean;
+                    // F-C: kroky 0-4 vedie workflowStep (kontakt..obhliadky), kroky 5-8 vedie stav obchodu.
                     if (i <= 3) {
-                      isCompleted = workflowStep > i;
-                      isCurrent = workflowStep === i;
-                    } else if (i === 8) {
-                      isCompleted = false;
-                      isCurrent = workflowStep >= 4;
+                      isCompleted = workflowStep > i || obchodStep >= 5; // beží obchod → predošlé kroky hotové
+                      isCurrent = workflowStep === i && obchodStep < 5;
+                    } else if (i === 4) {
+                      isCompleted = obchodStep >= 5;
+                      isCurrent = workflowStep === 3 && obchodStep < 5;
                     } else {
-                      isCompleted = false;
-                      isCurrent = workflowStep === 3 && i === 4;
+                      // 5 Rezervácia, 6 Podpis KZ, 7 Vklad, 8 Predaný
+                      isCompleted = obchodStep > i;
+                      isCurrent = obchodStep === i || (i === 8 && workflowStep >= 4);
                     }
                     const handler = STEP_HANDLERS[i];
                     const isClickable = handler !== null && !isCurrent;
