@@ -1009,5 +1009,78 @@ users|users_pkey
 vyhradne_zmluvy|vyhradne_zmluvy_pkey
 
 # ============================================================
-# Query C: pg_policies (RLS) — ČAKÁ na CEO výstup
+# Query C: pg_policies (RLS) — table|policy|roles|cmd|qual
 # ============================================================
+audit_log|audit_log_read_service|public|SELECT|(auth.role() = 'service_role'::text)
+audit_log|service_role_all_audit_log|service_role|ALL|true
+client_interactions|auth_read_interactions|authenticated|SELECT|true
+companies|companies_service_only|public|ALL|(auth.role() = 'service_role'::text)
+consents|anon_insert_consents|anon|INSERT|
+consents|auth_read_consents|authenticated|SELECT|true
+consents|service_all_consents|service_role|ALL|true
+dsr_requests|auth_insert_dsr|authenticated|INSERT|
+dsr_requests|auth_read_dsr|authenticated|SELECT|true
+dsr_requests|auth_update_dsr|authenticated|UPDATE|true
+dsr_requests|service_all_dsr|service_role|ALL|true
+faktura_polozky|service_role_all_faktura_polozky|service_role|ALL|true
+faktury|service_role_all_faktury|service_role|ALL|true
+firma_info|firma_info_select_public|public|SELECT|true
+firma_info|firma_info_update_auth|public|UPDATE|(auth.role() = 'authenticated'::text)
+google_tokens|service_role_all_google_tokens|service_role|ALL|true
+in_app_notifications|authenticated_read_in_app_notifications|authenticated|SELECT|true
+in_app_notifications|service_role_all_in_app_notifications|service_role|ALL|true
+klient_dokumenty|service_role_all_klient_dokumenty|service_role|ALL|true
+klient_udalosti|service_role_all_klient_udalosti|service_role|ALL|true
+klienti|authenticated_read_klienti|authenticated|SELECT|true
+klienti|service_role_all_klienti|service_role|ALL|true
+klienti_history|service_role_all_klienti_history|service_role|ALL|true
+kolizny_log|service_role_all_kolizny_log|service_role|ALL|true
+login_attempts|service_role_all_login_attempts|service_role|ALL|true
+logy|service_role_all_logy|service_role|ALL|true
+makler_provizie_pct|service_role_all_makler_provizie_pct|service_role|ALL|true
+makleri|authenticated_read_makleri|authenticated|SELECT|true
+makleri|service_role_all_makleri|service_role|ALL|true
+market_sentiments|auth_read_market_sentiments|authenticated|SELECT|true
+market_sentiments|service_role_all_market_sentiments|service_role|ALL|true
+monitor_filtre|authenticated_read_monitor_filtre|authenticated|SELECT|true
+monitor_filtre|service_role_all_monitor_filtre|service_role|ALL|true
+monitor_inzeraty|authenticated_read_monitor_inzeraty|authenticated|SELECT|true
+monitor_inzeraty|service_role_all_monitor_inzeraty|service_role|ALL|true
+monitor_inzeraty_disappearances|auth_read_monitor_disappearances|authenticated|SELECT|true
+monitor_inzeraty_disappearances|service_role_all_monitor_disap|service_role|ALL|true
+monitor_inzeraty_snapshots|service_role_all_monitor_snapshots|service_role|ALL|true
+monitor_notifikacie|service_role_all_monitor_notifikacie|service_role|ALL|true
+monitor_scrape_log|service_role_all_monitor_scrape_log|service_role|ALL|true
+motivation_signals|authenticated_read_motivation_signals|authenticated|SELECT|true
+motivation_signals|service_role_all_motivation_signals|service_role|ALL|true
+naberove_listy|authenticated_read_naberove_listy|authenticated|SELECT|true
+naberove_listy|service_role_all_naberove_listy|service_role|ALL|true
+nehnutelnosti|authenticated_read_nehnutelnosti|authenticated|SELECT|true
+nehnutelnosti|service_role_all_nehnutelnosti|service_role|ALL|true
+obchod_ulohy|auth_ulohy_delete|authenticated|DELETE|true
+obchod_ulohy|auth_ulohy_insert|authenticated|INSERT|
+obchod_ulohy|auth_ulohy_select|authenticated|SELECT|true
+obchod_ulohy|auth_ulohy_update|authenticated|UPDATE|true
+obchody|auth_obchody_delete|authenticated|DELETE|true
+obchody|auth_obchody_insert|authenticated|INSERT|
+obchody|auth_obchody_select|authenticated|SELECT|true
+obchody|auth_obchody_update|authenticated|UPDATE|true
+obhliadky|authenticated_read_obhliadky|authenticated|SELECT|true
+obhliadky|service_role_all_obhliadky|service_role|ALL|true
+objednavky|authenticated_read_objednavky|authenticated|SELECT|true
+objednavky|service_role_all_objednavky|service_role|ALL|true
+odberatelia|service_role_all_odberatelia|service_role|ALL|true
+password_reset_tokens|service_role_all_password_reset_tokens|service_role|ALL|true
+pravidelne_naklady|service_role_all_pravidelne_naklady|service_role|ALL|true
+prehlad_zaznamy|service_role_all_prehlad_zaznamy|service_role|ALL|true
+pricing_estimates|service_role_all_pricing_estimates|service_role|ALL|true
+property_stories|service_role_all_property_stories|service_role|ALL|true
+push_subscriptions|service_role_all_push_subscriptions|service_role|ALL|true
+rk_directory|authenticated_read_rk_directory|authenticated|SELECT|true
+rk_directory|service_role_all_rk_directory|service_role|ALL|true
+signature_otps|service_role_all_sig_otps|service_role|ALL|true
+ulohy|auth_all_ulohy|authenticated|ALL|true
+users|authenticated_read_users|authenticated|SELECT|true
+users|read_users_service|public|SELECT|(auth.role() = 'service_role'::text)
+users|service_role_all_users|service_role|ALL|true
+vyhradne_zmluvy|service_all_vyhradne|service_role|ALL|true
