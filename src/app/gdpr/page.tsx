@@ -8,7 +8,7 @@ export default async function GdprPage() {
         Zásady spracovania osobných údajov
       </h1>
       <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "24px" }}>
-        Posledná aktualizácia: 7. júna 2026 · Verzia v2.1
+        Posledná aktualizácia: 7. júna 2026 · Verzia v2.2
       </p>
 
       <Section title="1. Prevádzkovateľ">
@@ -114,6 +114,8 @@ export default async function GdprPage() {
             <Tr vals={["Resend Inc.", "USA", "EU-US Data Privacy Framework"]} />
             <Tr vals={["Google LLC", "USA", "EU-US DPF + SCC"]} />
             <Tr vals={["Anthropic PBC", "USA", "Štandardné zmluvné doložky (SCC)"]} />
+            <Tr vals={["OpenAI, L.L.C.", "USA", "EU-US DPF + SCC (len neosobné údaje — copywriting, analýza trhu)"]} />
+            <Tr vals={["OpenStreetMap Foundation (Nominatim)", "Veľká Británia", "Rozhodnutie o primeranosti (UK) — geokódovanie adries"]} />
           </tbody>
         </table>
       </Section>
@@ -158,6 +160,7 @@ export default async function GdprPage() {
           <li><strong>v1.0 (26. apríla 2026)</strong> — pôvodné znenie</li>
           <li><strong>v2.0 (13. mája 2026)</strong> — doplnenie identifikácie prevádzkovateľa, DPO, prenosov mimo EÚ, automatizovaného rozhodovania, AML sekcie, rozšírenie práv dotknutých osôb</li>
           <li><strong>v2.1 (7. júna 2026)</strong> — doplnenie právneho základu a doby uchovávania pre dokumenty k nehnuteľnosti (list vlastníctva, výpis z katastra) a zdroja údajov z verejného registra (kataster, čl. 14 GDPR)</li>
+          <li><strong>v2.2 (7. júna 2026)</strong> — doplnenie subprocesorov do prehľadu prenosov (sekcia 9): OpenAI (len neosobné údaje) a OpenStreetMap/Nominatim (geokódovanie adries)</li>
         </ul>
       </Section>
     </div>
