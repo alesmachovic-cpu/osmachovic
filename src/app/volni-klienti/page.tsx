@@ -184,9 +184,9 @@ export default function VolniKlientiPage() {
             Klienti ktorých si môže prevziať akýkoľvek maklér z kancelárie. Po prebratí sa štartuje 24h SLA.
           </p>
         </div>
-        {/* S7 follow-up: SLA cron je po fixe len pre admina/manažéra (backend requireUser+isManager).
-            Bežnému maklérovi tlačidlo skry, nech nekliká na niečo, čo mu vráti 403. */}
-        {user?.role !== "makler" && (
+        {/* S7 follow-up: backend cron pustí manuálny trigger len pre isManager = super_admin | majitel | manazer.
+            Ostatní (makler, admin, platform_admin) by dostali 403, tak button zobrazíme presne týmto trom rolám. */}
+        {(user?.role === "super_admin" || user?.role === "majitel" || user?.role === "manazer") && (
         <button
           onClick={runCron}
           disabled={running}
