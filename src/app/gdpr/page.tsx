@@ -8,7 +8,7 @@ export default async function GdprPage() {
         Zásady spracovania osobných údajov
       </h1>
       <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "24px" }}>
-        Posledná aktualizácia: 13. mája 2026 · Verzia v2.0
+        Posledná aktualizácia: 7. júna 2026 · Verzia v2.1
       </p>
 
       <Section title="1. Prevádzkovateľ">
@@ -40,12 +40,19 @@ export default async function GdprPage() {
           <li><strong>Elektronický podpis</strong> — obraz podpisu na obhliadkovom liste / náberáku</li>
           <li><strong>Audit metadáta</strong> — IP adresa, user-agent prehliadača, čas podpisu</li>
         </ul>
+        <p style={{ marginTop: "10px" }}>
+          <strong>Zdroj údajov:</strong> väčšinu údajov získavame priamo od Vás. Údaje z listu
+          vlastníctva a výpisov z katastra nehnuteľností získavame z verejného registra
+          (kataster, katasterportal.sk); tieto dokumenty môžu obsahovať aj údaje spoluvlastníkov
+          uvedených na liste vlastníctva (čl. 14 GDPR).
+        </p>
       </Section>
 
       <Section title="4. Účel a právny základ">
         <ul style={ulSt}>
           <li><strong>Sprostredkovanie predaja / prenájmu</strong> — plnenie zmluvy alebo predzmluvné kroky (čl. 6 ods. 1 písm. b GDPR).</li>
           <li><strong>Evidencia obhliadok</strong> — oprávnený záujem realitnej kancelárie (čl. 6 ods. 1 písm. f GDPR).</li>
+          <li><strong>Overenie vlastníctva a evidencia dokumentov k nehnuteľnosti</strong> (list vlastníctva, výpis z katastra) — plnenie zmluvy o sprostredkovaní (čl. 6 ods. 1 písm. b) a oprávnený záujem na previerke vlastníckych pomerov a obhajobe právnych nárokov, vrátane údajov spoluvlastníkov uvedených na liste vlastníctva (čl. 6 ods. 1 písm. f GDPR).</li>
           <li><strong>AML overenie totožnosti</strong> — zákonná povinnosť podľa zákona č. 297/2008 Z. z. (čl. 6 ods. 1 písm. c GDPR).</li>
           <li><strong>Účtovníctvo a daňové účely</strong> — zákonná povinnosť (čl. 6 ods. 1 písm. c GDPR).</li>
           <li><strong>Zasielanie obchodných ponúk</strong> — len so súhlasom klienta (čl. 6 ods. 1 písm. a GDPR). Súhlas možno kedykoľvek odvolať.</li>
@@ -76,6 +83,7 @@ export default async function GdprPage() {
         <ul style={ulSt}>
           <li>Obhliadkové listy: <strong>7 rokov</strong>, potom anonymizácia kontaktných údajov kupujúceho</li>
           <li>Náberové zmluvy a podpísané dokumenty: <strong>10 rokov</strong> (zákon o účtovníctve)</li>
+          <li>Dokumenty k nehnuteľnosti (list vlastníctva, výpis z katastra): <strong>7 rokov od poslednej aktivity klienta</strong>, resp. po dobu trvania obchodu (oprávnený záujem)</li>
           <li>Kontaktné údaje klientov: <strong>po dobu spolupráce a následne 7 rokov od poslednej aktivity</strong>, potom anonymizácia (oprávnený záujem — dlhý realitný cyklus)</li>
           <li>AML doklady: <strong>5 rokov</strong> od skončenia obchodného vzťahu</li>
           <li>Faktúry: <strong>10 rokov</strong> (zákon č. 431/2002 Z. z.)</li>
@@ -149,6 +157,7 @@ export default async function GdprPage() {
         <ul style={ulSt}>
           <li><strong>v1.0 (26. apríla 2026)</strong> — pôvodné znenie</li>
           <li><strong>v2.0 (13. mája 2026)</strong> — doplnenie identifikácie prevádzkovateľa, DPO, prenosov mimo EÚ, automatizovaného rozhodovania, AML sekcie, rozšírenie práv dotknutých osôb</li>
+          <li><strong>v2.1 (7. júna 2026)</strong> — doplnenie právneho základu a doby uchovávania pre dokumenty k nehnuteľnosti (list vlastníctva, výpis z katastra) a zdroja údajov z verejného registra (kataster, čl. 14 GDPR)</li>
         </ul>
       </Section>
     </div>

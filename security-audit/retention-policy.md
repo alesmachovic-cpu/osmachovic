@@ -14,6 +14,7 @@
 | **Kontakt klienta** (meno, tel., e-mail, lokalita) — bývalí/neaktívni | **7 rokov nečinnosti** | Oprávnený záujem (čl. 6 ods. 1 f) | Anonymizácia (cron F11) |
 | **Klienti s marketingovým súhlasom** | Kým trvá súhlas | Súhlas (čl. 6 ods. 1 a) | Po odvolaní → späť na oprávnený záujem, potom 7 r. |
 | **Obhliadkové listy** (kontakt kupujúceho, podpis) | **7 rokov** od vytvorenia | Oprávnený záujem (čl. 6 ods. 1 f) | Anonymizácia free-text PII (cron F11) |
+| **Dokumenty k nehnuteľnosti** (list vlastníctva, výpis z katastra) | **7 rokov** od poslednej aktivity klienta, resp. po dobu trvania obchodu | Plnenie zmluvy (čl. 6 ods. 1 b) + oprávnený záujem (čl. 6 ods. 1 f) | Zmazanie/anonymizácia (cron F11); `aml_retention=false` |
 | **AML dokumentácia** (kópia OP, identifikácia, overenie) | **5 rokov** po skončení vzťahu | Zákonná povinnosť (čl. 6 ods. 1 c) — § 20 zák. 297/2008 | Zmazanie (cron F11) |
 | **Faktúry + účtovné doklady** | **10 rokov** | Zákonná povinnosť — § 76 zák. 222/2004 (DPH), § 35 zák. 431/2002 | Anonymizované zostávajú, po 10 r. možno zmazať |
 | **Zmluvy (ÚZ/RZ/KZ)** | Po dobu premlčacích lehôt (spravidla do 10 r.) | Plnenie zmluvy + oprávnený záujem (uplatnenie/obhajoba nárokov) | Posúdiť individuálne |

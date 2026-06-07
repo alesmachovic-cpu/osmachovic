@@ -51,6 +51,13 @@ OTP + IP + timestamp = jednoduchý elektronický podpis (eIDAS čl. 3/10) — pl
 ### G8 — RoPA (záznamy o spracovateľských činnostiach, čl. 30) chýba
 Povinný interný register (účely, kategórie, príjemcovia, lehoty, prenosy). Stavebné bloky rozhádzané (retention, subprocesori) — skonsolidovať. **Zadanie (CEO/Compliance):** vytvoriť RoPA dokument.
 
+**📋 GO-LIVE CHECKLIST — feature „LV súbor do klient_dokumenty" (verdikt 2026-06-07, zelená):**
+- ✅ **PRIPRAVENÉ na dev (necommitnuté, čaká na go-live):**
+  - `src/app/gdpr/page.tsx` → **v2.1**: nový právny základ (sekcia 4, čl. 6/1/b+f vrátane spoluvlastníkov), doba uchovávania LV (sekcia 7), zdroj údajov z katastra (sekcia 3, čl. 14). Lint 0 chýb.
+  - `security-audit/retention-policy.md` → riadok „Dokumenty k nehnuteľnosti (LV/výpis z katastra) — 7 r., základ b+f, `aml_retention=false`".
+- ⏳ **Pri go-live ešte spraviť:** plný RoPA dokument (toto G8) — LV kategória tam patrí prirodzene; commit + deploy zásad v2.1 (legal text → vyžaduje finálne OK CEO).
+- Pozn.: teraz len test dáta → žiadna okamžitá povinnosť. Odovzdá sa do `plan-release.md`, keď ho MD vytvorí.
+
 ### G9 — Breach register (tabuľka) chýba ✅ OPRAVENÉ 2026-06-04
 **Hotové:** migr. 108 `breach_register` (čl. 33 ods. 5) + `/api/gdpr/breach` (admin POST/GET). Tabuľka otestovaná (insert/select/delete). Follow-up: admin UI na zobrazenie. RLS service-role only.
 Playbook existuje, ale evidencia incidentov (čl. 33 ods. 5) ako tabuľka nie. **Zadanie (DB):** tabuľka `breach_register` + určená zodpovedná osoba.
