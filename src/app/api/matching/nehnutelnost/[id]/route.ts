@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser } from "@/lib/auth/requireUser";
 import { vypocitajSkore } from "@/lib/matching";
 import type { ObjednavkaForMatch, NehnutelnostForMatch } from "@/lib/matching";
 
 export const runtime = "nodejs";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // 🔒 matching hotfix — zavrieť anonymný prístup (leak PII kupujúcich). Plný company scope ide vo veľkom release.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const { id } = await params;
   const sb = getSupabaseAdmin();
 

@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { requireUser } from "@/lib/auth/requireUser";
 import { vypocitajSkore } from "@/lib/matching";
 import type { ObjednavkaForMatch, NehnutelnostForMatch, KlientForMatch } from "@/lib/matching";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  // 🔒 matching hotfix — zavrieť anonymný prístup (leak PII). Plný company scope ide vo veľkom release.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const ids = (req.nextUrl.searchParams.get("objednavky") ?? "")
     .split(",").map(s => s.trim()).filter(Boolean);
   if (ids.length === 0) return NextResponse.json({});

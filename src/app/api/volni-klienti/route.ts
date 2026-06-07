@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
+import { getUserScope } from "@/lib/scope";
 
 export const runtime = "nodejs";
 
@@ -72,10 +73,21 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
+    const auth = await requireUser(request as NextRequest);
+    if (auth.error) return auth.error;
+    const scope = await getUserScope(auth.user.id);
+    if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
+
     const sb = getSupabaseAdmin();
     const body = await request.json();
     const { action, klient_id } = body;
     if (!klient_id) return NextResponse.json({ error: "Missing klient_id" }, { status: 400 });
+
+    // 🔒 S4 hotfix — klient musí patriť firme callera (inak anonym/cudzí prepriradí klienta).
+    const { data: klientCompany } = await sb.from("klienti").select("company_id").eq("id", klient_id).maybeSingle();
+    if (!klientCompany || (klientCompany.company_id !== scope.company_id && auth.user.role !== "platform_admin")) {
+      return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+    }
 
     if (action === "vratit") {
       // Pôvodný stav: zruš voľný flag, nastav status novy, makler_id ostáva
@@ -98,7 +110,7 @@ export async function POST(request: Request) {
         action: "vrateny_novy",
         from_makler_id: prevKlient?.makler_id || null,
         to_makler_id: prevKlient?.makler_id || null,
-        by_user_id: body.by_user_id || null,
+        by_user_id: auth.user.id,
         dovod: "Manuálne vrátený späť ako Nový",
       });
       return NextResponse.json({ success: true, message: "Klient vrátený ako Nový" });
@@ -107,6 +119,10 @@ export async function POST(request: Request) {
     if (action === "prebrat") {
       const newMaklerId = body.makler_id as string | null;
       if (!newMaklerId) return NextResponse.json({ error: "Missing makler_id" }, { status: 400 });
+      // 🔒 Maklér prebrať len PRE SEBA; admin/manažér môže priradiť inému.
+      if (!scope.isAdmin && newMaklerId !== scope.makler_id) {
+        return NextResponse.json({ error: "Môžeš prebrať len pre seba" }, { status: 403 });
+      }
       const { data: prevKlient } = await sb.from("klienti").select("makler_id").eq("id", klient_id).single();
       const { error } = await sb
         .from("klienti")
@@ -128,7 +144,7 @@ export async function POST(request: Request) {
         action: "prebraty",
         from_makler_id: prevKlient?.makler_id || null,
         to_makler_id: newMaklerId,
-        by_user_id: body.by_user_id || null,
+        by_user_id: auth.user.id,
         dovod: "Maklér prebral voľného klienta",
       });
       return NextResponse.json({ success: true, message: "Klient prebraný" });
