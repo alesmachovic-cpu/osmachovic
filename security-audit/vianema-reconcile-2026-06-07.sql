@@ -200,12 +200,15 @@ UPDATE public.objednavky o
 CREATE INDEX IF NOT EXISTS idx_2fa_challenges_challenge ON public.auth_2fa_challenges USING btree (challenge) WHERE (used_at IS NULL);
 CREATE INDEX IF NOT EXISTS idx_2fa_challenges_user_active ON public.auth_2fa_challenges USING btree (user_id, expires_at) WHERE (used_at IS NULL);
 CREATE INDEX IF NOT EXISTS idx_faktury_active ON public.faktury USING btree (user_id, datum_vystavenia DESC) WHERE (zrusena_at IS NULL);
--- ⛔ ODSTRÁNENÉ (MD/CEO 2026-06-08): uniq_faktury_company_cislo + uniq_faktury_company_vs.
+-- ⛔ ODSTRÁNENÉ — POTVRDENÉ FINÁLNE (MD + Pravo + CEO 2026-06-08): per-MAKLÉR číslovanie.
+--    uniq_faktury_company_cislo + uniq_faktury_company_vs sa NEPRIDÁVAJÚ.
 --    Číslovanie faktúr je PER-MAKLÉR (každý maklér = vlastný dodávateľ, vlastné IČO, vlastný
---    rad), NIE per-firma. Per-company unique by ZLÚČIL samostatné maklérske rady → 3 makléri
---    s FA20260001 sú LEGITÍMNI (pre-flight "duplicity" boli falošne pozitívne, merané per-company).
---    Prod má správny faktury_user_cislo_uniq (user_id, cislo_faktury) — ZACHOVÁVAME ho, per-company
---    NEpridávame. Dev migr. 075 (per-company prechod) = latentná chyba → fix pre Financie.
+--    rad), NIE per-firma. Pravo pôvodne navrhlo per-firma, ale korigoval (kanonický scope =
+--    IČO dodávateľa; user_id je proxy kým 1 maklér = 1 dodávateľ). Per-company unique by ZLÚČIL
+--    samostatné maklérske rady → 3 makléri s FA20260001 sú LEGITÍMNI (pre-flight "duplicity"
+--    boli falošne pozitívne, merané per-company; per-user/dodávateľ = 0).
+--    Prod má správny faktury_user_cislo_uniq (user_id, cislo_faktury) — ZACHOVÁVAME ho.
+--    Žiadne prečíslovanie, žiadne mazanie faktúr. Dev migr. 075 (per-company) = regresia → Financie.
 CREATE UNIQUE INDEX IF NOT EXISTS klient_dokumenty_klient_name_size_uniq ON public.klient_dokumenty USING btree (klient_id, name, COALESCE(size, 0));
 CREATE INDEX IF NOT EXISTS klient_dokumenty_retention_do_idx ON public.klient_dokumenty USING btree (retention_do) WHERE (retention_do IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_klienti_company_makler ON public.klienti USING btree (company_id, makler_id);
