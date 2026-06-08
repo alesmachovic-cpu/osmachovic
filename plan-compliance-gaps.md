@@ -129,6 +129,7 @@ Nové compliance medzery odhalené pri stavbe RoPA:
 - **G28 — Auto-vznik klientskej karty bez informovania** (kupujúci na obhliadke → záznam v klienti) — doplniť transparentnosť pri prvom spracovaní.
 - **G29 — Chýbajúce retenčné lehoty:** pricing_estimates, monitor_inzeraty, analyzy_trhu, kolizny_log, signature_otps, in-app notifikácie — doplniť do retention-policy + cleanup.
 - **G30 — AML retencia 5 r. vs dokumenty k nehnuteľnosti 7 r.** — overiť konzistenciu u právnika (súvisí F6/F14).
+- **G31 — 🔴 Číslovanie faktúr nie je unique per firma (duplicitné poradové čísla):** unique index je `(user_id, cislo_faktury)` (migr. 032, per maklér), nie `(company_id, cislo_faktury)` → 3 makléri v tej istej firme vystavili 3× FA20260001 (zachytené pre-flight na vianeme, test dáta). Pri reálnych faktúrach = porušenie § 74 ods.1/b zák. 222/2004 + § 8/10 zák. 431/2002. **Vlastník: Financie okno.** Spec: unique per company + atomické generovanie (sekvencia/FOR UPDATE/retry 23505) + sekvenčné bez duplicít + 1 rad/firma/rok + nemenné po vystavení (oprava len storno). MUSÍ byť pred reálnymi faktúrami. (kód faktury/route.ts r.111 komentár nesprávne tvrdí company-level constraint.)
 
 > **Bezpečnostné nálezy z RoPA discovery → odovzdané MD/Bezpecnosti (NIE compliance okno):** rad
 > kandidátnych nechránených GET endpointov (faktury/pdf, obhliadky/pdf, objednavka-pdf, dodavatel,
