@@ -12,7 +12,7 @@
 --
 -- OBSAH: 1) 6 chýbajúcich tabuliek (plné DDL + RLS z dev migrácií)
 --        2) 36 chýbajúcich stĺpcov (vrát. backfill objednavky.company_id)
---        3) 23 chýbajúcich indexov
+--        3) 21 chýbajúcich indexov
 --        4) RLS zladenie existujúcich tabuliek (service_role doplnky)
 --        5) 🔴 SAMOSTATNÝ release item: cross-tenant company_id RLS (NIE v tomto skripte)
 -- ════════════════════════════════════════════════════════════════════════════
@@ -195,13 +195,17 @@ UPDATE public.objednavky o
 -- ALTER TABLE public.objednavky ALTER COLUMN company_id SET NOT NULL;
 --     (Ak ostali NULL → najprv vyrieš osirelé objednávky s MD/Klienti oknom.)
 
--- ════════ 3) CHÝBAJÚCE INDEXY (23) — na existujúcich tabuľkách ════════
+-- ════════ 3) CHÝBAJÚCE INDEXY (21) — na existujúcich tabuľkách ════════
 
 CREATE INDEX IF NOT EXISTS idx_2fa_challenges_challenge ON public.auth_2fa_challenges USING btree (challenge) WHERE (used_at IS NULL);
 CREATE INDEX IF NOT EXISTS idx_2fa_challenges_user_active ON public.auth_2fa_challenges USING btree (user_id, expires_at) WHERE (used_at IS NULL);
 CREATE INDEX IF NOT EXISTS idx_faktury_active ON public.faktury USING btree (user_id, datum_vystavenia DESC) WHERE (zrusena_at IS NULL);
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_faktury_company_cislo ON public.faktury USING btree (company_id, cislo_faktury) WHERE (cislo_faktury IS NOT NULL);
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_faktury_company_vs ON public.faktury USING btree (company_id, variabilny_symbol) WHERE (variabilny_symbol IS NOT NULL);
+-- ⛔ ODSTRÁNENÉ (MD/CEO 2026-06-08): uniq_faktury_company_cislo + uniq_faktury_company_vs.
+--    Číslovanie faktúr je PER-MAKLÉR (každý maklér = vlastný dodávateľ, vlastné IČO, vlastný
+--    rad), NIE per-firma. Per-company unique by ZLÚČIL samostatné maklérske rady → 3 makléri
+--    s FA20260001 sú LEGITÍMNI (pre-flight "duplicity" boli falošne pozitívne, merané per-company).
+--    Prod má správny faktury_user_cislo_uniq (user_id, cislo_faktury) — ZACHOVÁVAME ho, per-company
+--    NEpridávame. Dev migr. 075 (per-company prechod) = latentná chyba → fix pre Financie.
 CREATE UNIQUE INDEX IF NOT EXISTS klient_dokumenty_klient_name_size_uniq ON public.klient_dokumenty USING btree (klient_id, name, COALESCE(size, 0));
 CREATE INDEX IF NOT EXISTS klient_dokumenty_retention_do_idx ON public.klient_dokumenty USING btree (retention_do) WHERE (retention_do IS NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_klienti_company_makler ON public.klienti USING btree (company_id, makler_id);
@@ -269,22 +273,17 @@ COMMIT;
 -- ════════════════════════════════════════════════════════════════════════════
 -- PRE-FLIGHT (read-only) — SPUSTI SAMOSTATNE PRED skriptom (na scratch ALEBO prod).
 -- Overuje riziká ktoré by skript inak nechali padnúť. Nič nemení (len SELECT).
--- MD flag: 3 UNIQUE indexy padnú ak existujú duplicity; objednavky.company_id
--- SET NOT NULL padne ak po backfille ostanú NULL. Ak je akýkoľvek počet > 0 →
--- NErieš silou, nahlás MD, najprv sa vyriešia dáta.
+-- Zostali 2 kontroly: klient_dokumenty unique + objednavky backfill úplnosť.
+-- (Faktúrne per-company dup kontroly ODSTRÁNENÉ — číslovanie je per-maklér, nie per-firma;
+--  per-company unique indexy sme zo skriptu vyňali, pozri sekciu 3.)
 -- ────────────────────────────────────────────────────────────────────────────
--- SELECT 'dup_faktury_cislo' AS kontrola, COUNT(*) AS konflikty FROM (
---   SELECT company_id, cislo_faktury FROM faktury WHERE cislo_faktury IS NOT NULL
---   GROUP BY company_id, cislo_faktury HAVING COUNT(*) > 1) x
--- UNION ALL SELECT 'dup_faktury_vs', COUNT(*) FROM (
---   SELECT company_id, variabilny_symbol FROM faktury WHERE variabilny_symbol IS NOT NULL
---   GROUP BY company_id, variabilny_symbol HAVING COUNT(*) > 1) x
--- UNION ALL SELECT 'dup_klient_dok', COUNT(*) FROM (
+-- SELECT 'dup_klient_dok' AS kontrola, COUNT(*) AS konflikty FROM (
 --   SELECT klient_id, name, COALESCE(size,0) FROM klient_dokumenty
 --   GROUP BY klient_id, name, COALESCE(size,0) HAVING COUNT(*) > 1) x
 -- UNION ALL SELECT 'objednavky_unbackfillable', COUNT(*) FROM objednavky o
 --   WHERE NOT EXISTS (SELECT 1 FROM klienti k WHERE k.id = o.klient_id)
 -- UNION ALL SELECT 'objednavky_total', COUNT(*) FROM objednavky;
 -- ────────────────────────────────────────────────────────────────────────────
--- OČAKÁVANÉ: prvé 4 riadky = 0. Ak nie → STOP, nahlás MD (dáta sa riešia pred releasom).
+-- OČAKÁVANÉ: dup_klient_dok = 0 a objednavky_unbackfillable = 0. Ak nie → STOP, nahlás MD.
+-- (Prod re-run 2026-06-08: dup_klient_dok=0, objednavky_unbackfillable=0 ✓ — dáta čisté.)
 -- ════════════════════════════════════════════════════════════════════════════
