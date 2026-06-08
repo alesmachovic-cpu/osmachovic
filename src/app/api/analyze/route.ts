@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
 
 /* ── Trhové benchmarky (€/m²) ── */
 const BENCHMARKS: Record<string, number> = {
@@ -206,6 +207,11 @@ Vráť JSON:
 
 /* ══════ MAIN ══════ */
 export async function POST(req: NextRequest) {
+  // Cost-abuse ochrana: /api/analyze páli platené AI volania (Gemini) →
+  // bez prihlásenia by anonym mohol vyčerpať kvótu. requireUser ako prvý krok.
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
   const body = await req.json();
   const { action, items, item } = body;
 
