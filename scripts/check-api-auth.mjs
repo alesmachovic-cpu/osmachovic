@@ -42,6 +42,18 @@ const TIER1_MUST_HAVE_AUTH = new Set([
   "src/app/api/ulohy/route.ts",
   "src/app/api/klient-dokumenty/route.ts",
   "src/app/api/obchody/route.ts",
+  // 2026-06-06 — objednavky kupujúcich (PII): GET bol verejný (P0 leak).
+  "src/app/api/objednavky/route.ts",
+  // 2026-06-06 — matching routes: GET bez auth + bez company_id scope cez service role
+  //   → cross-tenant leak mien/telefónov kupujúcich aj predávajúcich (P0 leak).
+  "src/app/api/matching/objednavka/[id]/route.ts",
+  "src/app/api/matching/nehnutelnost/[id]/route.ts",
+  "src/app/api/matching/summary/route.ts",
+  // 2026-06-07 — Klienti/Obchody audit (S3/S4/S6): GET/POST bez auth alebo bez company scope.
+  "src/app/api/klient-udalosti/route.ts",
+  "src/app/api/volni-klienti/route.ts",
+  "src/app/api/obchody/[id]/ulohy/route.ts",
+  "src/app/api/obchody/[id]/ulohy/[ulohaId]/route.ts",
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -62,6 +74,8 @@ const PUBLIC_WHITELIST = new Set([
   "src/app/api/auth/register/route.ts",          // registrácia nového usera
 
   // Verejné utility endpointy
+  "src/app/api/consent-confirm/route.ts",        // klient klikne "chcem zostať" z e-mailu — HMAC token, bez session
+  "src/app/api/consent-unsubscribe/route.ts",    // one-click unsubscribe z e-mailu — HMAC token, bez session
   "src/app/api/locale/route.ts",                 // i18n preferences (cookie)
   "src/app/api/weather/route.ts",                // public weather proxy
   "src/app/api/ico-lookup/route.ts",             // FinStat lookup, public
@@ -104,8 +118,18 @@ function findHandlerIssues(src, filePath) {
     const match = re.exec(src);
     if (!match) continue;
 
-    // Extract handler body
-    let i = src.indexOf("{", match.index);
+    // Najprv preskoč PARAM LIST (môže obsahovať destrukturalizáciu `{ params }`,
+    // inak by sme telo funkcie hľadali od nesprávneho `{`). Skoč za zatváraciu `)`.
+    const paren = src.indexOf("(", match.index);
+    let pdepth = 1, p = paren + 1;
+    while (p < src.length && pdepth > 0) {
+      if (src[p] === "(") pdepth++;
+      else if (src[p] === ")") pdepth--;
+      p++;
+    }
+
+    // Extract handler body — prvé `{` AŽ ZA zatváracou `)` param listu.
+    let i = src.indexOf("{", p);
     if (i < 0) continue;
     let depth = 1;
     let j = i + 1;

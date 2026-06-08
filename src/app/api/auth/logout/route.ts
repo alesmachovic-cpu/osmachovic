@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { buildLogoutCookieValue } from "@/lib/auth/session";
+import { buildLogoutCookieValue, buildTwoFactorCookieValue } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
 
 /** POST /api/auth/logout — vymaže crm_session cookie. */
 export async function POST() {
   const res = NextResponse.json({ ok: true });
-  res.headers.set("Set-Cookie", buildLogoutCookieValue());
+  res.headers.append("Set-Cookie", buildLogoutCookieValue());
+  res.headers.append("Set-Cookie", buildTwoFactorCookieValue(false));
   return res;
 }

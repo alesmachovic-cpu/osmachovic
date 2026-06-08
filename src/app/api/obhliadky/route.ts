@@ -4,6 +4,7 @@ import { getUserScope, canEditRecord } from "@/lib/scope";
 import { requireUser } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
 import { sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
+import { touchEngagement } from "@/lib/engagement";
 
 export const runtime = "nodejs";
 
@@ -143,6 +144,10 @@ export async function POST(req: NextRequest) {
   const safePayload = sanitizeFields(payload as Record<string, unknown>, [...SANITIZE_FIELDS]);
   const { data, error } = await sb.from("obhliadky").insert(safePayload).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Nová obhliadka = živý vzťah → reset retention lehoty (F11) pre účastníkov.
+  await touchEngagement(body.predavajuci_klient_id as string | null | undefined);
+  await touchEngagement(body.kupujuci_klient_id as string | null | undefined);
 
   // 2) Auto-upsert kupujúci klient (best-effort, nezhasne obhliadku ak zlyhá)
   let kupujuciInfo: { klient_id: string; created: boolean; updated: boolean } | null = null;

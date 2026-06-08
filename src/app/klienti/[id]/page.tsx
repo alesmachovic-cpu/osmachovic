@@ -23,6 +23,8 @@ import { ProviziaMiniCalc } from "@/components/calc/ProviziaMiniCalc";
 import { ClientInsightPanel } from "@/components/client-insight/ClientInsightPanel";
 import ProdukciaTab from "@/components/produkcia/ProdukciaTab";
 import ObchodTab from "@/components/Obchod/ObchodTab";
+import PropertyPickerSearch from "@/components/PropertyPickerSearch";
+import HypoPoradcaPicker from "@/components/HypoPoradcaPicker";
 
 // ── LV sekcia s uploadom a parsovaním ──
 function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = "", klientLokalita = "", onFixName, onFixLocation, userId }: {
@@ -62,11 +64,13 @@ function LVSection({ klientId, lvData, onParsed, canEdit = true, klientMeno = ""
       if (!res.ok) throw new Error(await res.text());
       const parsed = await res.json();
 
-      // Ulož do klienta cez API endpoint (ownership check)
+      // Ulož parsované dáta do klienta cez API endpoint (ownership check)
       await klientUpdate(userId, klientId, { lv_data: parsed });
-      console.log("[LVSection] LV uložené do DB, volám onParsed...");
+      // Ulož aj samotný LV súbor do Dokumentov (šifrované, aml_retention=false default).
+      // Právny základ: plnenie zmluvy + oprávnený záujem (verdikt Pravo 2026-06-07).
+      const docRes = await saveKlientDokument({ klient_id: klientId, name: file.name, type: "List vlastníctva", source: "naber", mime: file.type, data_base64: base64 });
+      if (docRes.error) console.warn("[LVSection] LV súbor sa neuložil do Dokumentov:", docRes.error);
       onParsed(parsed);
-      console.log("[LVSection] onParsed hotové, rodičovský modal by mal byť otvorený");
     } catch (e) {
       setErr("Chyba pri analýze LV: " + (e as Error).message.slice(0, 120));
     } finally {
@@ -330,6 +334,7 @@ export default function KlientDetailPage() {
   const [objednavky, setObjednavky] = useState<Record<string, unknown>[]>([]);
   const [produkciaObjednavky, setProdukciaObjednavky] = useState<Record<string, unknown>[]>([]);
   const [inzeraty, setInzeraty] = useState<Record<string, unknown>[]>([]);
+  const [obchod, setObchod] = useState<Record<string, unknown> | null>(null); // F-C: stav obchodu pre pipeline kroky 5-8
   const [activeTab, setActiveTab] = useState<"timeline" | "nehnutelnosti" | "objednavky" | "produkcia" | "obhliadky" | "dokumenty" | "historia" | "obchod">("timeline");
   const [klientDokumenty, setKlientDokumenty] = useState<KlientDokument[]>([]);
   const [obhliadky, setObhliadky] = useState<Record<string, unknown>[]>([]);
@@ -475,7 +480,7 @@ export default function KlientDetailPage() {
     setLoading(true);
 
     // Paralelné načítanie cez API routes (service_role, RLS-safe)
-    const [klientJson, naberyData, objednavkyData, inzeratyData, obhliadkyJson, docs, udalostiData, produkciaData, vzData] = await Promise.all([
+    const [klientJson, naberyData, objednavkyData, inzeratyData, obhliadkyJson, docs, udalostiData, produkciaData, vzData, obchodyData] = await Promise.all([
       fetch(`/api/klienti?id=${id}`).then(r => r.json()),
       fetch(`/api/nabery?klient_id=${id}`).then(r => r.json()),
       fetch(`/api/objednavky?klient_id=${id}`).then(r => r.json()),
@@ -485,6 +490,7 @@ export default function KlientDetailPage() {
       fetch(`/api/klient-udalosti?klient_id=${id}`).then(r => r.json()),
       fetch(`/api/produkcia-objednavky?klient_id=${id}`).then(r => r.json()),
       fetch(`/api/vyhradna-zmluva?klient_id=${id}`).then(r => r.ok ? r.json() : []),
+      fetch(`/api/obchody?klient_id=${id}`).then(r => r.ok ? r.json() : []), // F-C: stav obchodu
     ]);
 
     const klientData = klientJson?.klient ?? null;
@@ -500,6 +506,8 @@ export default function KlientDetailPage() {
     setObjednavky(objednavkyArr);
     setProdukciaObjednavky(produkciaArr);
     setInzeraty(inzeratyArr);
+    const obchodyArr = Array.isArray(obchodyData) ? obchodyData : [];
+    setObchod((obchodyArr[0] as Record<string, unknown>) ?? null); // F-C: najnovší obchod klienta
     const vzArr = Array.isArray(vzData) ? vzData : (vzData ? [vzData] : []);
     setVzPodpisana(vzArr.some((v: Record<string, unknown>) => !!v.podpisane_at));
 
@@ -536,8 +544,8 @@ export default function KlientDetailPage() {
       });
     }
 
-    // Nábery
-    naberyArr.forEach((n: Record<string, unknown>) => {
+    // Nábery — NIE pre čistého kupujúceho (ten náberák nemá; konzistentné s isCistyKupujuci v UI)
+    if (klientData?.typ !== "kupujuci") naberyArr.forEach((n: Record<string, unknown>) => {
       events.push({
         id: `naber-${n.id}`,
         type: "naber",
@@ -566,8 +574,8 @@ export default function KlientDetailPage() {
       });
     });
 
-    // Nehnuteľnosti
-    inzeratyArr.forEach((n: Record<string, unknown>) => {
+    // Nehnuteľnosti — NIE pre čistého kupujúceho (rovnaký vzor ako náberák vyššie)
+    if (klientData?.typ !== "kupujuci") inzeratyArr.forEach((n: Record<string, unknown>) => {
       const nStatus = String(n.status || "koncept");
       const nAddr = String(n.obec || n.ulica || "bez adresy");
       const nTitle = nStatus === "aktivny"
@@ -707,6 +715,27 @@ export default function KlientDetailPage() {
   }
 
   // Status change handler s automatickým workflow
+  // Pre OBOJE klientov — zmena status_kupujuci je čisto data update,
+  // bez calendar/náber side-effectov (tie patria predávajúcej strane).
+  async function handleKupujuciStatusChange(newStatus: string) {
+    if (!klient) return;
+    if (newStatus === "nabrany") return;
+    const oldStatus = klient.status_kupujuci || null;
+    if (user?.id) await klientUpdate(user.id, klient.id, { status_kupujuci: newStatus });
+    try {
+      await fetch("/api/klient-udalosti", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          klient_id: klient.id,
+          typ: "status_zmena",
+          popis: `[Kúpa] ${STATUS_LABELS[oldStatus as keyof typeof STATUS_LABELS] || oldStatus || "—"} → ${STATUS_LABELS[newStatus as keyof typeof STATUS_LABELS] || newStatus}`,
+          autor: user?.id || null,
+        }),
+      });
+    } catch { /* neblokuj */ }
+    loadAll();
+  }
+
   async function handleStatusChange(newStatus: string) {
     if (!klient) return;
     // nabrany can only be set automatically via náberový list
@@ -717,17 +746,9 @@ export default function KlientDetailPage() {
     ) {
       setPendingStatus(newStatus);
       setNaberMiesto(klient.lokalita || "");
-      // Pre-fill ulica/číslo z poznámky ak existuje
-      const addrMatch = klient.poznamka?.match(/Adresa:\s*(.+?)(?:,|\n|$)/);
-      if (addrMatch) {
-        const parts = addrMatch[1].trim().split(/\s+/);
-        const cislo = parts.pop() || "";
-        setNaberUlica(parts.join(" "));
-        setNaberCislo(/^\d/.test(cislo) ? cislo : "");
-        if (!/^\d/.test(cislo)) setNaberUlica(addrMatch[1].trim());
-      } else {
-        setNaberUlica(""); setNaberCislo("");
-      }
+      // Ulicu/číslo necháme PRÁZDNE — maklér ich vyplní ručne. Pre-fill z poznámky
+      // ("Adresa: …") ťahal do poľa Ulica mestskú časť/lokalitu a mýlil maklérov.
+      setNaberUlica(""); setNaberCislo("");
       setNaberAddrError("");
       setShowDatePicker(true);
       return;
@@ -867,17 +888,45 @@ export default function KlientDetailPage() {
   function getWorkflowStep(): number {
     if (!klient) return 0;
     if (klient.status === "uzavrety") return 4;
-    if (inzeraty.length > 0 || (klient.status as string) === "inzerovany") return 3;
+    // F-B: ráta len AKTÍVNE inzeráty (nie archivované/predané) — inak pipeline klamala
+    if (inzeraty.some(i => { const s = (i as Record<string, unknown>).status; return s !== "archivovany" && s !== "predany"; }) || (klient.status as string) === "inzerovany") return 3;
     if (klient.status === "nabrany" || nabery.length > 0) return 2;
     if (klient.status === "dohodnuty_naber") return 1;
     return 0;
   }
 
+  // F-C: stav obchodu → pipeline kroky 5-8 (Rezervácia/Podpis KZ/Vklad/Predaný).
+  // -1 = klient ešte nemá obchod (kroky 5-7 ostanú neaktívne, čo je správne).
+  function getObchodStep(): number {
+    if (!obchod) return -1;
+    const s = obchod.status as string;
+    if (s === "ukoncene") return 8;
+    if (s === "vklad") return 7;
+    if (s === "podpisane") return 6;
+    if (s === "v_procese" || s === "pred_podpisom_kz") return 5;
+    return -1;
+  }
+
+  // Pri OBOJE klientovi vedie predaj `status` a kúpu samostatný `status_kupujuci`.
+  // Pri čistých kupujúcich vedie `status` kupujúcu pipeline (status_kupujuci je NULL).
+  // Pri predávajúcich/prenajímateľoch nemá kupujúca strana zmysel.
+  function kupujuciStatus(): string | null {
+    if (!klient) return null;
+    if (klient.typ === "kupujuci") return klient.status;
+    if (klient.typ === "oboje") return klient.status_kupujuci || null;
+    return null;
+  }
+  function predavajuciStatus(): string | null {
+    if (!klient) return null;
+    if (klient.typ === "kupujuci") return null;
+    return klient.status;
+  }
+
   // Kupujuci workflow (F1 plan-kupujuci, per Aleš 2026-05-23)
-  // Mapuje klient.status na pozíciu v 8-krokovej kupujúcej pipeline (0-7).
+  // Mapuje aktuálny kupujúci status na pozíciu v 8-krokovej pipeline (0-7).
   function getKupujuciStep(): number {
-    if (!klient) return 0;
-    const s = klient.status as string;
+    const s = kupujuciStatus();
+    if (!s) return 0;
     if (s === "uz_kupil") return 7;
     if (s === "podpis_kz") return 6;
     if (s === "rezervacia") return 5;
@@ -892,6 +941,7 @@ export default function KlientDetailPage() {
   const initials = klient.meno.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
   const statusColor = STATUS_COLORS[klient.status] || "#6B7280";
   const workflowStep = getWorkflowStep();
+  const obchodStep = getObchodStep();
   const kupujuciStep = getKupujuciStep();
 
   // Rýchle nahratie LV priamo z banneru/promptu
@@ -916,6 +966,9 @@ export default function KlientDetailPage() {
       if (!res.ok) throw new Error(await res.text());
       const parsed = await res.json();
       if (user?.id) await klientUpdate(user.id, klient.id, { lv_data: parsed });
+      // Ulož aj samotný LV súbor do Dokumentov (šifrované, aml_retention=false default) — verdikt Pravo 2026-06-07
+      const docRes = await saveKlientDokument({ klient_id: klient.id, name: file.name, type: "List vlastníctva", source: "naber", mime: file.type, data_base64: base64 });
+      if (docRes.error) console.warn("[handleQuickLvUpload] LV súbor sa neuložil do Dokumentov:", docRes.error);
       setKlient(k => k ? { ...k, lv_data: parsed } : k);
       setShowLVPrompt(false);
 
@@ -1148,8 +1201,10 @@ export default function KlientDetailPage() {
             {klient.typ === "oboje" && (
               <>
                 <button disabled={!isOwner} onClick={async () => {
-                  if (!confirm(`Nechať ${klient.meno} iba ako kupujúceho?\n\nZmizne zo sekcie Klienti.`)) return;
-                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "kupujuci" });
+                  const visiace = nabery.length + inzeraty.length;
+                  if (!confirm(`Nechať ${klient.meno} iba ako kupujúceho?\n\nZmizne zo sekcie Klienti (predávajúci).${visiace > 0 ? `\n\n⚠️ Má ${visiace} náberákov/nehnuteľností — ostanú v DB, len skryté.` : ""}`)) return;
+                  // F-D: prenes kupujúci stav do `status`, vyčisti predajný `status_kupujuci` (inak sa stavy zlejú / skorumpujú)
+                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "kupujuci", status: klient.status_kupujuci || "novy_kontakt", status_kupujuci: null });
                   loadAll();
                 }} style={{
                   padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
@@ -1157,8 +1212,9 @@ export default function KlientDetailPage() {
                   fontWeight: "600", cursor: "pointer", ...lockSt,
                 }}>iba kupujúci</button>
                 <button disabled={!isOwner} onClick={async () => {
-                  if (!confirm(`Nechať ${klient.meno} iba ako predávajúceho?\n\nZmizne zo sekcie Kupujúci.`)) return;
-                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "predavajuci" });
+                  if (!confirm(`Nechať ${klient.meno} iba ako predávajúceho?\n\nZmizne zo sekcie Kupujúci.${objednavky.length > 0 ? `\n\n⚠️ Má ${objednavky.length} objednávok — ostanú v DB, len skryté.` : ""}`)) return;
+                  // F-D: vyčisti kupujúci `status_kupujuci` (predaj vedie `status`) — inak ostane mŕtve pole
+                  if (user?.id) await klientUpdate(user.id, klient.id, { typ: "predavajuci", status_kupujuci: null });
                   loadAll();
                 }} style={{
                   padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
@@ -1215,19 +1271,22 @@ export default function KlientDetailPage() {
                 // 🔒 M1: re-auth modal namiesto blocking confirm()
                 const proof = await reAuth.prompt({
                   title: `Anonymizovať klienta ${klient.meno || ""}?`,
-                  description: "Meno, telefón, email a poznámky budú nenávratne zmazané (GDPR čl. 17). Náberáky a obhliadky zostanú evidované bez identifikovateľných údajov. Operácia je nevratná — pre potvrdenie zadaj heslo alebo 2FA kód.",
+                  description: "GDPR výmaz (čl. 17): osobné údaje, dokumenty, náberáky, obhliadky a história sa nenávratne zmažú. AML doklady (kópia OP, identifikácia) ostávajú 5 rokov podľa zákona. Faktúry ostávajú anonymizované. Drive priečinok treba zmazať ručne. Operácia je nevratná — potvrď heslom alebo 2FA kódom.",
                   dangerLabel: "Anonymizovať",
                 });
                 if (!proof) return;
-                const r = await fetch("/api/klienti/anonymize", {
+                // MD cesta A (2026-06-07): bezpečný endpoint — rieši AML retenciu + company scope + audit.
+                const r = await fetch("/api/gdpr/erasure", {
                   method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id: klient.id, ...proof }),
+                  body: JSON.stringify({ klient_id: klient.id, ...proof }),
                 });
+                const resBody = await r.json().catch(() => ({}));
                 if (!r.ok) {
-                  const body = await r.json().catch(() => ({}));
-                  alert(body.error || "Chyba pri anonymizácii");
+                  alert(resBody.error || "Chyba pri anonymizácii");
                   return;
                 }
+                // Erasure vracia pripomienku na ručné zmazanie Drive priečinka (OP/LV scany)
+                if (resBody.message) alert(resBody.message);
                 // 🔥 #5 fix (2026-05-21): namiesto window.location.reload() (ktorý
                 // spôsobil flicker na LoginScreen počas re-bootstrap session),
                 // updateneme klient state in-place + reloadneme timeline.
@@ -1248,6 +1307,25 @@ export default function KlientDetailPage() {
                 Anonymizovať (GDPR)
               </button>
             )}
+            <button onClick={async () => {
+              // F4: export osobných údajov klienta-subjektu (GDPR čl. 15 + 20).
+              try {
+                const r = await fetch(`/api/gdpr/export?klient_id=${klient.id}`);
+                if (!r.ok) { const b = await r.json().catch(() => ({})); alert(b.error || "Export zlyhal"); return; }
+                const data = await r.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `gdpr-export-${klient.id}.json`; a.click();
+                URL.revokeObjectURL(url);
+              } catch { alert("Export zlyhal"); }
+            }} style={{
+              padding: "9px 14px", background: "var(--bg-surface)", color: "var(--text-primary)",
+              border: "1px solid var(--border)", borderRadius: "10px", fontSize: "12px",
+              fontWeight: "600", cursor: "pointer",
+            }} title="Export osobných údajov klienta podľa GDPR čl. 15 a 20">
+              Export GDPR údajov
+            </button>
             {(klient as { anonymized_at?: string | null }).anonymized_at && (
               <span style={{
                 padding: "9px 14px", background: "#F3F4F6", color: "#6B7280",
@@ -1398,11 +1476,32 @@ export default function KlientDetailPage() {
 
         {/* Status + Typ badges */}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
-          <select
-            value={klient.status}
-            onChange={(e) => handleStatusChange(e.target.value)}
-            disabled={!isOwner}
-            style={{
+          {(() => {
+            const KUPUJUCI_STATUSY = [
+              { value: "novy_kontakt", label: "Nový kontakt" },
+              { value: "zaujem_konkretna_nasa", label: "Záujem — naša nehnuteľnosť" },
+              { value: "zaujem_konkretna_ina_rk", label: "Záujem — v inej RK" },
+              { value: "caka_na_hypoteku", label: "Čaká na hypotéku" },
+              { value: "odlozene", label: "Odložené" },
+              { value: "nereaguje", label: "Nereaguje" },
+              { value: "turista", label: "Turista" },
+              { value: "realitna_kancelaria", label: "Realitná kancelária" },
+              { value: "uz_kupil", label: "Už kúpil" },
+            ];
+            const PREDAVAJUCI_STATUSY = [
+              { value: "aktivny", label: "Aktívny" },
+              { value: "novy_kontakt", label: "Nový kontakt" },
+              { value: "dohodnuty_naber", label: "Dohodnutý náber" },
+              ...(klient.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
+              ...(klient.status === "inzerovany" ? [{ value: "inzerovany", label: "Inzerovaný" }] : []),
+              ...(klient.status === "uzavrety" ? [{ value: "uzavrety", label: "Uzavretý" }] : []),
+              { value: "volat_neskor", label: "Volať neskôr" },
+              { value: "nedovolal", label: "Nedovolal" },
+              { value: "nechce_rk", label: "Nechce RK" },
+              { value: "uz_predal", label: "Už predal" },
+              { value: "realitna_kancelaria", label: "Realitná kancelária" },
+            ];
+            const selectStyle: React.CSSProperties = {
               padding: "6px 28px 6px 14px", borderRadius: "20px", fontSize: "12px", fontWeight: "700",
               background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border)",
               cursor: isOwner ? "pointer" : "default", appearance: "none",
@@ -1410,46 +1509,39 @@ export default function KlientDetailPage() {
               backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='8' height='5' viewBox='0 0 8 5' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L4 4L7 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
               backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
               outline: "none",
-            }}
-          >
-            {(() => {
-              const kupujuciStatusy = [
-                { value: "aktivny", label: "Aktívny" },
-                { value: "zaujem_konkretna_nasa", label: "Záujem — naša nehnuteľnosť" },
-                { value: "zaujem_konkretna_ina_rk", label: "Záujem — v inej RK" },
-                { value: "caka_na_hypoteku", label: "Čaká na hypotéku" },
-                { value: "odlozene", label: "Odložené" },
-                { value: "nereaguje", label: "Nereaguje" },
-                { value: "turista", label: "Turista" },
-                { value: "realitna_kancelaria", label: "Realitná kancelária" },
-                { value: "uz_kupil", label: "Už kúpil" },
-              ];
-              const predavajuciStatusy = [
-                { value: "aktivny", label: "Aktívny" },
-                { value: "novy_kontakt", label: "Nový kontakt" },
-                { value: "dohodnuty_naber", label: "Dohodnutý náber" },
-                ...(klient.status === "nabrany" ? [{ value: "nabrany", label: "Nabraný" }] : []),
-                { value: "volat_neskor", label: "Volať neskôr" },
-                { value: "nedovolal", label: "Nedovolal" },
-                { value: "nechce_rk", label: "Nechce RK" },
-                { value: "uz_predal", label: "Už predal" },
-                { value: "realitna_kancelaria", label: "Realitná kancelária" },
-              ];
-              // Per Aleš (2026-05-23): kupujuci → kupujúce statusy; predavajuci →
-              // predávajúca pipeline; oboje → SPOJENÉ (deduplicated by value).
-              let options;
-              if (klient.typ === "kupujuci") options = kupujuciStatusy;
-              else if (klient.typ === "oboje") {
-                const seen = new Set<string>();
-                options = [...predavajuciStatusy, ...kupujuciStatusy].filter(o => {
-                  if (seen.has(o.value)) return false;
-                  seen.add(o.value);
-                  return true;
-                });
-              } else options = predavajuciStatusy;
-              return options.map(o => <option key={o.value} value={o.value}>{o.label}</option>);
-            })()}
-          </select>
+            };
+            const tagStyle: React.CSSProperties = {
+              fontSize: "10px", fontWeight: 700, color: "var(--text-muted)",
+              textTransform: "uppercase", letterSpacing: "0.05em",
+            };
+
+            if (klient.typ === "oboje") {
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={tagStyle}>Predaj</span>
+                    <select value={klient.status} onChange={(e) => handleStatusChange(e.target.value)} disabled={!isOwner} style={selectStyle}>
+                      {PREDAVAJUCI_STATUSY.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={tagStyle}>Kúpa</span>
+                    <select value={klient.status_kupujuci || ""} onChange={(e) => handleKupujuciStatusChange(e.target.value)} disabled={!isOwner} style={selectStyle}>
+                      <option value="">— vyber —</option>
+                      {KUPUJUCI_STATUSY.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              );
+            }
+
+            const options = klient.typ === "kupujuci" ? KUPUJUCI_STATUSY : PREDAVAJUCI_STATUSY;
+            return (
+              <select value={klient.status} onChange={(e) => handleStatusChange(e.target.value)} disabled={!isOwner} style={selectStyle}>
+                {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            );
+          })()}
           <span style={{
             padding: "4px 12px", borderRadius: "20px", fontSize: "11px", fontWeight: "600",
             background: "var(--bg-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border)",
@@ -1478,6 +1570,125 @@ export default function KlientDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Záujem o konkrétnu nehnuteľnosť — naša / v inej RK (kupujúca strana) */}
+      {(kupujuciStatus() === "zaujem_konkretna_nasa" || kupujuciStatus() === "zaujem_konkretna_ina_rk") && (
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            {kupujuciStatus() === "zaujem_konkretna_nasa" ? "Záujem — naša nehnuteľnosť" : "Záujem — v inej RK"}
+          </div>
+          {kupujuciStatus() === "zaujem_konkretna_nasa" ? (
+            <PropertyPickerSearch
+              value={klient.zaujem_nehnutelnost_id || null}
+              disabled={!isOwner}
+              onChange={async (id) => {
+                if (user?.id) await klientUpdate(user.id, klient.id, { zaujem_nehnutelnost_id: id });
+                loadAll();
+              }}
+            />
+          ) : (
+            <>
+            <textarea
+              defaultValue={klient.zaujem_ina_rk || ""}
+              disabled={!isOwner}
+              placeholder={"napr. 3-izbový byt Petržalka v RK Re/Max\nalebo\nhttps://nehnutelnosti.sk/..."}
+              rows={3}
+              onBlur={async (e) => {
+                const val = e.target.value.trim() || null;
+                if (val === (klient.zaujem_ina_rk || null)) return;
+                if (user?.id) await klientUpdate(user.id, klient.id, { zaujem_ina_rk: val });
+                loadAll();
+              }}
+              style={{
+                width: "100%", padding: "10px 12px", borderRadius: "10px",
+                background: "var(--bg-elevated)", border: "1px solid var(--border)",
+                color: "var(--text-primary)", fontSize: 13, outline: "none",
+                resize: "vertical", fontFamily: "inherit",
+              }}
+            />
+            <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>
+              Stačí jedno — buď slovný popis (typ, lokalita, ktorá RK), alebo URL inzerátu.
+            </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Hypo poradca — pri statuse "Čaká na hypotéku" (kupujúca strana) */}
+      {kupujuciStatus() === "caka_na_hypoteku" && (
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Kto rieši hypotéku
+          </div>
+          <HypoPoradcaPicker
+            value={{
+              hypo_typ: (klient.hypo_typ as "nas_poradca" | "externy" | "klient_sam" | null) || null,
+              hypo_meno: klient.hypo_meno || null,
+              hypo_firma: klient.hypo_firma || null,
+              hypo_poradca_id: klient.hypo_poradca_id || null,
+            }}
+            disabled={!isOwner}
+            onChange={async (v) => {
+              if (user?.id) await klientUpdate(user.id, klient.id, v);
+              loadAll();
+            }}
+          />
+        </div>
+      )}
+
+      {/* Odložené — kedy začne znova hľadať (ktorákoľvek strana) */}
+      {(predavajuciStatus() === "odlozene" || kupujuciStatus() === "odlozene") && (
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Hľadať byt znova od
+          </div>
+          <input
+            type="date"
+            defaultValue={klient.odlozene_do || ""}
+            disabled={!isOwner}
+            onChange={async (e) => {
+              const val = e.target.value || null;
+              if (val === (klient.odlozene_do || null)) return;
+              if (user?.id) await klientUpdate(user.id, klient.id, { odlozene_do: val });
+              loadAll();
+            }}
+            style={{
+              width: "100%", padding: "10px 12px", borderRadius: "10px",
+              background: "var(--bg-elevated)", border: "1px solid var(--border)",
+              color: "var(--text-primary)", fontSize: 13, outline: "none",
+            }}
+          />
+          <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>
+            Orientačný dátum — kedy sa ku klientovi vrátiť.
+          </div>
+        </div>
+      )}
+
+      {/* Realitná kancelária — názov (ktorákoľvek strana; pri OBOJE tento status nie je v ponuke) */}
+      {(predavajuciStatus() === "realitna_kancelaria" || kupujuciStatus() === "realitna_kancelaria") && (
+        <div style={{ ...cardSt, marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Názov realitnej kancelárie
+          </div>
+          <input
+            type="text"
+            defaultValue={klient.rk_nazov || ""}
+            disabled={!isOwner}
+            placeholder="napr. Re/Max, Century 21, lokálna RK…"
+            onBlur={async (e) => {
+              const val = e.target.value.trim() || null;
+              if (val === (klient.rk_nazov || null)) return;
+              if (user?.id) await klientUpdate(user.id, klient.id, { rk_nazov: val });
+              loadAll();
+            }}
+            style={{
+              width: "100%", padding: "10px 12px", borderRadius: "10px",
+              background: "var(--bg-elevated)", border: "1px solid var(--border)",
+              color: "var(--text-primary)", fontSize: 13, outline: "none",
+            }}
+          />
+        </div>
+      )}
 
       {/* Spolupráca */}
       {isOwner && makleri.length > 0 && (
@@ -1622,15 +1833,17 @@ export default function KlientDetailPage() {
                   {COMBINED_STEPS.map((step, i) => {
                     let isCompleted: boolean;
                     let isCurrent: boolean;
+                    // F-C: kroky 0-4 vedie workflowStep (kontakt..obhliadky), kroky 5-8 vedie stav obchodu.
                     if (i <= 3) {
-                      isCompleted = workflowStep > i;
-                      isCurrent = workflowStep === i;
-                    } else if (i === 8) {
-                      isCompleted = false;
-                      isCurrent = workflowStep >= 4;
+                      isCompleted = workflowStep > i || obchodStep >= 5; // beží obchod → predošlé kroky hotové
+                      isCurrent = workflowStep === i && obchodStep < 5;
+                    } else if (i === 4) {
+                      isCompleted = obchodStep >= 5;
+                      isCurrent = workflowStep === 3 && obchodStep < 5;
                     } else {
-                      isCompleted = false;
-                      isCurrent = workflowStep === 3 && i === 4;
+                      // 5 Rezervácia, 6 Podpis KZ, 7 Vklad, 8 Predaný
+                      isCompleted = obchodStep > i;
+                      isCurrent = obchodStep === i || (i === 8 && workflowStep >= 4);
                     }
                     const handler = STEP_HANDLERS[i];
                     const isClickable = handler !== null && !isCurrent;
@@ -1751,8 +1964,8 @@ export default function KlientDetailPage() {
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <span style={{ fontSize: "20px" }}>📄</span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>List vlastníctva chýba</div>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              <div style={{ fontSize: "13px", fontWeight: "700", color: "#78350F" }}>List vlastníctva chýba</div>
+              <div style={{ fontSize: "12px", color: "#92400E" }}>
                 {lvUploading ? "Analyzujem LV..." : "Nahraj PDF alebo fotku LV"}
               </div>
             </div>
@@ -2401,7 +2614,7 @@ export default function KlientDetailPage() {
                 { key: "nehnutelnost", label: "🏡 Nehnuteľnosti" },
                 { key: "objednavka", label: "📋 Objednávky" },
                 { key: "dokument", label: "📄 Dokumenty" },
-              ].map(f => (
+              ].filter(f => !isCistyKupujuci || (f.key !== "naber" && f.key !== "nehnutelnost")).map(f => (
                 <button key={f.key} onClick={() => setTimelineFilter(f.key)} style={{
                   padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
                   cursor: "pointer", border: "1px solid var(--border)",

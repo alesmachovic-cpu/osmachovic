@@ -43,9 +43,9 @@ export const maxDuration = 60;
 export async function GET(request: Request) {
   const startTime = Date.now();
 
-  // 🔒 S7 hotfix — Vercel/externý cron cez CRON_SECRET, ALEBO prihlásený admin/manažér.
-  // __internal__ bypass ODSTRÁNENÝ — bola to verejná diera (ktokoľvek ?key=__internal__
-  // spustil uvoľňovanie klientov + push/email). Chýbajúci secret = zamietni (nie povoľ).
+  // 🔒 S7 Auth — Vercel/externý cron cez CRON_SECRET, ALEBO prihlásený admin/manažér
+  // (manuálny trigger z UI). __internal__ bypass ODSTRÁNENÝ (2026-06-07) — bola to
+  // verejná diera: ktokoľvek ?key=__internal__ spustil uvoľňovanie klientov + push/email.
   const authHeader = request.headers.get("authorization");
   const { searchParams } = new URL(request.url);
   const queryKey = searchParams.get("key");
@@ -243,7 +243,7 @@ export async function GET(request: Request) {
     // === SLA CRITICAL (72h) markers + notifikácie maklerovi + manažérom ===
     let slaCriticalCount = 0;
     for (const c of slaCriticalIds) {
-      const { data: kl } = await sb.from("klienti").select("meno, telefon").eq("id", c.id).single();
+      const { data: kl } = await sb.from("klienti").select("meno, telefon, company_id").eq("id", c.id).single();
       await sb.from("klienti").update({ sla_critical_at: now.toISOString() }).eq("id", c.id);
       await sb.from("klienti_history").insert({
         klient_id: c.id,
@@ -268,7 +268,7 @@ export async function GET(request: Request) {
           }),
         });
       }
-      await notifyManagers({
+      await notifyManagers(String(kl?.company_id || ""), {
         type: "odklik",
         title: "SLA porušenie 72h+ — vyžaduje rozhodnutie",
         body: `${kl?.meno || "Klient"} čaká bez inzerátu. Otvor manažérsky pohľad.`,

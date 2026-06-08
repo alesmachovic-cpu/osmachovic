@@ -23,6 +23,7 @@ interface FilterPayload {
   notify_email?: boolean;
   notify_telegram?: boolean;
   len_sukromni?: boolean;
+  ponuka_typ?: string;
   is_active?: boolean;
   makler_id?: string | null;
   id?: string;
@@ -38,6 +39,9 @@ function validateFilterPayload(body: FilterPayload): string | null {
   }
   if (body.typ !== undefined && body.typ !== null && !VALID_TYP.has(body.typ)) {
     return `Neplatný 'typ' — akceptujem: byt, dom, pozemok, ...`;
+  }
+  if (body.ponuka_typ !== undefined && !["predaj", "prenajom", "oboje"].includes(body.ponuka_typ)) {
+    return `Neplatný 'ponuka_typ' — akceptujem: predaj, prenajom, oboje`;
   }
   for (const numField of ["cena_od", "cena_do", "plocha_od", "plocha_do", "izby_od", "izby_do"] as const) {
     const v = body[numField];
@@ -94,6 +98,7 @@ export async function POST(request: NextRequest) {
       notify_email: body.notify_email ?? true,
       notify_telegram: body.notify_telegram ?? false,
       len_sukromni: body.len_sukromni ?? true,
+      ponuka_typ: body.ponuka_typ || "predaj",
       is_active: true,
       // makler_id berie zo session, nie z body (zabráni cudzí maklér priradiť svoj filter inému)
       makler_id: auth.user.id,
@@ -145,6 +150,7 @@ export async function PUT(request: NextRequest) {
       notify_email: body.notify_email,
       notify_telegram: body.notify_telegram,
       len_sukromni: body.len_sukromni,
+      ponuka_typ: body.ponuka_typ,
       is_active: body.is_active,
       updated_at: new Date().toISOString(),
     })

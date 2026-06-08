@@ -65,6 +65,8 @@ export interface Klient {
   lokalita: string | null;
   typ: "kupujuci" | "predavajuci" | "oboje" | "prenajimatel";
   status: KlientStatus;
+  // Pri OBOJE typu — samostatný status pre kupujúcu pipeline (viď 098_klienti_status_kupujuci.sql)
+  status_kupujuci?: KlientStatus | null;
   makler_id: string | null;
   priorita: string | null;
   zdroj: string | null;
@@ -77,6 +79,17 @@ export interface Klient {
   spolupracujuci_makler_id: string | null;
   spolupracujuci_provizia_pct: number | null;
   lv_data: Record<string, unknown> | null;
+  // Záujem o konkrétnu nehnuteľnosť — viď 095_klienti_zaujem_nehnutelnost.sql
+  zaujem_nehnutelnost_id?: string | null;
+  zaujem_ina_rk?: string | null;
+  // Hypo poradca — viď 096_klienti_hypo_poradca.sql
+  hypo_typ?: "nas_poradca" | "externy" | "klient_sam" | null;
+  hypo_meno?: string | null;
+  hypo_firma?: string | null;
+  hypo_poradca_id?: string | null;
+  // Odložené / Realitná kancelária — viď 097_klienti_odlozene_rk.sql
+  odlozene_do?: string | null;
+  rk_nazov?: string | null;
   anonymized_at: string | null;
   // Voľní klienti / SLA — viď migrácia 026_volni_klienti.sql
   je_volny?: boolean | null;

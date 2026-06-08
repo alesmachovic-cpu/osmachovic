@@ -13,14 +13,19 @@
 - **Google integrácia** — Drive (dokumenty klientov), Gmail (komunikácia), Calendar (termíny)
 - **Operatíva** — produkcia tímu, vyťaženosť, štatistiky, push notifikácie
 
-Produkcia: **https://vianema.amgd.sk**
-Test/staging: **https://dev.amgd.sk**
+„Produkcia": **https://vianema.amgd.sk** — POZOR: zatiaľ **interné test/demo prostredie len pre maklérov, s fiktívnymi dátami**, NIE ostrá verejná prevádzka s reálnymi klientmi. (Smeruje k ostrej prevádzke — preto security baseline držíme plný už teraz.)
+Vývoj: **https://dev.amgd.sk** — osobné vývojové prostredie Aleša, tiež fiktívne dáta.
 
 ## Jazyk a štýl komunikácie
 - **Komunikuj so mnou v slovenčine.**
 - Buď stručný, konkrétny, bez zbytočných úvodov.
 - Keď niečo neviem alebo si neistý, povedz to priamo. Žiadne "isto budeš zvládať".
 - Som realitný maklér, nie programátor — vysvetľuj rozhodnutia rečou ktorá dáva zmysel realiťákovi.
+
+## 🧠 Buď kritický — nie áno-pán
+- **Žiadne automatické áno.** Pri každom mojom zadaní aj pri každom svojom riešení sa najprv spýtaj: aký je skutočný cieľ za zadaním (čo tým naozaj chcem dosiahnuť), nie len doslovné znenie.
+- Keď vidíš slabinu, riziko alebo jednoduchšiu/lepšiu cestu — **povedz to priamo PRED implementáciou** a navrhni alternatívu. Platí to rovnako na tvoje vlastné návrhy: over, že riešia reálny cieľ.
+- Cieľ je **najlepší výsledok, nie odpor zo zásady.** Tam, kde je zadanie zjavne správne, nehľadaj problém umelo — kritickosť má slúžiť výsledku, nie kontrariánstvu.
 
 ## 🔒 ZLATÉ PRAVIDLO: Bezpečnosť 100%, vždy, bez výnimky
 
@@ -34,7 +39,38 @@ Test/staging: **https://dev.amgd.sk**
 - Tri known gaps (HSTS, dev password protect, CSP nonce) sú evidované, ale **nepribúdajú** ďalšie gaps — to je pevný limit.
 - Pri novej API route / DB migrácii / session emitteri: vyžadované checks z "Security Regression Guardian Mode" sekcie sú **nezjednateľné**, nie nice-to-have.
 
-**Prečo:** Vianema má reálnych klientov, reálne osobné údaje (AML/KYC, OP, listy vlastníctva), reálne peniaze (provízie, faktúry). Jeden security breach = okamžitý koniec firmy + GDPR pokuty + osobná zodpovednosť Aleša ako CEO. Žiadna feature, žiadna deadline, žiadny "rýchly fix" toto neprebije.
+**Prečo:** Vianema síce **zatiaľ beží len ako interný test medzi maklérmi s fiktívnymi dátami** (žiadni reálni klienti zatiaľ → dnešná diera = oprava kódu, NIE GDPR breach), ale **smeruje k ostrej prevádzke** s reálnymi klientmi, reálnymi osobnými údajmi (AML/KYC, OP, listy vlastníctva) a reálnymi peniazmi (provízie, faktúry) — **reálne nasadenie príde až po veľkom update**. Preto staviame security správne **od začiatku** — keď príde ostrá prevádzka, baseline už musí byť pevný a disciplína zabehnutá. Jeden security breach v ostrej prevádzke = koniec firmy + GDPR pokuty + osobná zodpovednosť Aleša ako CEO. Baseline preto **nerozvoľňujeme** ani v test fáze.
+
+> **Dôsledok pre okná (dôležité, šetrí zbytočnú paniku):** kým sú dáta fiktívne/testovacie, bezpečnostná diera = **oprava kódu**, nie GDPR incident — NEspúšťaj breach/oznamovací protokol (ÚOOÚ, 72h) pre test dáta. GDPR/breach protokol sa aktivuje až keď budú v systéme **reálne osobné údaje reálnych osôb**. Technickú prísnosť (requireUser, scope, audit, RLS) ale držíme rovnako aj teraz.
+
+## 🔴 ZAMRZNUTÝ BASELINE: Bezpečnosť + Právo/Compliance (platí na `dev` aj `main`)
+
+**Pri KAŽDEJ zmene — aj na `dev` branchi — sa nesmie nepozorovane oslabiť ani zmeniť dvojica: (a) bezpečnostné nastavenie, (b) právne / compliance nastavenie.** `dev` nie je "ihrisko kde sa to nemusí riešiť" — všetko čo na `dev` vznikne smeruje do produkcie, takže ten istý gate platí od prvého commitu.
+
+### Čo je chránený PRÁVNY / COMPLIANCE baseline (popri security baseline)
+Toto sa nesmie zmeniť bez výslovného súhlasu Aleša:
+- **GDPR** — súhlasy (cookie consent, marketing), právo na výmaz, retention/lehoty uchovávania, export osobných údajov, audit trail prístupov k PII.
+- **AML/KYC** — povinné kontroly, evidencia, lehoty, identifikácia klienta.
+- **Faktúry — zákonné náležitosti** — IČO/DIČ/IČ DPH, číslovanie radov, dátumy (vystavenie/dodanie/splatnosť), DPH sadzby a výpočet, dodávateľ snapshot (nemennosť faktúry po vystavení), integrita/append-only.
+- **Provízie a daňové polia** — výpočtové pravidlá ktoré majú daňový/účtovný dopad.
+- **Texty s právnym účinkom** — zmluvy (ÚZ/RZ/KZ/ZZ), súhlasy, poučenia, podpisové doložky, znenie e-mailov s právnym obsahom.
+
+### 🔴 ČERVENÉ UPOZORNENIE — povinný protokol
+Ak akákoľvek zmena (vrátane "len UI", "len refactor", "len kozmetika") **vyžaduje alebo spôsobí** zmenu security alebo právneho/compliance baseline:
+
+1. **ZASTAV. Nerob commit, nepokračuj v kóde.**
+2. Vypíš Alešovi na začiatok odpovede tento presný banner (aby bol nemožné prehliadnuť):
+
+   ```
+   🔴🔴🔴 POZOR — ZMENA BEZPEČNOSTI / PRÁVA 🔴🔴🔴
+   ```
+   Pod ním v **tučnom** texte: čoho sa zmena týka (security / GDPR / AML / faktúra / zmluva …), **čo presne sa mení**, **prečo to inak nejde**, a **aké je riziko** (pokuta, leak, neplatná faktúra, neplatná zmluva).
+3. **Počkaj na výslovné „áno, zmeň to"** od Aleša. Ticho ≠ súhlas.
+4. Až po súhlase pokračuj — a zmenu zapíš do commit message + (ak je trvalá) do tohto CLAUDE.md.
+
+**Nikdy** túto zmenu neschovaj do väčšieho diffu, neoznač ako „drobnosť", ani neprejdi ďalej s predpokladom že to bude OK. Realiťák Aleš nemusí v kóde vidieť že sa práve mení niečo právne — preto je červené upozornenie jeho jediná poistka.
+
+> Bezpečnostná časť tohto baseline je detailne rozpísaná nižšie v sekciách „🔒 ZLATÉ PRAVIDLO", „🛡️ API Security Rules" a „🛡️ Security Regression Guardian Mode". Tento blok ich **rozširuje o právnu/compliance vrstvu a o povinné červené upozornenie** — neruší ich.
 
 ## Workflow — DÔLEŽITÉ
 1. **Pri každej netriviálnej úlohe (3+ kroky) najprv vytvor plán** v `plan.md`.
@@ -57,6 +93,96 @@ Test/staging: **https://dev.amgd.sk**
    Ak akýkoľvek `✗`, **NEROBí commit** — najprv oprav alebo pridaj do allowlist s odôvodnením. Žiadne "tváriť že robíme".
 9. **NIKDY alias-swap** medzi Vercel preview a production deployment cez API. Lekcia z 20.5.2026: prepol som `vianema.amgd.sk` na preview deployment ktorý nemal `NEXT_PUBLIC_*` env vars (per-environment) → klient JS dostal undefined → 1h výpadok. Pre PROD deploy do `funny-stonebraker` projektu: VŽDY `vercel deploy --prod` (target=production) z fresh clone main, NIKDY alias swap.
 10. Nikdy neoznač úlohu ako hotovú bez verifikácie.
+
+## 🪟 Viac okien naraz — disciplína (DÔLEŽITÉ, číta KAŽDÉ okno)
+
+Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne (kupujúci / analyza / právo / security / …). **Všetky zdieľajú ten istý adresár a git repo** (`/Users/alesmachovic/Code/os-machovic`, branch `dev`). Necommitnuté zmeny aj commity sa preto medzi oknami miešajú. Aby sa **žiadne okno nepomýlilo**:
+
+1. **Svoj scope ber z chatu, NIE z pamäte.** Memory je zdieľaná; záznam „toto okno = X" napísalo INÉ okno o sebe — nevzťahuj ho na seba. Keď nevieš svoj scope, spýtaj sa Aleša.
+2. **Rob len vo svojej doméne. Keď nájdeš niečo mimo svojej kompetencie** (napr. security, právo, iná doména), **NEopravuj to tu** — namiesto toho:
+   - **(a) upozorni Aleša** na nález: čo to je, prečo je to dôležité, aké je riziko (pri security/práve použi 🔴 banner podľa protokolu nižšie);
+   - **(b) priprav hotový copy-paste prompt pre správne okno** — sebestačný, s presnými súbormi/riadkami a už overenými faktami, nech cieľové okno nezačína od nuly.
+3. **Commituj LEN svoje konkrétne súbory** — `git add cesta/k/suboru`, **NIKDY `git add -A` ani `git add .`**. Inak zahrnieš rozrobenú prácu iného okna.
+4. **Pred commitom vždy `git status`** a over, že stage-uješ len svoje. Vo working tree môžu byť `M`/`??` súbory iných okien — **nedotýkaj sa ich**, nestage-uj ich, nevracaj späť.
+5. **Po `git push` over `git log origin/dev`**, že tvoj commit tam reálne je. „Everything up-to-date" často znamená, že iné okno už pushlo (a odnieslo aj tvoj commit) — nie že push zlyhal.
+6. **Baseline/audit porovnania**: stashuj LEN svoj súbor (`git stash push <file>`), nie celý working tree — inak do baseline zamiešaš cudzie zmeny.
+7. **NIKDY `git checkout`/`switch` na iný branch** — prepol by si súbory pod rukami ostatným oknám. Všetci sme na `dev`.
+8. **Potrebuješ samostatnú branch?** (napr. feature čaká na release, nepushuje sa hneď na `dev`) → použi **`git worktree add ../os-machovic-<nazov> <branch>`** = samostatný adresár s vlastným HEAD. **Nikdy `checkout` tej branche v zdieľanom `dev` adresári** — aj dočasný prepnutý stav môže zachytiť cudzie commity. Worktree to izoluje, zdieľaný `dev` ostane nedotknutý.
+
+> Reálny incident 2026-06-06: počas práce na kupujúci (commit 9e9aeaa) iné okno pushlo `13f27ab` (analyza) a odnieslo aj môj commit. Nič sa nerozbilo len preto, že commit bol čistý (`git add` len 1 súbor). Tieto pravidlá to robia spoľahlivým, nie šťastím.
+
+## 🗂️ Register okien / kompetencie (jediný zdroj pravdy)
+
+**Toto je záväzná mapa „kto vlastní čo". Spravuje ju KOORDINAČNÉ okno (MD). Každé okno si na štarte nájde svoj riadok a drží sa svojich ciest.** Keď nájdeš chybu mimo svojho riadku → neopravuj, upozorni Aleša + priprav prompt pre správne okno (pozri „🪟 Viac okien naraz").
+
+| Okno | Doména | Vlastní (kľúčové cesty) | NErobí → odovzdáva |
+|---|---|---|---|
+| **Koordinácia (MD)** | Kompetencie, onboarding okien, register | `CLAUDE.md` (sekcia Register), prekryvy hraníc | Nepíše doménový kód — pripraví prompt domén. oknu |
+| **Klienti & Pipeline** *(okno „Klienti")* | **Predávajúci + kupujúci + voľní + „oboje"** klienti, obchody/pipeline | `app/klienti`, `app/kupujuci`, `app/volni-klienti`, `api/klienti*`, `api/klient-dokumenty`, `api/klient-udalosti`, `api/objednavky`, `api/obchody`, `lib/scope.ts`, `lib/maklerMap.ts` | Parse dokumentov → Náberáky; GDPR/AML texty → Compliance |
+| **Nehnuteľnosti & Portfólio** | Portfólio, inzeráty, matching, kalkulačka | `app/nehnutelnosti`, `app/portfolio`, `app/matching`, `app/inzerat`, `app/kalkulator`, `api/nehnutelnosti`, `api/inzerat`, `api/matching`, `api/fotky`, `api/pricing` | Property Story copy → AI |
+| **Náberáky, Zmluvy & Dokumenty** | Nábery, zmluvy, podpis, parse LV/posudkov | `app/naber`, `app/podpis`, `api/nabery`, `api/naber-pdf`, `api/naber-analyza`, `api/parse-doc`, `api/parse-pdf`, `api/parse-lv`, `api/vyhradna-zmluva`, `api/sign`, `api/objednavka-pdf`, `NaberyForm`, `VyhradnaZmluvaModal` | AI model vrstva → AI; právny text zmlúv → Compliance |
+| **Obhliadky & Kalendár** | Obhliadky, kolízie, kalendár | `app/kalendar`, `app/kolize`, `api/obhliadky`, `api/kolize`, `api/calendar`, `api/calendar-sync`, `useKoliziaCheck` | OAuth/token vrstva Google → Google; podpisová komponenta → Náberáky |
+| **Financie** | Faktúry, provízie, náklady, odberatelia | `app/faktury`, `app/provizie-maklerov`, `app/uctovny-prehlad`, `app/prehlad-financii`, `app/pravidelne-naklady`, `app/naklady`, `app/odberatelia`, `app/potvrdenie-provizii`, `api/faktury`, `api/maklerske-provizie`, `api/makler-provizie-pct`, `api/odberatelia`, `api/dodavatel`, `api/billing`, `api/firma-info`, `api/ico-lookup` | Zákonné náležitosti faktúr/DPH → Compliance (🔴 protokol) |
+| **Monitor & Analýza** | Scraping konkurencie, AI analýza okolia/trhu | `app/monitor`, `app/analyzy`, `api/monitor`, `api/analyze`, `api/analyze-url`, `api/analyze-pdf`, `api/analyzy-trhu`, `api/okolie-analysis`, `api/market-sentiments`, `cron/scrape`, `lib/monitor` | AI model vrstva → AI |
+| **AI nástroje** | Copywriter, fill, generate, property story | `app/ai-writer`, `app/nastroje`, `api/ai-writer`, `api/ai-analyze`, `api/ai-fill`, `api/generate`, `api/property-story`, `lib/ai` | Parse routes (parse-doc/lv) → Náberáky |
+| **Google integrácia** | Drive, Gmail, OAuth, token/connect | `app/gmail`, `app/disk`, `api/google`, `api/auth/google`, `api/email`, `lib/google.ts`, `useGoogleConnected` | Calendar business logika → Obhliadky |
+| **Operatíva & Manažér** | Dashboard, push, úlohy, štatistiky, tím | `app/manazer`, `app/operativa`, `app/notifikacie`, `app/upozornenia`, `app/log`, `app/ulohy`, `app/statistiky`, `app/vytazenost`, `app/tim`, `app/produkcia`, `api/manazer`, `api/push`, `api/notifications`, `api/ulohy`, `api/logy`, `api/makleri`, `api/pobocky`, `api/dashboard`, `api/prehlad` | — |
+| **Security & Auth** | Auth, session, RLS, audit, users | `app/auth`, `app/pridat-heslo`, `app/reset-password`, `app/registracia`, `app/admin`, `api/auth`, `api/users`, `api/user-scope`, `api/audit`, `api/admin`, `middleware.ts`, `lib/auth`, `lib/audit`, RLS migrácie | — (cross-cutting, 🔴 protokol) |
+| **GDPR / Compliance / Právo** | Súhlasy, výmaz, AML, zákonné náležitosti | `app/(legal)`, `app/gdpr`, `app/klientska-zona`, `app/odklik`, `api/gdpr`, `api/consents`, `api/consent-confirm`, `api/consent-refresh`, `api/consent-unsubscribe` + právne náležitosti faktúr/zmlúv/AML | — (cross-cutting, 🔴 protokol) |
+
+**Vyriešené prekryvy (kanonický vlastník):**
+- **Podpis** (`app/podpis`, `api/sign`) = **Náberáky** vlastní podpisovú primitívu; Obhliadky ju len volajú pre protokoly.
+- **Calendar**: **Obhliadky** vlastnia business logiku (`api/calendar`, `api/calendar-sync`); **Google** vlastní OAuth/token vrstvu (`lib/google.ts`, `api/auth/google`).
+- **Parse-doc/lv/pdf** = **Náberáky** vlastnia parse endpointy; **AI** vlastní len model/prompt vrstvu (`lib/ai`), ktorú parse volá.
+- **Obchody** (`api/obchody`) = **Klienti & Pipeline** (stav obchodu od ÚZ po vklad); zmluvné dokumenty k obchodu → **Náberáky**.
+- **Predávajúci vs kupujúci** = **JEDNO okno (Klienti & Pipeline)** — NEdeliť podľa typu klienta. Klient je jedna entita, zdieľa kód (`app/klienti`, `api/klienti`, detail `app/klienti/[id]`) a môže byť „oboje" (predávajúci aj kupujúci naraz). Hranica je *entita klienta vs kupujúci dopyt* (`api/objednavky`/matching), nie *typ klienta* — ale aj dopyt drží to isté okno. Dve okná podľa typu = kolízie na zdieľaných súboroch.
+- **Zdieľané utility** (`api/locale`, `api/weather`, `api/ulica-search`, `api/api-status`, `app/nastavenia`): meniť len po dohode; default správca = Operatíva.
+
+**Pravidlá určovania vlastníka (dispečer) — záväzné:**
+1. Najprv over **kontext nálezu** (ktorá stránka, ktoré UI, ktorý endpoint) — až potom urči vlastníka. Nikdy nie z jedného grep výskytu.
+2. **Pozor na homonymá** (objednávka = dopyt kupujúceho `api/objednavky` vs. fotoprodukcia `api/produkcia-objednavky`; podpis; kalendár; parse…). Over reálnu cestu kódu po klik: komponent → fetch → route.
+3. Keď nie si istý na 100 %, **spýtaj sa / ukáž kandidátov** — neoznačuj to ako fakt.
+4. Nikdy neprezentuj „pravdepodobného vlastníka" ako istotu.
+
+**🛰️ Komunikácia medzi oknami — VŽDY cez MD (hub-and-spoke, záväzné):**
+- **Žiadne priame okno↔okno správy.** Keď okno potrebuje čokoľvek od iného okna (otázka, handoff, závislosť, nález mimo svojej domény, koordinácia timingu) → pošle to **MD oknu**, MD posúdi, určí vlastníka a prepošle. Nikdy nie priamo druhému oknu.
+- **Dôvod:** pri 6+ oknách je priama mesh komunikácia (každý s každým) chaos — stratené správy, duplicitné úlohy, nik nevidí celý obraz. MD je jediný router a drží register pravdy.
+- **MD je jediný, kto smie písať doménovým oknám úlohy** a jediný, komu okná reportujú. Aj „skoordinuj sa s druhým oknom" rieši MD, nie okná medzi sebou.
+- Keď MD okno práve nie je otvorené: pošli správu MD (zaradí sa do fronty, doručí sa keď MD ožije) a počkaj — nepíš priamo inému oknu „medzitým".
+
+**Bug triáž + report-back (záväzné):**
+- **Chyby/bugy hlási Aleš MD oknu** (nie priamo doménovému oknu). MD určí vlastníka, overí kontext, zistí či to už niekto rieši, a pošle úlohu správnemu oknu.
+- **Po dokončení zadanej úlohy okno reportuje SPÄŤ do MD** (cez `send_message` na MD session): „hotovo" + zmenené súbory + commit hash. MD skontroluje výsledok a koordináciu medzi oknami.
+- Cross-window bug (viac okien) → MD rozdelí na časti s **jasne oddelenými** zodpovednosťami (kto tvar dát, kto auth, kto UI) a **koordinuje timing cez seba** (okná sa nedohadujú priamo).
+
+**🚨 Security ≠ Právo/GDPR — sú to DVE samostatné okná. Nikdy ich nezlievaj do jedného „security okna".**
+- **`Bezpecnost`** (Security & Auth) = technická vrstva: chýbajúci `requireUser`, RLS/scope/`company_id` filter, IDOR, secrets v kóde, rate-limit, 2FA, **technické odstránenie PII z logov/kódu**.
+- **`Pravo`** (GDPR / Compliance / Právo) = právna vrstva: súhlasy, výmaz, retention, AML/KYC, zákonné náležitosti faktúr/zmlúv, a **posúdenie GDPR dopadu** (oznamovacia povinnosť ÚOOÚ, dopad na dotknuté osoby).
+
+**Smerovanie častých cross-cutting nálezov:**
+| Nález | Kam |
+|---|---|
+| API bez `requireUser` / bez `company_id` filtra, IDOR, leak dát cez endpoint | **Bezpecnost** |
+| Secrets v kóde, slabý rate-limit, session/2FA diera | **Bezpecnost** |
+| **PII v console/logoch alebo leak osobných údajov** | **Bezpecnost** (zavrie dieru) **+ Pravo** (posúdi GDPR dopad/hlásenie) — ide do OBOCH |
+| Súhlasy, cookie consent, právo na výmaz, retention, AML/KYC | **Pravo** |
+| Zákonné náležitosti faktúry/DPH, znenie zmlúv/poučení | **Pravo** (🔴 protokol) |
+
+> Pri **úniku osobných údajov** platí: technickú dieru zavrie `Bezpecnost`, ale právne posúdenie (či a komu hlásiť) **vždy** dostane aj `Pravo`. Jedno okno na oboje = chyba smerovania.
+
+## 🚀 Deploy gate + push-konflikt protokol (viac okien naraz)
+
+**Deploy gate (koordinuje MD/koordinačné okno):**
+- Každý `git push` na `dev` = **1 Vercel auto-deploy**. Limit Hobby = **100 deployov/deň**. (Stav 2026-06-06: ~16 za 6 h → veľká rezerva, nie je to akútne.)
+- **Dávkuj pushe** — nepushuj po každej mikro-zmene; nazbieraj logický celok a pushni raz. Z 5 pushov spravíš 1 deploy.
+- **NIKDY `vercel deploy --prod` po pushe** — auto-deploy to spraví sám; manuálny = 2× deploy + riziko výpadku env (viď Lessons learned 2026-05-21/23).
+- MD sleduje strop: pri ~60–70 deployoch/deň dá oknám echo nech spomalia. Pod tým nikoho neobmedzuje.
+
+**Push-konflikt protokol (keď push „zlyhá"):**
+- `! [rejected] ... (fetch first)` = **iné okno pushlo skôr**, nič sa neprepísalo. Tvoj commit je stále lokálne.
+- Riešenie: `git pull --rebase origin dev` → over `git status` (tvoje súbory sú stále tvoje) → `git push`. **NIE `merge`, NIKDY `git checkout`/`switch`.**
+- Konflikt je nepravdepodobný (okná menia rôzne súbory). Ak predsa nastane na **cudzom** súbore → nedotýkaj sa ho, zavolaj Aleša.
+- Vercel „cez seba" sa riešiť nemusí: `dev.amgd.sk` vždy ukazuje **najnovší úspešný** deploy; zlyhaný build alias nezhodí.
 
 ## Tri hlavné princípy (Boris Cherny)
 1. **Jednoduchosť** — minimálny kód. Ak vieš niečo zmazať namiesto pridať, sprav to.
@@ -229,7 +355,7 @@ Beží automaticky v CI cez `.github/workflows/security.yml` → job `api-auth-g
 - **Vercel auto-deploy z `dev` branch FUNGUJE** (pôvodne som si myslel že je rozbitý — bola to moja chyba pozorovania). Production Branch v Vercel je nastavený na `dev`, GitHub webhook beží, každý `git push` automaticky spustí deploy (source: "git"). **NIKDY nerob `vercel deploy --prod --yes` po pushe** — to robí 2× deploy (jeden git, jeden cli) a vyčerpá 100/day limit free tier. Sám push stačí. Ako overiť: `curl api.vercel.com/v6/deployments` cez Vercel API token → `source: "git"` = auto-deploy beží.
 
 ## Lessons learned (2026-05-22)
-- **Pracovný adresár NIE je Desktop.** Aktívny projekt žije v `/Users/alesmachovic/Code/os-machovic` (mimo iCloud). Desktop sync sa vypol 2026-05-22 a `~/Desktop/os-machovic` zmizla. Adresár `/Users/alesmachovic/os-machovic` je marcový boilerplate (11-bajtový CLAUDE.md, prázdne `src/`) — **NIE** je to projekt, nezamieňať. Po reset session: `cd /Users/alesmachovic/Code/os-machovic`, prečítaj `CLAUDE.md`, `ls plan*.md`, `git status`, `git log -5 --oneline` — neopytuj sa "kde je projekt".
+- **Pracovný adresár NIE je Desktop.** Aktívny projekt žije v `/Users/alesmachovic/Code/os-machovic` (mimo iCloud). `~/Desktop/os-machovic` je dnes **živý symlink** na `Code/os-machovic` (nie samostatná kópia) — je jedno cez ktorú cestu vojdeš, je to ten istý repo. Adresár `/Users/alesmachovic/os-machovic` je marcový boilerplate (11-bajtový CLAUDE.md, prázdne `src/`) — **NIE** je to projekt, nezamieňať. Po reset session: `cd /Users/alesmachovic/Code/os-machovic`, prečítaj `CLAUDE.md`, `ls plan*.md`, `git status`, `git log -5 --oneline` — neopytuj sa "kde je projekt".
 - **Plány rozdeľuj podľa domény, nie chronologicky.** Keď sa rieši viac súvisiacich vecí naraz (matching + kupujúci), maj **samostatný `plan-<doména>.md`** pre každú. `plan.md` je len pre aktuálny bug sweep. Zachová to fokus pri resetoch — pri otázke "kde sme skončili" stačí otvoriť relevantný plan-*.md a pokračovať. Spájať sa to dá až keď je každá doména hotová.
 - **Audit fails ≠ blocked commit ak sú pre-existing.** CLAUDE.md pravidlo 8 ("ak akýkoľvek ✗, NEROBí commit") platí len pre **regression**. Pred commitom: stash zmeny → spusti `audit-all.sh` na čistom stave (baseline) → unstash → spusti znova → porovnaj počty failov. Ak nepribudol nový fail, commit je OK. Vždy uveď baseline vs current počty fail-ov v commit message.
 

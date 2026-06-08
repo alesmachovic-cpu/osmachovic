@@ -24,9 +24,14 @@ const OBJ_STEPS = [
   { key: "hotovo", label: "Hotovo", num: 3 },
 ];
 
-// Štatusy ktoré majú zmysel pre kupujúceho (filtruje aj zoznam aj výber)
+// Bežné stavy kupujúceho. Jediné použitie: pri výbere klienta sa status-badge
+// zobrazí len ak klient NIE je v tomto zozname (upozornenie na nezvyčajný stav).
+// Nefiltruje zoznam ani výber — len rozhoduje o zobrazení badge.
 const KUPUJUCI_STATUSY = new Set([
   "novy", "novy_kontakt", "aktivny", "volat_neskor", "nedovolal", "nechce_rk", "uzavrety", "caka_na_schvalenie",
+  // K6 fix: reálne kupujúce stavy (taxonómia per Aleš 2026-05-23) — inak dostal kupujúci falošný badge "nezvyčajný stav"
+  "caka_na_hypoteku", "zaujem_o_konkretnu", "zaujem_konkretna_nasa", "zaujem_konkretna_ina_rk",
+  "kapacita_schvalena", "hypo_konzultacia", "rezervacia", "podpis_kz", "uz_kupil", "turista", "odlozene", "nereaguje",
 ]);
 
 export default function KupujuciPage() {
@@ -74,6 +79,18 @@ function KupujuciInner() {
     fetch("/api/makleri?aktivny=true").then(r => r.json()).then(data => setMakleri(Array.isArray(data) ? data : []));
   }, []);
 
+  // 2026-06-06 (B6 fix): myMaklerUuid sa MUSÍ načítať keď je user dostupný.
+  // Predtým ho riešil len loadData() na mount — ak useAuth() ešte nemal usera,
+  // uuid ostalo null navždy a filter "moji klienti" sa ticho neaplikoval
+  // (fail-open → ukázal všetkých). Fail-open je zámerný (viď maklerMap.ts), tu
+  // len zaručíme spoľahlivé načítanie uuid hneď ako user dorazí.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    getMaklerUuid(user.id).then(uuid => { if (!cancelled) setMyMaklerUuid(uuid); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
   // Ak prišiel cez ?klient_id=X (z karty klienta — "+ Pridať preferencie"),
   // hneď otvor formulár objednávky pre tohto konkrétneho klienta — nech
   // Aleš nemusí klikať cez "objednávka / bez objednávky" menu.
@@ -97,8 +114,7 @@ function KupujuciInner() {
     setLoadError(false);
     const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000));
     try {
-      const uuid = user?.id ? await Promise.race([getMaklerUuid(user.id), timeout]) : null;
-      setMyMaklerUuid(uuid as string | null);
+      // myMaklerUuid rieši samostatný useEffect naviazaný na user.id (B6 fix).
       const [klientiData, objData] = await Promise.race([
         Promise.all([
           fetch("/api/klienti").then(r => r.json()),
@@ -166,10 +182,23 @@ function KupujuciInner() {
           <div>
             <h2 style={{ fontSize: "20px", fontWeight: "700", margin: "0 0 3px", color: "var(--text-primary)" }}>Kupujúci</h2>
             <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: 0 }}>
-              {kupujuciKlienti.length} kupujúcich · {objednavky.length} objednávok
+              {filtered.length} kupujúcich · {objednavky.filter(o => filtered.some(k => k.id === o.klient_id)).length} objednávok
             </p>
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            {/* K4 fix: prepínač moji/všetci — zoznam teraz rešpektuje filterMakler (predtým ukazoval vždy všetkých firmy) */}
+            {makleri.length > 0 && (
+              <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={{
+                padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+                borderRadius: "10px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
+                appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+                backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+              }}>
+                <option value="mine">Moji klienti</option>
+                <option value="all">Všetci</option>
+                {makleri.map(m => <option key={m.id} value={m.id}>{m.meno}</option>)}
+              </select>
+            )}
             <button onClick={() => { setIsSimplified(false); setEditingObjednavka(null); setSelectedKlient(null); setStep("klient"); }}
               style={{ padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}
               title="Vytvor klienta + záväznú objednávku v jednom kroku">
@@ -196,7 +225,7 @@ function KupujuciInner() {
         )}
 
         {/* ZLÚČENÝ ZOZNAM: kupujúci s objednávkou (modrastí, hore) + bez objednávky (biele, dole) */}
-        {!loading && kupujuciKlienti.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <div style={{
             padding: "60px", textAlign: "center", color: "var(--text-muted)",
             background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px",
@@ -212,10 +241,17 @@ function KupujuciInner() {
             </button>
           </div>
         )}
-        {!loading && kupujuciKlienti.length > 0 && (
+        {!loading && filtered.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {kupujuciKlienti
-              .map(k => ({ klient: k, obj: objednavky.find(o => o.klient_id === k.id) || null }))
+            {filtered
+              .flatMap(k => {
+                // B5 fix: klient môže mať viac objednávok — zobraz každú ako
+                // samostatný riadok (predtým `find` ukázal len prvú a zvyšok sa stratil).
+                const kObj = objednavky.filter(o => o.klient_id === k.id);
+                return kObj.length > 0
+                  ? kObj.map(obj => ({ klient: k, obj }))
+                  : [{ klient: k, obj: null as Record<string, unknown> | null }];
+              })
               .sort((a, b) => (a.obj ? 0 : 1) - (b.obj ? 0 : 1))
               .map(({ klient: k, obj }) => {
                 if (obj) {
@@ -229,7 +265,7 @@ function KupujuciInner() {
                   const izby = poziadavky.pocet_izieb ? `${String(poziadavky.pocet_izieb)} izieb` : null;
                   const meta = [lokalitaText, izby, cenaText].filter(Boolean).join(" · ");
                   return (
-                    <div key={k.id} style={{
+                    <div key={obj.id as string} style={{
                       display: "flex", alignItems: "center", gap: "12px",
                       padding: "14px 16px", background: "var(--bg-surface)",
                       border: "1px solid var(--border)",
@@ -496,7 +532,8 @@ function KupujuciInner() {
   // HOTOVO
   return (
     <div style={{ maxWidth: "720px" }}>
-      <Stepper steps={OBJ_STEPS} currentStep="hotovo" onStepClick={k => setStep(k as Step)} />
+      {/* K5 fix: na "hotovo" Stepper zámerne BEZ onStepClick — skok späť na Formulár vytváral duplicitnú objednávku. Navigácia ide cez tlačidlá nižšie. */}
+      <Stepper steps={OBJ_STEPS} currentStep="hotovo" />
       <div style={{
         background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "20px",
         padding: "48px 32px", textAlign: "center",

@@ -15,21 +15,24 @@ type NehWithMeta = NehnutelnostForMatch & {
 };
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  // 🔒 matching hotfix — zavrieť anonymný prístup (leak PII predávajúcich). Plný company scope ide vo veľkom release.
   const auth = await requireUser(req);
   if (auth.error) return auth.error;
+  const companyId = auth.user.company_id;
 
   const { id } = await params;
   const limit = Number(req.nextUrl.searchParams.get("limit") ?? "5");
   const sb = getSupabaseAdmin();
 
+  // 🔒 Scope na company_id — objednávka aj kandidáti len z firmy používateľa (cross-tenant guard).
+  // monitor_inzeraty je globálna verejná tabuľka (scraped konkurencia, bez PII) — nescope-uje sa.
   const [{ data: obj }, { data: nehnutelnosti }, { data: monitorItems }] = await Promise.all([
-    sb.from("objednavky").select("id,klient_id,druh,poziadavky,lokalita,cena_od,cena_do").eq("id", id).single(),
+    sb.from("objednavky").select("id,klient_id,druh,poziadavky,lokalita,cena_od,cena_do,lat,lng").eq("id", id).eq("company_id", companyId).single(),
     sb.from("nehnutelnosti")
-      .select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status,nazov,obec,ulica")
+      .select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status,nazov,obec,ulica,lat,lng")
+      .eq("company_id", companyId)
       .or("status.eq.aktivny,status.is.null"),
     sb.from("monitor_inzeraty")
-      .select("id,portal,url,nazov,typ,lokalita,cena,plocha,izby,predajca_meno,predajca_telefon")
+      .select("id,portal,url,nazov,typ,lokalita,cena,plocha,izby,lat,lng")
       .eq("is_active", true),
   ]);
 
@@ -40,8 +43,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // Fallback: keď obj.lokalita je prázdne, použijeme klient.lokalita ("Vlčince, Žilina").
   let klientForMatch: KlientForMatch | undefined;
   if (obj.klient_id) {
-    const { data: k } = await sb.from("klienti").select("id,lokalita").eq("id", obj.klient_id).maybeSingle();
-    if (k) klientForMatch = { id: k.id, lokalita: k.lokalita, rozpocet_max: null };
+    const { data: k } = await sb.from("klienti").select("id,lokalita,rozpocet_max").eq("id", obj.klient_id).eq("company_id", companyId).maybeSingle();
+    if (k) klientForMatch = { id: k.id, lokalita: k.lokalita, rozpocet_max: k.rozpocet_max };
   }
 
   // Interné nehnuteľnosti
@@ -51,7 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (neh.length > 0) {
     const klientIds = [...new Set(neh.map(n => n.klient_id).filter(Boolean))];
     if (klientIds.length > 0) {
-      const { data: klienti } = await sb.from("klienti").select("id,meno,telefon").in("id", klientIds as string[]);
+      const { data: klienti } = await sb.from("klienti").select("id,meno,telefon").in("id", klientIds as string[]).eq("company_id", companyId);
       const km = new Map((klienti ?? []).map(k => [k.id, k]));
       for (const n of neh) {
         if (n.klient_id) n.predavajuci = km.get(n.klient_id) ?? undefined;
@@ -68,6 +71,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     plocha: m.plocha,
     izby: m.izby,
     lokalita: m.lokalita,
+    lat: m.lat,
+    lng: m.lng,
     kraj: null,
     okres: null,
     status: null,
@@ -75,9 +80,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     portal: m.portal,
     url: m.url,
     nazov: m.nazov,
-    predavajuci: m.predajca_meno
-      ? { id: "", meno: m.predajca_meno, telefon: m.predajca_telefon ?? null }
-      : undefined,
+    // GDPR data-min: monitor neukladá kontakt predajcu. Maklér nájde kontakt
+    // priamo v inzeráte cez `url`.
+    predavajuci: undefined,
   }));
 
   const matches = [...neh, ...monitorNeh]

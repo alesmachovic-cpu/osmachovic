@@ -39,6 +39,7 @@ ALLOWLIST=(
   "src/app/api/faktury/pdf"        # by-ID
   "src/app/api/objednavka-pdf"     # by-ID
   "src/app/api/sign"               # token-based signing flow
+  "src/app/api/consent-confirm"    # verejný HMAC-token endpoint (klik z e-mailu, bez session)
   "src/app/api/property-story"     # AI utility, čaká na refactor
   # Matching/AI endpointy (TODO add company scope ako P3):
   "src/app/api/matching"
@@ -79,6 +80,36 @@ for table in "${SCOPED_TABLES[@]}"; do
     else
       VIOLATIONS=$((VIOLATIONS + 1))
       echo "  ✗ $rel  (číta '$table' bez company_id filtra)"
+    fi
+  done
+done
+
+# ───────────────────────────────────────────────────────────────────────────
+# Druhý pass: DETSKÉ PII tabuľky bez vlastného company_id stĺpca, ktoré
+# scopujú cez FK na rodiča (klient_id → klienti).
+#
+# Pridané 2026-06-03 po F1 incidente: klient_dokumenty (OP/LV/AML scany) sa
+# čítali bez akéhokoľvek company/owner checku — cross-tenant IDOR. Prvý pass to
+# nezachytil, lebo klient_dokumenty NIE je v SCOPED_TABLES (nemá company_id).
+# Pravidlo: route ktorá selectuje z detskej PII tabuľky MUSÍ odvodiť scope
+# (getUserScope) a porovnať company_id rodiča.
+CHILD_PII_TABLES=(klient_dokumenty)
+for table in "${CHILD_PII_TABLES[@]}"; do
+  FILES=$(grep -rln "\.from(\"$table\")\|\.from('$table')" src/app/api --include="*.ts" 2>/dev/null || true)
+  for f in $FILES; do
+    rel="${f#$PWD/}"
+    skip=false
+    for a in "${ALLOWLIST[@]}"; do
+      if [[ "$rel" == "$a"* ]]; then skip=true; break; fi
+    done
+    $skip && continue
+    CHECKED=$((CHECKED + 1))
+    # Musí odvodiť scope A porovnať company_id (nestačí len requireUser).
+    if grep -q "getUserScope" "$f" && grep -q "company_id" "$f"; then
+      PASSED=$((PASSED + 1))
+    else
+      VIOLATIONS=$((VIOLATIONS + 1))
+      echo "  ✗ $rel  (číta detskú PII tabuľku '$table' bez scope/company checku)"
     fi
   done
 done

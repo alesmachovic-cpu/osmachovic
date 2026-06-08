@@ -14,6 +14,7 @@ import {
 } from "@/lib/monitor";
 import { classify, toLegacyDbEnum, type ClassifierResult, type ClassifierDbContext } from "@/lib/monitor/classifier";
 import type { ScrapedInzerat, MonitorFilter, ScrapeResult } from "@/lib/monitor";
+import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 export const maxDuration = 30; // Vercel hobby limit
@@ -94,7 +95,7 @@ function matchesFilter(listing: ScrapedInzerat, filter: MonitorFilter): boolean 
   // Kontrolujeme URL + názov + popis (popis obsahuje "prenájom" aj keď URL nie).
   const textLow = ((listing.url || "") + " " + (listing.nazov || "") + " " + (listing.popis || ""))
     .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  if (/\bprena?jom\b|\bpodna?jom\b|\bnajom\b|na[-_]prenaj/i.test(textLow)) return false;
+  void textLow; // predaj/prenájom sa NEzahadzuje — ukladáme oboje, len tag cez ponuka_typ
 
   // Cena — ak máme cena_od/do, vyžadujeme aby listing cena bola v rozsahu.
   // Ak listing nemá cenu (undefined), nechávame ju ako potenciálne relevantnú (nechytí všetko).
@@ -115,6 +116,31 @@ function matchesFilter(listing: ScrapedInzerat, filter: MonitorFilter): boolean 
   }
 
   return true;
+}
+
+/**
+ * Poskladá nadpis inzerátu z FAKTOV o objekte — nie z pôvodného titulku
+ * portálu (ten môže obsahovať meno predajcu / RK značku / kontakt).
+ * GDPR data-min: do DB ukladáme len neosobný, fakticky odvodený nadpis.
+ * Napr. "Byt · 2-izb · Bratislava-Petržalka · 149 900 €".
+ */
+const TYP_LABEL: Record<string, string> = { byt: "Byt", dom: "Dom", pozemok: "Pozemok", iny: "Nehnuteľnosť" };
+function buildNazovZFaktov(l: ScrapedInzerat): string {
+  const parts: string[] = [];
+  if (l.ponuka_typ === "prenajom") parts.push("Prenájom");
+  parts.push(TYP_LABEL[l.typ || ""] || "Nehnuteľnosť");
+  if (l.izby) parts.push(`${l.izby}-izb`);
+  if (l.plocha) parts.push(`${l.plocha} m²`);
+  if (l.lokalita) parts.push(l.lokalita);
+  if (l.cena) parts.push(`${l.cena.toLocaleString("sk-SK")} €${l.ponuka_typ === "prenajom" ? "/mes" : ""}`);
+  return parts.join(" · ");
+}
+
+/** Spustí async fn nad items s max `limit` súbežne — chráni 30s/HTTP rozpočet. */
+async function mapCapped<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += limit) {
+    await Promise.all(items.slice(i, i + limit).map(fn));
+  }
 }
 
 export async function GET(request: Request) {
@@ -166,14 +192,22 @@ export async function GET(request: Request) {
         break;
       }
 
-      const result = await processFilter(sb, filter);
-      results.push(result);
+      // Segmentácia: 'oboje' → scrapni predaj aj prenájom (2 prechody).
+      const segments: Array<"predaj" | "prenajom"> =
+        filter.ponuka_typ === "prenajom" ? ["prenajom"]
+        : filter.ponuka_typ === "oboje" ? ["predaj", "prenajom"]
+        : ["predaj"];
 
       // Aktualizuj updated_at filtra (aby sa rotovali)
       await sb
         .from("monitor_filtre")
         .update({ updated_at: new Date().toISOString() })
         .eq("id", filter.id);
+
+      for (const segment of segments) {
+      if (Date.now() - startTime > 22000) break;
+      const result = await processFilter(sb, { ...filter, ponuka_typ: segment });
+      results.push(result);
 
       // Loguj výsledok scrape-u
       await sb.from("monitor_scrape_log").insert({
@@ -215,10 +249,20 @@ export async function GET(request: Request) {
           }
         }
       }
+      } // koniec segment loop
     }
 
     const totalNew = results.reduce((s, r) => s + r.new_count, 0);
     const totalFound = results.reduce((s, r) => s + r.total_found, 0);
+
+    // Audit trail behu scrape (GDPR — evidencia spracúvania). Bez PII.
+    await logAudit({
+      action: "monitor.scrape",
+      actor_id: null,
+      actor_name: isInternal ? "monitor/manual" : "cron/scrape",
+      target_type: "monitor_inzeraty",
+      detail: { filters: results.length, total_found: totalFound, new: totalNew },
+    });
 
     return NextResponse.json({
       message: `Spracované ${results.length} filtre: ${totalFound} inzerátov, ${totalNew} nových`,
@@ -281,6 +325,20 @@ async function processFilter(
       allListings.push(...listings);
     }
 
+    // 2-ponuka. Otaguj ponuka_typ (predaj/prenájom). Segment scrapovania je
+    // filter.ponuka_typ (rozriešené orchestrátorom na konkrétnu hodnotu). Parser
+    // mohol nastaviť presnejšie (bazos zo slugu) — to rešpektujeme. Navyše opravíme
+    // zjavné „leaky" (prenájom v predaj-liste) podľa textu.
+    const segment: "predaj" | "prenajom" = filter.ponuka_typ === "prenajom" ? "prenajom" : "predaj";
+    for (const l of allListings) {
+      if (!l.ponuka_typ) l.ponuka_typ = segment;
+      const t = ((l.nazov || "") + " " + (l.popis || "") + " " + (l.url || ""))
+        .toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      if (/\bprenajom\b|\bpodnajom\b|na prenajom|k prenajmu|mesacne|\/mes\b|eur\/mes/.test(t)) {
+        l.ponuka_typ = "prenajom";
+      }
+    }
+
     // 2a. Lokalita injection: portály ktoré URL-filtrujú lokalitou (bazos cez
     //     ?hlokalita=, byty.sk cez URL slug) garantujú že všetky výsledky sú
     //     v danej lokalite. Parser ich lokalitu však extrahuje nespoľahlivo
@@ -306,7 +364,7 @@ async function processFilter(
       const externalIds = nehnListings.map((l) => l.external_id);
       const { data: existing } = await sb
         .from("monitor_inzeraty")
-        .select("external_id, predajca_typ, predajca_meno")
+        .select("external_id, predajca_typ")
         .eq("portal", "nehnutelnosti.sk")
         .in("external_id", externalIds);
 
@@ -342,52 +400,46 @@ async function processFilter(
         const e = existingMap.get(listing.external_id);
         if (e && e.predajca_typ) {
           listing.predajca_typ = e.predajca_typ as typeof listing.predajca_typ;
-          if (e.predajca_meno) listing.predajca_meno = e.predajca_meno as string;
         }
       }
     }
 
-    // 2c. Bazos enrichment — pre listingy klasifikované ako "sukromny" (podľa
-    //     mena predajcu) skontrolujeme detail stránku. Makléri často používajú
-    //     osobné meno, ale v popise majú "+ provízia RK". List page popis býva
-    //     orezaný, detail page ma plný text.
-    const bazosCandidates = allListings.filter(
-      (l) => l.portal === "bazos.sk" && l.predajca_typ === "sukromny"
-    );
-    if (bazosCandidates.length > 0) {
-      await Promise.all(
-        bazosCandidates.map(async (listing) => {
-          try {
-            const isFirma = await isBazosListingFirma(listing.url);
-            if (isFirma) listing.predajca_typ = "firma";
-          } catch { /* fail-safe: keep sukromny */ }
-        })
-      );
+    // AUTORITATÍVNE výsledky z detail-stránok (ground-truth) — klasifikátor ich
+    // NESMIE prepísať. Kľúč = `${portal}:${external_id}`.
+    const authoritativeKeys = new Set<string>();
+
+    // 2c. Reality.sk enrichment — AUTORITATÍVNE na VŠETKÝCH reality listingoch.
+    //     Detail stránka má štruktúrny štítok: link /realitna-kancelaria/ ⇒ firma,
+    //     inak ⇒ sukromny. Ground-truth pre reality.sk — beží PRVÉ (najhodnotnejšie)
+    //     a je nedotknuteľné klasifikátorom. STROP: 40, po 10 súbežne.
+    const realityListings = allListings.filter((l) => l.portal === "reality.sk").slice(0, 40);
+    if (realityListings.length > 0) {
+      await mapCapped(realityListings, 10, async (listing) => {
+        try {
+          const isAgency = await fetchRealitySkIsAgency(listing.url);
+          listing.predajca_typ = isAgency ? "firma" : "sukromny";
+          authoritativeKeys.add(`${listing.portal}:${listing.external_id}`);
+        } catch { /* fail-safe: ponechaj existujúci predajca_typ (neautoritatívne) */ }
+      });
     }
 
-    // 2d. Reality.sk enrichment — pre listings kde predajca_typ je undefined (neznámy),
-    //     stiahni detail stránku a skontroluj prítomnosť linky /realitna-kancelaria/.
-    //     Ak link existuje → firma. Ak nie → sukromny.
-    //     Len nové listings (nie v DB) — existujúce majú predajca_typ už uložený.
-    const realityNewListings = allListings.filter((l) => l.portal === "reality.sk" && !l.predajca_typ);
-    if (realityNewListings.length > 0) {
-      const realityExternalIds = realityNewListings.map((l) => l.external_id);
-      const { data: realityExisting } = await sb
-        .from("monitor_inzeraty")
-        .select("external_id, predajca_typ")
-        .eq("portal", "reality.sk")
-        .in("external_id", realityExternalIds);
-      const realityExistingSet = new Set((realityExisting || []).map((r) => r.external_id as string));
-      const realityNeedsEnrich = realityNewListings.filter((l) => !realityExistingSet.has(l.external_id));
-
-      await Promise.all(
-        realityNeedsEnrich.map(async (listing) => {
-          try {
-            const isAgency = await fetchRealitySkIsAgency(listing.url);
-            listing.predajca_typ = isAgency ? "firma" : "sukromny";
-          } catch { /* fail-safe: keep undefined → classifier rozhodne */ }
-        })
-      );
+    // 2d. Bazos enrichment — pre listingy klasifikované ako "sukromny" skontrolujeme
+    //     detail stránku na RK markery. Ak detail potvrdí RK → firma (autoritatívne).
+    //     Nenájdenie markerov NIE je dôkaz súkromníka (maklér môže byť skrytý) →
+    //     neautoritatívne, klasifikátor doháda. STROP: 36, po 12 súbežne.
+    const bazosCandidates = allListings
+      .filter((l) => l.portal === "bazos.sk" && l.predajca_typ === "sukromny")
+      .slice(0, 36);
+    if (bazosCandidates.length > 0) {
+      await mapCapped(bazosCandidates, 12, async (listing) => {
+        try {
+          const isFirma = await isBazosListingFirma(listing.url);
+          if (isFirma) {
+            listing.predajca_typ = "firma";
+            authoritativeKeys.add(`${listing.portal}:${listing.external_id}`); // potvrdené RK
+          }
+        } catch { /* fail-safe: keep sukromny (neautoritatívne) */ }
+      });
     }
 
     // 2e. CLASSIFIER v2 — multi-signal scoring (sukromny/rk/unknown + confidence + signals[]).
@@ -396,37 +448,56 @@ async function processFilter(
     //     existujúci predajca_typ_override — ten má prednosť pred algoritmom.
     const classifierResults = new Map<string, ClassifierResult>();
     if (allListings.length > 0) {
-      // Batch fetch phone counts za 30 dni
-      const phones = Array.from(new Set(allListings.map(l => l.predajca_telefon).filter(Boolean) as string[]));
-      const names = Array.from(new Set(allListings.map(l => l.predajca_meno).filter(Boolean) as string[]));
-      const ago30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-
+      // Phone/name counts — GDPR data-min: telefón/meno sa už NEUKLADAJÚ do DB,
+      // takže historický 30-dňový count nie je možný. Počítame výskyt LEN v rámci
+      // aktuálneho behu (transientne, z pamäte). Zachytí makléra, ktorý v jednom
+      // scrape behu inzeruje viacero nehnuteľností s rovnakým kontaktom.
       const phoneCountMap = new Map<string, number>();
       const nameCountMap = new Map<string, number>();
+      const inzerentBatchMap = new Map<string, number>();
       const overrideByExternalId = new Map<string, string>();
+      for (const l of allListings) {
+        if (l.predajca_telefon) phoneCountMap.set(l.predajca_telefon, (phoneCountMap.get(l.predajca_telefon) || 0) + 1);
+        if (l.predajca_meno) nameCountMap.set(l.predajca_meno, (nameCountMap.get(l.predajca_meno) || 0) + 1);
+        if (l.inzerent_id) inzerentBatchMap.set(l.inzerent_id, (inzerentBatchMap.get(l.inzerent_id) || 0) + 1);
+      }
 
-      if (phones.length > 0) {
-        const { data: phoneRows } = await sb
+      // Inzerent (účet) — 30-dňový počet uložených inzerátov za daný účet (RK signál).
+      // inzerent_id NIE je kontakt/meno (len anonymné ID účtu). Výsledný signál =
+      // max(uložený 30d počet, počet v aktuálnom behu) — zachytí aj nový RK účet,
+      // ktorý sa prvýkrát objaví naraz s mnohými inzerátmi.
+      const ago30 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+      const inzerentDbMap = new Map<string, number>();
+      const inzerentLokMap = new Map<string, Set<string>>(); // inzerent → rôzne lokality
+      // Lokality v aktuálnom behu (pre nový účet, čo ešte nie je v DB)
+      for (const l of allListings) {
+        if (l.inzerent_id && l.lokalita) {
+          if (!inzerentLokMap.has(l.inzerent_id)) inzerentLokMap.set(l.inzerent_id, new Set());
+          inzerentLokMap.get(l.inzerent_id)!.add(l.lokalita.toLowerCase().trim());
+        }
+      }
+      const inzerentIds = Array.from(inzerentBatchMap.keys());
+      if (inzerentIds.length > 0) {
+        const { data: inzRows } = await sb
           .from("monitor_inzeraty")
-          .select("predajca_telefon")
-          .in("predajca_telefon", phones)
+          .select("inzerent_id, lokalita")
+          .in("inzerent_id", inzerentIds)
           .gte("last_seen_at", ago30)
           .eq("is_active", true);
-        (phoneRows || []).forEach((r: { predajca_telefon: string | null }) => {
-          if (r.predajca_telefon) phoneCountMap.set(r.predajca_telefon, (phoneCountMap.get(r.predajca_telefon) || 0) + 1);
+        (inzRows || []).forEach((r: { inzerent_id: string | null; lokalita: string | null }) => {
+          if (!r.inzerent_id) return;
+          inzerentDbMap.set(r.inzerent_id, (inzerentDbMap.get(r.inzerent_id) || 0) + 1);
+          if (r.lokalita) {
+            if (!inzerentLokMap.has(r.inzerent_id)) inzerentLokMap.set(r.inzerent_id, new Set());
+            inzerentLokMap.get(r.inzerent_id)!.add(r.lokalita.toLowerCase().trim());
+          }
         });
       }
-      if (names.length > 0) {
-        const { data: nameRows } = await sb
-          .from("monitor_inzeraty")
-          .select("predajca_meno")
-          .in("predajca_meno", names)
-          .gte("last_seen_at", ago30)
-          .eq("is_active", true);
-        (nameRows || []).forEach((r: { predajca_meno: string | null }) => {
-          if (r.predajca_meno) nameCountMap.set(r.predajca_meno, (nameCountMap.get(r.predajca_meno) || 0) + 1);
-        });
-      }
+      const inzerentCount = (id?: string): number => {
+        if (!id) return 0;
+        return Math.max(inzerentDbMap.get(id) || 0, inzerentBatchMap.get(id) || 0);
+      };
+      const inzerentDistinctLok = (id?: string): number => (id ? (inzerentLokMap.get(id)?.size || 0) : 0);
 
       // Načítaj override-y a klasifikácie z minulosti (per portal+external_id)
       // Defensive: ak migrácia 041 ešte nebola spustená, predajca_typ_override stĺpec
@@ -445,6 +516,23 @@ async function processFilter(
             });
           }
         } catch { /* migrácia 041 nie je aplikovaná — preskočíme override */ }
+      }
+
+      // UČENIE — override-y na úrovni účtu predajcu (inzerent_id). Maklér raz
+      // označí účet ako RK/súkromník → platí pre všetky jeho budúce inzeráty.
+      const overrideByInzerentId = new Map<string, string>();
+      if (inzerentIds.length > 0) {
+        try {
+          const { data: inzClass, error } = await sb
+            .from("inzerent_klasifikacia")
+            .select("inzerent_id, typ")
+            .in("inzerent_id", inzerentIds);
+          if (!error) {
+            (inzClass || []).forEach((r: { inzerent_id: string; typ: string }) => {
+              if (r.typ) overrideByInzerentId.set(r.inzerent_id, r.typ);
+            });
+          }
+        } catch { /* migrácia 111 nie je aplikovaná — preskočíme učenie */ }
       }
 
       // RK directory — telefóny/mená/domény ktoré už sú potvrdené ako RK
@@ -466,18 +554,37 @@ async function processFilter(
       // Klasifikuj každý listing
       for (const listing of allListings) {
         const key = `${listing.portal}:${listing.external_id}`;
-        const override = overrideByExternalId.get(key);
+        // Override-y: konkrétny inzerát (external_id) má prednosť pred účtom (inzerent_id);
+        // oba sú manuálne rozhodnutia makléra → plná istota.
+        const override =
+          overrideByExternalId.get(key) ||
+          (listing.inzerent_id ? overrideByInzerentId.get(listing.inzerent_id) : undefined);
 
         // Ak existuje manuálny override, použijeme ho s plnou confidence — bez ďalšieho výpočtu
         if (override === "rk" || override === "sukromny") {
+          const fromAccount = !overrideByExternalId.get(key);
           classifierResults.set(key, {
             predajca_typ: override as "rk" | "sukromny",
             confidence: 1.0,
             raw_score: 99,
-            signals: [{ id: "manual_override", side: override === "rk" ? "rk" : "sukromny", weight: 99, reason: "Manuálny override maklérom" }],
+            signals: [{ id: "manual_override", side: override === "rk" ? "rk" : "sukromny", weight: 99, reason: fromAccount ? "Účet predajcu ručne označený maklérom" : "Manuálny override maklérom" }],
             method: "v2",
           });
           listing.predajca_typ = toLegacyDbEnum(override as "rk" | "sukromny") as typeof listing.predajca_typ;
+          continue;
+        }
+
+        // Autoritatívny výsledok z detail-stránky portálu (reality agentúrny štítok
+        // / potvrdené bazos RK) — ground-truth. Klasifikátor ho NESMIE prepísať.
+        if (authoritativeKeys.has(key)) {
+          const at: "rk" | "sukromny" = listing.predajca_typ === "firma" ? "rk" : "sukromny";
+          classifierResults.set(key, {
+            predajca_typ: at,
+            confidence: 1.0,
+            raw_score: 99,
+            signals: [{ id: "detail_authoritative", side: at, weight: 99, reason: at === "rk" ? "Detail stránka portálu: realitná kancelária" : "Detail stránka portálu: bez agentúry → súkromník" }],
+            method: "v2",
+          });
           continue;
         }
 
@@ -490,6 +597,8 @@ async function processFilter(
         const ctx: ClassifierDbContext = {
           phone_count_30d: listing.predajca_telefon ? phoneCountMap.get(listing.predajca_telefon) || 0 : 0,
           name_count_30d: listing.predajca_meno ? nameCountMap.get(listing.predajca_meno) || 0 : 0,
+          inzerent_count_30d: inzerentCount(listing.inzerent_id),
+          inzerent_distinct_lokalit: inzerentDistinctLok(listing.inzerent_id),
           listed_on_n_portals: 1, // TODO: prepojiť po canonical_id dedup (Etapa F)
           in_rk_directory: inDirectory,
         };
@@ -516,13 +625,12 @@ async function processFilter(
       }
     }
 
-    // Post-parse filter — portály v search URL čiastočne rešpektujú filter kritéria
-    // (cena/lokalita/typ), ale nie všetky a nie spoľahlivo. Aplikujeme striktný
-    // post-filter lokality, typu, ceny, plochy, izieb + vyradíme prenájmy.
-    // RK (firma) sa odhodí len ak má filter `len_sukromni=true` (default).
-    // Ak je `len_sukromni=false` → ukladáme aj RK pre analýzy cien.
+    // Post-parse filter — portály v search URL čiastočne rešpektujú kritériá
+    // (cena/lokalita/typ), nie však spoľahlivo. Aplikujeme post-filter lokality,
+    // typu, ceny, plochy, izieb.
+    // UKLADÁME VŠETKO (súkromník aj RK, predaj aj prenájom) — pre kompletnú trhovú
+    // analýzu. `len_sukromni` NEZAHADZUJE — ovplyvňuje len notifikácie (nižšie).
     const filteredListings = allListings
-      .filter((l) => !filter.len_sukromni || l.predajca_typ !== "firma")
       .filter((l) => matchesFilter(l, filter));
     totalFound = filteredListings.length;
 
@@ -536,23 +644,24 @@ async function processFilter(
         portal: listing.portal,
         external_id: listing.external_id,
         url: listing.url,
-        nazov: listing.nazov,
+        // GDPR data-min: nadpis z faktov o objekte, NIE z pôvodného titulku
+        // portálu (môže obsahovať meno/kontakt predajcu). PII polia (meno,
+        // telefón, popis, raw_data) sa zámerne neukladajú.
+        nazov: buildNazovZFaktov(listing),
         typ: listing.typ,
         lokalita: listing.lokalita,
         cena: listing.cena,
         mena: listing.mena || "EUR",
         plocha: listing.plocha,
         izby: listing.izby,
-        popis: listing.popis,
         foto_url: listing.foto_url,
-        predajca_meno: listing.predajca_meno,
-        predajca_telefon: listing.predajca_telefon,
         predajca_typ: listing.predajca_typ,
+        ponuka_typ: listing.ponuka_typ || "predaj",
+        inzerent_id: listing.inzerent_id ?? null,
         predajca_typ_confidence: cls?.confidence ?? null,
         predajca_typ_method: cls?.method === "v2" ? (cls.signals.length > 0 ? "rule_v2" : null) : null,
         poschodie: listing.poschodie ?? null,
         stav: listing.stav ?? null,
-        raw_data: listing.raw_data || {},
         last_seen_at: new Date().toISOString(),
         is_active: true,
       };
@@ -599,9 +708,14 @@ async function processFilter(
             new Date(row.first_seen_at).getTime() > Date.now() - 60000;
           if (isNew) {
             newCount++;
-            // Notifikácia (push/email) ide len o súkromných predajcov — RK
-            // sa zbierajú výhradne pre analýzy cien, žiadne notifikácie.
-            if (listing.predajca_typ !== "firma") {
+            // Notifikácia ide len o leady: PREDAJ + súkromník (nie RK, nie prenájom).
+            // RK aj prenájmy sa ukladajú pre analýzu, ale nespamujú notifikácie.
+            // `len_sukromni=false` filter (čisto analytický) notifikácie nevydáva.
+            if (
+              filter.len_sukromni !== false &&
+              listing.predajca_typ !== "firma" &&
+              listing.ponuka_typ !== "prenajom"
+            ) {
               newItems.push({ ...listing, db_id: row.id });
             }
           } else {

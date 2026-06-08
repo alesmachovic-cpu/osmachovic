@@ -19,6 +19,7 @@ type Faktura = {
   zaplatene: boolean;
   poznamka: string | null;
   odberatel_snapshot: { nazov?: string; adresa?: string; ico?: string; dic?: string; ic_dph?: string } | null;
+  dodavatel_snapshot: Partial<DodavatelSettings> | null;
   polozky: Polozka[];
 };
 
@@ -26,12 +27,22 @@ export default function FakturaDetail() {
   const params = useParams<{ id: string }>();
   const { user } = useAuth();
   const [f, setF] = useState<Faktura | null>(null);
-  const [DODAVATEL, setDodavatel] = useState<DodavatelSettings>(DEFAULT_DODAVATEL);
+  const [liveDodavatel, setLiveDodavatel] = useState<DodavatelSettings | null>(null);
 
   useEffect(() => {
     fetch(`/api/faktury?id=${params.id}`).then((r) => r.json()).then(setF);
-    if (user?.id) fetchDodavatel(user.id).then(setDodavatel);
-  }, [params.id, user?.id]);
+  }, [params.id]);
+
+  // Legacy fallback: ak faktúra nemá snapshot (predzmenové dáta bez settings),
+  // načítaj aktuálne nastavenia. Pre nové faktúry sa nepoužije.
+  useEffect(() => {
+    if (!user?.id || !f || f.dodavatel_snapshot) return;
+    fetchDodavatel(user.id).then(setLiveDodavatel);
+  }, [user?.id, f]);
+
+  const DODAVATEL: DodavatelSettings = f?.dodavatel_snapshot
+    ? { ...DEFAULT_DODAVATEL, ...f.dodavatel_snapshot }
+    : (liveDodavatel ?? DEFAULT_DODAVATEL);
 
   if (!f) return <div style={{ padding: "24px" }}>Načítavam…</div>;
 

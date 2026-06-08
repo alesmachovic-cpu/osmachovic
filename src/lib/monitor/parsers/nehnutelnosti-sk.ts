@@ -120,7 +120,8 @@ export const nehnutelnostiSkParser: PortalParser = {
     if (filter.search_url) return filter.search_url;
 
     const typSlug = filter.typ ? TYP_URL[filter.typ] || "nehnutelnosti" : "nehnutelnosti";
-    let url = `${BASE_URL}/${typSlug}/predaj/`;
+    const seg = filter.ponuka_typ === "prenajom" ? "prenajom" : "predaj";
+    let url = `${BASE_URL}/${typSlug}/${seg}/`;
 
     if (filter.lokalita) {
       // nehnutelnosti.sk URL pattern: /byty/predaj/bratislava-ruzinov/
@@ -130,7 +131,7 @@ export const nehnutelnostiSkParser: PortalParser = {
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .replace(/[\s-]+/g, "-")
         .replace(/^-|-$/g, "");
-      url = `${BASE_URL}/${typSlug}/predaj/${slug}/`;
+      url = `${BASE_URL}/${typSlug}/${seg}/${slug}/`;
     }
 
     const params = new URLSearchParams();

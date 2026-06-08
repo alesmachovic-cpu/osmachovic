@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
+import { obchodScopeById } from "@/lib/scope";
 import { computeObchodStatus } from "@/lib/obchodStatus";
 import { requireReAuth } from "@/lib/auth/reAuth";
 
 export const runtime = "nodejs";
+
+/** Cross-tenant guard — obchod (parent) musí patriť firme callera. Vráti error response alebo null. */
+async function assertObchodCompany(obchodId: string, companyId: string, role: string) {
+  const obchodCompany = await obchodScopeById(obchodId);
+  if (!obchodCompany || (obchodCompany !== companyId && role !== "platform_admin")) {
+    return NextResponse.json({ error: "Obchod nenájdený" }, { status: 404 });
+  }
+  return null;
+}
 
 /**
  * Statusy ktoré vyžadujú force re-auth (M1 pen-test, súlad s PATCH /api/obchody/[id]).
@@ -21,6 +31,8 @@ export async function PATCH(
   if (auth.error) return auth.error;
 
   const { id: obchodId, ulohaId } = await params;
+  const guard = await assertObchodCompany(obchodId, auth.user.company_id, auth.user.role);
+  if (guard) return guard;
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch {
@@ -113,6 +125,8 @@ export async function DELETE(
   if (auth.error) return auth.error;
 
   const { id: obchodId, ulohaId } = await params;
+  const guard = await assertObchodCompany(obchodId, auth.user.company_id, auth.user.role);
+  if (guard) return guard;
 
   const sb = getSupabaseAdmin();
   const { error } = await sb

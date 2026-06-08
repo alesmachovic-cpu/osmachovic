@@ -1,38 +1,41 @@
-# Plán: Matching (nehnuteľnosť ↔ objednávka)
+# Plán — Matching (vývoj)
 
-## Cieľ
-Zlepšiť pairovanie nehnuteľností s objednávkami kupujúcich tak aby maklér dostal **použiteľný** zoznam — nie zoznam kde Senec sedí rovnako vysoko ako susedná ulica.
+Audit 2026-06-06. **Scope tohto okna: len vývoj.** Bezpečnosť (auth/scope) a právo (GDPR/PII) sú odovzdané do iných okien.
 
-## Stav (2026-05-22)
+## Hotové (overené: vitest 11/11 + lint 0 errors)
+- [x] **#1 Izby string/number bug** — normalizácia na `number[]` v `vypocitajSkore` + 2 regression testy. 3-izbový pre klienta čo chce 3-izbový už dostane +10, nie −30.
+- [x] **#7 Farby** — jeden zdroj prahov `skoreUroven` (80/50) pre 5 komponentov. Opravená obrátená modrá/žltá na /matching; MatchingWidget prah 85→80.
+- [x] **#5 Lokalita fallback** — `nehnutelnost/[id]` teraz posiela `klientForMatch` → skóre symetrické s ostatnými routes.
+- [x] **#4 Cena postih** — stupňovaný postih za prekročenie rozpočtu: +10–25 % → −20, +25–50 % → −40, >50 % → −60.
+- [x] **#6 rozpocet_max** — oživený fallback: keď objednávka nemá cena_do, použije sa rozpočet klienta. Načítané v 3 routes.
+- [x] **Drobnosť** — zmazaný mŕtvy súbor `src/app/matching/page 2` (starý duplikát z 22. mája).
 
-### ✅ Hotové
-1. **DB migrácia `086_geo_coords.sql`** — pridané `lat` a `lng` do tabuľky `nehnutelnosti`.
-2. **`src/lib/geocode.ts`** — helper cez OpenStreetMap Nominatim:
-   - `geocodeAddress(query)` vráti GPS pre slovenskú adresu
-   - `distanceKm(lat1,lng1,lat2,lng2)` — vzdialenosť v km (haversine)
-   - SK bbox filter (odmietne výsledky mimo Slovenska)
-3. **Auto-geocoding v save** (`src/app/api/inzerat/save/route.ts`):
-   - Pri insert aj edit sa pokúsi doplniť lat/lng z adresy (ulica + obec + okres + kraj)
-   - Ak GPS už je vyplnené, neprepíše (idempotentné)
-   - Ak adresa nie je geokódovateľná, ostane NULL — matching padne na text-based fallback
-4. **`src/lib/matching.ts`** — geo-aware scoring:
-   - <1 km: +25 bodov ("Presne v lokalite")
-   - <3 km: +18 bodov ("Blízko")
-   - <7 km: +10 bodov ("V okolí")
-   - <15 km: +2 body ("V meste/okrese")
-   - <50 km: **-30 bodov** ("Mimo mesta")
-   - >50 km: ešte negatívnejšie
+## Schválené Alešom 2026-06-06 — väčšie, po fázach
 
-### 🧪 Čo treba otestovať
-1. Otvor kupujúceho s konkrétnou lokalitou v objednávke (napr. Petržalka)
-2. Pozri jeho matching → blízke musia byť hore, vzdialené dole
-3. Otvor kupujúceho čo má len kraj/okres bez lokality → matching musí stále fungovať
-4. Stará nehnuteľnosť bez GPS — otvor a ulož → auto-doplní GPS
+### #3 Geo — dotiahnuť (vzdialenosť v km namiesto textových názvov) — HOTOVÉ A1–A3 (vitest 13/13)
+- [x] **A1** `lat,lng` v 3 matching routes + mapovanie pre monitor inzeráty.
+- [x] **A2** Geokódovanie objednávok pri save (`/api/objednavky` POST/PATCH). Len jednoznačná lokalita (1 okres alebo 1 kraj bez okresov) → 1 GPS bod; viac okresov = null → text matching. PATCH pregeokóduje pri zmene lokality.
+- [x] **A3** Refaktor inline haversine → `distanceKm` z `geocode.ts`.
+- [~] **A4** ZRUŠENÉ (Aleš 2026-06-06): existujúce objednávky sú testovacie dáta, nahradia sa novými. Backfill netreba — nové objednávky sa geokódujú automaticky (A2).
 
-### ⏳ TODO (po teste)
-- [ ] **Refaktor:** `matching.ts:96-102` má inline haversine, mal by používať `distanceKm` z `geocode.ts` (DRY, -8 riadkov).
-- [ ] **Bulk backfill:** Skript ktorý prebehne existujúce nehnuteľnosti bez GPS a doplní ich (rate-limit 1 req/s kvôli Nominatim).
-- [ ] **Logging:** Keď geocoding zlyhá, `console.warn` aby maklér v logu videl ktoré adresy nesedia.
+### #2 Zjednotiť výpočet — jeden zdroj pravdy + matching na každom kupujúcom
+- [x] **B1** `page.tsx` volá `vypocitajSkore` (jeden zdroj pravdy). Mapovanie Nehnutelnost/Objednavka → *ForMatch (lat/lng cez cast). Klient bez objednávky → pseudo-objednávka z profilu (lokalita + rozpočet). Odstránený umelý bonus „+10 má objednávku". Vedľajší efekt: rešpektuje status → predané/archivované zmiznú z /matching.
+- [x] **B2** Jemný štítok „z profilu — doplň objednávku" pri zhodách bez objednávky.
+### #2 B3 — matching widget na karte kupujúceho aj bez objednávky (SCHVÁLENÉ 2026-06-06)
+- [ ] **B3a** Nový endpoint `/api/matching/klient/[id]` — matching cez profil klienta (lokalita + rozpočet). **MUSÍ mať requireUser + company scope** (na rozdiel od starých matching routes — toto je vzor ako majú vyzerať; staré rieši security okno).
+- [ ] **B3b** Hook `useZhodyPreKlienta(klientId)` v `useMatching.ts`.
+- [ ] **B3c** `MatchingWidget`: kupujúci bez objednávky → BuyerWidget cez klientId (profil) namiesto fallbacku „Vytvoriť objednávku". Empty state hint na doplnenie objednávky.
 
-## Mimo scope tohto plánu
-- Akékoľvek zmeny v kupujúcom / objednávke samotnej → patrí do `plan-kupujuci.md`.
+## Handoff z okna Kupujúci (2026-06-06) — HOTOVÉ (vitest 15/15)
+- [x] **D** multi-druh: `vypocitajSkore` splitne `druh` string ("byt, rodinny_dom") → typ sedí pre každý druh (predtým multi-druh nikdy nesedel).
+- [x] **E** cena_od: nehnuteľnosť pod dolnou hranicou rozpočtu dostane len malý bonus (+8), nie plný +30.
+- [x] **Pseudo-lokalita**: klient bez objednávky AJ bez lokality sa nepáruje (predtým 30 % na všetko cez rozpočet → falošné zhody). Fix v page.tsx + klient/[id].
+- [~] **Slice**: `nehnutelnost/[id]` limit — ODLOŽENÉ. Moja necommitnutá zmena sa stratila pri multi-okno revertе (security okno aktívne mení túto route na requireUser). Odovzdané security oknu, nech limit/slice pridá spolu s auth (žiadna kolízia). Prompt pripravený.
+- [x] **Prahy**: ZhodyDrawer, ZaujemcoviaChip, ZaujemcoviaDrawer napojené na `skoreUroven` (jediný zdroj prahov).
+
+## Upozornenie (iná doména — nemením z tohto okna)
+- `kupujuci/page.tsx:249` číta `poziadavky.pocet_izieb`, ale ObjednavkaForm ukladá `izby` → počet izieb sa na karte kupujúceho nezobrazí. Patrí do kupujuci domény (bolo rozrobené v inom okne).
+
+## Mimo scope (handoff hotový)
+- BEZPEČNOSŤ → requireUser + company_id scope na 3 matching routes.
+- PRÁVO → GDPR posúdenie PII leaku (hlavne či je aj na prod).

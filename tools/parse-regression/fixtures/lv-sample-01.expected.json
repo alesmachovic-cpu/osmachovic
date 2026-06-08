@@ -1,0 +1,22 @@
+{
+  "typ": "byt",
+  "obec": "Petrzalka",
+  "okres": "Bratislava V",
+  "katastralneUzemie": "Petrzalka",
+  "plocha": 64.8,
+  "material": "panel",
+  "rok_vystavby": 1985,
+  "poschodie": 5,
+  "cislo_bytu": "51",
+  "vchod": "7",
+  "izby": 2,
+  "loggia_plocha": 4.2,
+  "pivnica_plocha": 1.7,
+  "parcela": "3360/15",
+  "supisne_cislo": "1234",
+  "pravne_vady": "VUB",
+  "majitelia": [
+    { "meno": "Novak Jan", "datum_narodenia": "12.03.1978", "podiel": "1/2" },
+    { "meno": "Novakova Eva", "datum_narodenia": "25.07.1980", "podiel": "1/2" }
+  ]
+}

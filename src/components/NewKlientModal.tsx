@@ -8,6 +8,8 @@ import { useAuth } from "@/components/AuthProvider";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { searchStreets } from "@/lib/streets-db";
 import { klientInsert, klientUpdate } from "@/lib/klientApi";
+import PropertyPickerSearch from "@/components/PropertyPickerSearch";
+import HypoPoradcaPicker from "@/components/HypoPoradcaPicker";
 
 interface DuplicateHit {
   id: string;
@@ -47,17 +49,51 @@ interface Props {
   } | null;
 }
 
-// TODO: Po spustení SQL migrácie (002_update_klienti_constraints.sql) odkomentuj všetky statusy
-const STATUS_OPTIONS = [
+// Statusy musia zostať zladené s `src/app/klienti/[id]/page.tsx` (karta klienta).
+// "Nabraný" sa do dropdown-u nevkladá — nastavuje sa automaticky cez náberový list.
+// Pre edit klienta ktorý už má status="nabrany" doplníme možnosť za behu (viď render).
+const STATUSY_PREDAVAJUCI = [
   { value: "novy_kontakt", label: "Nový kontakt" },
   { value: "dohodnuty_naber", label: "Dohodnutý náber" },
-  { value: "nabrany", label: "Nabraný" },
   { value: "volat_neskor", label: "Volať neskôr" },
   { value: "nedovolal", label: "Nedovolal" },
   { value: "nechce_rk", label: "Nechce RK" },
   { value: "uz_predal", label: "Už predal" },
   { value: "realitna_kancelaria", label: "Realitná kancelária" },
 ];
+const STATUSY_KUPUJUCI = [
+  { value: "novy_kontakt", label: "Nový kontakt" },
+  { value: "zaujem_konkretna_nasa", label: "Záujem — naša nehnuteľnosť" },
+  { value: "zaujem_konkretna_ina_rk", label: "Záujem — v inej RK" },
+  { value: "caka_na_hypoteku", label: "Čaká na hypotéku" },
+  { value: "odlozene", label: "Odložené" },
+  { value: "nereaguje", label: "Nereaguje" },
+  { value: "turista", label: "Turista" },
+  { value: "realitna_kancelaria", label: "Realitná kancelária" },
+  { value: "uz_kupil", label: "Už kúpil" },
+];
+// Per Aleš (2026-05-24): pre OBOJE klienta sú tieto statusy nezmyselné —
+// turista (neseriózny pozeráč), nechce_rk (nepracuje s nami) a
+// realitna_kancelaria (odišiel ku konkurencii) — OBOJE klient s nami už
+// aktívne pracuje cez pipeline.
+const STATUSY_OBOJE_OMIT = new Set(["turista", "nechce_rk", "realitna_kancelaria"]);
+
+function statusyForTyp(typ: string) {
+  if (typ === "kupujuci") return STATUSY_KUPUJUCI;
+  if (typ === "oboje") {
+    const seen = new Set<string>();
+    return [...STATUSY_PREDAVAJUCI, ...STATUSY_KUPUJUCI].filter(o => {
+      if (seen.has(o.value)) return false;
+      if (STATUSY_OBOJE_OMIT.has(o.value)) return false;
+      seen.add(o.value);
+      return true;
+    });
+  }
+  return STATUSY_PREDAVAJUCI;
+}
+function defaultStatusForTyp(_typ: string) {
+  return "novy_kontakt";
+}
 
 /* ── Typ nehnuteľnosti — zladené s InzeratForm ── */
 const TYP_GROUPS = [
@@ -458,9 +494,41 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
       setEmailWarning(null);
     }
   }
-  const [status, setStatus] = useState(editKlient?.status || "novy_kontakt");
   const [typKlienta, setTypKlienta] = useState<string>(editKlient?.typ || defaultTyp);
+  const [status, setStatus] = useState(editKlient?.status || defaultStatusForTyp(editKlient?.typ || defaultTyp));
+  // Pri OBOJE klientovi — samostatný status pre kupujúcu pipeline.
+  const [statusKupujuci, setStatusKupujuci] = useState<string>(
+    (editKlient as Record<string, unknown> | undefined)?.status_kupujuci as string || ""
+  );
+  const [zaujemNehnutelnostId, setZaujemNehnutelnostId] = useState<string | null>(
+    (editKlient as Record<string, unknown> | undefined)?.zaujem_nehnutelnost_id as string | null || null
+  );
+  const [zaujemInaRk, setZaujemInaRk] = useState<string>(
+    (editKlient as Record<string, unknown> | undefined)?.zaujem_ina_rk as string || ""
+  );
+  const [hypoTyp, setHypoTyp] = useState<"nas_poradca" | "externy" | "klient_sam" | null>(
+    (editKlient as Record<string, unknown> | undefined)?.hypo_typ as "nas_poradca" | "externy" | "klient_sam" | null || null
+  );
+  const [hypoMeno, setHypoMeno] = useState<string | null>(
+    (editKlient as Record<string, unknown> | undefined)?.hypo_meno as string | null || null
+  );
+  const [hypoFirma, setHypoFirma] = useState<string | null>(
+    (editKlient as Record<string, unknown> | undefined)?.hypo_firma as string | null || null
+  );
+  const [hypoPoradcaId, setHypoPoradcaId] = useState<string | null>(
+    (editKlient as Record<string, unknown> | undefined)?.hypo_poradca_id as string | null || null
+  );
+  const [odlozeneDo, setOdlozeneDo] = useState<string>(
+    (editKlient as Record<string, unknown> | undefined)?.odlozene_do as string || ""
+  );
+  const [rkNazov, setRkNazov] = useState<string>(
+    (editKlient as Record<string, unknown> | undefined)?.rk_nazov as string || ""
+  );
   const [typNehnutelnosti, setTypNehnutelnosti] = useState("");
+  // Odporúčanie — kto nového klienta odporučil (len nový klient).
+  const [odporucilId, setOdporucilId] = useState<string | null>(null);
+  const [odporucilQuery, setOdporucilQuery] = useState("");
+  const [odporucilResults, setOdporucilResults] = useState<Array<{ id: string; meno: string; telefon?: string }>>([]);
   const [lokalitaInput, setLokalitaInput] = useState(editKlient?.lokalita || "");
   // lokalitaValue = "confirmed" DB value — len ak je v LOKALITY_DB (edit mode: overíme)
   const [lokalitaValue, setLokalitaValue] = useState(() => {
@@ -476,7 +544,6 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
   const [showUlicaSuggestions, setShowUlicaSuggestions] = useState(false);
   const ulicaSuggestRef = useRef<HTMLDivElement>(null);
   const [datumStretnutia, setDatumStretnutia] = useState("");
-  const [datumNarodenia, setDatumNarodenia] = useState("");
   const [odkaz, setOdkaz] = useState("");
   const [poznamka, setPoznamka] = useState(editKlient?.poznamka || "");
   const [saving, setSaving] = useState(false);
@@ -491,12 +558,20 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
       setTelefon(editKlient.telefon || "");
       setMeno(editKlient.meno || "");
       setEmail(editKlient.email || "");
-      setStatus(editKlient.status || "novy_kontakt");
       setTypKlienta(editKlient.typ || defaultTyp);
+      setStatus(editKlient.status || defaultStatusForTyp(editKlient.typ || defaultTyp));
+      setStatusKupujuci((editKlient as Record<string, unknown>)?.status_kupujuci as string || "");
+      setZaujemNehnutelnostId((editKlient as Record<string, unknown>)?.zaujem_nehnutelnost_id as string | null || null);
+      setZaujemInaRk((editKlient as Record<string, unknown>)?.zaujem_ina_rk as string || "");
+      setHypoTyp((editKlient as Record<string, unknown>)?.hypo_typ as "nas_poradca" | "externy" | "klient_sam" | null || null);
+      setHypoMeno((editKlient as Record<string, unknown>)?.hypo_meno as string | null || null);
+      setHypoFirma((editKlient as Record<string, unknown>)?.hypo_firma as string | null || null);
+      setHypoPoradcaId((editKlient as Record<string, unknown>)?.hypo_poradca_id as string | null || null);
+      setOdlozeneDo((editKlient as Record<string, unknown>)?.odlozene_do as string || "");
+      setRkNazov((editKlient as Record<string, unknown>)?.rk_nazov as string || "");
       setLokalitaInput(editKlient.lokalita || "");
       const editLokVal = editKlient.lokalita || "";
       setLokalitaValue(LOKALITY_DB.some(l => !l.ulica && l.lokalita === editLokVal) ? editLokVal : "");
-      setDatumNarodenia(editKlient.datum_narodenia ? editKlient.datum_narodenia.slice(0, 10) : "");
 
       // Parse poznamka for structured fields (Adresa, Stretnutie, Typ nehnuteľnosti, Odkaz)
       const raw = editKlient.poznamka || "";
@@ -564,11 +639,17 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     debounceRef.current = setTimeout(async () => {
       setChecking(true);
       const last9 = getLastDigits(norm, 9);
-      const { data } = await supabase
-        .from("klienti")
-        .select("id, meno, telefon, email, status, typ, lokalita, poznamka, makler_id, created_at")
-        .ilike("telefon", `%${last9}%`);
-      const hits = (data as DuplicateHit[] | null) ?? [];
+      // Cez /api/klienti?telefon=… ide cez admin scope + company filter — bez
+      // tohto sa priamy supabase select môže RLS-blokovaný vrátiť ako prázdny
+      // a vyrobí false negative "Číslo nie je v databáze".
+      let hits: DuplicateHit[] = [];
+      try {
+        const res = await fetch(`/api/klienti?telefon=${encodeURIComponent(last9)}`, { credentials: "include" });
+        if (res.ok) {
+          const body = await res.json();
+          hits = (body.klienti as DuplicateHit[] | null) ?? [];
+        }
+      } catch { /* sieťová chyba — necháme hits prázdne */ }
       setDuplicates(hits);
       setChecked(true);
       setChecking(false);
@@ -668,12 +749,14 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
 
   async function handleSave() {
     if (!telefon.trim() || !meno.trim()) return;
-    if (!isEdit && !typNehnutelnosti) return;
+    if (!isEdit && !typNehnutelnosti && status === "novy_kontakt") return;
     if (!isEdit && dupLevel === "critical" && !forceCreate) return;
 
     // Validácia adresy — lokalita musí byť vybraná z dropdownu
     const addrErrors: typeof fieldErrors = {};
-    if (!isValidLokalita) {
+    // K7 fix: lokalitu validuj len keď je pole reálne viditeľné (status novy_kontakt).
+    // Inak sa pri edite klienta s iným statusom (pole skryté) save ticho zasekol bez viditeľnej príčiny.
+    if (status === "novy_kontakt" && !isValidLokalita) {
       addrErrors.lokalita = "Vyber mesto / mestskú časť zo zoznamu";
     }
     // Ulica a číslo sú povinné až pri dohodnutom nábere, nie pri vytváraní kontaktu
@@ -728,9 +811,52 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
     if (showCalendar && datumStretnutia) {
       basePayload.datum_naberu = new Date(datumStretnutia).toISOString();
     }
-    if (datumNarodenia) {
-      basePayload.datum_narodenia = datumNarodenia;
+    // status_kupujuci — len pri OBOJE klientovi, inak null
+    if (typKlienta === "oboje") {
+      basePayload.status_kupujuci = statusKupujuci || "novy_kontakt";
+    } else if (isEdit) {
+      basePayload.status_kupujuci = null;
     }
+    // Pri OBOJE platí "kupujúci" status z statusKupujuci; inak zo statusu.
+    const effectiveKupujuciStatus = typKlienta === "oboje" ? statusKupujuci : status;
+
+    // Záujem o konkrétnu nehnuteľnosť — kupujúca strana
+    if (effectiveKupujuciStatus === "zaujem_konkretna_nasa") {
+      basePayload.zaujem_nehnutelnost_id = zaujemNehnutelnostId;
+      basePayload.zaujem_ina_rk = null;
+    } else if (effectiveKupujuciStatus === "zaujem_konkretna_ina_rk") {
+      basePayload.zaujem_ina_rk = zaujemInaRk.trim() || null;
+      basePayload.zaujem_nehnutelnost_id = null;
+    } else if (isEdit) {
+      basePayload.zaujem_nehnutelnost_id = null;
+      basePayload.zaujem_ina_rk = null;
+    }
+    // Hypo poradca — kupujúca strana
+    if (effectiveKupujuciStatus === "caka_na_hypoteku") {
+      basePayload.hypo_typ = hypoTyp;
+      basePayload.hypo_meno = hypoTyp === "externy" ? (hypoMeno || null) : null;
+      basePayload.hypo_firma = (hypoTyp === "externy" || hypoTyp === "klient_sam") ? (hypoFirma || null) : null;
+      basePayload.hypo_poradca_id = hypoTyp === "nas_poradca" ? hypoPoradcaId : null;
+    } else if (isEdit) {
+      basePayload.hypo_typ = null;
+      basePayload.hypo_meno = null;
+      basePayload.hypo_firma = null;
+      basePayload.hypo_poradca_id = null;
+    }
+    // Odložené — môže byť na ktorejkoľvek strane
+    if (status === "odlozene" || effectiveKupujuciStatus === "odlozene") {
+      basePayload.odlozene_do = odlozeneDo || null;
+    } else if (isEdit) {
+      basePayload.odlozene_do = null;
+    }
+    // Realitná kancelária — môže byť na ktorejkoľvek strane (pri OBOJE nie je v ponuke)
+    if (status === "realitna_kancelaria" || effectiveKupujuciStatus === "realitna_kancelaria") {
+      basePayload.rk_nazov = rkNazov.trim() || null;
+    } else if (isEdit) {
+      basePayload.rk_nazov = null;
+    }
+    // Odporúčanie — len pri novom klientovi (kto ho odporučil).
+    if (!isEdit && odporucilId) basePayload.odporucil_klient_id = odporucilId;
     const payload = basePayload;
 
     console.log("[NewKlientModal] isEdit:", isEdit, "id:", editKlient?.id, "payload:", JSON.stringify(payload));
@@ -806,22 +932,29 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
         };
         const existingEventId = (editKlient as { calendar_event_id?: string } | null)?.calendar_event_id;
         if (isEdit && existingEventId) {
-          await fetch("/api/google/calendar", {
+          const res = await fetch("/api/google/calendar", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ...body, eventId: existingEventId }),
           });
+          // F-F: nezahltávaj 401/chybu — upozorni že event sa neaktualizoval
+          if (!res.ok) alert("Google Kalendár sa nepodarilo aktualizovať — termín skontroluj ručne.");
         } else {
           const res = await fetch("/api/google/calendar", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           });
-          const json = await res.json().catch(() => null);
-          const newEventId = json?.event?.id;
-          const targetId = (isEdit ? editKlient?.id : (resultData?.[0] as { id?: string } | undefined)?.id) as string | undefined;
-          if (newEventId && targetId && authUser?.id) {
-            await klientUpdate(authUser.id, targetId, { calendar_event_id: newEventId });
+          // F-F: pri 401 (Google nepripojený) sa predtým event ticho nevytvoril — maklér si myslel že má termín v kalendári
+          if (!res.ok) {
+            alert("Klient je uložený, ale Google Kalendár nie je pripojený — termín si pridaj do kalendára ručne.");
+          } else {
+            const json = await res.json().catch(() => null);
+            const newEventId = json?.event?.id;
+            const targetId = (isEdit ? editKlient?.id : (resultData?.[0] as { id?: string } | undefined)?.id) as string | undefined;
+            if (newEventId && targetId && authUser?.id) {
+              await klientUpdate(authUser.id, targetId, { calendar_event_id: newEventId });
+            }
           }
         }
       } catch { /* silent */ }
@@ -833,10 +966,15 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
       setSaveError(error.message || "Nepodarilo sa uložiť klienta");
       return;
     }
-    setTelefon(""); setMeno(""); setEmail(""); setStatus("novy_kontakt");
-    setTypKlienta("kupujuci"); setTypNehnutelnosti("");
+    // F-E: reset na defaultTyp okna (nie natvrdo "kupujuci") — inak séria predávajúcich po uložení spadla na kupujúceho
+    setTelefon(""); setMeno(""); setEmail(""); setStatus(defaultStatusForTyp(defaultTyp));
+    setStatusKupujuci("");
+    setTypKlienta(defaultTyp); setTypNehnutelnosti("");
+    setZaujemNehnutelnostId(null); setZaujemInaRk("");
+    setHypoTyp(null); setHypoMeno(null); setHypoFirma(null); setHypoPoradcaId(null);
+    setOdlozeneDo(""); setRkNazov("");
     setLokalitaInput(""); setLokalitaValue("");
-    setUlica(""); setCisloDomu(""); setDatumStretnutia(""); setOdkaz(""); setPoznamka(""); setDatumNarodenia("");
+    setUlica(""); setCisloDomu(""); setDatumStretnutia(""); setOdkaz(""); setPoznamka("");
     setChecked(false); setDuplicates([]); setDupLevel("none");
     setCalendarSynced(false); setSaveError("");
     // LV prompt — ak dohodnutý náber a nemá LV
@@ -907,7 +1045,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
             </div>
 
             {checked && dupLevel === "none" && (
-              <div style={{ marginTop: "8px", padding: "8px 12px", background: "#D1FAE5", borderRadius: "8px", fontSize: "12px", color: "var(--text-primary)", fontWeight: "500" }}>
+              <div style={{ marginTop: "8px", padding: "8px 12px", background: "#D1FAE5", borderRadius: "8px", fontSize: "12px", color: "#065F46", fontWeight: "600" }}>
                 ✅ Číslo nie je v databáze
               </div>
             )}
@@ -932,7 +1070,7 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
                       }}
                       style={{
                         display: "block", width: "100%", marginBottom: "6px",
-                        padding: "10px 12px", background: "#fff", border: "1px solid #93C5FD",
+                        padding: "10px 12px", background: "var(--bg-surface)", border: "1px solid #93C5FD",
                         borderRadius: "8px", fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer",
                         textAlign: "left", fontWeight: "500",
                       }}>
@@ -984,45 +1122,84 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
             <input style={inputSt} placeholder="Meno a priezvisko" value={meno} onChange={e => setMeno(e.target.value)} />
           </div>
 
-          {/* Email + Dátum narodenia */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <div style={labelSt}>Email</div>
-              <input
-                style={inputSt}
-                placeholder="email@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                onBlur={e => checkEmailDuplicate(e.target.value)}
-              />
-              {emailWarning && (
-                <div style={{
-                  marginTop: "6px", padding: "6px 10px", borderRadius: "6px",
-                  background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)",
-                  fontSize: "11px", lineHeight: 1.4,
-                }}>
-                  ⚠️ {emailWarning}
-                </div>
-              )}
-            </div>
-            <div>
-              <div style={labelSt}>Dátum narodenia</div>
-              <input type="date" style={inputSt} value={datumNarodenia} onChange={e => setDatumNarodenia(e.target.value)} />
-            </div>
+          {/* Email */}
+          <div>
+            <div style={labelSt}>Email</div>
+            <input
+              style={inputSt}
+              placeholder="email@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onBlur={e => checkEmailDuplicate(e.target.value)}
+            />
+            {emailWarning && (
+              <div style={{
+                marginTop: "6px", padding: "6px 10px", borderRadius: "6px",
+                background: "var(--bg-elevated)", border: "1px solid var(--border)", color: "var(--text-secondary)",
+                fontSize: "11px", lineHeight: 1.4,
+              }}>
+                ⚠️ {emailWarning}
+              </div>
+            )}
           </div>
 
-          {/* Status + Typ klienta */}
+          {/* Status + Typ klienta. Pri OBOJE typu — dva nezávislé statusy (Predaj + Kúpa). */}
           <div style={{ display: "grid", gridTemplateColumns: showTypKlienta ? "1fr 1fr" : "1fr", gap: "12px" }}>
             <div>
-              <div style={labelSt}>Status *</div>
-              <select value={status} onChange={e => setStatus(e.target.value)} style={selectSt}>
-                {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+              {typKlienta === "oboje" ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div>
+                    <div style={labelSt}>Status — predaj *</div>
+                    <select value={status} onChange={e => setStatus(e.target.value)} style={selectSt}>
+                      {STATUSY_PREDAVAJUCI.filter(o => !STATUSY_OBOJE_OMIT.has(o.value)).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      {status === "nabrany" && <option value="nabrany">Nabraný</option>}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={labelSt}>Status — kúpa *</div>
+                    <select value={statusKupujuci || "novy_kontakt"} onChange={e => setStatusKupujuci(e.target.value)} style={selectSt}>
+                      {/* F-G: OBOJE klient nemá mať turista/nechce_rk/realitna_kancelaria (STATUSY_OBOJE_OMIT) */}
+                      {STATUSY_KUPUJUCI.filter(o => !STATUSY_OBOJE_OMIT.has(o.value)).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={labelSt}>Status *</div>
+                  <select value={status} onChange={e => setStatus(e.target.value)} style={selectSt}>
+                    {statusyForTyp(typKlienta).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {status === "nabrany" && !statusyForTyp(typKlienta).some(o => o.value === "nabrany") && (
+                      <option value="nabrany">Nabraný</option>
+                    )}
+                  </select>
+                </div>
+              )}
             </div>
             {showTypKlienta && (
               <div>
                 <div style={labelSt}>Typ klienta *</div>
-                <select value={typKlienta} onChange={e => setTypKlienta(e.target.value)} style={selectSt}>
+                <select
+                  value={typKlienta}
+                  onChange={e => {
+                    const novyTyp = e.target.value;
+                    const starsi = typKlienta;
+                    setTypKlienta(novyTyp);
+                    if (novyTyp === "oboje") {
+                      // Predávajúca strana — ak je aktuálny status kupujúci-only, prepni na predávajúci default
+                      if (!STATUSY_PREDAVAJUCI.some(o => o.value === status)) setStatus("novy_kontakt");
+                      // Kupujúca strana — default ak ešte nie je nastavená
+                      if (!statusKupujuci) setStatusKupujuci("novy_kontakt");
+                    } else {
+                      // Odchod z OBOJE — vyčisti kupujúcu stranu
+                      if (starsi === "oboje") setStatusKupujuci("");
+                      const dostupne = statusyForTyp(novyTyp);
+                      if (!dostupne.some(o => o.value === status)) {
+                        setStatus(defaultStatusForTyp(novyTyp));
+                      }
+                    }
+                  }}
+                  style={selectSt}
+                >
                   <option value="kupujuci">Kupujúci</option>
                   <option value="predavajuci">Predávajúci</option>
                   <option value="oboje">Kupujúci + Predávajúci</option>
@@ -1031,6 +1208,80 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
               </div>
             )}
           </div>
+
+          {/* Záujem — naša nehnuteľnosť */}
+          {(status === "zaujem_konkretna_nasa" || (typKlienta === "oboje" && statusKupujuci === "zaujem_konkretna_nasa")) && (
+            <div>
+              <div style={labelSt}>Naša nehnuteľnosť — o ktorú má záujem *</div>
+              <PropertyPickerSearch
+                value={zaujemNehnutelnostId}
+                onChange={(id) => setZaujemNehnutelnostId(id)}
+              />
+            </div>
+          )}
+
+          {/* Záujem — v inej RK */}
+          {(status === "zaujem_konkretna_ina_rk" || (typKlienta === "oboje" && statusKupujuci === "zaujem_konkretna_ina_rk")) && (
+            <div>
+              <div style={labelSt}>Nehnuteľnosť v inej RK — popis alebo link *</div>
+              <textarea
+                value={zaujemInaRk}
+                onChange={e => setZaujemInaRk(e.target.value)}
+                placeholder={"napr. 3-izbový byt Petržalka v RK Re/Max\nalebo\nhttps://nehnutelnosti.sk/..."}
+                rows={3}
+                style={{ ...inputSt, resize: "vertical", fontFamily: "inherit" }}
+              />
+              <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>
+                Stačí jedno — buď slovný popis (typ, lokalita, ktorá RK), alebo URL inzerátu.
+              </div>
+            </div>
+          )}
+
+          {/* Odložené — kedy začne znova hľadať */}
+          {(status === "odlozene" || (typKlienta === "oboje" && statusKupujuci === "odlozene")) && (
+            <div>
+              <div style={labelSt}>Hľadať byt znova od</div>
+              <input
+                type="date"
+                value={odlozeneDo}
+                onChange={e => setOdlozeneDo(e.target.value)}
+                style={inputSt}
+              />
+              <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>
+                Orientačný dátum — kedy sa ku klientovi vrátiť.
+              </div>
+            </div>
+          )}
+
+          {/* Realitná kancelária — názov */}
+          {(status === "realitna_kancelaria" || (typKlienta === "oboje" && statusKupujuci === "realitna_kancelaria")) && (
+            <div>
+              <div style={labelSt}>Názov realitnej kancelárie</div>
+              <input
+                type="text"
+                value={rkNazov}
+                onChange={e => setRkNazov(e.target.value)}
+                placeholder="napr. Re/Max, Century 21, lokálna RK…"
+                style={inputSt}
+              />
+            </div>
+          )}
+
+          {/* Čaká na hypotéku — kto rieši */}
+          {(status === "caka_na_hypoteku" || (typKlienta === "oboje" && statusKupujuci === "caka_na_hypoteku")) && (
+            <div>
+              <div style={labelSt}>Kto rieši hypotéku *</div>
+              <HypoPoradcaPicker
+                value={{ hypo_typ: hypoTyp, hypo_meno: hypoMeno, hypo_firma: hypoFirma, hypo_poradca_id: hypoPoradcaId }}
+                onChange={(v) => {
+                  setHypoTyp(v.hypo_typ);
+                  setHypoMeno(v.hypo_meno);
+                  setHypoFirma(v.hypo_firma);
+                  setHypoPoradcaId(v.hypo_poradca_id);
+                }}
+              />
+            </div>
+          )}
 
           {/* Dohodnutý náber — checklist */}
           {status === "dohodnuty_naber" && (() => {
@@ -1066,6 +1317,11 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
             );
           })()}
 
+          {/* Generické polia (typ, mesto/obec, ulica, odkaz) sú zmysluplné len
+              pri "Nový kontakt" — keď ešte nepoznáme konkrétnu nehnuteľnosť ani
+              kontext. Pri ostatných statusoch sa skryjú aby nešumili. */}
+          {status === "novy_kontakt" && (
+          <>
           {/* Typ nehnuteľnosti */}
           <div>
             <div style={labelSt}>Typ nehnuteľnosti *</div>
@@ -1219,12 +1475,16 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
             </div>
           )}
 
-          {/* Odkaz na nehnuteľnosť */}
+          {/* Odkaz na nehnuteľnosť — predávajúca vec, čistému kupujúcemu netreba */}
+          {typKlienta !== "kupujuci" && (
           <div>
             <div style={labelSt}>Odkaz na nehnuteľnosť</div>
             <input style={inputSt} placeholder="https://nehnutelnosti.sk/... alebo realit.sk/..." value={odkaz} onChange={e => setOdkaz(e.target.value)} />
             <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "3px" }}>Link na inzerát — studený náber, Google Maps pin</div>
           </div>
+          )}
+          </>
+          )}
 
           {/* Poznámka */}
           <div>
@@ -1233,6 +1493,44 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
               placeholder="Interná poznámka..."
               value={poznamka} onChange={e => setPoznamka(e.target.value)} />
           </div>
+
+          {/* Odporúčanie — len pri novom klientovi */}
+          {!isEdit && (
+            <div>
+              <div style={labelSt}>Odporučil (existujúci klient)</div>
+              {odporucilId ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ ...inputSt, flex: 1 }}>{odporucilQuery}</span>
+                  <button type="button" onClick={() => { setOdporucilId(null); setOdporucilQuery(""); setOdporucilResults([]); }}
+                    style={{ padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "8px", background: "var(--bg-surface)", cursor: "pointer", fontSize: "13px" }}>✕</button>
+                </div>
+              ) : (
+                <div style={{ position: "relative" }}>
+                  <input style={inputSt} placeholder="Hľadaj klienta podľa mena…"
+                    value={odporucilQuery}
+                    onChange={async (e) => {
+                      const q = e.target.value; setOdporucilQuery(q);
+                      if (q.trim().length < 2) { setOdporucilResults([]); return; }
+                      try {
+                        const r = await fetch(`/api/klienti?q=${encodeURIComponent(q.trim())}`, { credentials: "include" });
+                        const d = await r.json();
+                        setOdporucilResults(Array.isArray(d) ? d.filter((x: { id: string }) => x.id !== editKlient?.id) : []);
+                      } catch { setOdporucilResults([]); }
+                    }} />
+                  {odporucilResults.length > 0 && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", marginTop: "4px", maxHeight: "180px", overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
+                      {odporucilResults.map(k => (
+                        <div key={k.id} onClick={() => { setOdporucilId(k.id); setOdporucilQuery(k.meno); setOdporucilResults([]); }}
+                          style={{ padding: "8px 12px", cursor: "pointer", fontSize: "13px", borderBottom: "1px solid var(--border)", color: "var(--text-primary)" }}>
+                          {k.meno}{k.telefon ? ` · ${k.telefon}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Error */}
@@ -1273,11 +1571,11 @@ export default function NewKlientModal({ open, onClose, onCreated, onSaved, onLv
         <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
           <button onClick={onClose} style={{ padding: "10px 20px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "10px", fontSize: "14px", cursor: "pointer", color: "var(--text-secondary)" }}>Zrušiť</button>
           <button onClick={handleSave}
-            disabled={saving || !telefon.trim() || !meno.trim() || (!isEdit && !typNehnutelnosti) || (!isEdit && dupLevel === "critical" && !forceCreate)}
+            disabled={saving || !telefon.trim() || !meno.trim() || (!isEdit && !typNehnutelnosti && status === "novy_kontakt") || (!isEdit && dupLevel === "critical" && !forceCreate)}
             style={{
               padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
               borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
-              opacity: saving || !telefon.trim() || !meno.trim() || (!isEdit && !typNehnutelnosti) || (!isEdit && dupLevel === "critical" && !forceCreate) ? 0.4 : 1,
+              opacity: saving || !telefon.trim() || !meno.trim() || (!isEdit && !typNehnutelnosti && status === "novy_kontakt") || (!isEdit && dupLevel === "critical" && !forceCreate) ? 0.4 : 1,
             }}>
             {saving ? "Ukladám..." : isEdit ? "Uložiť zmeny" : "Vytvoriť klienta"}
           </button>

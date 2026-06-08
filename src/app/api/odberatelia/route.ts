@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { requireUser } from "@/lib/auth/requireUser";
+import { requireUser, isSuperAdmin } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
-  const __auth = await requireUser(req as NextRequest); if (__auth.error) return __auth.error;
-  const userId = req.nextUrl.searchParams.get("user_id");
-  // Bez user_id NIČ nevraciame — odberatelia sú per-makler.
-  if (!userId) return NextResponse.json([]);
+  const auth = await requireUser(req);
+  if (auth.error) return auth.error;
+
+  // Default: vlastní odberatelia (zo session). ?user_id= je OK len pre super_admina.
+  const queryUserId = req.nextUrl.searchParams.get("user_id");
+  let userId = auth.user.id;
+  if (queryUserId && queryUserId !== auth.user.id) {
+    if (!isSuperAdmin(auth.user.role)) {
+      return NextResponse.json({ error: "Nemáš oprávnenie pozerať odberateľov iného užívateľa" }, { status: 403 });
+    }
+    userId = queryUserId;
+  }
   const sb = getSupabaseAdmin();
   const { data, error } = await sb
     .from("odberatelia")

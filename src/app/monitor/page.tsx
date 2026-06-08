@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { filterLokality, type LokalitaEntry } from "@/lib/lokality-db";
 import { useAuth } from "@/components/AuthProvider";
-import PreCallBriefModal from "@/components/PreCallBriefModal";
 import PriceSparkline from "@/components/PriceSparkline";
 import AnalyzyPage from "@/app/analyzy/page";
 
@@ -21,9 +20,8 @@ interface Inzerat {
   plocha: number;
   izby: number;
   foto_url: string;
-  predajca_meno: string;
-  predajca_telefon: string;
   predajca_typ: string | null;
+  ponuka_typ: string | null;
   first_seen_at: string;
   last_seen_at: string;
   is_active: boolean;
@@ -52,6 +50,7 @@ interface Filter {
   notify_telegram: boolean;
   is_active: boolean;
   len_sukromni: boolean;
+  ponuka_typ: string;
 }
 
 /* ── Konštanty ── */
@@ -183,7 +182,6 @@ function LokalitaInput({ value, onChange, placeholder }: { value: string; onChan
 /* ── Hlavná stránka ── */
 function MonitorContent() {
   const router = useRouter();
-  const [briefFor, setBriefFor] = useState<{ id: string; url?: string } | null>(null);
   const [inzeraty, setInzeraty] = useState<Inzerat[]>([]);
   const [filtre, setFiltre] = useState<Filter[]>([]);
   const [total, setTotal] = useState(0);
@@ -193,6 +191,7 @@ function MonitorContent() {
 
   const [viewPortal, setViewPortal] = useState("");
   const [viewTyp, setViewTyp] = useState("");
+  const [viewPonuka, setViewPonuka] = useState(""); // "" | predaj | prenajom
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [lenSukromni, setLenSukromni] = useState(true);  // Default: zobraz len súkromných
@@ -328,6 +327,7 @@ function MonitorContent() {
         const isNejasne = !i.predajca_typ;
         if (!isSukromny && !(zahrnNeJasne && isNejasne)) return false;
       }
+      if (viewPonuka && (i.ponuka_typ || "predaj") !== viewPonuka) return false;
       if (onlyToday && !(i.first_seen_at || "").startsWith(today)) return false;
       if (onlyMotivated && (i.motivation_score ?? 0) < 30) return false;
       if (hideDuplicates && i.canonical_id) return false; // skry duplikáty (canonical_id ≠ null = sekundárny)
@@ -347,7 +347,7 @@ function MonitorContent() {
     nazov: "", portal: "reality.sk", typ: "byt", lokalita: "",
     cena_od: "", cena_do: "", search_url: "",
     notify_email: true, notify_telegram: false,
-    len_sukromni: true,
+    len_sukromni: true, ponuka_typ: "predaj",
   };
   const [nf, setNf] = useState(defaultForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -366,6 +366,7 @@ function MonitorContent() {
       notify_email: f.notify_email,
       notify_telegram: f.notify_telegram,
       len_sukromni: f.len_sukromni ?? true,
+      ponuka_typ: f.ponuka_typ || "predaj",
     });
   };
 
@@ -412,7 +413,7 @@ function MonitorContent() {
     });
     if (res.ok) {
       setShowNewFilter(false);
-      setNf({ nazov: "", portal: "reality.sk", typ: "byt", lokalita: "", cena_od: "", cena_do: "", search_url: "", notify_email: true, notify_telegram: false, len_sukromni: true });
+      setNf({ nazov: "", portal: "reality.sk", typ: "byt", lokalita: "", cena_od: "", cena_do: "", search_url: "", notify_email: true, notify_telegram: false, len_sukromni: true, ponuka_typ: "predaj" });
       loadFiltre();
       showToast("Filter vytvorený");
     } else {
@@ -455,29 +456,6 @@ function MonitorContent() {
     }
   };
 
-  const [reclassifying, setReclassifying] = useState(false);
-  const runReclassify = async () => {
-    if (!confirm("Re-klasifikovať všetky aktívne inzeráty cez AI classifier v2? Môže trvať 1–2 minúty.")) return;
-    setReclassifying(true);
-    try {
-      const res = await fetch("/api/monitor/reclassify-all", {
-        method: "POST",
-        credentials: "include",
-      });
-      const d = await res.json();
-      if (res.ok) {
-        showToast(`Hotovo: ${d.updated} preklasifikovaných, ${d.skipped} preskočených (override)`);
-        await loadInzeraty();
-      } else {
-        showToast(d.error || "Chyba pri re-klasifikácii", "error");
-      }
-    } catch {
-      showToast("Chyba pri re-klasifikácii", "error");
-    } finally {
-      setReclassifying(false);
-    }
-  };
-
   if (loading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "120px 0" }}>
@@ -516,27 +494,6 @@ function MonitorContent() {
           </p>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          {isSuperAdmin && (
-            <button
-              onClick={runReclassify}
-              disabled={reclassifying}
-              style={{
-                ...S.btnSecondary,
-                opacity: reclassifying ? 0.4 : 1,
-                cursor: reclassifying ? "not-allowed" : "pointer",
-                display: "flex", alignItems: "center", gap: "6px",
-                fontSize: "12px",
-              }}
-              title="Re-klasifikovať všetky inzeráty cez classifier v2"
-            >
-              {reclassifying ? (
-                <>
-                  <span style={{ width: "12px", height: "12px", border: "2px solid var(--border)", borderTopColor: "var(--text-primary)", borderRadius: "50%", animation: "spin 0.6s linear infinite" }} />
-                  Klasifikujem...
-                </>
-              ) : "🤖 Re-klasifikovať"}
-            </button>
-          )}
           <button
             onClick={runScrape}
             disabled={scraping || aktivneFiltre === 0}
@@ -651,6 +608,31 @@ function MonitorContent() {
             <select value={viewTyp} onChange={e => setViewTyp(e.target.value)} style={{ ...S.select, width: "auto", minWidth: "140px" }}>
               {TYPY.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
+            {/* Predaj / prenájom — viditeľný segmentovaný prepínač */}
+            <div style={{ display: "inline-flex", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", overflow: "hidden", height: "38px" }}>
+              {[
+                { v: "", label: "Všetko" },
+                { v: "predaj", label: "Predaj" },
+                { v: "prenajom", label: "Prenájom" },
+              ].map((o, idx) => {
+                const active = viewPonuka === o.v;
+                return (
+                  <button
+                    key={o.v || "all"}
+                    onClick={() => setViewPonuka(o.v)}
+                    style={{
+                      padding: "0 14px", border: "none", cursor: "pointer", fontSize: "13px",
+                      fontWeight: active ? 700 : 500,
+                      borderLeft: idx > 0 ? "1px solid var(--border-subtle)" : "none",
+                      background: active ? (o.v === "prenajom" ? "#cffafe" : o.v === "predaj" ? "#e0e7ff" : "var(--text-primary)") : "var(--bg-base)",
+                      color: active ? (o.v === "prenajom" ? "#0e7490" : o.v === "predaj" ? "#3730a3" : "var(--bg-base)") : "var(--text-secondary)",
+                    }}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
             <select value={sort} onChange={e => setSort(e.target.value)} style={{ ...S.select, width: "auto", minWidth: "140px" }}>
               {SORT_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
@@ -787,6 +769,10 @@ function MonitorContent() {
                         <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: PORTAL_DOT[i.portal] || "var(--text-muted)" }} />
                         {i.portal}
                       </span>
+                      {i.ponuka_typ === "prenajom"
+                        ? <span style={{ fontSize: "11px", fontWeight: 600, color: "#0e7490", background: "#cffafe", padding: "2px 8px", borderRadius: "6px" }}>Prenájom</span>
+                        : <span style={{ fontSize: "11px", fontWeight: 600, color: "#3730a3", background: "#e0e7ff", padding: "2px 8px", borderRadius: "6px" }}>Predaj</span>
+                      }
                       {i.typ && <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{i.typ}</span>}
                       {i.plocha > 0 && <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>{i.plocha} m²</span>}
                       {i.izby > 0 && <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>{i.izby}-izb</span>}
@@ -837,17 +823,6 @@ function MonitorContent() {
                         </span>
                       )}
                       <PriceSparkline inzeratId={i.id} currentPrice={i.cena} />
-                      <button onClick={(e) => {
-                        e.preventDefault(); e.stopPropagation();
-                        setBriefFor({ id: i.id, url: i.url });
-                      }} style={{
-                        marginLeft: "auto",
-                        fontSize: "11px", fontWeight: 600, color: "#7c2d12",
-                        background: "#fed7aa", border: "none",
-                        padding: "3px 10px", borderRadius: "6px", cursor: "pointer",
-                      }} title="Pre-call brief — čo povedať predajcovi pred zavolaním">
-                        📞 Brief
-                      </button>
                       {i.predajca_typ !== "firma" && (
                         <button
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleOverride(i.id, "rk"); }}
@@ -940,6 +915,14 @@ function MonitorContent() {
                   <label style={S.label}>Typ</label>
                   <select value={nf.typ} onChange={e => setNf({ ...nf, typ: e.target.value })} style={S.select}>
                     {TYPY.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.label}>Predaj / prenájom</label>
+                  <select value={nf.ponuka_typ} onChange={e => setNf({ ...nf, ponuka_typ: e.target.value })} style={S.select}>
+                    <option value="predaj">Predaj</option>
+                    <option value="prenajom">Prenájom</option>
+                    <option value="oboje">Oboje (predaj + prenájom)</option>
                   </select>
                 </div>
                 <div>
@@ -1074,6 +1057,14 @@ function MonitorContent() {
                           {TYPY.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
                       </div>
+                      <div>
+                        <label style={S.label}>Predaj / prenájom</label>
+                        <select value={ef.ponuka_typ} onChange={e => setEf({ ...ef, ponuka_typ: e.target.value })} style={S.select}>
+                          <option value="predaj">Predaj</option>
+                          <option value="prenajom">Prenájom</option>
+                          <option value="oboje">Oboje (predaj + prenájom)</option>
+                        </select>
+                      </div>
                       <div style={{ gridColumn: "1 / -1" }}>
                         <label style={S.label}>Lokalita</label>
                         <LokalitaInput value={ef.lokalita} onChange={v => setEf({ ...ef, lokalita: v })} placeholder="Bratislava - Petržalka" />
@@ -1123,6 +1114,9 @@ function MonitorContent() {
                           {f.portal === "vsetky" ? "Všetky" : f.portal}
                         </span>
                         {f.typ && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>{f.typ}</span>}
+                        <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: f.ponuka_typ === "prenajom" ? "#cffafe" : f.ponuka_typ === "oboje" ? "#fef9c3" : "#e0e7ff", color: f.ponuka_typ === "prenajom" ? "#0e7490" : f.ponuka_typ === "oboje" ? "#854d0e" : "#3730a3", fontWeight: 600 }}>
+                          {f.ponuka_typ === "prenajom" ? "Prenájom" : f.ponuka_typ === "oboje" ? "Predaj + prenájom" : "Predaj"}
+                        </span>
                         {f.lokalita && <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>📍 {f.lokalita}</span>}
                         {(f.cena_od || f.cena_do) && (
                           <span style={{ fontSize: "12px", padding: "3px 10px", borderRadius: "6px", background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
@@ -1181,19 +1175,12 @@ function MonitorContent() {
         select:focus, input:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-light) !important; }
       `}</style>
 
-      {briefFor && (
-        <PreCallBriefModal
-          inzeratId={briefFor.id}
-          sourceUrl={briefFor.url}
-          onClose={() => setBriefFor(null)}
-        />
-      )}
     </div>
   );
 }
 
 const MONITOR_TABS = [
-  { key: "scraping", label: "Scraping", icon: "📡" },
+  { key: "scraping", label: "Monitor", icon: "📡" },
   { key: "analyza",  label: "AI Analýza", icon: "📈" },
 ] as const;
 

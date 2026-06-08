@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { vypocitajSkore } from "./matching";
+import { vypocitajSkore, skoreUroven } from "./matching";
 import type { ObjednavkaForMatch, NehnutelnostForMatch } from "./matching";
 
 const baseObj: ObjednavkaForMatch = {
   id: "o1",
   klient_id: "k1",
   druh: "3-izbovy-byt",
-  poziadavky: { pocet_izieb: [3] },
+  // Reálny formát z ObjednavkaForm: kľúč `izby`, hodnoty sú stringy.
+  poziadavky: { izby: ["3"] },
   lokalita: { okresy: ["Bratislava II"] },
   cena_od: 150000,
   cena_do: 220000,
@@ -50,5 +51,85 @@ describe("vypocitajSkore", () => {
   it("null status = aktivny (legacy záznamy)", () => {
     const { score } = vypocitajSkore(baseObj, { ...baseNeh, status: null });
     expect(score).toBeGreaterThan(0);
+  });
+
+  // Regression: izby uložené ako pole stringov (["3"]) sa musia párovať s
+  // číselným n.izby. Pred fixom 2026-06-06 dostal správny počet izieb postih -30.
+  it("izby ako string pole — 3i sedí, dostane bonus nie postih", () => {
+    const obj: ObjednavkaForMatch = { ...baseObj, poziadavky: { izby: ["3"] } };
+    const { score, reasons } = vypocitajSkore(obj, baseNeh);
+    expect(reasons).toContain("3-izbový vyhovuje");
+    expect(reasons.some(r => r.includes("mimo preferencie"))).toBe(false);
+    expect(score).toBeGreaterThanOrEqual(90);
+  });
+
+  it("izby string nesedí — postih sa počíta z čísla, nie z NaN", () => {
+    const obj: ObjednavkaForMatch = { ...baseObj, poziadavky: { izby: ["2"] } };
+    const { reasons } = vypocitajSkore(obj, baseNeh); // baseNeh má 3 izby → odchýlka 1
+    expect(reasons.some(r => r.includes("klient chce 2i"))).toBe(true);
+  });
+
+  it("prázdna lokalita objednávky → fallback na lokalitu klienta (symetria routes)", () => {
+    const obj: ObjednavkaForMatch = { ...baseObj, lokalita: { kraje: [], okresy: [] } };
+    const klient = { id: "k1", lokalita: "Bratislava - Ružinov", rozpocet_max: null };
+    const { reasons } = vypocitajSkore(obj, baseNeh, klient);
+    expect(reasons.some(r => r.includes("z profilu"))).toBe(true);
+  });
+
+  it("cena výrazne nad rozpočtom — stupňovaný postih (#4)", () => {
+    // cena_do 220000, nehnuteľnosť 400000 = +82 % → najvyšší postih
+    const { reasons } = vypocitajSkore(baseObj, { ...baseNeh, cena: 400000 });
+    expect(reasons.some(r => r.includes("mimo rozpočtu"))).toBe(true);
+  });
+
+  it("objednávka bez cena_do → fallback na rozpočet klienta (#6)", () => {
+    const obj: ObjednavkaForMatch = { ...baseObj, cena_do: null };
+    const klient = { id: "k1", lokalita: null, rozpocet_max: 220000 };
+    const { reasons } = vypocitajSkore(obj, baseNeh, klient); // baseNeh 195000 <= 220000
+    expect(reasons).toContain("Cena je v rozpočte");
+  });
+
+  it("druh ako spojený string 'byt, rodinny_dom' — typ sedí (handoff D)", () => {
+    // ObjednavkaForm ukladá multi-druh ako jeden string → musí sa splitnúť
+    const obj: ObjednavkaForMatch = { ...baseObj, druh: "byt, rodinny_dom" };
+    const { reasons } = vypocitajSkore(obj, baseNeh); // baseNeh.typ = "3-izbovy-byt" → "byt" sedí
+    expect(reasons).toContain("Typ nehnuteľnosti sedí");
+  });
+
+  it("cena pod dolnou hranicou (cena_od) — malý bonus, nie plný (handoff E)", () => {
+    // cena_od 150000, nehnuteľnosť 90000 → pod očakávaným rozsahom
+    const { reasons } = vypocitajSkore(baseObj, { ...baseNeh, cena: 90000 });
+    expect(reasons).toContain("Cena pod očakávaným rozsahom");
+    expect(reasons).not.toContain("Cena je v rozpočte");
+  });
+});
+
+describe("skoreUroven", () => {
+  // Jeden zdroj pravdy pre farby naprieč 5 UI komponentmi (prahy 80/50).
+  it("hranice 80 a 50 sú inkluzívne", () => {
+    expect(skoreUroven(80)).toBe("vyborna");
+    expect(skoreUroven(79)).toBe("dobra");
+    expect(skoreUroven(50)).toBe("dobra");
+    expect(skoreUroven(49)).toBe("slaba");
+    expect(skoreUroven(0)).toBe("slaba");
+  });
+});
+
+describe("vypocitajSkore — geo (vzdialenosť v km)", () => {
+  // Petržalka cca 48.12 / 17.10. Keď majú obj aj neh GPS, použije sa vzdialenosť
+  // a text-based lokalita sa preskočí.
+  const objGeo: ObjednavkaForMatch = { ...baseObj, lat: 48.12, lng: 17.10 };
+
+  it("nehnuteľnosť ~0.6 km → geo bonus", () => {
+    const neh: NehnutelnostForMatch = { ...baseNeh, lat: 48.125, lng: 17.105 };
+    const { reasons } = vypocitajSkore(objGeo, neh);
+    expect(reasons.some(r => r.includes("km"))).toBe(true);
+    expect(reasons.some(r => r.includes("Presne v lokalite"))).toBe(true);
+  });
+
+  it("nehnuteľnosť ~300 km (Prešov) → geo postih", () => {
+    const neh: NehnutelnostForMatch = { ...baseNeh, lat: 48.99, lng: 21.24 };
+    const { reasons } = vypocitajSkore(objGeo, neh);
+    expect(reasons.some(r => r.includes("km od preferencie"))).toBe(true);
   });
 });

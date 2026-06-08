@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
+import { buildTwoFactorCookieValue } from "@/lib/auth/session";
 import { verifyTotp, generateBackupCodes } from "@/lib/totp";
 import { logAudit } from "@/lib/audit";
 import { decryptDocString } from "@/lib/cryptoDocs";
@@ -77,9 +78,12 @@ export async function POST(req: NextRequest) {
     ip_address: req.headers.get("x-forwarded-for") || undefined,
   });
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     ok: true,
     backup_codes: plainBackup,
     warning: "Tieto backup kódy ulož na bezpečné miesto. Po zatvorení tohto okna ich už neuvidíš. Každý funguje len raz.",
   });
+  // 2FA je teraz zapnuté → zruš enforcement cookie (admin už nie je presmerovaný na setup).
+  res.headers.append("Set-Cookie", buildTwoFactorCookieValue(false));
+  return res;
 }

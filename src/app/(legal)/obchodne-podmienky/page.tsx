@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getFirmaInfo } from "@/lib/getFirmaInfo";
 
 export const metadata: Metadata = {
   title: "Obchodné podmienky | Vianema",
@@ -6,7 +7,8 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function ObchodnePodmienkyPage() {
+export default async function ObchodnePodmienkyPage() {
+  const f = await getFirmaInfo();
   return (
     <>
       <header style={headerSt}>
@@ -52,7 +54,7 @@ export default function ObchodnePodmienkyPage() {
           <li>Organizácia a vedenie obhliadok s evidenciou záujemcov</li>
           <li>Poradenstvo pri stanovení trhovej ceny (CMA analýza)</li>
           <li>Mlčanlivosť o dôverných informáciách klienta</li>
-          <li>Poistenie zodpovednosti za škodu spôsobenú výkonom realitnej činnosti</li>
+          {f.poistovna && <li>Poistenie zodpovednosti za škodu spôsobenú výkonom realitnej činnosti ({f.poistovna})</li>}
         </ul>
       </Section>
 

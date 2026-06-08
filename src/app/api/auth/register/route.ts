@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { buildSessionCookieValue, buildBillingCookieValue } from "@/lib/auth/session";
+import { buildSessionCookieValue, buildBillingCookieValue, buildTwoFactorCookieValue } from "@/lib/auth/session";
+import { isAdminTier } from "@/lib/auth/requireUser";
 import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
@@ -92,7 +93,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Chyba pri vytváraní kancelárie" }, { status: 500 });
     }
 
-    // Vytvor admin usera
+    // Vytvor majiteľa firmy.
+    // "majitel" je kanonická rola vlastníka RK (viď src/lib/scope.ts Role type).
+    // Dáva plné práva v rámci vlastnej firmy (isSuperAdmin → true, scope.isAdmin →
+    // true), ale je company-scoped — cross-tenant prístup má len "platform_admin".
+    // NEPOUŽÍVAŤ "admin": nie je v kanonickej taxonómii, isSuperAdmin() ho nepozná
+    // → owner by bol under-privileged.
     const hashed = await bcrypt.hash(password, 10);
     const initials = name.trim().split(/\s+/).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
 
@@ -103,7 +109,7 @@ export async function POST(request: Request) {
         initials,
         email: email.toLowerCase().trim(),
         password: hashed,
-        role: "admin",
+        role: "majitel",
         company_id: company.id,
       })
       .select("id, name, role, email, company_id")
@@ -119,6 +125,8 @@ export async function POST(request: Request) {
     const res = NextResponse.json({ user });
     res.headers.append("Set-Cookie", buildSessionCookieValue(String(user.id)));
     res.headers.append("Set-Cookie", buildBillingCookieValue(true));
+    // 🔒 Nový majiteľ firmy (admin) nemá 2FA → middleware ho presmeruje na setup.
+    res.headers.append("Set-Cookie", buildTwoFactorCookieValue(isAdminTier(user.role)));
     return res;
   } catch (e) {
     console.error("[register] error:", e);

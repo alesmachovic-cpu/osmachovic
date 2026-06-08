@@ -11,13 +11,21 @@ export interface ScrapedInzerat {
   mena?: string;
   plocha?: number;
   izby?: number;
-  popis?: string;
   foto_url?: string;
+  predajca_typ?: string; // 'sukromny' | 'realitka' | 'developer'
+  ponuka_typ?: "predaj" | "prenajom"; // os predaj/prenájom
+  // Anonymné ID účtu predajcu na portáli (napr. "bazos:12345"). NIE kontakt/meno.
+  // Slúži len na počet "koľko inzerátov má tento účet" → RK detekcia.
+  inzerent_id?: string;
+  poschodie?: string;    // "4/8", "prízemie", "podkrovie"
+  stav?: string;         // "novostavba", "po rekonštrukcii", "pôvodný stav"
+
+  // ⚠️ TRANSIENTNÉ polia (GDPR data-min) — parsery ich vyextrahujú do pamäte
+  // a klasifikátor ich použije POČAS scrape behu, ale do DB sa NIKDY neukladajú.
+  // Nikde ich nezapisuj do monitor_inzeraty (stĺpce boli odstránené migr. 106).
+  popis?: string;
   predajca_meno?: string;
   predajca_telefon?: string;
-  predajca_typ?: string; // 'sukromny' | 'realitka' | 'developer'
-  poschodie?: string;   // "4/8", "prízemie", "podkrovie"
-  stav?: string;        // "novostavba", "po rekonštrukcii", "pôvodný stav"
   raw_data?: Record<string, unknown>;
 }
 
@@ -38,7 +46,8 @@ export interface MonitorFilter {
   notify_email: boolean;
   notify_telegram: boolean;
   is_active: boolean;
-  len_sukromni?: boolean;  // ak true, scraper uloží len predajca_typ=sukromny
+  len_sukromni?: boolean;  // ak true → notifikácie len pre súkromníkov (NIE filter ukladania)
+  ponuka_typ?: "predaj" | "prenajom" | "oboje"; // ktorý segment scrapovať
   makler_id?: string | null;
 }
 

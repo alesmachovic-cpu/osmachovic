@@ -184,6 +184,9 @@ export default function VolniKlientiPage() {
             Klienti ktorých si môže prevziať akýkoľvek maklér z kancelárie. Po prebratí sa štartuje 24h SLA.
           </p>
         </div>
+        {/* S7 follow-up: backend cron pustí manuálny trigger len pre isManager = super_admin | majitel | manazer.
+            Ostatní (makler, admin, platform_admin) by dostali 403, tak button zobrazíme presne týmto trom rolám. */}
+        {(user?.role === "super_admin" || user?.role === "majitel" || user?.role === "manazer") && (
         <button
           onClick={runCron}
           disabled={running}
@@ -197,6 +200,7 @@ export default function VolniKlientiPage() {
         >
           {running ? "Spúšťam..." : "Spustiť SLA cron"}
         </button>
+        )}
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "12px" }}>

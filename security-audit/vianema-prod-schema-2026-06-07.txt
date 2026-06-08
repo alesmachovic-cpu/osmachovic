@@ -1,0 +1,1086 @@
+# Vianema PROD schema dump (hokymscytscsewrpwdjf) — 2026-06-07
+# Query A: information_schema.columns (table|column|type|nullable)
+# Účel: podklad pre veľký release — diff dev vs prod, zladovací skript (Bezpecnost)
+# Pozn: B (indexy) + C (RLS) doplníme keď CEO pošle.
+
+analyzy_trhu|id|uuid|NO
+analyzy_trhu|klient_id|uuid|YES
+analyzy_trhu|obec|text|NO
+analyzy_trhu|typ_nehnutelnosti|text|NO
+analyzy_trhu|plocha|numeric|NO
+analyzy_trhu|predajna_cena|numeric|YES
+analyzy_trhu|priemerna_cena_m2|numeric|NO
+analyzy_trhu|odporucana_od|numeric|NO
+analyzy_trhu|odporucana_do|numeric|NO
+analyzy_trhu|hodnotenie|text|NO
+analyzy_trhu|odchylka_pct|integer|NO
+analyzy_trhu|pocet_porovnani|integer|NO
+analyzy_trhu|zdroj|text|NO
+analyzy_trhu|komentar|text|YES
+analyzy_trhu|analyzed_at|timestamp with time zone|NO
+analyzy_trhu|company_id|uuid|NO
+audit_log|id|uuid|NO
+audit_log|user_id|text|YES
+audit_log|action|text|NO
+audit_log|entity_type|text|YES
+audit_log|entity_id|text|YES
+audit_log|detail|jsonb|YES
+audit_log|ip|text|YES
+audit_log|user_agent|text|YES
+audit_log|created_at|timestamp with time zone|NO
+auth_2fa_challenges|id|uuid|NO
+auth_2fa_challenges|user_id|text|NO
+auth_2fa_challenges|challenge|text|NO
+auth_2fa_challenges|ip|text|YES
+auth_2fa_challenges|user_agent|text|YES
+auth_2fa_challenges|created_at|timestamp with time zone|YES
+auth_2fa_challenges|expires_at|timestamp with time zone|NO
+auth_2fa_challenges|used_at|timestamp with time zone|YES
+client_interactions|id|uuid|NO
+client_interactions|klient_id|uuid|NO
+client_interactions|typ|text|NO
+client_interactions|subject|text|YES
+client_interactions|body|text|YES
+client_interactions|occurred_at|timestamp with time zone|NO
+client_interactions|created_by|text|NO
+client_interactions|created_at|timestamp with time zone|NO
+companies|id|uuid|NO
+companies|name|text|NO
+companies|slug|text|NO
+companies|plan|text|NO
+companies|plan_valid_until|timestamp with time zone|YES
+companies|stripe_customer_id|text|YES
+companies|stripe_subscription_id|text|YES
+companies|logo_url|text|YES
+companies|email|text|YES
+companies|phone|text|YES
+companies|address|text|YES
+companies|city|text|YES
+companies|country|text|NO
+companies|is_active|boolean|NO
+companies|settings|jsonb|NO
+companies|created_at|timestamp with time zone|NO
+companies|updated_at|timestamp with time zone|NO
+companies|billing_status|text|YES
+companies|plan_interval|text|YES
+companies|trial_ends_at|timestamp with time zone|YES
+companies|max_users|integer|YES
+companies|locale|text|YES
+companies|ico|text|YES
+companies|dic|text|YES
+consents|id|uuid|NO
+consents|klient_id|uuid|YES
+consents|data_subject_id|text|YES
+consents|purpose|text|NO
+consents|text_version|text|YES
+consents|text_hash|text|YES
+consents|granted|boolean|NO
+consents|granted_at|timestamp with time zone|YES
+consents|withdrawn_at|timestamp with time zone|YES
+consents|proof_ip|text|YES
+consents|proof_user_agent|text|YES
+consents|source|text|YES
+consents|created_at|timestamp with time zone|NO
+dsr_requests|id|uuid|NO
+dsr_requests|klient_id|uuid|YES
+dsr_requests|data_subject|text|NO
+dsr_requests|request_type|text|NO
+dsr_requests|status|text|NO
+dsr_requests|received_at|timestamp with time zone|NO
+dsr_requests|deadline_at|timestamp with time zone|NO
+dsr_requests|completed_at|timestamp with time zone|YES
+dsr_requests|assigned_to|text|YES
+dsr_requests|notes|text|YES
+dsr_requests|created_at|timestamp with time zone|NO
+faktura_polozky|id|uuid|NO
+faktura_polozky|faktura_id|uuid|YES
+faktura_polozky|popis|text|YES
+faktura_polozky|mnozstvo|integer|YES
+faktura_polozky|jednotka|text|YES
+faktura_polozky|cena_jednotka|integer|YES
+faktura_polozky|spolu|integer|YES
+faktura_polozky|poradie|integer|YES
+faktura_polozky|company_id|uuid|NO
+faktury|id|uuid|NO
+faktury|cislo_faktury|text|YES
+faktury|variabilny_symbol|text|YES
+faktury|odberatel_id|uuid|YES
+faktury|odberatel_snapshot|jsonb|YES
+faktury|datum_vystavenia|text|YES
+faktury|datum_dodania|text|YES
+faktury|datum_splatnosti|text|YES
+faktury|forma_uhrady|text|YES
+faktury|suma_bez_dph|integer|YES
+faktury|dph|integer|YES
+faktury|suma_celkom|integer|YES
+faktury|zaplatene|boolean|YES
+faktury|datum_uhrady|text|YES
+faktury|poznamka|text|YES
+faktury|created_at|timestamp with time zone|YES
+faktury|user_id|text|YES
+faktury|company_id|uuid|NO
+firma_info|id|integer|NO
+firma_info|nazov|text|NO
+firma_info|sidlo|text|NO
+firma_info|ico|text|NO
+firma_info|dic|text|NO
+firma_info|ic_dph|text|NO
+firma_info|registracia|text|NO
+firma_info|konatel|text|NO
+firma_info|telefon|text|NO
+firma_info|email|text|NO
+firma_info|web|text|NO
+firma_info|prevadzkarena|text|NO
+firma_info|region|text|NO
+firma_info|historia|text|NO
+firma_info|cislo_licencie|text|NO
+firma_info|poistovna|text|NO
+firma_info|narks|text|NO
+firma_info|updated_at|timestamp with time zone|YES
+google_tokens|user_id|text|NO
+google_tokens|access_token|text|YES
+google_tokens|refresh_token|text|YES
+google_tokens|token_expires_at|timestamp with time zone|YES
+google_tokens|scope|text|YES
+google_tokens|created_at|timestamp with time zone|NO
+google_tokens|updated_at|timestamp with time zone|NO
+in_app_notifications|id|uuid|NO
+in_app_notifications|user_id|text|NO
+in_app_notifications|typ|text|YES
+in_app_notifications|titulok|text|YES
+in_app_notifications|sprava|text|YES
+in_app_notifications|data|jsonb|YES
+in_app_notifications|precitane|boolean|YES
+in_app_notifications|created_at|timestamp with time zone|NO
+klient_dokumenty|id|uuid|NO
+klient_dokumenty|klient_id|uuid|NO
+klient_dokumenty|name|text|NO
+klient_dokumenty|type|text|YES
+klient_dokumenty|size|integer|YES
+klient_dokumenty|source|text|YES
+klient_dokumenty|mime|text|YES
+klient_dokumenty|text_content|text|YES
+klient_dokumenty|data_base64|text|YES
+klient_dokumenty|created_at|timestamp with time zone|YES
+klient_dokumenty|nehnutelnost_id|uuid|YES
+klient_dokumenty|company_id|uuid|NO
+klient_udalosti|id|uuid|NO
+klient_udalosti|klient_id|uuid|NO
+klient_udalosti|typ|text|NO
+klient_udalosti|popis|text|NO
+klient_udalosti|autor|text|YES
+klient_udalosti|created_at|timestamp with time zone|NO
+klient_udalosti|company_id|uuid|NO
+klienti|id|uuid|NO
+klienti|meno|text|YES
+klienti|telefon|text|YES
+klienti|email|text|YES
+klienti|lokalita|text|YES
+klienti|typ|text|YES
+klienti|status|text|YES
+klienti|makler_id|uuid|YES
+klienti|priorita|text|YES
+klienti|zdroj|text|YES
+klienti|datum_kontaktu|text|YES
+klienti|poznamka|text|YES
+klienti|proviziaeur|text|YES
+klienti|created_at|timestamp with time zone|YES
+klienti|updated_at|timestamp with time zone|YES
+klienti|datum_naberu|text|YES
+klienti|calendar_event_id|text|YES
+klienti|spolupracujuci_makler_id|uuid|YES
+klienti|spolupracujuci_provizia_pct|integer|YES
+klienti|datum_narodenia|text|YES
+klienti|lv_data|jsonb|YES
+klienti|je_volny|boolean|YES
+klienti|volny_dovod|text|YES
+klienti|volny_at|timestamp with time zone|YES
+klienti|typ_transakcie|text|YES
+klienti|anonymized_at|timestamp with time zone|YES
+klienti|sla_warning_at|timestamp with time zone|YES
+klienti|sla_critical_at|timestamp with time zone|YES
+klienti|sla_last_chance_at|timestamp with time zone|YES
+klienti|napomenutia_count|integer|YES
+klienti|posledne_napomenutie_at|timestamp with time zone|YES
+klienti|posledne_napomenutie_dovod|text|YES
+klienti|manager_action_at|timestamp with time zone|YES
+klienti|manager_action_type|text|YES
+klienti|acquisition_source|text|YES
+klienti|segment|text|YES
+klienti|legal_basis|text|YES
+klienti|lifetime_value|numeric|YES
+klienti|tags|ARRAY|YES
+klienti|company_id|uuid|NO
+klienti_history|id|uuid|NO
+klienti_history|klient_id|uuid|NO
+klienti_history|action|text|NO
+klienti_history|dovod|text|YES
+klienti_history|from_makler_id|uuid|YES
+klienti_history|to_makler_id|uuid|YES
+klienti_history|by_user_id|text|YES
+klienti_history|meta|jsonb|YES
+klienti_history|created_at|timestamp with time zone|NO
+klienti_history|company_id|uuid|NO
+kolizny_log|id|uuid|NO
+kolizny_log|nehnutelnost_id|uuid|YES
+kolizny_log|klient_id|uuid|YES
+kolizny_log|makler_id|text|YES
+kolizny_log|status|text|YES
+kolizny_log|poznamka|text|YES
+kolizny_log|vyriesene_at|timestamp with time zone|YES
+kolizny_log|created_at|timestamp with time zone|NO
+login_attempts|id|uuid|NO
+login_attempts|ip|text|NO
+login_attempts|identifier|text|NO
+login_attempts|success|boolean|NO
+login_attempts|attempted_at|timestamp with time zone|NO
+login_attempts|user_agent|text|YES
+login_attempts|created_at|timestamp with time zone|NO
+logy|id|uuid|NO
+logy|typ|text|YES
+logy|popis|text|YES
+logy|klient_id|text|YES
+logy|nehnutelnost_id|text|YES
+logy|metadata|jsonb|YES
+logy|created_at|timestamp with time zone|YES
+makler_dodavatel|user_id|text|NO
+makler_dodavatel|nazov|text|YES
+makler_dodavatel|adresa|text|YES
+makler_dodavatel|ico|text|YES
+makler_dodavatel|dic|text|YES
+makler_dodavatel|ic_dph|text|YES
+makler_dodavatel|iban|text|YES
+makler_dodavatel|banka|text|YES
+makler_dodavatel|swift|text|YES
+makler_dodavatel|obch_register|text|YES
+makler_dodavatel|konst_symbol|text|YES
+makler_dodavatel|email|text|YES
+makler_dodavatel|telefon|text|YES
+makler_dodavatel|splatnost_dni|integer|YES
+makler_dodavatel|uvodny_text|text|YES
+makler_dodavatel|poznamka_default|text|YES
+makler_dodavatel|vystavil|text|YES
+makler_dodavatel|created_at|timestamp with time zone|NO
+makler_dodavatel|updated_at|timestamp with time zone|NO
+makler_dodavatel|podpis_data|text|YES
+makler_provizie_pct|id|uuid|NO
+makler_provizie_pct|meno|text|YES
+makler_provizie_pct|percento|numeric|YES
+makler_provizie_pct|medziprovizia|numeric|YES
+makleri|id|uuid|NO
+makleri|meno|text|YES
+makleri|email|text|YES
+makleri|telefon|text|YES
+makleri|firma|text|YES
+makleri|aktivny|boolean|YES
+makleri|created_at|timestamp with time zone|YES
+market_sentiments|id|uuid|NO
+market_sentiments|sentiment_date|date|NO
+market_sentiments|lokalita|text|NO
+market_sentiments|typ|text|NO
+market_sentiments|izby|integer|YES
+market_sentiments|active_count|integer|NO
+market_sentiments|new_count|integer|NO
+market_sentiments|disappeared_count|integer|NO
+market_sentiments|median_cena|numeric|YES
+market_sentiments|median_eur_per_m2|numeric|YES
+market_sentiments|min_cena|numeric|YES
+market_sentiments|max_cena|numeric|YES
+market_sentiments|median_dom|numeric|YES
+market_sentiments|avg_dom|numeric|YES
+market_sentiments|price_change_30d_pct|numeric|YES
+market_sentiments|supply_change_30d_pct|numeric|YES
+market_sentiments|demand_index|numeric|NO
+market_sentiments|created_at|timestamp with time zone|NO
+market_sentiments|company_id|uuid|NO
+monitor_filtre|id|uuid|NO
+monitor_filtre|nazov|text|NO
+monitor_filtre|portal|text|NO
+monitor_filtre|typ|text|YES
+monitor_filtre|lokalita|text|YES
+monitor_filtre|cena_od|numeric|YES
+monitor_filtre|cena_do|numeric|YES
+monitor_filtre|plocha_od|numeric|YES
+monitor_filtre|plocha_do|numeric|YES
+monitor_filtre|izby_od|integer|YES
+monitor_filtre|izby_do|integer|YES
+monitor_filtre|klucove_slova|text|YES
+monitor_filtre|search_url|text|YES
+monitor_filtre|notify_email|boolean|YES
+monitor_filtre|notify_telegram|boolean|YES
+monitor_filtre|is_active|boolean|YES
+monitor_filtre|makler_id|uuid|YES
+monitor_filtre|created_at|timestamp with time zone|YES
+monitor_filtre|updated_at|timestamp with time zone|YES
+monitor_filtre|len_sukromni|boolean|NO
+monitor_filtre|company_id|uuid|NO
+monitor_inzeraty|id|uuid|NO
+monitor_inzeraty|portal|text|NO
+monitor_inzeraty|external_id|text|NO
+monitor_inzeraty|url|text|NO
+monitor_inzeraty|nazov|text|YES
+monitor_inzeraty|typ|text|YES
+monitor_inzeraty|lokalita|text|YES
+monitor_inzeraty|cena|numeric|YES
+monitor_inzeraty|mena|text|YES
+monitor_inzeraty|plocha|numeric|YES
+monitor_inzeraty|izby|integer|YES
+monitor_inzeraty|popis|text|YES
+monitor_inzeraty|foto_url|text|YES
+monitor_inzeraty|predajca_meno|text|YES
+monitor_inzeraty|predajca_telefon|text|YES
+monitor_inzeraty|predajca_typ|text|YES
+monitor_inzeraty|raw_data|jsonb|YES
+monitor_inzeraty|first_seen_at|timestamp with time zone|YES
+monitor_inzeraty|last_seen_at|timestamp with time zone|YES
+monitor_inzeraty|is_active|boolean|YES
+monitor_inzeraty|created_at|timestamp with time zone|YES
+monitor_inzeraty|motivation_score|integer|NO
+monitor_inzeraty|canonical_id|uuid|YES
+monitor_inzeraty|listed_on_n_portals|integer|NO
+monitor_inzeraty|predajca_typ_confidence|numeric|YES
+monitor_inzeraty|predajca_typ_method|text|YES
+monitor_inzeraty|first_known_cena|numeric|YES
+monitor_inzeraty|predajca_typ_signals|jsonb|YES
+monitor_inzeraty|predajca_typ_override|text|YES
+monitor_inzeraty|poschodie|text|YES
+monitor_inzeraty|stav|text|YES
+monitor_inzeraty|cena_za_m2|numeric|YES
+monitor_inzeraty_disappearances|id|uuid|NO
+monitor_inzeraty_disappearances|inzerat_id|uuid|NO
+monitor_inzeraty_disappearances|disappeared_on|date|NO
+monitor_inzeraty_disappearances|last_known_cena|numeric|NO
+monitor_inzeraty_disappearances|last_known_eur_per_m2|numeric|YES
+monitor_inzeraty_disappearances|total_days_on_market|integer|NO
+monitor_inzeraty_disappearances|classification|text|NO
+monitor_inzeraty_disappearances|confidence_score|numeric|NO
+monitor_inzeraty_disappearances|estimated_sale_price|numeric|YES
+monitor_inzeraty_disappearances|estimated_discount_pct|numeric|YES
+monitor_inzeraty_disappearances|snapshot|jsonb|NO
+monitor_inzeraty_disappearances|created_at|timestamp with time zone|NO
+monitor_inzeraty_snapshots|id|uuid|NO
+monitor_inzeraty_snapshots|inzerat_id|uuid|NO
+monitor_inzeraty_snapshots|snapshot_date|date|NO
+monitor_inzeraty_snapshots|cena|numeric|NO
+monitor_inzeraty_snapshots|eur_per_m2|numeric|YES
+monitor_inzeraty_snapshots|was_active|boolean|NO
+monitor_inzeraty_snapshots|created_at|timestamp with time zone|NO
+monitor_notifikacie|id|uuid|NO
+monitor_notifikacie|inzerat_id|uuid|YES
+monitor_notifikacie|filter_id|uuid|YES
+monitor_notifikacie|typ|text|NO
+monitor_notifikacie|prijemca|text|YES
+monitor_notifikacie|status|text|YES
+monitor_notifikacie|error_msg|text|YES
+monitor_notifikacie|created_at|timestamp with time zone|YES
+monitor_notifikacie|company_id|uuid|NO
+monitor_scrape_log|id|uuid|NO
+monitor_scrape_log|portal|text|NO
+monitor_scrape_log|status|text|NO
+monitor_scrape_log|total_found|integer|YES
+monitor_scrape_log|new_count|integer|YES
+monitor_scrape_log|updated_count|integer|YES
+monitor_scrape_log|duration_ms|integer|YES
+monitor_scrape_log|error_msg|text|YES
+monitor_scrape_log|created_at|timestamp with time zone|YES
+motivation_signals|id|uuid|NO
+motivation_signals|inzerat_id|uuid|NO
+motivation_signals|signal_type|text|NO
+motivation_signals|severity|text|NO
+motivation_signals|detected_at|timestamp with time zone|NO
+motivation_signals|evidence|jsonb|NO
+motivation_signals|is_active|boolean|NO
+motivation_signals|company_id|uuid|NO
+naberove_listy|id|uuid|NO
+naberove_listy|typ_nehnutelnosti|text|YES
+naberove_listy|kraj|text|YES
+naberove_listy|okres|text|YES
+naberove_listy|obec|text|YES
+naberove_listy|cast_obce|text|YES
+naberove_listy|kat_uzemie|text|YES
+naberove_listy|ulica|text|YES
+naberove_listy|supisne_cislo|text|YES
+naberove_listy|cislo_orientacne|text|YES
+naberove_listy|plocha|numeric|YES
+naberove_listy|stav|text|YES
+naberove_listy|poznamky_vybavenie|text|YES
+naberove_listy|parametre|jsonb|YES
+naberove_listy|vybavenie|jsonb|YES
+naberove_listy|oznacenie|text|YES
+naberove_listy|majitel|text|YES
+naberove_listy|konatel|text|YES
+naberove_listy|jednatel|text|YES
+naberove_listy|kontakt_majitel|text|YES
+naberove_listy|uzivatel|text|YES
+naberove_listy|kontakt_uzivatel|text|YES
+naberove_listy|predajna_cena|integer|YES
+naberove_listy|makler|text|YES
+naberove_listy|zmluva|boolean|YES
+naberove_listy|typ_zmluvy|text|YES
+naberove_listy|datum_podpisu|text|YES
+naberove_listy|zmluva_do|text|YES
+naberove_listy|provizia|text|YES
+naberove_listy|popis|text|YES
+naberove_listy|podpis_data|text|YES
+naberove_listy|created_at|timestamp with time zone|YES
+naberove_listy|klient_id|uuid|YES
+naberove_listy|updated_at|timestamp with time zone|YES
+naberove_listy|datum_naberu|text|YES
+naberove_listy|calendar_event_id|text|YES
+naberove_listy|parent_naberak_id|text|YES
+naberove_listy|gdpr_consent|boolean|YES
+naberove_listy|gdpr_consent_at|timestamp with time zone|YES
+naberove_listy|podpis_meta|jsonb|YES
+naberove_listy|company_id|uuid|NO
+naberove_listy|makler_id|uuid|YES
+nehnutelnosti|id|uuid|NO
+nehnutelnosti|nazov|text|YES
+nehnutelnosti|lokalita|text|YES
+nehnutelnosti|ulica|text|YES
+nehnutelnosti|typ_transakcie|text|YES
+nehnutelnosti|typ_nehnutelnosti|text|YES
+nehnutelnosti|cena|integer|YES
+nehnutelnosti|plocha|numeric|YES
+nehnutelnosti|eurM2|numeric|YES
+nehnutelnosti|izby|integer|YES
+nehnutelnosti|poschodie|integer|YES
+nehnutelnosti|stav|text|YES
+nehnutelnosti|balkon|boolean|YES
+nehnutelnosti|garaz|boolean|YES
+nehnutelnosti|vytah|boolean|YES
+nehnutelnosti|url|text|YES
+nehnutelnosti|stav_inzeratu|text|YES
+nehnutelnosti|created_at|timestamp with time zone|YES
+nehnutelnosti|status_kolizie|text|YES
+nehnutelnosti|kolizia_poznamka|text|YES
+nehnutelnosti|makler_id|uuid|YES
+nehnutelnosti|makler_email|text|YES
+nehnutelnosti|klient_id|uuid|YES
+nehnutelnosti|status|text|YES
+nehnutelnosti|fotky_urls|jsonb|YES
+nehnutelnosti|fotky_thumbs|jsonb|YES
+nehnutelnosti|videa_urls|jsonb|YES
+nehnutelnosti|last_foto_rotation_at|timestamp with time zone|YES
+nehnutelnosti|cena_za_energie|text|YES
+nehnutelnosti|text_k_cene|text|YES
+nehnutelnosti|typ_ceny|text|YES
+nehnutelnosti|tagy|text|YES
+nehnutelnosti|vlastnictvo|text|YES
+nehnutelnosti|exkluzivne|boolean|YES
+nehnutelnosti|url_virtualka|text|YES
+nehnutelnosti|vhodne_pre_studentov|boolean|YES
+nehnutelnosti|video_url|text|YES
+nehnutelnosti|kategoria|text|YES
+nehnutelnosti|projekt|boolean|YES
+nehnutelnosti|so_zmluvou|boolean|YES
+nehnutelnosti|specialne_oznacenie|text|YES
+nehnutelnosti|seo_keywords|text|YES
+nehnutelnosti|zobrazovat_cenu|boolean|YES
+nehnutelnosti|zobrazovat_mapu|boolean|YES
+nehnutelnosti|zobrazovat_hypoteku|boolean|YES
+nehnutelnosti|intro|text|YES
+nehnutelnosti|text_popis|text|YES
+nehnutelnosti|url_inzercia|text|YES
+nehnutelnosti|stat|text|YES
+nehnutelnosti|kraj|text|YES
+nehnutelnosti|okres|text|YES
+nehnutelnosti|obec|text|YES
+nehnutelnosti|ulica_privatna|text|YES
+nehnutelnosti|makler|text|YES
+nehnutelnosti|interne_id|text|YES
+nehnutelnosti|provizia_hodnota|integer|YES
+nehnutelnosti|provizia_typ|text|YES
+nehnutelnosti|poznamka_interna|text|YES
+nehnutelnosti|orientacia|text|YES
+nehnutelnosti|pripojenie|jsonb|YES
+nehnutelnosti|export_portaly|jsonb|YES
+nehnutelnosti|typ|text|YES
+nehnutelnosti|uzitkova_plocha|text|YES
+nehnutelnosti|zastavana_plocha|text|YES
+nehnutelnosti|podlahova_plocha|text|YES
+nehnutelnosti|skladova_plocha|text|YES
+nehnutelnosti|celkova_plocha|text|YES
+nehnutelnosti|energeticky_certifikat|text|YES
+nehnutelnosti|energeticka_narocnost|text|YES
+nehnutelnosti|typ_budovy|text|YES
+nehnutelnosti|typ_vybavy|text|YES
+nehnutelnosti|pozicia|text|YES
+nehnutelnosti|poschodia_vyssie|text|YES
+nehnutelnosti|rok_vystavby|text|YES
+nehnutelnosti|rok_rekonstrukcie|text|YES
+nehnutelnosti|balkon_plocha|text|YES
+nehnutelnosti|loggia|boolean|YES
+nehnutelnosti|loggia_plocha|text|YES
+nehnutelnosti|terasa|boolean|YES
+nehnutelnosti|terasa_plocha|text|YES
+nehnutelnosti|pivnica|boolean|YES
+nehnutelnosti|verejne_parkovanie|boolean|YES
+nehnutelnosti|sukromne_parkovanie|boolean|YES
+nehnutelnosti|spajza|boolean|YES
+nehnutelnosti|sklad_toggle|boolean|YES
+nehnutelnosti|dielna|boolean|YES
+nehnutelnosti|vykurovanie|jsonb|YES
+nehnutelnosti|mesacne_naklady|text|YES
+nehnutelnosti|naklady_detail|text|YES
+nehnutelnosti|pravne_vady|text|YES
+nehnutelnosti|lv_text|text|YES
+nehnutelnosti|h1|text|YES
+nehnutelnosti|meta_description|text|YES
+nehnutelnosti|updated_at|timestamp with time zone|YES
+nehnutelnosti|naberak_id|uuid|YES
+nehnutelnosti|company_id|uuid|NO
+obchod_ulohy|id|uuid|NO
+obchod_ulohy|obchod_id|uuid|NO
+obchod_ulohy|kategoria|text|NO
+obchod_ulohy|nazov|text|NO
+obchod_ulohy|popis|text|YES
+obchod_ulohy|done|boolean|NO
+obchod_ulohy|done_at|timestamp with time zone|YES
+obchod_ulohy|priorita|text|NO
+obchod_ulohy|deadline|date|YES
+obchod_ulohy|drive_link|text|YES
+obchod_ulohy|calendar_event_id|text|YES
+obchod_ulohy|created_at|timestamp with time zone|YES
+obchod_ulohy|company_id|uuid|NO
+obchody|id|uuid|NO
+obchody|klient_id|uuid|NO
+obchody|nehnutelnost_id|uuid|YES
+obchody|status|text|NO
+obchody|cena|numeric|YES
+obchody|provizia|numeric|YES
+obchody|kupujuci_meno|text|YES
+obchody|notar|text|YES
+obchody|banka|text|YES
+obchody|poznamky|text|YES
+obchody|created_at|timestamp with time zone|YES
+obchody|updated_at|timestamp with time zone|YES
+obchody|company_id|uuid|NO
+obchody|rz_vynimka_poziadana|boolean|NO
+obchody|rz_vynimka_approved|boolean|NO
+obhliadky|id|uuid|NO
+obhliadky|predavajuci_klient_id|uuid|YES
+obhliadky|nehnutelnost_id|uuid|YES
+obhliadky|kupujuci_klient_id|uuid|YES
+obhliadky|kupujuci_meno|text|YES
+obhliadky|kupujuci_telefon|text|YES
+obhliadky|kupujuci_email|text|YES
+obhliadky|makler_id|uuid|YES
+obhliadky|datum|timestamp with time zone|NO
+obhliadky|miesto|text|YES
+obhliadky|poznamka|text|YES
+obhliadky|status|text|NO
+obhliadky|podpis_data|text|YES
+obhliadky|podpis_datum|timestamp with time zone|YES
+obhliadky|list_pdf_base64|text|YES
+obhliadky|email_sent_at|timestamp with time zone|YES
+obhliadky|email_sent_to|text|YES
+obhliadky|calendar_event_id|text|YES
+obhliadky|created_at|timestamp with time zone|NO
+obhliadky|updated_at|timestamp with time zone|NO
+obhliadky|gdpr_consent|boolean|YES
+obhliadky|gdpr_consent_at|timestamp with time zone|YES
+obhliadky|podpis_meta|jsonb|YES
+obhliadky|company_id|uuid|NO
+objednavky|id|uuid|NO
+objednavky|klient_id|uuid|YES
+objednavky|druh|text|YES
+objednavky|poziadavky|jsonb|YES
+objednavky|lokalita|jsonb|YES
+objednavky|cena_do|integer|YES
+objednavky|termin_do|text|YES
+objednavky|zaloha|text|YES
+objednavky|ine|text|YES
+objednavky|podpis|text|YES
+objednavky|makler|text|YES
+objednavky|stav_objednavky|text|YES
+objednavky|created_at|timestamp with time zone|YES
+objednavky|updated_at|timestamp with time zone|YES
+objednavky|cena_od|numeric|YES
+odberatelia|id|uuid|NO
+odberatelia|nazov|text|YES
+odberatelia|adresa|text|YES
+odberatelia|ico|text|YES
+odberatelia|dic|text|YES
+odberatelia|ic_dph|text|YES
+odberatelia|email|text|YES
+odberatelia|telefon|text|YES
+odberatelia|created_at|timestamp with time zone|YES
+odberatelia|user_id|text|YES
+odberatelia|company_id|uuid|NO
+password_reset_tokens|id|uuid|NO
+password_reset_tokens|user_id|text|NO
+password_reset_tokens|token_hash|text|NO
+password_reset_tokens|email_sent_to|text|NO
+password_reset_tokens|expires_at|timestamp with time zone|NO
+password_reset_tokens|used_at|timestamp with time zone|YES
+password_reset_tokens|created_at|timestamp with time zone|NO
+pobocky|id|text|NO
+pobocky|nazov|text|NO
+pobocky|mesto|text|YES
+pobocky|adresa|text|YES
+pobocky|poznamka|text|YES
+pobocky|created_at|timestamp with time zone|NO
+pobocky|updated_at|timestamp with time zone|NO
+pobocky|company_id|uuid|NO
+pravidelne_naklady|id|uuid|NO
+pravidelne_naklady|popis|text|YES
+pravidelne_naklady|suma|numeric|YES
+pravidelne_naklady|perioda|text|YES
+pravidelne_naklady|aktivny|boolean|YES
+pravidelne_naklady|poznamka|text|YES
+pravidelne_naklady|user_id|text|YES
+pravidelne_naklady|created_at|timestamp with time zone|NO
+prehlad_zaznamy|id|uuid|NO
+prehlad_zaznamy|typ|text|YES
+prehlad_zaznamy|datum|date|NO
+prehlad_zaznamy|popis|text|YES
+prehlad_zaznamy|suma|numeric|YES
+prehlad_zaznamy|zaplatene|boolean|YES
+prehlad_zaznamy|faktura_id|uuid|YES
+prehlad_zaznamy|user_id|text|YES
+prehlad_zaznamy|created_at|timestamp with time zone|NO
+pricing_estimates|id|uuid|NO
+pricing_estimates|user_id|text|YES
+pricing_estimates|klient_id|uuid|YES
+pricing_estimates|nehnutelnost_id|uuid|YES
+pricing_estimates|input_params|jsonb|NO
+pricing_estimates|comparable_count|integer|NO
+pricing_estimates|cma_summary|jsonb|YES
+pricing_estimates|recommended_price|numeric|NO
+pricing_estimates|price_low|numeric|NO
+pricing_estimates|price_high|numeric|NO
+pricing_estimates|confidence_score|numeric|NO
+pricing_estimates|aggressive_price|numeric|NO
+pricing_estimates|market_price|numeric|NO
+pricing_estimates|aspirational_price|numeric|NO
+pricing_estimates|predicted_dom_aggressive|integer|YES
+pricing_estimates|predicted_dom_market|integer|YES
+pricing_estimates|predicted_dom_aspirational|integer|YES
+pricing_estimates|recommended_strategy|text|NO
+pricing_estimates|rarity_score|integer|NO
+pricing_estimates|owner_target_price|numeric|YES
+pricing_estimates|created_at|timestamp with time zone|NO
+pricing_estimates|company_id|uuid|NO
+produkcia_objednavky|id|uuid|NO
+produkcia_objednavky|klient_id|uuid|NO
+produkcia_objednavky|makler_id|text|NO
+produkcia_objednavky|stav|text|NO
+produkcia_objednavky|typ|text|NO
+produkcia_objednavky|snapshot_meno|text|YES
+produkcia_objednavky|snapshot_telefon|text|YES
+produkcia_objednavky|snapshot_lokalita|text|YES
+produkcia_objednavky|details|jsonb|NO
+produkcia_objednavky|scheduled_date|timestamp with time zone|YES
+produkcia_objednavky|submitted_at|timestamp with time zone|YES
+produkcia_objednavky|completed_at|timestamp with time zone|YES
+produkcia_objednavky|deliverable_url|text|YES
+produkcia_objednavky|created_at|timestamp with time zone|YES
+produkcia_objednavky|updated_at|timestamp with time zone|YES
+produkcia_objednavky|company_id|uuid|NO
+property_stories|id|uuid|NO
+property_stories|user_id|text|YES
+property_stories|klient_id|uuid|YES
+property_stories|nehnutelnost_id|uuid|YES
+property_stories|input_data|jsonb|NO
+property_stories|generator_output|text|NO
+property_stories|generator_tokens|integer|YES
+property_stories|validator_output|text|NO
+property_stories|passed_first_attempt|boolean|YES
+property_stories|violations_count|integer|YES
+property_stories|violations_breakdown|jsonb|YES
+property_stories|final_copy|text|NO
+property_stories|quality_scores|jsonb|YES
+property_stories|overall_quality|integer|YES
+property_stories|recommended_price|numeric|YES
+property_stories|strategy_used|text|YES
+property_stories|rarity_score|integer|YES
+property_stories|final_status|text|YES
+property_stories|used_in_listing|boolean|YES
+property_stories|created_at|timestamp with time zone|NO
+property_stories|company_id|uuid|NO
+push_subscriptions|id|uuid|NO
+push_subscriptions|user_id|text|YES
+push_subscriptions|endpoint|text|NO
+push_subscriptions|p256dh|text|NO
+push_subscriptions|auth|text|NO
+push_subscriptions|user_agent|text|YES
+push_subscriptions|created_at|timestamp with time zone|YES
+push_subscriptions|last_used_at|timestamp with time zone|YES
+rk_directory|id|uuid|NO
+rk_directory|telefon|text|YES
+rk_directory|email_domain|text|YES
+rk_directory|meno|text|YES
+rk_directory|typ|text|NO
+rk_directory|pridal_user_id|text|YES
+rk_directory|poznamka|text|YES
+rk_directory|created_at|timestamp with time zone|NO
+rk_directory|company_id|uuid|NO
+signature_otps|id|uuid|NO
+signature_otps|token_hash|text|NO
+signature_otps|entity_type|text|NO
+signature_otps|entity_id|uuid|NO
+signature_otps|telefon|text|NO
+signature_otps|otp_hash|text|NO
+signature_otps|requested_by_user_id|text|YES
+signature_otps|requested_at|timestamp with time zone|NO
+signature_otps|expires_at|timestamp with time zone|NO
+signature_otps|used_at|timestamp with time zone|YES
+signature_otps|attempts|integer|NO
+signature_otps|signed_at|timestamp with time zone|YES
+signature_otps|signed_ip|text|YES
+signature_otps|signed_user_agent|text|YES
+signature_otps|sms_status|text|YES
+signature_otps|sms_provider|text|YES
+signature_otps|sms_error|text|YES
+signature_otps|created_at|timestamp with time zone|NO
+ulohy|id|uuid|NO
+ulohy|nazov|text|NO
+ulohy|hotovo|boolean|NO
+ulohy|priorita|text|NO
+ulohy|deadline|date|YES
+ulohy|klient_id|uuid|YES
+ulohy|nehnutelnost_id|uuid|YES
+ulohy|assigned_to|text|YES
+ulohy|kanban_status|text|NO
+ulohy|deleted_at|timestamp with time zone|YES
+ulohy|created_at|timestamp with time zone|NO
+ulohy|updated_at|timestamp with time zone|NO
+user_invites|id|uuid|NO
+user_invites|user_id|text|NO
+user_invites|token|text|NO
+user_invites|created_by|text|NO
+user_invites|expires_at|timestamp with time zone|NO
+user_invites|used_at|timestamp with time zone|YES
+user_invites|created_at|timestamp with time zone|YES
+user_invites|company_id|uuid|NO
+users|id|text|NO
+users|name|text|YES
+users|initials|text|YES
+users|role|text|YES
+users|email|text|YES
+users|password|text|YES
+users|created_at|timestamp with time zone|YES
+users|google_access_token|text|YES
+users|google_refresh_token|text|YES
+users|google_token_expires_at|bigint|YES
+users|google_email|text|YES
+users|login_email|text|YES
+users|notification_prefs|jsonb|YES
+users|vzorove_inzeraty|jsonb|YES
+users|pobocka_id|text|YES
+users|makler_id|uuid|YES
+users|dpo_name|text|YES
+users|dpo_email|text|YES
+users|nav_prefs|jsonb|YES
+users|company_id|uuid|NO
+users|totp_secret|text|YES
+users|totp_enabled_at|timestamp with time zone|YES
+users|totp_backup_codes|jsonb|YES
+users|totp_last_used_counter|bigint|YES
+users|telefon|text|YES
+v_deals|id|uuid|YES
+v_deals|nazov|text|YES
+v_deals|obrat|integer|YES
+v_deals|provizia_firmy|integer|YES
+v_deals|provizia_typ|text|YES
+v_deals|lokalita|text|YES
+v_deals|typ|text|YES
+v_deals|stav_inzeratu|text|YES
+v_deals|makler_meno|text|YES
+v_deals|makler_user_id|uuid|YES
+v_deals|makler_email|text|YES
+v_deals|created_at|timestamp with time zone|YES
+v_deals|updated_at|timestamp with time zone|YES
+v_deals|deal_date|timestamp with time zone|YES
+v_makler_stats|makler_user_id|uuid|YES
+v_makler_stats|makler_meno|text|YES
+v_makler_stats|makler_email|text|YES
+v_makler_stats|pocet_obchodov|bigint|YES
+v_makler_stats|celkovy_obrat|bigint|YES
+v_makler_stats|avg_provizia_firmy|numeric|YES
+v_makler_stats|first_deal|timestamp with time zone|YES
+v_makler_stats|last_deal|timestamp with time zone|YES
+vyhradne_zmluvy|id|uuid|NO
+vyhradne_zmluvy|klient_id|uuid|YES
+vyhradne_zmluvy|naber_id|uuid|YES
+vyhradne_zmluvy|company_id|uuid|YES
+vyhradne_zmluvy|majitelia|jsonb|NO
+vyhradne_zmluvy|okres|text|YES
+vyhradne_zmluvy|obec|text|YES
+vyhradne_zmluvy|kat_uzemie|text|YES
+vyhradne_zmluvy|stavby|jsonb|NO
+vyhradne_zmluvy|pozemky|jsonb|NO
+vyhradne_zmluvy|pozadovana_cena|numeric|YES
+vyhradne_zmluvy|moznost_znizenia_dni|integer|YES
+vyhradne_zmluvy|suma_znizenia|numeric|YES
+vyhradne_zmluvy|provizna_text|text|YES
+vyhradne_zmluvy|provizna_slovom|text|YES
+vyhradne_zmluvy|provizna_suma|numeric|YES
+vyhradne_zmluvy|dodatocna_provizna|text|YES
+vyhradne_zmluvy|trvanie_mesiacov|integer|NO
+vyhradne_zmluvy|predlzenie_mesiacov|integer|NO
+vyhradne_zmluvy|datum_zacatia|date|NO
+vyhradne_zmluvy|zastupena_meno|text|YES
+vyhradne_zmluvy|podpis_data|text|YES
+vyhradne_zmluvy|podpis_meta|jsonb|YES
+vyhradne_zmluvy|podpisane_at|timestamp with time zone|YES
+vyhradne_zmluvy|pocet_rovnopisov|integer|NO
+vyhradne_zmluvy|kluce_ks|integer|YES
+vyhradne_zmluvy|kluce_poznamka|text|YES
+vyhradne_zmluvy|created_at|timestamp with time zone|NO
+vyhradne_zmluvy|updated_at|timestamp with time zone|NO
+
+# ============================================================
+# Query B: pg_indexes (table|index)
+# ============================================================
+analyzy_trhu|analyzy_trhu_analyzed_at_idx
+analyzy_trhu|analyzy_trhu_klient_id_idx
+analyzy_trhu|analyzy_trhu_pkey
+audit_log|audit_log_pkey
+audit_log|idx_audit_log_action_time
+audit_log|idx_audit_log_entity
+audit_log|idx_audit_log_user_time
+auth_2fa_challenges|auth_2fa_challenges_challenge_idx
+auth_2fa_challenges|auth_2fa_challenges_challenge_key
+auth_2fa_challenges|auth_2fa_challenges_expires_at_idx
+auth_2fa_challenges|auth_2fa_challenges_pkey
+auth_2fa_challenges|auth_2fa_challenges_user_id_idx
+client_interactions|client_interactions_pkey
+client_interactions|idx_client_interactions_created
+client_interactions|idx_client_interactions_klient
+companies|companies_pkey
+companies|companies_slug_key
+companies|idx_companies_is_active
+companies|idx_companies_slug
+consents|consents_pkey
+consents|idx_consents_klient
+consents|idx_consents_purpose
+consents|idx_consents_subject
+dsr_requests|dsr_requests_pkey
+dsr_requests|idx_dsr_deadline
+dsr_requests|idx_dsr_status
+faktura_polozky|faktura_polozky_pkey
+faktury|faktury_pkey
+faktury|faktury_user_cislo_uniq
+faktury|idx_faktury_company_id
+faktury|idx_faktury_user_id
+firma_info|firma_info_pkey
+google_tokens|google_tokens_pkey
+in_app_notifications|in_app_notifications_pkey
+klient_dokumenty|idx_klient_dokumenty_company_id
+klient_dokumenty|klient_dokumenty_created_at_idx
+klient_dokumenty|klient_dokumenty_klient_id_idx
+klient_dokumenty|klient_dokumenty_nehnutelnost_idx
+klient_dokumenty|klient_dokumenty_pkey
+klient_udalosti|idx_klient_udalosti_klient
+klient_udalosti|klient_udalosti_pkey
+klienti|idx_klienti_company_id
+klienti|klienti_anonymized_idx
+klienti|klienti_je_volny_idx
+klienti|klienti_pkey
+klienti|klienti_sla_critical_idx
+klienti|klienti_telefon_uniq
+klienti_history|klienti_history_action_idx
+klienti_history|klienti_history_created_idx
+klienti_history|klienti_history_klient_idx
+klienti_history|klienti_history_pkey
+kolizny_log|kolizny_log_pkey
+login_attempts|idx_login_attempts_identifier_time
+login_attempts|idx_login_attempts_ip_time
+login_attempts|idx_login_attempts_success
+login_attempts|login_attempts_pkey
+logy|logy_pkey
+makler_dodavatel|makler_dodavatel_pkey
+makler_provizie_pct|makler_provizie_pct_pkey
+makleri|makleri_pkey
+market_sentiments|idx_market_sentiments_date
+market_sentiments|idx_market_sentiments_demand
+market_sentiments|idx_market_sentiments_lokalita
+market_sentiments|market_sentiment_uniq
+market_sentiments|market_sentiments_pkey
+monitor_filtre|idx_monitor_filtre_company_id
+monitor_filtre|monitor_filtre_pkey
+monitor_inzeraty|idx_monitor_canonical
+monitor_inzeraty|idx_monitor_inzeraty_active
+monitor_inzeraty|idx_monitor_inzeraty_cena
+monitor_inzeraty|idx_monitor_inzeraty_cena_za_m2
+monitor_inzeraty|idx_monitor_inzeraty_first_seen
+monitor_inzeraty|idx_monitor_inzeraty_lokalita
+monitor_inzeraty|idx_monitor_inzeraty_portal
+monitor_inzeraty|idx_monitor_inzeraty_stav
+monitor_inzeraty|idx_monitor_inzeraty_typ
+monitor_inzeraty|idx_monitor_motivation_score
+monitor_inzeraty|idx_monitor_predajca_telefon
+monitor_inzeraty|idx_monitor_predajca_typ_override
+monitor_inzeraty|monitor_inzeraty_pkey
+monitor_inzeraty|monitor_inzeraty_portal_external_id_key
+monitor_inzeraty_disappearances|idx_monitor_disap_class
+monitor_inzeraty_disappearances|idx_monitor_disap_date
+monitor_inzeraty_disappearances|idx_monitor_disap_inzerat
+monitor_inzeraty_disappearances|monitor_disap_uniq
+monitor_inzeraty_disappearances|monitor_inzeraty_disappearances_pkey
+monitor_inzeraty_snapshots|idx_monitor_snapshots_date
+monitor_inzeraty_snapshots|idx_monitor_snapshots_inzerat
+monitor_inzeraty_snapshots|monitor_inzeraty_snapshots_pkey
+monitor_inzeraty_snapshots|monitor_snapshot_uniq
+monitor_notifikacie|idx_monitor_notif_created
+monitor_notifikacie|idx_monitor_notif_inzerat
+monitor_notifikacie|monitor_notifikacie_pkey
+monitor_scrape_log|idx_scrape_log_created
+monitor_scrape_log|monitor_scrape_log_pkey
+motivation_signals|idx_motivation_signals_active
+motivation_signals|idx_motivation_signals_detected
+motivation_signals|idx_motivation_signals_type
+motivation_signals|motivation_signal_uniq
+motivation_signals|motivation_signals_pkey
+naberove_listy|idx_naberove_listy_company_id
+naberove_listy|naberove_listy_makler_id_idx
+naberove_listy|naberove_listy_parent_idx
+naberove_listy|naberove_listy_pkey
+nehnutelnosti|idx_nehnutelnosti_company_id
+nehnutelnosti|idx_nehnutelnosti_foto_rotation
+nehnutelnosti|nehnutelnosti_klient_id_idx
+nehnutelnosti|nehnutelnosti_makler_id_idx
+nehnutelnosti|nehnutelnosti_naberak_idx
+nehnutelnosti|nehnutelnosti_pkey
+nehnutelnosti|nehnutelnosti_status_idx
+obchod_ulohy|idx_obchod_ulohy_obchod
+obchod_ulohy|obchod_ulohy_pkey
+obchody|idx_obchody_company_id
+obchody|idx_obchody_klient
+obchody|obchody_pkey
+obhliadky|idx_obhliadky_company_id
+obhliadky|obhliadky_datum_idx
+obhliadky|obhliadky_kupujuci_idx
+obhliadky|obhliadky_makler_idx
+obhliadky|obhliadky_nehnutelnost_idx
+obhliadky|obhliadky_pkey
+obhliadky|obhliadky_predavajuci_idx
+objednavky|objednavky_pkey
+odberatelia|idx_odberatelia_company_id
+odberatelia|idx_odberatelia_user_id
+odberatelia|odberatelia_pkey
+password_reset_tokens|idx_pwreset_expires
+password_reset_tokens|idx_pwreset_token_hash
+password_reset_tokens|idx_pwreset_user
+password_reset_tokens|password_reset_tokens_pkey
+pobocky|pobocky_pkey
+pravidelne_naklady|pravidelne_naklady_pkey
+prehlad_zaznamy|prehlad_zaznamy_pkey
+pricing_estimates|idx_pricing_estimates_created
+pricing_estimates|idx_pricing_estimates_klient
+pricing_estimates|idx_pricing_estimates_nehn
+pricing_estimates|idx_pricing_estimates_user
+pricing_estimates|pricing_estimates_pkey
+produkcia_objednavky|produkcia_objednavky_klient_id_idx
+produkcia_objednavky|produkcia_objednavky_makler_id_idx
+produkcia_objednavky|produkcia_objednavky_pkey
+produkcia_objednavky|produkcia_objednavky_stav_idx
+property_stories|idx_property_stories_created
+property_stories|idx_property_stories_nehn
+property_stories|idx_property_stories_status
+property_stories|idx_property_stories_user
+property_stories|property_stories_pkey
+push_subscriptions|idx_push_subscriptions_user
+push_subscriptions|push_subscriptions_endpoint_key
+push_subscriptions|push_subscriptions_pkey
+rk_directory|idx_rk_directory_domain
+rk_directory|idx_rk_directory_meno
+rk_directory|idx_rk_directory_telefon
+rk_directory|rk_directory_pkey
+rk_directory|uq_rk_directory_dom
+rk_directory|uq_rk_directory_tel
+signature_otps|idx_sig_otp_entity
+signature_otps|idx_sig_otp_expires
+signature_otps|signature_otps_pkey
+signature_otps|signature_otps_token_hash_key
+ulohy|idx_ulohy_assigned
+ulohy|idx_ulohy_kanban
+ulohy|idx_ulohy_klient
+ulohy|ulohy_pkey
+user_invites|user_invites_pkey
+user_invites|user_invites_token_key
+users|idx_users_company_id
+users|idx_users_login_email
+users|idx_users_makler_id
+users|idx_users_pobocka_id
+users|idx_users_role
+users|users_pkey
+vyhradne_zmluvy|vyhradne_zmluvy_pkey
+
+# ============================================================
+# Query C: pg_policies (RLS) — table|policy|roles|cmd|qual
+# ============================================================
+audit_log|audit_log_read_service|public|SELECT|(auth.role() = 'service_role'::text)
+audit_log|service_role_all_audit_log|service_role|ALL|true
+client_interactions|auth_read_interactions|authenticated|SELECT|true
+companies|companies_service_only|public|ALL|(auth.role() = 'service_role'::text)
+consents|anon_insert_consents|anon|INSERT|
+consents|auth_read_consents|authenticated|SELECT|true
+consents|service_all_consents|service_role|ALL|true
+dsr_requests|auth_insert_dsr|authenticated|INSERT|
+dsr_requests|auth_read_dsr|authenticated|SELECT|true
+dsr_requests|auth_update_dsr|authenticated|UPDATE|true
+dsr_requests|service_all_dsr|service_role|ALL|true
+faktura_polozky|service_role_all_faktura_polozky|service_role|ALL|true
+faktury|service_role_all_faktury|service_role|ALL|true
+firma_info|firma_info_select_public|public|SELECT|true
+firma_info|firma_info_update_auth|public|UPDATE|(auth.role() = 'authenticated'::text)
+google_tokens|service_role_all_google_tokens|service_role|ALL|true
+in_app_notifications|authenticated_read_in_app_notifications|authenticated|SELECT|true
+in_app_notifications|service_role_all_in_app_notifications|service_role|ALL|true
+klient_dokumenty|service_role_all_klient_dokumenty|service_role|ALL|true
+klient_udalosti|service_role_all_klient_udalosti|service_role|ALL|true
+klienti|authenticated_read_klienti|authenticated|SELECT|true
+klienti|service_role_all_klienti|service_role|ALL|true
+klienti_history|service_role_all_klienti_history|service_role|ALL|true
+kolizny_log|service_role_all_kolizny_log|service_role|ALL|true
+login_attempts|service_role_all_login_attempts|service_role|ALL|true
+logy|service_role_all_logy|service_role|ALL|true
+makler_provizie_pct|service_role_all_makler_provizie_pct|service_role|ALL|true
+makleri|authenticated_read_makleri|authenticated|SELECT|true
+makleri|service_role_all_makleri|service_role|ALL|true
+market_sentiments|auth_read_market_sentiments|authenticated|SELECT|true
+market_sentiments|service_role_all_market_sentiments|service_role|ALL|true
+monitor_filtre|authenticated_read_monitor_filtre|authenticated|SELECT|true
+monitor_filtre|service_role_all_monitor_filtre|service_role|ALL|true
+monitor_inzeraty|authenticated_read_monitor_inzeraty|authenticated|SELECT|true
+monitor_inzeraty|service_role_all_monitor_inzeraty|service_role|ALL|true
+monitor_inzeraty_disappearances|auth_read_monitor_disappearances|authenticated|SELECT|true
+monitor_inzeraty_disappearances|service_role_all_monitor_disap|service_role|ALL|true
+monitor_inzeraty_snapshots|service_role_all_monitor_snapshots|service_role|ALL|true
+monitor_notifikacie|service_role_all_monitor_notifikacie|service_role|ALL|true
+monitor_scrape_log|service_role_all_monitor_scrape_log|service_role|ALL|true
+motivation_signals|authenticated_read_motivation_signals|authenticated|SELECT|true
+motivation_signals|service_role_all_motivation_signals|service_role|ALL|true
+naberove_listy|authenticated_read_naberove_listy|authenticated|SELECT|true
+naberove_listy|service_role_all_naberove_listy|service_role|ALL|true
+nehnutelnosti|authenticated_read_nehnutelnosti|authenticated|SELECT|true
+nehnutelnosti|service_role_all_nehnutelnosti|service_role|ALL|true
+obchod_ulohy|auth_ulohy_delete|authenticated|DELETE|true
+obchod_ulohy|auth_ulohy_insert|authenticated|INSERT|
+obchod_ulohy|auth_ulohy_select|authenticated|SELECT|true
+obchod_ulohy|auth_ulohy_update|authenticated|UPDATE|true
+obchody|auth_obchody_delete|authenticated|DELETE|true
+obchody|auth_obchody_insert|authenticated|INSERT|
+obchody|auth_obchody_select|authenticated|SELECT|true
+obchody|auth_obchody_update|authenticated|UPDATE|true
+obhliadky|authenticated_read_obhliadky|authenticated|SELECT|true
+obhliadky|service_role_all_obhliadky|service_role|ALL|true
+objednavky|authenticated_read_objednavky|authenticated|SELECT|true
+objednavky|service_role_all_objednavky|service_role|ALL|true
+odberatelia|service_role_all_odberatelia|service_role|ALL|true
+password_reset_tokens|service_role_all_password_reset_tokens|service_role|ALL|true
+pravidelne_naklady|service_role_all_pravidelne_naklady|service_role|ALL|true
+prehlad_zaznamy|service_role_all_prehlad_zaznamy|service_role|ALL|true
+pricing_estimates|service_role_all_pricing_estimates|service_role|ALL|true
+property_stories|service_role_all_property_stories|service_role|ALL|true
+push_subscriptions|service_role_all_push_subscriptions|service_role|ALL|true
+rk_directory|authenticated_read_rk_directory|authenticated|SELECT|true
+rk_directory|service_role_all_rk_directory|service_role|ALL|true
+signature_otps|service_role_all_sig_otps|service_role|ALL|true
+ulohy|auth_all_ulohy|authenticated|ALL|true
+users|authenticated_read_users|authenticated|SELECT|true
+users|read_users_service|public|SELECT|(auth.role() = 'service_role'::text)
+users|service_role_all_users|service_role|ALL|true
+vyhradne_zmluvy|service_all_vyhradne|service_role|ALL|true

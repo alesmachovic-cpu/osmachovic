@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { buildSessionCookieValue, buildBillingCookieValue } from "@/lib/auth/session";
+import { buildSessionCookieValue, buildBillingCookieValue, buildTwoFactorCookieValue } from "@/lib/auth/session";
 import { verifyTotp } from "@/lib/totp";
 import { logAudit } from "@/lib/audit";
 import { rateLimit, getRequestIp, RATE_LIMITS } from "@/lib/rateLimit";
@@ -142,5 +142,7 @@ export async function POST(req: NextRequest) {
   const res = NextResponse.json({ user: safeUser });
   res.headers.append("Set-Cookie", buildSessionCookieValue(String(user.id)));
   res.headers.append("Set-Cookie", buildBillingCookieValue(companyActive));
+  // User má 2FA zapnuté (práve overené) → zruš prípadnú stale enforcement cookie.
+  res.headers.append("Set-Cookie", buildTwoFactorCookieValue(false));
   return res;
 }

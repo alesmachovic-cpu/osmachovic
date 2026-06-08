@@ -1,7 +1,17 @@
-/* ── Parser pre topreality.sk ── */
+/* ── Parser pre topreality.sk ──
+ *
+ * Topreality je súčasť siete nehnutelnosti.sk a má Cloudflare/anti-bot, preto
+ * sa scrapuje cez ScrapingBee (NIE priamy fetch — ten po pár requestoch zablokuje).
+ *
+ * Listings sú v HTML ako štruktúrované `data-ga4-container-*` atribúty na kontajneri
+ * každého inzerátu — spoľahlivejšie než vizuálny DOM:
+ *   item_id_generic, item_name, price, currency, item_category (typ),
+ *   item_category3 (lokalita), location_id, affiliation (predajca/agentúra).
+ * Detail link má tvar `/<slug>-r<ID>.html`.
+ */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
-import { detectFirma } from "./shared";
+import { detectFirma, extractPoschodie, extractStav, extractIzby, extractPlocha, extractTyp } from "./shared";
 
 const PORTAL = "topreality.sk";
 const BASE_URL = "https://www.topreality.sk";
@@ -17,107 +27,90 @@ export const toprealitySkParser: PortalParser = {
 
   buildSearchUrl(filter: MonitorFilter): string {
     if (filter.search_url) return filter.search_url;
-
-    const typSlug = filter.typ ? TYP_URL[filter.typ] || "nehnutelnosti" : "nehnutelnosti";
-    let url = `${BASE_URL}/predaj-${typSlug}`;
-
-    if (filter.lokalita) {
-      const slug = filter.lokalita
-        .toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s+/g, "-");
-      url += `-${slug}`;
-    }
-
-    const params = new URLSearchParams();
-    if (filter.cena_od) params.set("cena_od", String(filter.cena_od));
-    if (filter.cena_do) params.set("cena_do", String(filter.cena_do));
-    if (filter.plocha_od) params.set("plocha_od", String(filter.plocha_od));
-    if (filter.plocha_do) params.set("plocha_do", String(filter.plocha_do));
-
-    const paramStr = params.toString();
-    return paramStr ? `${url}?${paramStr}` : url;
+    // Správny tvar: /vyhladavanie/<predaj|prenajom>-<byty|domy|pozemky>/
+    // (starý /predaj-byty vracal prázdnu 404 stránku). Default null typ → byty.
+    const typSlug = filter.typ ? TYP_URL[filter.typ] || "byty" : "byty";
+    const seg = filter.ponuka_typ === "prenajom" ? "prenajom" : "predaj";
+    // Lokalitu zámerne neukladáme do URL (neistý formát → 404). Post-filter
+    // matchesFilter() v scrape route ju doženie.
+    return `${BASE_URL}/vyhladavanie/${seg}-${typSlug}/`;
   },
 
   parseListings(html: string): ScrapedInzerat[] {
     const listings: ScrapedInzerat[] = [];
-    const seenIds = new Set<string>();
+    const seen = new Set<string>();
 
-    const priceRegex = /(\d[\d\s,.]*)\s*€/;
-    const areaRegex = /(\d[\d,.]*)\s*m[²2]/;
-    const roomRegex = /(\d+)[- ]izb/;
+    // Pozície začiatkov listing kontajnerov (item_id_generic je prvý atribút clustra).
+    const idRe = /data-ga4-container-item_id_generic="(\d+)"/g;
+    const positions: Array<{ id: string; pos: number }> = [];
+    let m: RegExpExecArray | null;
+    while ((m = idRe.exec(html)) !== null) positions.push({ id: m[1], pos: m.index });
 
-    // topreality.sk — reálne URL majú tvar /title-slug-r<NNNN>.html
-    // Predošlý regex `\/(\d{5,})` hľadal "/1234..." (digits priamo za /), čo
-    // nikdy nesedelo so skutočným formátom, preto nič nenachádzal.
-    const detailRegex = /<a[^>]*href="((?:https?:\/\/[^"]*topreality\.sk)?\/[a-z0-9-]+-r(\d+)\.html)"/gi;
+    for (let i = 0; i < positions.length; i++) {
+      const { id, pos } = positions[i];
+      if (seen.has(id)) continue;
+      seen.add(id);
 
-    let match;
-    while ((match = detailRegex.exec(html)) !== null) {
-      const href = match[1];
-      const externalId = match[2];
-      if (seenIds.has(externalId)) continue;
-      seenIds.add(externalId);
+      const end = i + 1 < positions.length ? positions[i + 1].pos : Math.min(html.length, pos + 3000);
+      const block = html.slice(Math.max(0, pos - 800), end);
 
-      const fullUrl = href.startsWith("http") ? href : `${BASE_URL}${href}`;
+      const attr = (name: string): string | undefined => {
+        const mm = block.match(new RegExp(`data-ga4-container-${name}="([^"]*)"`));
+        return mm ? mm[1] : undefined;
+      };
 
-      const pos = match.index;
-      const context = html.substring(
-        Math.max(0, pos - 300),
-        Math.min(html.length, pos + 600)
-      );
+      const nazov = (attr("item_name") || "").trim();
+      if (!nazov) continue;
 
-      const titleMatch = context.match(
-        /(?:title|alt)="([^"]+)"|<h[23][^>]*>([^<]+)/
-      );
-      const nazov = (titleMatch?.[1] || titleMatch?.[2] || "").trim();
+      // URL: href obsahuje `-r<ID>.html` (id-špecifické → bezpečné aj s lookbackom).
+      const hrefM = block.match(new RegExp(`href="\\.?(/?[A-Za-z0-9-]+-r${id}\\.html)"`, "i"));
+      const rel = hrefM ? hrefM[1].replace(/^\.?\/?/, "/") : null;
+      if (!rel) continue;
+      const url = `${BASE_URL}${rel}`;
 
-      const priceMatch = context.match(priceRegex);
-      const cena = priceMatch
-        ? parseFloat(priceMatch[1].replace(/\s/g, "").replace(",", "."))
-        : undefined;
+      const currency = attr("currency") || "";
+      const priceRaw = attr("price") || "";
+      const priceNum = parseInt(priceRaw.replace(/[^\d]/g, ""), 10);
+      const cena = Number.isFinite(priceNum) && priceNum > 0 ? priceNum : undefined;
 
-      const areaMatch = context.match(areaRegex);
-      const plocha = areaMatch
-        ? parseFloat(areaMatch[1].replace(",", "."))
-        : undefined;
+      // Predaj/prenájom: mena "€/mesiac" alebo "Prenájom" v názve.
+      const ponuka_typ: "predaj" | "prenajom" =
+        (/mesiac/i.test(currency) || /\bprena[jí]om|podna[jí]om|\bnaja?m\b/i.test(nazov)) ? "prenajom" : "predaj";
 
-      const roomMatch = context.match(roomRegex);
-      const izby = roomMatch ? parseInt(roomMatch[1]) : undefined;
+      // Typ: z item_category, „pozemok" v názve má prednosť (topreality dáva
+      // rekreačné pozemky pod „Domy").
+      const cat = (attr("item_category") || "").toLowerCase();
+      let typ = cat.includes("byt") ? "byt" : cat.includes("dom") ? "dom" : cat.includes("pozem") ? "pozemok" : extractTyp(nazov);
+      if (extractTyp(nazov) === "pozemok") typ = "pozemok";
 
-      let typ = "iny";
-      const ctxLower = context.toLowerCase();
-      if (ctxLower.includes("izb") || ctxLower.includes("byt")) typ = "byt";
-      else if (ctxLower.includes("dom") || ctxLower.includes("rodin")) typ = "dom";
-      else if (ctxLower.includes("pozem")) typ = "pozemok";
+      // Lokalita: item_category3 (najšpecifickejšia) alebo posledné slová location_id.
+      const loc3 = attr("item_category3");
+      const locId = attr("location_id");
+      const lokalita = (loc3 && loc3.trim()) || (locId ? locId.split(/\s+/).slice(-2).join(" ") : undefined);
 
-      const imgMatch = context.match(
-        /<img[^>]*src="([^"]*(?:jpg|jpeg|png|webp)[^"]*)"/i
-      );
+      // Predajca (affiliation) — TRANSIENTNE pre klasifikátor (neukladá sa).
+      const predajca_meno = attr("affiliation") || undefined;
+      const predajca_typ = detectFirma(predajca_meno, nazov) ? "firma" : undefined;
 
-      const lokMatch = context.match(
-        /(?:location|address|city|lokalita)[^>]*>([^<]+)/i
-      );
-
-      const sellerMatch = context.match(
-        /class="[^"]*(?:advertiser|seller|agent|agency|broker|company|realitka|inzerent)[^"]*"[^>]*>\s*(?:<[^>]*>\s*)*([^<]{2,100})/i
-      );
-      const predajca_meno = sellerMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
-      const isFirma = detectFirma(nazov, predajca_meno);
+      const imgM = block.match(/(?:src|data-src)="(https:\/\/[^"]+\.(?:jpe?g|png|webp)[^"]*)"/i);
 
       listings.push({
         portal: PORTAL,
-        external_id: externalId,
-        url: fullUrl,
+        external_id: id,
+        url,
         nazov,
         typ,
-        lokalita: lokMatch?.[1]?.trim(),
+        lokalita,
         cena,
-        plocha,
-        izby,
-        foto_url: imgMatch?.[1],
+        mena: "EUR",
+        plocha: extractPlocha(nazov),
+        izby: extractIzby(nazov),
+        foto_url: imgM?.[1],
         predajca_meno,
-        predajca_typ: isFirma ? "firma" : undefined,
+        predajca_typ,
+        ponuka_typ,
+        poschodie: extractPoschodie(nazov),
+        stav: extractStav(nazov),
         raw_data: {},
       });
     }

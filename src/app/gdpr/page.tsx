@@ -8,7 +8,7 @@ export default async function GdprPage() {
         Zásady spracovania osobných údajov
       </h1>
       <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "24px" }}>
-        Posledná aktualizácia: 13. mája 2026 · Verzia v2.0
+        Posledná aktualizácia: 7. júna 2026 · Verzia v2.2
       </p>
 
       <Section title="1. Prevádzkovateľ">
@@ -40,12 +40,19 @@ export default async function GdprPage() {
           <li><strong>Elektronický podpis</strong> — obraz podpisu na obhliadkovom liste / náberáku</li>
           <li><strong>Audit metadáta</strong> — IP adresa, user-agent prehliadača, čas podpisu</li>
         </ul>
+        <p style={{ marginTop: "10px" }}>
+          <strong>Zdroj údajov:</strong> väčšinu údajov získavame priamo od Vás. Údaje z listu
+          vlastníctva a výpisov z katastra nehnuteľností získavame z verejného registra
+          (kataster, katasterportal.sk); tieto dokumenty môžu obsahovať aj údaje spoluvlastníkov
+          uvedených na liste vlastníctva (čl. 14 GDPR).
+        </p>
       </Section>
 
       <Section title="4. Účel a právny základ">
         <ul style={ulSt}>
           <li><strong>Sprostredkovanie predaja / prenájmu</strong> — plnenie zmluvy alebo predzmluvné kroky (čl. 6 ods. 1 písm. b GDPR).</li>
           <li><strong>Evidencia obhliadok</strong> — oprávnený záujem realitnej kancelárie (čl. 6 ods. 1 písm. f GDPR).</li>
+          <li><strong>Overenie vlastníctva a evidencia dokumentov k nehnuteľnosti</strong> (list vlastníctva, výpis z katastra) — plnenie zmluvy o sprostredkovaní (čl. 6 ods. 1 písm. b) a oprávnený záujem na previerke vlastníckych pomerov a obhajobe právnych nárokov, vrátane údajov spoluvlastníkov uvedených na liste vlastníctva (čl. 6 ods. 1 písm. f GDPR).</li>
           <li><strong>AML overenie totožnosti</strong> — zákonná povinnosť podľa zákona č. 297/2008 Z. z. (čl. 6 ods. 1 písm. c GDPR).</li>
           <li><strong>Účtovníctvo a daňové účely</strong> — zákonná povinnosť (čl. 6 ods. 1 písm. c GDPR).</li>
           <li><strong>Zasielanie obchodných ponúk</strong> — len so súhlasom klienta (čl. 6 ods. 1 písm. a GDPR). Súhlas možno kedykoľvek odvolať.</li>
@@ -54,8 +61,10 @@ export default async function GdprPage() {
 
       <Section title="5. Automatizované rozhodovanie a profilovanie">
         <p>
-          CRM systém využíva nástroje umelej inteligencie (Anthropic Claude, Google Gemini) na analýzu
-          trhovej ceny nehnuteľnosti, vyhodnotenie inzerátov a návrhy copywritingu. Tieto nástroje
+          CRM systém využíva nástroje umelej inteligencie. Klientske dokumenty (list vlastníctva,
+          znalecký posudok) spracúva <strong>výhradne Anthropic Claude</strong>. Na analýzu trhovej
+          ceny, vyhodnotenie inzerátov a copywriting (bez identifikačných dokumentov) môžu byť použité
+          aj Google Gemini a OpenAI. Tieto nástroje
           <strong> nepredstavujú automatizované rozhodovanie s právnym účinkom</strong> v zmysle čl. 22
           GDPR — slúžia výlučne ako podporný nástroj pre makléra, ktorý prijíma všetky rozhodnutia sám.
         </p>
@@ -72,9 +81,10 @@ export default async function GdprPage() {
 
       <Section title="7. Doba uchovávania">
         <ul style={ulSt}>
-          <li>Obhliadkové listy: <strong>2 roky</strong> od podpisu, potom anonymizácia</li>
+          <li>Obhliadkové listy: <strong>7 rokov</strong>, potom anonymizácia kontaktných údajov kupujúceho</li>
           <li>Náberové zmluvy a podpísané dokumenty: <strong>10 rokov</strong> (zákon o účtovníctve)</li>
-          <li>Kontaktné údaje aktívnych klientov: <strong>po dobu spolupráce + 3 roky</strong></li>
+          <li>Dokumenty k nehnuteľnosti (list vlastníctva, výpis z katastra): <strong>7 rokov od poslednej aktivity klienta</strong>, resp. po dobu trvania obchodu (oprávnený záujem)</li>
+          <li>Kontaktné údaje klientov: <strong>po dobu spolupráce a následne 7 rokov od poslednej aktivity</strong>, potom anonymizácia (oprávnený záujem — dlhý realitný cyklus)</li>
           <li>AML doklady: <strong>5 rokov</strong> od skončenia obchodného vzťahu</li>
           <li>Faktúry: <strong>10 rokov</strong> (zákon č. 431/2002 Z. z.)</li>
         </ul>
@@ -104,6 +114,8 @@ export default async function GdprPage() {
             <Tr vals={["Resend Inc.", "USA", "EU-US Data Privacy Framework"]} />
             <Tr vals={["Google LLC", "USA", "EU-US DPF + SCC"]} />
             <Tr vals={["Anthropic PBC", "USA", "Štandardné zmluvné doložky (SCC)"]} />
+            <Tr vals={["OpenAI, L.L.C.", "USA", "EU-US DPF + SCC (len neosobné údaje — copywriting, analýza trhu)"]} />
+            <Tr vals={["OpenStreetMap Foundation (Nominatim)", "Veľká Británia", "Rozhodnutie o primeranosti (UK) — geokódovanie adries"]} />
           </tbody>
         </table>
       </Section>
@@ -111,9 +123,9 @@ export default async function GdprPage() {
       <Section title="10. Bezpečnosť">
         <ul style={ulSt}>
           <li>Šifrovanie databázy AES-256 (Supabase) + AES-256-GCM pre citlivé dokumenty</li>
-          <li>Row Level Security — každý maklér vidí len svoje záznamy</li>
+          <li>Prístup k údajom obmedzený podľa firmy a roly používateľa (multi-tenant izolácia + Row Level Security)</li>
           <li>HTTPS / HSTS preload na všetkých doménach</li>
-          <li>Audit log každého prístupu k citlivým dátam</li>
+          <li>Audit log kritických operácií a prístupu k citlivým dokumentom (kto, kedy, IP)</li>
           <li>Rate-limiting prihlásení (max 5 neúspechov / 15 min / IP)</li>
         </ul>
       </Section>
@@ -124,7 +136,7 @@ export default async function GdprPage() {
           <li><strong>Právo na opravu (čl. 16)</strong> — oprava nesprávnych alebo neúplných údajov</li>
           <li><strong>Právo na vymazanie (čl. 17)</strong> — „právo na zabudnutie" (s výnimkou zákonných povinností uchovávania)</li>
           <li><strong>Právo na obmedzenie spracúvania (čl. 18)</strong></li>
-          <li><strong>Právo na prenositeľnosť (čl. 20)</strong> — strojovo čitateľný export dát na <a href="/transparency" style={linkSt}>Moje dáta</a></li>
+          <li><strong>Právo na prenositeľnosť (čl. 20)</strong> — strojovo čitateľný export dát; požiadajte na <a href="mailto:privacy@vianema.sk" style={linkSt}>privacy@vianema.sk</a> (vlastný self-service prístup pripravujeme v Klientskej zóne)</li>
           <li><strong>Právo namietať (čl. 21)</strong> — voči spracúvaniu na základe oprávneného záujmu</li>
           <li><strong>Právo odvolať súhlas</strong> — kedykoľvek, bez vplyvu na zákonnosť predchádzajúceho spracovania</li>
         </ul>
@@ -147,6 +159,8 @@ export default async function GdprPage() {
         <ul style={ulSt}>
           <li><strong>v1.0 (26. apríla 2026)</strong> — pôvodné znenie</li>
           <li><strong>v2.0 (13. mája 2026)</strong> — doplnenie identifikácie prevádzkovateľa, DPO, prenosov mimo EÚ, automatizovaného rozhodovania, AML sekcie, rozšírenie práv dotknutých osôb</li>
+          <li><strong>v2.1 (7. júna 2026)</strong> — doplnenie právneho základu a doby uchovávania pre dokumenty k nehnuteľnosti (list vlastníctva, výpis z katastra) a zdroja údajov z verejného registra (kataster, čl. 14 GDPR)</li>
+          <li><strong>v2.2 (7. júna 2026)</strong> — doplnenie subprocesorov do prehľadu prenosov (sekcia 9): OpenAI (len neosobné údaje) a OpenStreetMap/Nominatim (geokódovanie adries)</li>
         </ul>
       </Section>
     </div>

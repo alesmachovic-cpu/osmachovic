@@ -7,26 +7,27 @@ import type { ObjednavkaForMatch, NehnutelnostForMatch, KlientForMatch } from "@
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
-  // 🔒 matching hotfix — zavrieť anonymný prístup (leak PII). Plný company scope ide vo veľkom release.
   const auth = await requireUser(req);
   if (auth.error) return auth.error;
+  const companyId = auth.user.company_id;
 
   const ids = (req.nextUrl.searchParams.get("objednavky") ?? "")
     .split(",").map(s => s.trim()).filter(Boolean);
   if (ids.length === 0) return NextResponse.json({});
 
   const sb = getSupabaseAdmin();
+  // 🔒 Scope na company_id — objednávky aj nehnuteľnosti len z firmy používateľa (cross-tenant guard)
   const [{ data: objednavky }, { data: nehnutelnosti }] = await Promise.all([
-    sb.from("objednavky").select("id,klient_id,druh,poziadavky,lokalita,cena_od,cena_do,created_at").in("id", ids),
-    sb.from("nehnutelnosti").select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status"),
+    sb.from("objednavky").select("id,klient_id,druh,poziadavky,lokalita,cena_od,cena_do,created_at,lat,lng").in("id", ids).eq("company_id", companyId),
+    sb.from("nehnutelnosti").select("id,klient_id,typ,cena,plocha,izby,lokalita,kraj,okres,status,lat,lng").eq("company_id", companyId),
   ]);
 
   // 🐛 BUG FIX 2026-05-22: fallback na klient.lokalita keď obj.lokalita je prázdne
   const klientIds = [...new Set(((objednavky ?? []) as Array<{ klient_id: string | null }>).map(o => o.klient_id).filter(Boolean) as string[])];
   const { data: klientiData } = klientIds.length > 0
-    ? await sb.from("klienti").select("id,lokalita").in("id", klientIds)
+    ? await sb.from("klienti").select("id,lokalita,rozpocet_max").in("id", klientIds).eq("company_id", companyId)
     : { data: [] };
-  const klientMap = new Map<string, KlientForMatch>((klientiData ?? []).map(k => [k.id, { id: k.id, lokalita: k.lokalita, rozpocet_max: null }]));
+  const klientMap = new Map<string, KlientForMatch>((klientiData ?? []).map(k => [k.id, { id: k.id, lokalita: k.lokalita, rozpocet_max: k.rozpocet_max }]));
 
   const result: Record<string, { totalMatches: number; topScore: number; daysSinceCreated: number }> = {};
 

@@ -22,7 +22,7 @@ export async function GET() {
     disappearanceRes,
   ] = await Promise.all([
     sb.from("monitor_inzeraty")
-      .select("portal, typ, predajca_typ, cena, plocha, lokalita, izby")
+      .select("portal, typ, predajca_typ, ponuka_typ, cena, plocha, lokalita, izby")
       .eq("is_active", true),
     sb.from("monitor_inzeraty")
       .select("id")
@@ -67,10 +67,65 @@ export async function GET() {
     byTyp[t] = (byTyp[t] ?? 0) + 1;
   }
 
-  // Súkromní vs realitky
+  // Súkromní vs realitky (DB enum je "firma" pre RK, nie "realitka")
   const sukromni = active.filter(i => i.predajca_typ === "sukromny").length;
-  const realitky = active.filter(i => i.predajca_typ === "realitka").length;
+  const realitky = active.filter(i => i.predajca_typ === "firma").length;
   const ostatni = active.length - sukromni - realitky;
+
+  // ── CENOVÁ ANALÝZA — matica lokalita × predaj/prenájom × súkromník/RK ──
+  type Row = { predajca_typ: string | null; ponuka_typ: string | null; typ: string | null; lokalita: string | null; cena: number | null; plocha: number | null };
+  const med = (nums: number[]): number | null => {
+    if (!nums.length) return null;
+    const s = [...nums].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  const pstats = (rows: Row[]) => {
+    const prices = rows.map(r => Number(r.cena)).filter(v => Number.isFinite(v) && v > 0);
+    const epm = rows
+      .map(r => (r.cena && r.plocha) ? Number(r.cena) / Number(r.plocha) : 0)
+      .filter(v => Number.isFinite(v) && v > 0 && v < 100000);
+    const mc = med(prices);
+    const me = med(epm);
+    return {
+      count: rows.length,
+      median_cena: mc != null ? Math.round(mc) : null,
+      median_eur_m2: me != null ? Math.round(me) : null,
+    };
+  };
+  const segment = (rows: Row[]) => {
+    const suk = rows.filter(r => r.predajca_typ === "sukromny");
+    const rk = rows.filter(r => r.predajca_typ === "firma");
+    const byTypObj: Record<string, { all: ReturnType<typeof pstats>; sukromnik: ReturnType<typeof pstats>; rk: ReturnType<typeof pstats> }> = {};
+    for (const t of ["byt", "dom", "pozemok"]) {
+      const tr = rows.filter(r => r.typ === t);
+      byTypObj[t] = { all: pstats(tr), sukromnik: pstats(tr.filter(r => r.predajca_typ === "sukromny")), rk: pstats(tr.filter(r => r.predajca_typ === "firma")) };
+    }
+    return { all: pstats(rows), sukromnik: pstats(suk), rk: pstats(rk), by_typ: byTypObj };
+  };
+  const activeRows = active as Row[];
+  const segByPonuka = (rows: Row[]) => ({
+    predaj: segment(rows.filter(r => (r.ponuka_typ || "predaj") !== "prenajom")),
+    prenajom: segment(rows.filter(r => r.ponuka_typ === "prenajom")),
+  });
+  // Lokality — normalizovaný kľúč (trim + zložené medzery). Zobrazujeme len tie
+  // s aspoň 3 inzerátmi (menej = nereprezentatívny medián), top 30 podľa počtu.
+  // Normalizácia: zlúč staré "Reality " prefixy (reality.sk artefakt na starých
+  // riadkoch) s čistými, zlož medzery. Tým sa "Reality Bratislava-Ružinov" a
+  // "Bratislava-Ružinov" počítajú ako jedna lokalita.
+  const lokKey = (s: string | null) => (s || "").replace(/^\s*reality\s+/i, "").replace(/\s+/g, " ").trim();
+  const lokCounts = new Map<string, number>();
+  for (const r of activeRows) {
+    const k = lokKey(r.lokalita);
+    if (k) lokCounts.set(k, (lokCounts.get(k) || 0) + 1);
+  }
+  const topLok = [...lokCounts.entries()].filter(([, c]) => c >= 3).sort((a, b) => b[1] - a[1]).slice(0, 30);
+  const data: Record<string, ReturnType<typeof segByPonuka>> = { __all__: segByPonuka(activeRows) };
+  for (const [k] of topLok) data[k] = segByPonuka(activeRows.filter(r => lokKey(r.lokalita) === k));
+  const cenova_analyza = {
+    lokality: topLok.map(([key, count]) => ({ key, count })),
+    data,
+  };
 
   // Avg DOM a avg discount z predajov
   const disap = disappearanceStats ?? [];
@@ -91,6 +146,7 @@ export async function GET() {
     by_portal: byPortal,
     by_typ: byTyp,
     predajcovia: { sukromni, realitky, ostatni },
+    cenova_analyza,
     motivated_sellers: motivated,
     sales_stats: { avg_dom: avgDom, avg_discount: avgDiscount, avg_sale_price: avgSalePrice, sample_size: disap.length },
   });

@@ -5,6 +5,7 @@ import { logAudit } from "@/lib/audit";
 import { requireUser } from "@/lib/auth/requireUser";
 import { sanitizeFields, SANITIZE_FIELDS } from "@/lib/sanitize";
 import { requireReAuth } from "@/lib/auth/reAuth";
+import { touchEngagement } from "@/lib/engagement";
 
 export const runtime = "nodejs";
 
@@ -41,9 +42,10 @@ export async function GET(req: NextRequest) {
   }
   if (telefon) {
     const last9 = telefon.replace(/\D/g, "").slice(-9);
-    const { data, error } = await sb.from("klienti").select("*").ilike("telefon", `%${last9}%`).eq("company_id", companyId).limit(1).maybeSingle();
+    const { data, error } = await sb.from("klienti").select("*").ilike("telefon", `%${last9}%`).eq("company_id", companyId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ klient: data });
+    // Spätná kompatibilita: `klient` = prvý match (single), `klienti` = celé pole.
+    return NextResponse.json({ klient: data?.[0] ?? null, klienti: data ?? [] });
   }
   if (q) {
     const { data, error } = await sb.from("klienti").select("id, meno, telefon, email").ilike("meno", `%${q}%`).eq("company_id", companyId).limit(8);
@@ -83,10 +85,18 @@ export async function POST(req: NextRequest) {
   const scope = await getUserScope(userId);
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
 
-  const { user_id: _u, makler_id: bodyMakler, ...rest } = body;
+  const { user_id: _u, makler_id: bodyMakler, odporucil_klient_id: bodyOdporucil, ...rest } = body;
   const makler_id = scope.isAdmin && bodyMakler ? String(bodyMakler) : scope.makler_id;
   if (!makler_id) {
     return NextResponse.json({ error: "Užívateľ nemá priradeného makléra" }, { status: 400 });
+  }
+
+  // Odporúčanie: nový klient naviazaný na existujúceho, ktorý ho odporučil.
+  // Over že odporúčajúci patrí do tej istej firmy (žiadne cross-tenant prepojenie).
+  let validReferrer: string | null = null;
+  if (bodyOdporucil) {
+    const { data: ref } = await sb.from("klienti").select("id, company_id").eq("id", String(bodyOdporucil)).maybeSingle();
+    if (ref && ref.company_id === scope.company_id) validReferrer = ref.id;
   }
 
   // C4: XSS sanitize free-form text fields (poznamka, meno, lokalita, ...)
@@ -99,6 +109,7 @@ export async function POST(req: NextRequest) {
     makler_id,
     created_by_makler_id: makler_id,
     company_id: scope.company_id,
+    odporucil_klient_id: validReferrer,
   };
   const { data, error } = await sb.from("klienti").insert(payload).select().single();
   if (error) {
@@ -107,6 +118,20 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: error.message, code: error.code }, { status: 500 });
   }
+
+  // Odporúčajúci klient = aktívny živý vzťah → reset retention lehoty (F11)
+  // + záznam do jeho histórie.
+  if (validReferrer) {
+    await touchEngagement(validReferrer);
+    await sb.from("klient_udalosti").insert({
+      klient_id: validReferrer,
+      typ: "ine",
+      popis: `Dal odporúčanie — nový klient: ${typeof data.meno === "string" ? data.meno : data.id}`,
+      autor: auth.user.name || null,
+      company_id: scope.company_id,
+    });
+  }
+
   await logAudit({
     action: "klient.create",
     actor_id: userId,
@@ -148,10 +173,13 @@ export async function PATCH(req: NextRequest) {
   const scope = await getUserScope(userId);
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
 
+  // 🔒 S5 cross-tenant guard — company_id scope (read/write konzistencia s GET).
+  // canEditRecord() pre admin/majiteľa firmu NEkontroluje, preto musí byť tu.
   const { data: existing } = await sb
     .from("klienti")
     .select("id, makler_id, anonymized_at")
     .eq("id", id)
+    .eq("company_id", scope.company_id)
     .single();
   if (!existing) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
   if (existing.anonymized_at) {
@@ -167,7 +195,7 @@ export async function PATCH(req: NextRequest) {
   const patch: Record<string, unknown> = { ...cleanRest };
   if (scope.isAdmin && bodyMakler) patch.makler_id = bodyMakler; // delegate
 
-  const { data, error } = await sb.from("klienti").update(patch).eq("id", id).select().single();
+  const { data, error } = await sb.from("klienti").update(patch).eq("id", id).eq("company_id", scope.company_id).select().single();
   if (error) {
     // P0 fix 2026-05-24a: schema cache miss → 400 namiesto 500.
     if (error.code === "PGRST204" || /column|schema cache/i.test(error.message)) {
@@ -241,8 +269,10 @@ export async function DELETE(req: NextRequest) {
     }, { status: reAuth.status });
   }
 
-  const { error } = await sb.from("klienti").delete().eq("id", id);
+  // 🔒 S5 cross-tenant guard — admin smie mazať len klienta vlastnej firmy.
+  const { error, count } = await sb.from("klienti").delete({ count: "exact" }).eq("id", id).eq("company_id", scope.company_id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!count) return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
   await logAudit({ action: "klient.delete", actor_id: userId, target_id: id, target_type: "klient", ip_address: req.headers.get("x-forwarded-for") || undefined });
   return NextResponse.json({ ok: true });
 }

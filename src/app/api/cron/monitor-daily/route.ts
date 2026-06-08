@@ -34,7 +34,7 @@ interface MonitorRow {
   first_seen_at: string;
   last_seen_at: string;
   is_active: boolean;
-  raw_data: Record<string, unknown> | null;
+  ponuka_typ: string | null;
 }
 
 function eurPerM2(cena: number | null, plocha: number | null): number | null {
@@ -152,7 +152,7 @@ export async function GET(request: Request) {
   try {
     const { data: candidates, error } = await sb
       .from("monitor_inzeraty")
-      .select("id, cena, plocha, lokalita, typ, izby, first_seen_at, last_seen_at, is_active, raw_data")
+      .select("id, cena, plocha, lokalita, typ, izby, first_seen_at, last_seen_at, is_active, ponuka_typ")
       .eq("is_active", true)
       .lte("last_seen_at", threshold);
     if (error) throw error;
@@ -187,7 +187,9 @@ export async function GET(request: Request) {
 
         const classification = classify(dom, firstPrice, lastPrice);
         const conf = confidence(dom, classification, priceDropped);
-        const estimatedSale = classification === "likely_sold" ? estimateSalePrice(lastPrice, dom) : null;
+        // Odhad realizačnej ceny dáva zmysel len pri PREDAJI (nie pri prenájme).
+        const estimatedSale = (classification === "likely_sold" && c.ponuka_typ !== "prenajom")
+          ? estimateSalePrice(lastPrice, dom) : null;
         const estimatedDiscount = estimatedSale && firstPrice > 0
           ? Math.round(((firstPrice - estimatedSale) / firstPrice) * 100 * 100) / 100
           : null;
@@ -250,23 +252,10 @@ export async function GET(request: Request) {
     stats.errors++;
   }
 
-  // ── PHASE 4: Multi-portal deduplication (telefón match) ──
-  let dedup_links = 0;
-  try {
-    dedup_links = await dedupPhoneMatch();
-  } catch (e) {
-    console.error("[monitor-daily] dedup phase failed:", e);
-    stats.errors++;
-  }
-
-  // ── PHASE 5: Private/RK classifier (rule-based heuristika) ──
-  let classifier_updated = 0;
-  try {
-    classifier_updated = await classifyPredajcaTyp();
-  } catch (e) {
-    console.error("[monitor-daily] classifier phase failed:", e);
-    stats.errors++;
-  }
+  // PHASE 4 (multi-portal dedup podľa telefónu) a PHASE 5 (denná re-klasifikácia
+  // podľa telefón-volume + popisu) boli ODSTRÁNENÉ — GDPR data-min: telefón ani
+  // popis sa už neukladajú. Klasifikácia súkromník/RK prebieha pri scrape behu
+  // (transientne). canonical_id/listed_on_n_portals sa už neprepočítavajú.
 
   // ── PHASE 6: Motivation signals detection ────────────────
   let signals_detected = 0;
@@ -278,7 +267,7 @@ export async function GET(request: Request) {
   }
 
   const ms = Date.now() - t0;
-  const result = { ...stats, sentiments_updated, dedup_links, classifier_updated, signals_detected, took_ms: ms };
+  const result = { ...stats, sentiments_updated, signals_detected, took_ms: ms };
   console.log("[monitor-daily] completed", result);
   return NextResponse.json({ ok: true, ...result });
 }
@@ -292,10 +281,12 @@ async function updateMarketSentiments(today: string): Promise<number> {
   const sb = getSupabaseAdmin();
 
   // Načítaj všetky aktívne inzeráty s validnými dátami
+  // Cenové sentimenty počítame LEN z predaja — nájomné ceny by zničili mediány.
   const { data: active } = await sb
     .from("monitor_inzeraty")
     .select("id, lokalita, typ, izby, cena, plocha, first_seen_at")
     .eq("is_active", true)
+    .eq("ponuka_typ", "predaj")
     .not("cena", "is", null)
     .not("lokalita", "is", null)
     .not("typ", "is", null);
@@ -306,6 +297,7 @@ async function updateMarketSentiments(today: string): Promise<number> {
   const { data: todayNew } = await sb
     .from("monitor_inzeraty")
     .select("id, lokalita, typ, izby")
+    .eq("ponuka_typ", "predaj")
     .gte("first_seen_at", today)
     .not("lokalita", "is", null);
   const { data: todayDisap } = await sb
@@ -423,145 +415,6 @@ async function updateMarketSentiments(today: string): Promise<number> {
 
     if (!error) updated++;
     else console.warn("[monitor-daily] sentiment upsert failed:", error.message);
-  }
-
-  return updated;
-}
-
-/* ── PHASE 4 ─ Multi-portal deduplication (telefón Stage 1) ─────────────
- * Pre každý telefón ktorý sa objaví na ≥2 rôznych portáloch:
- *   - Vyber primárny inzerát (najstarší first_seen_at) — canonical
- *   - Ostatné inzeráty s rovnakým telefónom + podobnou plochou (±5%)
- *     označ canonical_id = primárny.id
- *   - Updatni listed_on_n_portals counter na primárnom
- */
-async function dedupPhoneMatch(): Promise<number> {
-  const sb = getSupabaseAdmin();
-  const { data: rows } = await sb
-    .from("monitor_inzeraty")
-    .select("id, portal, predajca_telefon, plocha, first_seen_at, canonical_id")
-    .eq("is_active", true)
-    .not("predajca_telefon", "is", null);
-
-  if (!rows || rows.length === 0) return 0;
-
-  // Group by phone
-  const byPhone = new Map<string, typeof rows>();
-  for (const r of rows) {
-    const phone = String(r.predajca_telefon).replace(/[\s().-]/g, "");
-    if (phone.length < 7) continue;
-    if (!byPhone.has(phone)) byPhone.set(phone, []);
-    byPhone.get(phone)!.push(r);
-  }
-
-  let links = 0;
-  for (const group of byPhone.values()) {
-    const portals = new Set(group.map(r => r.portal));
-    if (portals.size < 2) continue;  // iba 1 portál → žiadny dedup
-
-    // Sort by first_seen_at — najstarší = canonical
-    group.sort((a, b) => new Date(a.first_seen_at).getTime() - new Date(b.first_seen_at).getTime());
-    const canonical = group[0];
-    const canonicalPlocha = canonical.plocha ? Number(canonical.plocha) : null;
-
-    for (let i = 1; i < group.length; i++) {
-      const dup = group[i];
-      // Filter podobnou plochou ±5% (ak obe majú plochu)
-      if (canonicalPlocha && dup.plocha) {
-        const ratio = Number(dup.plocha) / canonicalPlocha;
-        if (ratio < 0.95 || ratio > 1.05) continue;
-      }
-      // Updatni len ak sa zmenil canonical_id (idempotent)
-      if (dup.canonical_id !== canonical.id) {
-        const { error } = await sb.from("monitor_inzeraty")
-          .update({ canonical_id: canonical.id })
-          .eq("id", dup.id);
-        if (!error) links++;
-      }
-    }
-    // Update counter na canonical
-    await sb.from("monitor_inzeraty")
-      .update({ listed_on_n_portals: portals.size })
-      .eq("id", canonical.id);
-  }
-
-  return links;
-}
-
-/* ── PHASE 5 ─ Private/RK classifier (rule-based) ─────────────────────
- * Heuristiky z CLAUDE.md vrstva 2:
- *   - Telefón sa objavuje vo viacerých inzerátoch za 30 dní → RK
- *     (>=5 inzerátov = RK, 2-4 = unknown, 1 = súkromník)
- *   - Email domain v RK blacklist → RK
- *   - Bazos.sk + krátky popis bez RK keywords → súkromník
- *
- * Confidence + method sa logujú aby sme vedeli ako sme rozhodli.
- */
-async function classifyPredajcaTyp(): Promise<number> {
-  const sb = getSupabaseAdmin();
-
-  // Spočítaj koľko inzerátov má každý telefón za posledných 30 dní
-  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: rows } = await sb
-    .from("monitor_inzeraty")
-    .select("id, portal, predajca_telefon, predajca_typ, popis")
-    .eq("is_active", true)
-    .gte("first_seen_at", monthAgo);
-  if (!rows) return 0;
-
-  // Volume map per phone
-  const phoneVolume = new Map<string, number>();
-  for (const r of rows) {
-    if (!r.predajca_telefon) continue;
-    const p = String(r.predajca_telefon).replace(/[\s().-]/g, "");
-    phoneVolume.set(p, (phoneVolume.get(p) || 0) + 1);
-  }
-
-  // RK keywords
-  const rkKeywords = ["realitn", "kancelária", "exkluzívne", "provízia", "naša RK", "RK ", "MMr eality", "century 21", "remax"];
-  const sukromKeywords = ["predávam", "ponúkam na predaj", "z osobných dôvodov", "súrne", "vlastník"];
-
-  let updated = 0;
-  for (const r of rows) {
-    let typ: "sukromny" | "firma" | null = null;
-    let confidence = 0;
-    let method = "rule_default";
-
-    // 1) Phone volume
-    if (r.predajca_telefon) {
-      const p = String(r.predajca_telefon).replace(/[\s().-]/g, "");
-      const vol = phoneVolume.get(p) || 0;
-      if (vol >= 5) { typ = "firma"; confidence = 0.85; method = "rule_phone_volume"; }
-      else if (vol === 1) { typ = "sukromny"; confidence = 0.65; method = "rule_phone_volume"; }
-    }
-
-    // 2) Bazos baseline (vyšší prior pre súkromník)
-    if (typ === null && r.portal === "bazos") {
-      typ = "sukromny";
-      confidence = 0.55;
-      method = "rule_portal_baseline";
-    }
-
-    // 3) Keywords v popise (override ak match)
-    const popis = (r.popis || "").toLowerCase();
-    const rkHits = rkKeywords.filter(k => popis.includes(k.toLowerCase())).length;
-    const sukHits = sukromKeywords.filter(k => popis.includes(k.toLowerCase())).length;
-    if (rkHits >= 2) { typ = "firma"; confidence = Math.max(confidence, 0.80); method = "rule_keywords"; }
-    else if (sukHits >= 1 && rkHits === 0) { typ = "sukromny"; confidence = Math.max(confidence, 0.70); method = "rule_keywords"; }
-
-    if (typ === null) continue;
-
-    // Update iba ak sa rozhodnutie zmení
-    if (r.predajca_typ !== typ) {
-      await sb.from("monitor_inzeraty")
-        .update({
-          predajca_typ: typ,
-          predajca_typ_confidence: confidence,
-          predajca_typ_method: method,
-        })
-        .eq("id", r.id);
-      updated++;
-    }
   }
 
   return updated;

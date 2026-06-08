@@ -72,7 +72,7 @@ function parseCalendarCommand(q: string): { summary: string; time: string; locat
   }
 
   // Remove time, date keywords, and calendar keywords to get location/summary
-  let rest = q
+  const rest = q
     .replace(/\d{1,2}:\d{2}/, "")
     .replace(/zajtra|pozajtra|pondelok|utorok|streda[u]?|stvrtok|piatok|sobota|nedel[au]/gi, "")
     .trim();

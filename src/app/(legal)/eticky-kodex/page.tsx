@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getFirmaInfo } from "@/lib/getFirmaInfo";
 
 export const metadata: Metadata = {
   title: "Etický kódex | Vianema",
@@ -6,7 +7,8 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function EtickyKodexPage() {
+export default async function EtickyKodexPage() {
+  const f = await getFirmaInfo();
   return (
     <>
       <header style={headerSt}>
@@ -44,7 +46,7 @@ export default function EtickyKodexPage() {
         </ul>
         <p style={{ ...pSt, marginTop: "12px" }}><strong>Profesionálne štandardy:</strong></p>
         <ul style={ulSt}>
-          <li>Poistenie zodpovednosti za škodu spôsobenú výkonom realitnej činnosti</li>
+          {f.poistovna && <li>Poistenie zodpovednosti za škodu spôsobenú výkonom realitnej činnosti ({f.poistovna})</li>}
           <li>Pravidelné vzdelávanie maklérov (legislatíva, trh, etika)</li>
           <li>Dodržiavanie GDPR a AML predpisov</li>
           <li>Nestrannosť pri obhliadkach — rovnaké zaobchádzanie so všetkými záujemcami</li>

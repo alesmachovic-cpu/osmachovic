@@ -1076,9 +1076,9 @@ export function searchStreets(query: string, lokalita?: string): StreetEntry[] {
   if (q.length < 2) return [];
 
   // Determine which city to search
-  let cityName = lokalita ? (LOKALITA_TO_CITY[lokalita] || lokalita) : "";
+  const cityName = lokalita ? (LOKALITA_TO_CITY[lokalita] || lokalita) : "";
   let streets: string[] = [];
-  let city = cityName;
+  const city = cityName;
 
   if (cityName && CITY_STREETS[cityName]) {
     streets = CITY_STREETS[cityName];

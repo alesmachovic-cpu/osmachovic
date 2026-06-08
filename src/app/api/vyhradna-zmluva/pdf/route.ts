@@ -357,7 +357,9 @@ export async function POST(req: NextRequest) {
     const meta = z.podpis_meta as Record<string, string> | null;
     text(page, MARGIN, page.y, 8, `Datum: ${fmtDate(z.podpisane_at)}   Metoda: ${meta?.method || "email_otp"}   IP: ${meta?.ip || "—"}`);
     page.y -= LH;
-    grayText(page, MARGIN, page.y, 7, "Tento dokument bol podpisany elektronicky a je pravne zavazny.", 0.5);
+    grayText(page, MARGIN, page.y, 7, "Podpisane jednoduchym elektronickym podpisom (OTP overenie + casova peciatka + IP).", 0.5);
+    page.y -= LH;
+    grayText(page, MARGIN, page.y, 7, "Pri listinach vyzadujucich uradne overenie podpisu (kupna zmluva, navrh na vklad) nenahradza uradne osvedcenie.", 0.5);
     page.y -= LH + 4;
   }
 

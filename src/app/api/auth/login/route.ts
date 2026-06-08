@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { buildSessionCookieValue, buildBillingCookieValue } from "@/lib/auth/session";
+import { buildSessionCookieValue, buildBillingCookieValue, buildTwoFactorCookieValue } from "@/lib/auth/session";
+import { isAdminTier } from "@/lib/auth/requireUser";
 
 export const runtime = "nodejs";
 
@@ -292,6 +293,9 @@ export async function POST(request: Request) {
     const res = NextResponse.json({ user: safeUser });
     res.headers.append("Set-Cookie", buildSessionCookieValue(String(user.id)));
     res.headers.append("Set-Cookie", buildBillingCookieValue(companyActive));
+    // 🔒 2FA enforcement — admin bez 2FA → middleware ho presmeruje na setup.
+    // (Táto vetva beží len keď totp_enabled_at je null; inak login vyššie vrátil requires_2fa.)
+    res.headers.append("Set-Cookie", buildTwoFactorCookieValue(isAdminTier(user.role) && !user.totp_enabled_at));
     return res;
   } catch (e) {
     console.error("[login] error:", e);

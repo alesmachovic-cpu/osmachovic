@@ -805,7 +805,7 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
             if (parsed && !parsed.error) {
               fillFormFromAI(parsed as Record<string, string>);
             } else {
-              setError((parsed?.error as string) || "DOCX parsing zlyhal.");
+              setError((parsed?.error as string) || "DOCX sa nepodarilo automaticky prečítať — je uložený, vyplň polia ručne.");
             }
           } catch (e) {
             console.error("[upload] DOCX failed:", e);
@@ -900,11 +900,11 @@ export default function InzeratForm({ onSaved, onCancel, prefilledData, editId: 
               fillFormFromAI(parsed as Record<string, string>);
               setDocs(prev => prev.map(d => d.name === file.name ? { ...d, type: `${typeLabel} ✓` } : d));
             } else {
-              setError((parsed?.error as string) || "AI nevrátila žiadne dáta — skús ⚡AI manuálne.");
+              setError((parsed?.error as string) || "Dokument sa nepodarilo automaticky prečítať — je uložený, vyplň polia ručne.");
             }
           } catch (e) {
             console.error("[upload] PDF processing failed:", e);
-            setError("Nepodarilo sa spracovať PDF.");
+            setError("Dokument sa nepodarilo automaticky prečítať — je uložený, vyplň polia ručne.");
           } finally {
             setParsingLV(false);
             setUploadingFile("");

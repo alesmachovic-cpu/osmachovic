@@ -94,4 +94,17 @@ export function buildBillingCookieValue(isActive: boolean): string {
   return `crm_billing=${val}; Path=/; SameSite=Lax; Max-Age=${maxAge}; Secure`;
 }
 
+/**
+ * Cookie pre vynútenie 2FA setupu pre admin roly — čítaný v Edge middleware
+ * (nie httponly, ako crm_billing). setupRequired=true → admin bez 2FA, middleware
+ * ho presmeruje na /nastavenia/security. false → zmaž cookie (2FA OK / nie admin).
+ */
+export function buildTwoFactorCookieValue(setupRequired: boolean): string {
+  if (!setupRequired) {
+    return `crm_2fa=; Path=/; SameSite=Lax; Max-Age=0; Secure`;
+  }
+  const maxAge = 24 * 3600; // 1 deň — obnoví sa pri ďalšom logine
+  return `crm_2fa=setup; Path=/; SameSite=Lax; Max-Age=${maxAge}; Secure`;
+}
+
 export const SESSION_COOKIE_NAME = COOKIE_NAME;

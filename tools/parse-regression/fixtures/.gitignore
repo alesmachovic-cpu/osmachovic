@@ -1,0 +1,8 @@
+# Reálne dokumenty (najmä skeny s PII — OP/LV) NEpatria do gitu.
+# Commituj len syntetické .source.txt a .expected.json.
+*.pdf
+
+# Reálne fixtúry vrátane ich expected.json (obsahujú reálne PII vlastníkov)
+# ostávajú LEN lokálne.
+lv-real-*
+*-real-*

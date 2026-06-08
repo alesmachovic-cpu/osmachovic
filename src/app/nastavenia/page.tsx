@@ -406,7 +406,10 @@ export default function NastaveniaPage() {
               display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
             }}>
               <div>
-                <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text-primary)" }}>
+                <div style={{
+                  fontSize: "14px", fontWeight: "600",
+                  color: pushState === "granted" ? "#065F46" : pushState === "denied" ? "#991B1B" : "var(--text-primary)",
+                }}>
                   {pushState === "granted" ? "✓ Tento prehliadač je povolený" :
                    pushState === "denied" ? "⚠ Notifikácie sú zablokované v prehliadači" :
                    pushState === "unsupported" ? "Prehliadač nepodporuje notifikácie" :

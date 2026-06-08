@@ -15,10 +15,12 @@ export async function GET(req: NextRequest) {
   if (!klientId) return NextResponse.json({ error: "Chýba klient_id" }, { status: 400 });
 
   const sb = getSupabaseAdmin();
+  // 🔒 S6 cross-tenant guard — obchody (cena, provízia) len z firmy callera.
   const { data, error } = await sb
     .from("obchody")
     .select("*, obchod_ulohy(*)")
     .eq("klient_id", klientId)
+    .eq("company_id", auth.user.company_id)
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

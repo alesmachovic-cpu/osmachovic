@@ -1,7 +1,7 @@
 /* ── Parser pre reality.sk ── */
 
 import { ScrapedInzerat, MonitorFilter, PortalParser } from "../types";
-import { detectFirma, extractPoschodie, extractStav } from "./shared";
+import { detectFirma, extractPoschodie, extractStav, extractIzby, extractPlocha, extractTyp } from "./shared";
 
 /**
  * Stiahne detail stránku reality.sk a zistí či inzerát patrí realitke.
@@ -47,12 +47,13 @@ export const realitySkParser: PortalParser = {
     if (filter.search_url) return filter.search_url;
 
     const typSlug = filter.typ ? TYP_URL[filter.typ] || "" : "";
+    const seg = filter.ponuka_typ === "prenajom" ? "prenajom" : "predaj";
     // Bez lokality: celý slovenský trh pre daný typ
     // S lokalitou: pokusíme sa vytvoriť slug, ale fallback na celé SK
     if (typSlug) {
-      return `${BASE_URL}/${typSlug}/predaj/`;
+      return `${BASE_URL}/${typSlug}/${seg}/`;
     }
-    return `${BASE_URL}/vyhladavanie/predaj/`;
+    return `${BASE_URL}/vyhladavanie/${seg}/`;
   },
 
   parseListings(html: string): ScrapedInzerat[] {
@@ -87,31 +88,32 @@ export const realitySkParser: PortalParser = {
         if (isNaN(cena)) cena = undefined;
       }
 
-      // Area
-      const areaMatch = block.match(/(\d+(?:[,.]\d+)?)\s*m[²2&]/);
-      const plocha = areaMatch ? parseFloat(areaMatch[1].replace(",", ".")) : undefined;
-
-      // Rooms
-      const roomMatch = (nazov + block).match(/(\d+)[- ]izb/);
-      const izby = roomMatch ? parseInt(roomMatch[1]) : undefined;
-
       // Image
       const imgMatch = block.match(/(?:data-src|src)="(https:\/\/img\.[^"]+)"/);
       const foto_url = imgMatch?.[1]?.replace(/&amp;/g, "&");
 
-      // Location
-      const locMatch = block.match(/class="offer-location[^"]*"[^>]*>([\s\S]*?)<\//);
-      const lokalita = locMatch?.[1]?.replace(/<[^>]*>/g, "").trim() || undefined;
-
-      // Typ from URL
-      let typ = "iny";
-      if (relUrl.startsWith("/byty")) typ = "byt";
-      else if (relUrl.startsWith("/domy") || relUrl.startsWith("/rodinne")) typ = "dom";
-      else if (relUrl.startsWith("/pozemky")) typ = "pozemok";
-
       // Popis z offer-desc
       const descMatch = block.match(/class="offer-desc[^"]*"[^>]*>([\s\S]*?)<\/p>/);
       const popis = descMatch?.[1]?.replace(/<[^>]*>/g, "").trim().slice(0, 500) || undefined;
+
+      // Location — očisti "Reality " prefix (artefakt reality.sk štruktúry).
+      const locMatch = block.match(/class="offer-location[^"]*"[^>]*>([\s\S]*?)<\//);
+      const lokalita = locMatch?.[1]
+        ?.replace(/<[^>]*>/g, "")
+        .replace(/^\s*reality\s+/i, "")
+        .trim() || undefined;
+
+      // Plocha + izby — helpery so sanity hranicami (názov + popis, fallback blok).
+      const blockText = block.replace(/<[^>]*>/g, " ");
+      const plocha = extractPlocha(`${nazov} ${popis || ""}`) ?? extractPlocha(blockText);
+      const izby = extractIzby(`${nazov} ${popis || ""}`) ?? extractIzby(blockText);
+
+      // Typ — z URL (spoľahlivé), fallback na text helper.
+      let typ: string;
+      if (relUrl.startsWith("/byty")) typ = "byt";
+      else if (relUrl.startsWith("/domy") || relUrl.startsWith("/rodinne")) typ = "dom";
+      else if (relUrl.startsWith("/pozemky")) typ = "pozemok";
+      else typ = extractTyp(`${nazov} ${popis || ""}`);
 
       // Poschodie + stav z titulu, popisu a celého bloku
       const textForMeta = `${nazov} ${popis || ""} ${block.replace(/<[^>]*>/g, " ")}`;

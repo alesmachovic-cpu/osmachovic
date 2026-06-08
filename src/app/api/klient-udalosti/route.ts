@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
 import { logAudit } from "@/lib/audit";
-import { getUserScope, canEditRecord } from "@/lib/scope";
+import { getUserScope, canEditRecord, klientScopeById } from "@/lib/scope";
+import { touchEngagement } from "@/lib/engagement";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,12 @@ export async function GET(req: NextRequest) {
 
   const klientId = req.nextUrl.searchParams.get("klient_id");
   if (!klientId) return NextResponse.json({ error: "klient_id required" }, { status: 400 });
+
+  // 🔒 Cross-tenant guard — história interakcií je PII; klient musí patriť firme callera.
+  const klientCompany = await klientScopeById(klientId);
+  if (!klientCompany || (klientCompany !== auth.user.company_id && auth.user.role !== "platform_admin")) {
+    return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
+  }
 
   const sb = getSupabaseAdmin();
   // 🔒 S3 hotfix — história interakcií je PII; klient musí patriť firme callera (cross-tenant guard).
@@ -61,6 +68,9 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Reálny kontakt klienta = živý vzťah → reset retention lehoty (F11).
+  // status_zmena je interná admin akcia, nie kontakt → neresetuje.
+  if (typ !== "status_zmena") await touchEngagement(klient_id);
   await logAudit({
     action: "klient_udalost.create",
     actor_id: auth.user.id, actor_name: auth.user.name,

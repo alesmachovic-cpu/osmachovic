@@ -1,3 +1,5 @@
+import { distanceKm } from "./geocode";
+
 export type ObjednavkaForMatch = {
   id: string;
   klient_id: string;
@@ -49,7 +51,11 @@ export function vypocitajSkore(
 
   // Typ nehnuteľnosti
   if (o.druh && n.typ) {
-    const druhArr = Array.isArray(o.druh) ? o.druh : [o.druh];
+    // druh môže byť pole, alebo spojený string ("byt, rodinny_dom") z ObjednavkaForm
+    // → splitneme rovnako ako form, inak multi-druh nikdy nesedí (handoff 2026-06-06).
+    const druhArr = Array.isArray(o.druh)
+      ? o.druh
+      : o.druh.split(/[,/]/).map(s => s.trim()).filter(Boolean);
     const typLow = n.typ.toLowerCase();
     const typMatch = druhArr.some(d => {
       const dLow = d.toLowerCase();
@@ -61,15 +67,33 @@ export function vypocitajSkore(
     }
   }
 
-  // Cena v rozpočte
+  // Cena v rozpočte. maxCena = cena_do objednávky; ak objednávka nemá hornú
+  // hranicu, padáme na rozpočet klienta (rozpocet_max). Prekročenie rozpočtu
+  // má stupňovaný postih — symetricky k lokalite/izbám, inak by drahé
+  // nehnuteľnosti vychádzali ako dobrá zhoda (Aleš 2026-06-06).
   const maxCena = o.cena_do ?? klient?.rozpocet_max ?? null;
+  const minCena = o.cena_od ?? null;
   if (maxCena && n.cena != null) {
-    if (n.cena <= maxCena) {
+    if (minCena && n.cena < minCena) {
+      // Pod dolnou hranicou rozpočtu — kupujúci chce drahšie (iná kategória).
+      // Len malý bonus, nie plný — nie je to "v rozpočte" ako zamýšľal (handoff 2026-06-06).
+      score += 8;
+      reasons.push("Cena pod očakávaným rozsahom");
+    } else if (n.cena <= maxCena) {
       score += 30;
       reasons.push("Cena je v rozpočte");
     } else if (n.cena <= maxCena * 1.1) {
       score += 12;
       reasons.push("Cena mierne nad rozpočtom");
+    } else if (n.cena <= maxCena * 1.25) {
+      score -= 20;
+      reasons.push("Cena nad rozpočtom (+10–25 %)");
+    } else if (n.cena <= maxCena * 1.5) {
+      score -= 40;
+      reasons.push("Cena výrazne nad rozpočtom (+25–50 %)");
+    } else {
+      score -= 60;
+      reasons.push("Cena mimo rozpočtu (>50 %)");
     }
   }
 
@@ -93,13 +117,7 @@ export function vypocitajSkore(
   // Toto rieši "Petržalka-Háje → Dvory 1km lepšie ako Dúbravka 7km lepšie ako Senec 20km".
   let geoApplied = false;
   if (o.lat != null && o.lng != null && n.lat != null && n.lng != null) {
-    const R = 6371;
-    const toRad = (deg: number) => deg * Math.PI / 180;
-    const dLat = toRad(n.lat - o.lat);
-    const dLng = toRad(n.lng - o.lng);
-    const a = Math.sin(dLat / 2) ** 2 +
-              Math.cos(toRad(o.lat)) * Math.cos(toRad(n.lat)) * Math.sin(dLng / 2) ** 2;
-    const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const km = distanceKm(o.lat, o.lng, n.lat, n.lng);
 
     if (km <= 1) {
       score += 25;
@@ -152,11 +170,17 @@ export function vypocitajSkore(
     }
   }
 
-  // Izby z požiadaviek — postih ak nesedí
+  // Izby z požiadaviek — postih ak nesedí.
+  // ObjednavkaForm ukladá izby ako pole stringov (["3"]), DB stĺpec n.izby je
+  // number → normalizujeme na čísla. Inak `includes` nikdy nesedí a správny
+  // počet izieb dostane postih namiesto bonusu (bug fix 2026-06-06).
   if (o.poziadavky && n.izby != null) {
     const poz = o.poziadavky;
     const izbyVal = poz.izby ?? poz.pocet_izieb ?? poz.rooms;
-    const izbyArr = Array.isArray(izbyVal) ? izbyVal as number[] : (typeof izbyVal === "number" ? [izbyVal] : []);
+    const rawArr = Array.isArray(izbyVal) ? izbyVal : (izbyVal != null ? [izbyVal] : []);
+    const izbyArr = rawArr
+      .map(v => (typeof v === "number" ? v : parseInt(String(v), 10)))
+      .filter(v => Number.isFinite(v));
     if (izbyArr.length > 0) {
       if (izbyArr.includes(n.izby)) {
         score += 10;
@@ -178,8 +202,15 @@ export function vypocitajSkore(
   return { score: Math.max(0, Math.min(score, 100)), reasons };
 }
 
-export function farbaSkore(s: number): "green" | "yellow" | "gray" {
-  if (s >= 80) return "green";
-  if (s >= 50) return "yellow";
-  return "gray";
+export type SkoreUroven = "vyborna" | "dobra" | "slaba";
+
+/**
+ * Jednotné prahy skóre pre celý matching UI — jeden zdroj pravdy.
+ * Komponenty si na úroveň mapujú vlastné farby (light karty vs dark widget),
+ * ale prah (kedy je zhoda výborná/dobrá/slabá) je všade rovnaký.
+ */
+export function skoreUroven(s: number): SkoreUroven {
+  if (s >= 80) return "vyborna";
+  if (s >= 50) return "dobra";
+  return "slaba";
 }

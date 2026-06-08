@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { requireUser } from "@/lib/auth/requireUser";
-import { getUserScope } from "@/lib/scope";
+import { getUserScope, klientScopeById } from "@/lib/scope";
 
 export const runtime = "nodejs";
 
@@ -83,9 +83,9 @@ export async function POST(request: Request) {
     const { action, klient_id } = body;
     if (!klient_id) return NextResponse.json({ error: "Missing klient_id" }, { status: 400 });
 
-    // 🔒 S4 hotfix — klient musí patriť firme callera (inak anonym/cudzí prepriradí klienta).
-    const { data: klientCompany } = await sb.from("klienti").select("company_id").eq("id", klient_id).maybeSingle();
-    if (!klientCompany || (klientCompany.company_id !== scope.company_id && auth.user.role !== "platform_admin")) {
+    // 🔒 Cross-tenant guard — klient musí patriť firme callera (inak anonym/cudzí prepriradí klienta).
+    const klientCompany = await klientScopeById(klient_id);
+    if (!klientCompany || (klientCompany !== scope.company_id && auth.user.role !== "platform_admin")) {
       return NextResponse.json({ error: "Klient nenájdený" }, { status: 404 });
     }
 
@@ -119,9 +119,14 @@ export async function POST(request: Request) {
     if (action === "prebrat") {
       const newMaklerId = body.makler_id as string | null;
       if (!newMaklerId) return NextResponse.json({ error: "Missing makler_id" }, { status: 400 });
-      // 🔒 Maklér prebrať len PRE SEBA; admin/manažér môže priradiť inému.
+      // 🔒 Maklér môže prebrať len PRE SEBA; admin/manažér môže priradiť inému maklérovi.
       if (!scope.isAdmin && newMaklerId !== scope.makler_id) {
         return NextResponse.json({ error: "Môžeš prebrať len pre seba" }, { status: 403 });
+      }
+      // 🔒 Cieľový maklér musí patriť firme callera (zabráni priradeniu cez cudzí makler_id).
+      const { data: targetMakler } = await sb.from("users").select("id").eq("makler_id", newMaklerId).eq("company_id", scope.company_id).maybeSingle();
+      if (!targetMakler) {
+        return NextResponse.json({ error: "Maklér nepatrí do firmy" }, { status: 403 });
       }
       const { data: prevKlient } = await sb.from("klienti").select("makler_id").eq("id", klient_id).single();
       const { error } = await sb

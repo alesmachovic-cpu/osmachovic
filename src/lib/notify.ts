@@ -8,7 +8,7 @@
  *   await notifyUser(userId, { type: "sla_warning", title: "...", body: "...",
  *                              url: "/klienti/abc", emailHtml: "..." });
  *
- *   await notifyManagers({ ... });
+ *   await notifyManagers(companyId, { ... });
  */
 
 import webpush from "web-push";
@@ -119,10 +119,27 @@ export async function notifyUser(userId: string | null, payload: NotifyPayload):
   ]);
 }
 
-/** Pošle notifikáciu všetkým používateľom s rolou 'manager' alebo 'admin'. */
-export async function notifyManagers(payload: NotifyPayload): Promise<void> {
+/**
+ * Pošle notifikáciu manažérskym roliam (manazer/majitel/super_admin) **iba v rámci
+ * jednej firmy** (`company_id`). Multi-tenant: manažér firmy A nesmie dostať notifikáciu
+ * o dianí vo firme B.
+ *
+ * `platform_admin` (jediná cross-tenant rola) sa zámerne nenotifikuje — nie je viazaný
+ * na konkrétnu firmu a nemá dostávať per-company SLA alerty.
+ *
+ * Fail-closed: bez platného `companyId` sa nepošle nič (radšej žiadna notifikácia ako leak).
+ */
+export async function notifyManagers(companyId: string, payload: NotifyPayload): Promise<void> {
+  if (!companyId) {
+    console.warn("[notifyManagers] chýba companyId — notifikácia preskočená (fail-closed)");
+    return;
+  }
   const sb = getSupabaseAdmin();
-  const { data: managers } = await sb.from("users").select("id").in("role", ["manager", "admin"]);
+  const { data: managers } = await sb
+    .from("users")
+    .select("id")
+    .eq("company_id", companyId)
+    .in("role", ["manazer", "majitel", "super_admin"]);
   if (!managers?.length) return;
   await Promise.allSettled(managers.map((m) => notifyUser(m.id as string, payload)));
 }

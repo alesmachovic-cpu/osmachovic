@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { assertFileSize, assertMime, ALLOWED_DOC_MIMES, UPLOAD_LIMITS } from "@/lib/uploadGuards";
+import { aiParseDisabled, AI_DISABLED_BODY } from "@/lib/aiFlag";
+import { logParseFailure } from "@/lib/parseFailure";
 
 export const maxDuration = 300;
 export const runtime = "nodejs";
@@ -82,104 +84,54 @@ function extractJSON(raw: string): Record<string, unknown> | null {
   try { return JSON.parse(m[0]); } catch { return null; }
 }
 
-async function callGeminiText(text: string): Promise<{ data?: Record<string, unknown>; error?: string }> {
-  if (!process.env.GEMINI_API_KEY) return { error: "Chýba GEMINI_API_KEY" };
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM + "\n" + SCHEMA }] },
-          contents: [{ parts: [{ text: `Dokument:\n\n${text}\n\nExtrahuj údaje o nehnuteľnosti. Vráť IBA JSON podľa schémy.` }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 16000, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
-        }),
-      }
-    );
-    if (!res.ok) { const err = await res.text(); return { error: `Gemini HTTP ${res.status}: ${err.slice(0,200)}` }; }
-    const j = await res.json();
-    const raw = j.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-    const parsed = extractJSON(raw);
-    if (!parsed) return { error: `Gemini text neparsovateľný (${raw.length} znakov)` };
-    return { data: parsed };
-  } catch (e) { return { error: `Gemini výnimka: ${String(e).slice(0,200)}` }; }
+/* GDPR 2026-06-03 (F2): klientske dokumenty (LV, posudky, OP — obsahujú meno,
+   dátum narodenia, adresu) spracúva VÝHRADNE Anthropic (jediný AI subprocessor
+   s DPA/SCC). Gemini a OpenAI odstránené z PII parse flow. Claude číta natívne
+   PDF (document blok), rasterizované stránky (image bloky) aj text. */
+type ClaudeDocBlock = { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } };
+type ClaudeImgBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
+type ClaudeTxtBlock = { type: "text"; text: string };
+
+function imgMedia(mime: string): "image/jpeg" | "image/png" | "image/gif" | "image/webp" {
+  if (mime === "image/png") return "image/png";
+  if (mime === "image/gif") return "image/gif";
+  if (mime === "image/webp") return "image/webp";
+  return "image/jpeg";
 }
 
-async function callGemini(parts: Array<{ base64: string; mime: string }>): Promise<{ data?: Record<string, unknown>; error?: string }> {
-  if (!process.env.GEMINI_API_KEY) return { error: "Chýba GEMINI_API_KEY" };
+async function callClaude(input: { parts?: Array<{ base64: string; mime: string }>; text?: string }): Promise<{ data?: Record<string, unknown>; error?: string }> {
+  if (!process.env.ANTHROPIC_API_KEY) return { error: "Chýba ANTHROPIC_API_KEY" };
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM + "\n" + SCHEMA }] },
-          contents: [{
-            parts: [
-              ...parts.map(p => ({ inlineData: { mimeType: p.mime, data: p.base64 } })),
-              { text: "Extrahuj všetky dostupné údaje o nehnuteľnosti z tohto dokumentu. Vráť IBA JSON podľa schémy vyššie." },
-            ],
-          }],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 16000,
-            responseMimeType: "application/json",
-            thinkingConfig: { thinkingBudget: 0 },
-          },
-        }),
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const content: Array<ClaudeDocBlock | ClaudeImgBlock | ClaudeTxtBlock> = [];
+    if (input.parts && input.parts.length > 0) {
+      for (const p of input.parts) {
+        if (p.mime === "application/pdf") {
+          content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: p.base64 } });
+        } else {
+          content.push({ type: "image", source: { type: "base64", media_type: imgMedia(p.mime), data: p.base64 } });
+        }
       }
-    );
-    if (!res.ok) {
-      const err = await res.text();
-      console.error("[parse-doc] Gemini HTTP", res.status, err.slice(0, 500));
-      return { error: `Gemini HTTP ${res.status}: ${err.slice(0, 200)}` };
+      content.push({ type: "text", text: "Extrahuj všetky dostupné údaje o nehnuteľnosti z tohto dokumentu. Vráť IBA JSON podľa schémy vyššie." });
+    } else {
+      content.push({ type: "text", text: `Dokument:\n\n${input.text || ""}\n\nExtrahuj údaje o nehnuteľnosti. Vráť IBA JSON podľa schémy.` });
     }
-    const j = await res.json();
-    const raw = j.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-    const finishReason = j.candidates?.[0]?.finishReason;
-    console.log("[parse-doc] Gemini finish:", finishReason, "raw length:", raw.length);
-    const parsed = extractJSON(raw);
-    if (!parsed) return { error: `Gemini vrátil neparsovateľný JSON (${raw.length} znakov, finish: ${finishReason})` };
-    return { data: parsed };
-  } catch (e) {
-    console.error("[parse-doc] Gemini exception:", e);
-    return { error: `Gemini výnimka: ${String(e).slice(0, 200)}` };
-  }
-}
-
-async function callGPT(base64: string, mime: string, filename: string): Promise<{ data?: Record<string, unknown>; error?: string }> {
-  if (!process.env.OPENAI_API_KEY) return { error: "Chýba OPENAI_API_KEY" };
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        temperature: 0.1,
-        max_tokens: 8000,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM + "\n" + SCHEMA },
-          { role: "user", content: [
-            { type: "file", file: { filename, file_data: `data:${mime};base64,${base64}` } },
-            { type: "text", text: "Extrahuj údaje o nehnuteľnosti. Vráť IBA JSON." },
-          ]},
-        ],
-      }),
+    const msg = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 8000,
+      temperature: 0.1,
+      system: SYSTEM + "\n" + SCHEMA,
+      messages: [{ role: "user", content }],
     });
-    if (!res.ok) {
-      const err = await res.text();
-      return { error: `GPT HTTP ${res.status}: ${err.slice(0, 200)}` };
-    }
-    const j = await res.json();
-    const raw = j.choices?.[0]?.message?.content?.trim() || "";
+    const raw = msg.content.map(b => (b.type === "text" ? b.text : "")).join("").trim();
+    console.log("[parse-doc] Claude finish:", msg.stop_reason, "raw length:", raw.length);
     const parsed = extractJSON(raw);
-    if (!parsed) return { error: "GPT vrátil neparsovateľný JSON" };
+    if (!parsed) return { error: `Claude vrátil neparsovateľný JSON (${raw.length} znakov, finish: ${msg.stop_reason})` };
     return { data: parsed };
   } catch (e) {
-    return { error: `GPT výnimka: ${String(e).slice(0, 200)}` };
+    console.error("[parse-doc] Claude exception:", e);
+    return { error: `Claude výnimka: ${String(e).slice(0, 200)}` };
   }
 }
 
@@ -188,6 +140,9 @@ export async function POST(req: NextRequest) {
     // 🚨 P1 fix: auth + size limit + MIME whitelist + base64 size guard.
     const auth = await requireUser(req);
     if (auth.error) return auth.error;
+
+    // #8 kill-switch — keď je AI parsing vypnutý, vráť signál na manuálne vyplnenie.
+    if (aiParseDisabled()) return NextResponse.json(AI_DISABLED_BODY, { status: 503 });
 
     const ctype = req.headers.get("content-type") || "";
     let parts: Array<{ base64: string; mime: string }> = [];
@@ -242,11 +197,12 @@ export async function POST(req: NextRequest) {
           const { value: text } = await mammoth.extractRawText({ buffer: buf });
           console.log(`[parse-doc] docx ${filename}, text length: ${text.length}`);
           if (!text || text.length < 20) return NextResponse.json({ error: "Prázdny DOCX" }, { status: 400 });
-          const gemT = await callGeminiText(text);
-          if (gemT.data && Object.keys(gemT.data).length > 0) {
-            return NextResponse.json({ ...gemT.data, _ai: "gemini-text" });
+          const clT = await callClaude({ text });
+          if (clT.data && Object.keys(clT.data).length > 0) {
+            return NextResponse.json({ ...clT.data, _ai: "claude-text" });
           }
-          return NextResponse.json({ error: `Gemini DOCX: ${gemT.error || "empty"}` }, { status: 500 });
+          await logParseFailure({ source: "parse-doc", error: `DOCX: ${clT.error || "empty"}`, filename, doc_type: "docx", actor_id: auth.user.id });
+          return NextResponse.json({ error: `Claude DOCX: ${clT.error || "empty"}` }, { status: 500 });
         } catch (e) {
           return NextResponse.json({ error: `DOCX parsing zlyhal: ${String(e).slice(0,200)}` }, { status: 500 });
         }
@@ -261,26 +217,16 @@ export async function POST(req: NextRequest) {
 
     if (parts.length === 0) return NextResponse.json({ error: "Prázdny vstup" }, { status: 400 });
 
-    // 1. Gemini
-    const gem = await callGemini(parts);
-    if (gem.data && Object.keys(gem.data).length > 0) {
-      console.log("[parse-doc] ✓ Gemini success, fields:", Object.keys(gem.data).length);
-      return NextResponse.json({ ...gem.data, _ai: "gemini" });
-    }
-    console.log("[parse-doc] Gemini failed:", gem.error);
-
-    // 2. GPT-4o fallback (len pre PDF, nie pre images array)
-    if (!pdfBase64) {
-      return NextResponse.json({ error: `Gemini: ${gem.error || "empty"}` }, { status: 500 });
-    }
-    const gpt = await callGPT(pdfBase64, pdfMime, filename);
-    if (gpt.data && Object.keys(gpt.data).length > 0) {
-      console.log("[parse-doc] ✓ GPT success");
-      return NextResponse.json({ ...gpt.data, _ai: "gpt" });
+    // Výhradne Claude (PDF, rasterizované stránky aj text), bez fallbacku.
+    const cl = await callClaude({ parts });
+    if (cl.data && Object.keys(cl.data).length > 0) {
+      console.log("[parse-doc] ✓ Claude success, fields:", Object.keys(cl.data).length);
+      return NextResponse.json({ ...cl.data, _ai: "claude" });
     }
 
+    await logParseFailure({ source: "parse-doc", error: cl.error || "prázdna odpoveď", filename, doc_type: "pdf", actor_id: auth.user.id });
     return NextResponse.json({
-      error: `AI nedokázala spracovať dokument. Gemini: ${gem.error || "empty"}. GPT: ${gpt.error || "empty"}.`,
+      error: `AI nedokázalo spracovať dokument. ${cl.error || "prázdna odpoveď"}.`,
     }, { status: 500 });
   } catch (e) {
     console.error("[parse-doc] fatal:", e);
