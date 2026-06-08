@@ -106,11 +106,14 @@ export async function POST(req: NextRequest) {
   const dphSuma = isPlatca ? calcDph(sumaCelkomBezDph, dphSadzba) : 0;
   const sumaCelkom = sumaCelkomBezDph + dphSuma;
 
-  // Retry loop kvôli race condition pri paralelných POSToch v rámci firmy.
-  // 🐛 BUG FIX 2026-05-21: predtým sa max číslo počítalo z `.eq("user_id", ...)`,
-  // ale unique constraint v DB je `(company_id, cislo_faktury)` — keď dvaja
-  // makléri tej istej firmy fakturovali, druhý videl 0 vlastných faktúr →
-  // navrhol FA0001 → kolízia s prvým. Teraz scope = company_id.
+  // Retry loop kvôli race condition pri paralelných POSToch toho istého makléra.
+  // Číslovanie je PER MAKLÉR / DODÁVATEĽ (každý maklér = vlastné IČO = vlastný
+  // dodávateľský rad; odberateľ = Vianema). Rozhodnutie CEO + Pravo (commity G31).
+  // Unique constraint v DB je `(user_id, cislo_faktury)` resp. `(user_id,
+  // variabilny_symbol)` — preto sa max číslo počíta z radu daného makléra
+  // (`.eq("user_id", ...)`), NIE z celej firmy. Tri rôzni makléri tak môžu mať
+  // každý vlastné FA20260001 — to nie je duplicita. (Revert per-company z migr.
+  // 075 → migr. 114.)
   type Created = { id: string; cislo_faktury: string };
   let created: Created | null = null;
   let cislo = "";
@@ -120,7 +123,7 @@ export async function POST(req: NextRequest) {
     const { data: all } = await sb
       .from("faktury")
       .select("cislo_faktury, variabilny_symbol")
-      .eq("company_id", postCompanyId);
+      .eq("user_id", String(faktura.user_id));
     cislo = faktura.cislo_faktury || nextNumber((all ?? []).map((x) => x.cislo_faktury), "FA");
     vs = faktura.variabilny_symbol || nextNumber((all ?? []).map((x) => x.variabilny_symbol), "VS");
 
