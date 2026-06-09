@@ -108,6 +108,7 @@ Aleš pracuje s **viacerými Claude oknami súčasne**, každé na inej doméne 
 6. **Baseline/audit porovnania**: stashuj LEN svoj súbor (`git stash push <file>`), nie celý working tree — inak do baseline zamiešaš cudzie zmeny.
 7. **NIKDY `git checkout`/`switch` na iný branch** — prepol by si súbory pod rukami ostatným oknám. Všetci sme na `dev`.
 8. **Potrebuješ samostatnú branch?** (napr. feature čaká na release, nepushuje sa hneď na `dev`) → použi **`git worktree add ../os-machovic-<nazov> <branch>`** = samostatný adresár s vlastným HEAD. **Nikdy `checkout` tej branche v zdieľanom `dev` adresári** — aj dočasný prepnutý stav môže zachytiť cudzie commity. Worktree to izoluje, zdieľaný `dev` ostane nedotknutý.
+9. **MD (koordinačné) okno NEPÍŠE doménový ani bezpečnostne-citlivý kód samo — ani „drobnosť", ani neskoro v noci.** Pripraví zadanie vlastníckemu oknu a to ho spraví s review. Rýchlosť nie je dôvod obísť vlastníka a gate. Lekcia 2026-06-09: MD spravilo rýchlu opravu mazania klienta v cudzej doméne (Klienti) o 2:00 → zaviedlo bezpečnostnú regresiu (heslo v URL → server logy) + riziko kaskádového zmazania faktúr (porušenie 10r retencie). Zachytili to Klienti + Pravo okno až pri review; revert 7da9099. Keby to šlo na prod nasadené zbrklo, bola by to reálna škoda.
 
 > Reálny incident 2026-06-06: počas práce na kupujúci (commit 9e9aeaa) iné okno pushlo `13f27ab` (analyza) a odnieslo aj môj commit. Nič sa nerozbilo len preto, že commit bol čistý (`git add` len 1 súbor). Tieto pravidlá to robia spoľahlivým, nie šťastím.
 
