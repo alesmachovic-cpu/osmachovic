@@ -56,8 +56,17 @@ export function klientUpdate<T = Record<string, unknown>>(
   });
 }
 
-export function klientDelete(userId: string, id: string): Promise<ApiResult<unknown>> {
-  return callJson<unknown>(`/api/klienti?id=${encodeURIComponent(id)}&user_id=${encodeURIComponent(userId)}`, {
+export function klientDelete(
+  userId: string,
+  id: string,
+  proof?: { confirm_password?: string; confirm_code?: string },
+): Promise<ApiResult<unknown>> {
+  // M1 re-auth: backend (DELETE /api/klienti) vyžaduje confirm_password / confirm_code
+  // v query stringu (DELETE nemá body convention). Bez nich vráti 401 RE_AUTH_REQUIRED.
+  const params = new URLSearchParams({ id, user_id: userId });
+  if (proof?.confirm_password) params.set("confirm_password", proof.confirm_password);
+  if (proof?.confirm_code) params.set("confirm_code", proof.confirm_code);
+  return callJson<unknown>(`/api/klienti?${params.toString()}`, {
     method: "DELETE",
   });
 }
