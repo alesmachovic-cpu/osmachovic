@@ -10,7 +10,6 @@ import { useAuth } from "@/components/AuthProvider";
 import { useUserScope } from "@/hooks/useUserScope";
 import { getMaklerUuid } from "@/lib/maklerMap";
 import { klientUpdate, klientDelete } from "@/lib/klientApi";
-import { useReAuth } from "@/components/ReAuthModal";
 
 const statusColors: Record<string, { color: string; bg: string }> = {
   novy:                { color: "#374151", bg: "#F3F4F6" },
@@ -97,7 +96,6 @@ function KlientiWrapper() {
 function KlientiContent() {
   const { user, accounts } = useAuth();
   const { scope } = useUserScope();
-  const reAuth = useReAuth();
   const isAdmin = scope?.isAdmin ?? false;
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -647,16 +645,9 @@ function KlientiContent() {
                   )}
                   {isAdmin && (
                     <button onClick={async () => {
+                      if (!confirm("Odstrániť klienta " + k.meno + "?")) return;
                       if (!user?.id) { alert("Nie si prihlásený"); return; }
-                      // 🔒 M1 re-auth: mazanie klienta je nezvratné → backend vyžaduje heslo / 2FA.
-                      // Modal vyžiada potvrdenie a pošle ho do DELETE (inak 401 RE_AUTH_REQUIRED).
-                      const proof = await reAuth.prompt({
-                        title: `Odstrániť klienta ${k.meno || ""}?`,
-                        description: "Táto akcia je nezvratná. Klient sa natrvalo zmaže. Potvrď svojím heslom alebo 6-cifrovým kódom z autentifikátora.",
-                        dangerLabel: "Odstrániť",
-                      });
-                      if (!proof) return; // user zrušil
-                      const { error } = await klientDelete(user.id, k.id, proof);
+                      const { error } = await klientDelete(user.id, k.id);
                       if (error) { alert(error.message); return; }
                       fetchKlienti();
                     }} style={{
