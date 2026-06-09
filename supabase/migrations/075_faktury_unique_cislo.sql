@@ -1,50 +1,62 @@
 -- ============================================================================
--- 075_faktury_unique_cislo.sql
+-- 075_faktury_unique_cislo.sql  —  ⚠️ NEUTRALIZOVANÁ (no-op) 2026-06-09
 -- ============================================================================
--- P1 race-condition fix (2026-05-20):
---   POST /api/faktury používa retry loop pri 23505 (unique violation), ale
---   v DB chýbal samotný UNIQUE index. To znamená že pri paralelných POSToch
---   sa mohli vygenerovať DVE faktúry s rovnakým číslom (race window medzi
---   nextNumber() a insert).
+-- PÔVODNÝ ZÁMER (2026-05-20): UNIQUE (company_id, cislo_faktury)/(company_id,
+-- variabilny_symbol) + dedup existujúcich kolízií pripočítaním '-DUP' sufixu.
 --
--- Riešenie: UNIQUE (company_id, cislo_faktury) — číslo unikátne v rámci firmy.
--- A pre VS rovnaký constraint.
+-- 🔴 PREČO NEUTRALIZOVANÁ (rozhodnutie CEO + Pravo, 2026-06-09):
+--   1. PER-COMPANY číslovanie je REGRESIA. Faktúrne číslovanie je per MAKLÉR /
+--      DODÁVATEĽ (každý maklér = vlastné IČO = vlastný rad). Indexový zámer 075
+--      je revertnutý migráciou 114 (drop company indexov, per-user indexy).
+--   2. Časť `UPDATE faktury SET cislo_faktury = ...||'-DUP'` (a tá istá pre VS)
+--      je DATA-MUTÁCIA reálnych vystavených faktúr → porušuje nemennosť
+--      účtovného dokladu (§ 8 zák. 431/2002, § 74 zák. 222/2004). Žiadna
+--      migrácia nesmie premenovať vystavené faktúrne číslo.
+--   3. CREATE company unique index sa NEDÁ ponechať ani izolovane: po odstránení
+--      dedup UPDATE by na čistom (fresh) rebuilde ZLYHAL na legitímnych
+--      per-maklér duplicitách (napr. 3× FA20260001 od 3 maklérov) → padol by
+--      celý rebuild. Preto je neutralizovaná CELÁ vecná časť 075.
 --
--- Pred vytvorením indexu deduplikujeme existujúce kolízie (ak by nejaké boli)
--- pripočítaním sufixu k duplicitám.
+-- Táto migrácia je teraz zámerný NO-OP. Na už-aplikovaných DB (dev) sa nepustí
+-- znova; na fresh/prod rebuilde nevykoná nič a stav zabezpečí migr. 114.
+-- Pôvodný SQL je nižšie ZAKOMENTOVANÝ kvôli audit trail-u (čo 075 robila).
 -- ============================================================================
 
--- 1) Bezpečnostná deduplikácia ak by nejaké duplikáty existovali.
-WITH dups AS (
-  SELECT id, cislo_faktury, company_id,
-         ROW_NUMBER() OVER (PARTITION BY company_id, cislo_faktury ORDER BY created_at) AS rn
-  FROM faktury
-  WHERE cislo_faktury IS NOT NULL
-)
-UPDATE faktury f
-SET cislo_faktury = f.cislo_faktury || '-DUP' || d.rn
-FROM dups d
-WHERE f.id = d.id AND d.rn > 1;
+-- (žiadny výkonný SQL — zámerný no-op)
 
-WITH dups_vs AS (
-  SELECT id, variabilny_symbol, company_id,
-         ROW_NUMBER() OVER (PARTITION BY company_id, variabilny_symbol ORDER BY created_at) AS rn
-  FROM faktury
-  WHERE variabilny_symbol IS NOT NULL
-)
-UPDATE faktury f
-SET variabilny_symbol = f.variabilny_symbol || '-DUP' || d.rn
-FROM dups_vs d
-WHERE f.id = d.id AND d.rn > 1;
-
--- 2) UNIQUE indexy.
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_faktury_company_cislo
-  ON faktury (company_id, cislo_faktury)
-  WHERE cislo_faktury IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_faktury_company_vs
-  ON faktury (company_id, variabilny_symbol)
-  WHERE variabilny_symbol IS NOT NULL;
-
-COMMENT ON INDEX uniq_faktury_company_cislo IS
-  'P1 race-fix: predchádza duplikátnym číslam faktúr pri paralelných POSToch.';
+-- ─── PÔVODNÝ OBSAH 075 (NEAKTÍVNY, len pre históriu) ────────────────────────
+-- -- 1) Bezpečnostná deduplikácia ak by nejaké duplikáty existovali.
+-- WITH dups AS (
+--   SELECT id, cislo_faktury, company_id,
+--          ROW_NUMBER() OVER (PARTITION BY company_id, cislo_faktury ORDER BY created_at) AS rn
+--   FROM faktury
+--   WHERE cislo_faktury IS NOT NULL
+-- )
+-- UPDATE faktury f
+-- SET cislo_faktury = f.cislo_faktury || '-DUP' || d.rn
+-- FROM dups d
+-- WHERE f.id = d.id AND d.rn > 1;
+--
+-- WITH dups_vs AS (
+--   SELECT id, variabilny_symbol, company_id,
+--          ROW_NUMBER() OVER (PARTITION BY company_id, variabilny_symbol ORDER BY created_at) AS rn
+--   FROM faktury
+--   WHERE variabilny_symbol IS NOT NULL
+-- )
+-- UPDATE faktury f
+-- SET variabilny_symbol = f.variabilny_symbol || '-DUP' || d.rn
+-- FROM dups_vs d
+-- WHERE f.id = d.id AND d.rn > 1;
+--
+-- -- 2) UNIQUE indexy.
+-- CREATE UNIQUE INDEX IF NOT EXISTS uniq_faktury_company_cislo
+--   ON faktury (company_id, cislo_faktury)
+--   WHERE cislo_faktury IS NOT NULL;
+--
+-- CREATE UNIQUE INDEX IF NOT EXISTS uniq_faktury_company_vs
+--   ON faktury (company_id, variabilny_symbol)
+--   WHERE variabilny_symbol IS NOT NULL;
+--
+-- COMMENT ON INDEX uniq_faktury_company_cislo IS
+--   'P1 race-fix: predchádza duplikátnym číslam faktúr pri paralelných POSToch.';
+-- ────────────────────────────────────────────────────────────────────────────
