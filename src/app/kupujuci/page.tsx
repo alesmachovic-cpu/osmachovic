@@ -1,8 +1,7 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, type CSSProperties } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
 import type { Klient } from "@/lib/database.types";
 import { STATUS_LABELS } from "@/lib/database.types";
 import ObjednavkaForm from "@/components/ObjednavkaForm";
@@ -34,6 +33,21 @@ const KUPUJUCI_STATUSY = new Set([
   "kapacita_schvalena", "hypo_konzultacia", "rezervacia", "podpis_kz", "uz_kupil", "turista", "odlozene", "nereaguje",
 ]);
 
+// Stavy pre filter dropdown v zozname kupujúcich (label cez STATUS_LABELS).
+// Vybrané najbežnejšie kupujúce stavy — NIE predávajúce (dohodnuty_naber/nabrany sem nepatria).
+const KUPUJUCI_STATUS_FILTER = [
+  "novy_kontakt", "aktivny", "caka_na_hypoteku", "zaujem_o_konkretnu",
+  "rezervacia", "podpis_kz", "uz_kupil", "volat_neskor", "nereaguje",
+];
+
+// Zdieľaný štýl select dropdownov v zozname (konzistentný s Predávajúci tab).
+const selectSt: CSSProperties = {
+  padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)",
+  borderRadius: "10px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
+  appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+  backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+};
+
 export default function KupujuciPage() {
   return (
     <Suspense fallback={<div style={{ padding: "40px" }}>Načítavam…</div>}>
@@ -61,6 +75,7 @@ function KupujuciInner() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const [filterMakler, setFilterMakler] = useState<string>("mine"); // super_admin auto-switches to "all" via useEffect below
   const [makleri, setMakleri] = useState<{ id: string; meno: string }[]>([]);
   const [myMaklerUuid, setMyMaklerUuid] = useState<string | null>(null);
@@ -137,6 +152,7 @@ function KupujuciInner() {
   const filtered = kupujuciKlienti.filter(k => {
     if (filterMakler === "mine" && myMaklerUuid && k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
     if (filterMakler !== "all" && filterMakler !== "mine" && k.makler_id !== filterMakler) return false;
+    if (filterStatus && k.status !== filterStatus) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -186,19 +202,6 @@ function KupujuciInner() {
             </p>
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            {/* K4 fix: prepínač moji/všetci — zoznam teraz rešpektuje filterMakler (predtým ukazoval vždy všetkých firmy) */}
-            {makleri.length > 0 && (
-              <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={{
-                padding: "9px 30px 9px 12px", background: "var(--bg-surface)", border: "1px solid var(--border)",
-                borderRadius: "10px", fontSize: "13px", color: "var(--text-primary)", cursor: "pointer", outline: "none",
-                appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239CA3AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
-                backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
-              }}>
-                <option value="mine">Moji klienti</option>
-                <option value="all">Všetci</option>
-                {makleri.map(m => <option key={m.id} value={m.id}>{m.meno}</option>)}
-              </select>
-            )}
             <button onClick={() => { setIsSimplified(false); setEditingObjednavka(null); setSelectedKlient(null); setStep("klient"); }}
               style={{ padding: "9px 18px", background: "var(--bg-surface)", color: "var(--text-primary)", border: "1px solid var(--border)", borderRadius: "10px", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}
               title="Vytvor klienta + záväznú objednávku v jednom kroku">
@@ -210,6 +213,27 @@ function KupujuciInner() {
               + Kupujúci klient
             </button>
           </div>
+        </div>
+
+        {/* Toolbar: vyhľadávanie + status + maklér (konzistentné s Predávajúci tab) */}
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "16px", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: "200px", maxWidth: "360px" }}>
+            <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "14px", color: "var(--text-muted)", pointerEvents: "none" }}>🔍</span>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Hľadať meno, email, telefón..."
+              style={{ width: "100%", padding: "9px 14px 9px 36px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "13px", color: "var(--text-primary)", outline: "none" }} />
+          </div>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={selectSt}>
+            <option value="">Všetky statusy</option>
+            {KUPUJUCI_STATUS_FILTER.map(s => <option key={s} value={s}>{STATUS_LABELS[s as keyof typeof STATUS_LABELS] || s}</option>)}
+          </select>
+          {makleri.length > 0 && (
+            <select value={filterMakler} onChange={e => setFilterMakler(e.target.value)} style={selectSt}>
+              <option value="mine">Moji klienti</option>
+              <option value="all">Všetci</option>
+              {makleri.map(m => <option key={m.id} value={m.id}>{m.meno}</option>)}
+            </select>
+          )}
         </div>
 
         {loading && <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>Načítavam...</div>}
@@ -231,14 +255,20 @@ function KupujuciInner() {
             background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px",
           }}>
             <div style={{ fontSize: "48px", marginBottom: "16px" }}>👥</div>
-            <div style={{ fontSize: "16px", fontWeight: "600", marginBottom: "6px" }}>Žiadni kupujúci</div>
-            <div style={{ fontSize: "13px", marginBottom: "20px" }}>Pridaj prvého kupujúceho klienta alebo klienta s objednávkou</div>
-            <button onClick={() => setStep("klient")} style={{
-              padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
-              borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
-            }}>
-              + Nová objednávka
-            </button>
+            <div style={{ fontSize: "16px", fontWeight: "600", marginBottom: "6px" }}>
+              {search || filterStatus ? "Žiadne výsledky" : "Žiadni kupujúci"}
+            </div>
+            <div style={{ fontSize: "13px", marginBottom: "20px" }}>
+              {search || filterStatus ? "Skús zmeniť hľadaný výraz alebo filter" : "Pridaj prvého kupujúceho klienta alebo klienta s objednávkou"}
+            </div>
+            {!search && !filterStatus && (
+              <button onClick={() => setStep("klient")} style={{
+                padding: "10px 24px", background: "#374151", color: "#fff", border: "none",
+                borderRadius: "10px", fontSize: "14px", fontWeight: "600", cursor: "pointer",
+              }}>
+                + Nová objednávka
+              </button>
+            )}
           </div>
         )}
         {!loading && filtered.length > 0 && (
