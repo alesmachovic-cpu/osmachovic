@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS breach_register (
   reported_uoou_at  timestamptz,
   subjects_notified boolean not null default false,
   measures          text,
-  created_by        uuid,
+  created_by        text,   -- TEXT (nie uuid): drží public.users.id ktoré je text pre legacy adminov (G33 trieda, migr 117)
   created_at        timestamptz not null default now()
 );
 CREATE INDEX IF NOT EXISTS breach_register_detected_idx ON breach_register (detected_at desc);
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS parse_failures (
   id uuid primary key default gen_random_uuid(),
   klient_id uuid references klienti(id) on delete set null,
   company_id uuid,
-  actor_id uuid,
+  actor_id text,   -- TEXT (nie uuid): logParseFailure zapisuje auth.user.id = public.users.id text (G33 trieda, migr 118)
   filename text,
   doc_type text,
   source text,
