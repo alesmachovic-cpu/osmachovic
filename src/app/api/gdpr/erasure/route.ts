@@ -124,9 +124,9 @@ export async function POST(req: NextRequest) {
   });
   if (!startedAudited) {
     await sb.from("gdpr_requests").update({
-      status: "rejected",
+      status: "failed",
       completed_at: new Date().toISOString(),
-      details: { ...(gdprReq.details as Record<string, unknown>), abort_reason: "audit_log zápis zlyhal — fail-closed pred výmazom" },
+      details: { ...(gdprReq.details as Record<string, unknown>), abort_reason: "audit_log zápis zlyhal — fail-closed pred výmazom (žiadne dáta klienta sa nedotkli)" },
     }).eq("id", gdprReq.id);
     return NextResponse.json({
       error: "GDPR výmaz NEBOL vykonaný — forenzný audit zápis zlyhal (povinný pred výmazom). Žiadne dáta klienta neboli zmenené.",
@@ -260,7 +260,7 @@ export async function POST(req: NextRequest) {
   //    auditových). Status v rámci CHECK constraintu (completed); partial=true keď boli
   //    chyby sub-záznamov. completed_at = preukázateľnosť 30-dňovej lehoty (G33-e).
   const { error: updErr } = await sb.from("gdpr_requests").update({
-    status: "completed",
+    status: errors.length === 0 ? "completed" : "completed_with_errors",
     completed_at: new Date().toISOString(),
     details: { ...(gdprReq.details as Record<string, unknown>), errors, deleted_counts: counts, partial: errors.length > 0 },
   }).eq("id", gdprReq.id);
