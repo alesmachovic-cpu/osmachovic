@@ -176,7 +176,7 @@ Nasledujúci opis platí pre celý systém; pri jednotlivých činnostiach sa uv
 **Kategórie údajov:** kompletný profil klienta (vrátane kontaktných a LV údajov) · zoznam obhliadok · náberových listov · dokumentov (metadáta) · udalostí/histórie; CSV: meno, telefón, e-mail, typ, status, lokalita, dátum.
 **(c) Príjemcovia:** dotknutá osoba (príjemca JSON exportu) · manažment (role super_admin/majitel/manazer, RBAC) · Machovic · Supabase · Vercel.
 **(d) Prenos:** Supabase EÚ; Vercel USA — DPF + SCC; samotný export sa odovzdá dotknutej osobe.
-**(e) Retencia:** export sa negeneruje natrvalo (on-demand); samotná akcia exportu je auditovaná (`klient.gdpr_export`).
+**(e) Retencia:** export sa negeneruje natrvalo (on-demand); samotná akcia exportu je auditovaná (`gdpr_export_subject` / `gdpr_export` v audit_log). **Follow-up (2026-06-11, nie blocker):** export NEzapisuje do `gdpr_requests` (type='export') ako erasure → forenzná stopa je (audit_log), ale chýba štruktúrovaná evidencia žiadosti s received_at→completed_at na preukázanie 30-dňovej lehoty (čl. 12 ods. 3). Doplniť pre evidenčnú paritu s erasure (jednotný register GDPR žiadostí). Vlastník: Bezpecnost (rovnaký vzor ako erasure).
 **Právny základ:** čl. 6 ods. 1 písm. c (zákonná povinnosť — práva čl. 15/20) pre GDPR export; čl. 6 ods. 1 písm. f (manažérsky reporting — LIA podľa časti B) pre CSV.
 **Osobitná kategória:** nie.
 **Zdroj údajov:** agregované z existujúcich záznamov.
