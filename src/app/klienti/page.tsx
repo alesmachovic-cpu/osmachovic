@@ -9,7 +9,8 @@ import NewKlientModal from "@/components/NewKlientModal";
 import { useAuth } from "@/components/AuthProvider";
 import { useUserScope } from "@/hooks/useUserScope";
 import { getMaklerUuid } from "@/lib/maklerMap";
-import { klientUpdate, klientDelete } from "@/lib/klientApi";
+import { klientUpdate } from "@/lib/klientApi";
+import { useReAuth } from "@/components/ReAuthModal";
 
 const statusColors: Record<string, { color: string; bg: string }> = {
   novy:                { color: "#374151", bg: "#F3F4F6" },
@@ -96,6 +97,7 @@ function KlientiWrapper() {
 function KlientiContent() {
   const { user, accounts } = useAuth();
   const { scope } = useUserScope();
+  const reAuth = useReAuth();
   const isAdmin = scope?.isAdmin ?? false;
   const [klienti, setKlienti] = useState<Klient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -244,6 +246,7 @@ function KlientiContent() {
   const filtered = klienti.filter(k => {
     if (!PREDAVAJUCI_TYPY.has(k.typ ?? "")) return false;
     if (k.je_volny) return false; // F-H: uvoľnený klient patrí do "Voľní", nie do zoznamu/počítadiel predávajúcich
+    if ((k as { anonymized_at?: string | null }).anonymized_at) return false; // (b): anonymizovaný (GDPR) klient zmizne zo zoznamu
     // Makler filter
     if (filterMakler === "mine") {
       if (!myMaklerUuid) return false;
@@ -270,6 +273,7 @@ function KlientiContent() {
   const allForCounts = klienti.filter(k => {
     if (!PREDAVAJUCI_TYPY.has(k.typ ?? "")) return false;
     if (k.je_volny) return false; // F-H: uvoľnený klient patrí do "Voľní", nie do zoznamu/počítadiel predávajúcich
+    if ((k as { anonymized_at?: string | null }).anonymized_at) return false; // (b): anonymizovaný (GDPR) klient zmizne zo zoznamu
     if (filterMakler === "mine") {
       if (!myMaklerUuid) return false;
       if (k.makler_id !== myMaklerUuid && k.spolupracujuci_makler_id !== myMaklerUuid) return false;
@@ -645,10 +649,22 @@ function KlientiContent() {
                   )}
                   {isAdmin && (
                     <button onClick={async () => {
-                      if (!confirm("Odstrániť klienta " + k.meno + "?")) return;
                       if (!user?.id) { alert("Nie si prihlásený"); return; }
-                      const { error } = await klientDelete(user.id, k.id);
-                      if (error) { alert(error.message); return; }
+                      // (b) MD/Pravo 2026-06-07: kôš = GDPR anonymizácia (rovnaký bezpečný flow ako "Anonymizovať" na detaile),
+                      // NIE tvrdé DELETE (to by zmazalo faktúry/AML — porušenie retencie). Heslo ide v BODY (erasure POST), nie URL.
+                      const proof = await reAuth.prompt({
+                        title: `Anonymizovať klienta ${k.meno}?`,
+                        description: "GDPR výmaz (čl. 17): osobné údaje sa nenávratne anonymizujú. Faktúry a AML doklady sa zo zákona PONECHÁVAJÚ (anonymizované, nie zmazané). Operácia je nevratná — potvrď heslom alebo 2FA kódom.",
+                        dangerLabel: "Anonymizovať",
+                      });
+                      if (!proof) return;
+                      const r = await fetch("/api/gdpr/erasure", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ klient_id: k.id, ...proof }),
+                      });
+                      const resBody = await r.json().catch(() => ({}));
+                      if (!r.ok) { alert(resBody.error || "Chyba pri anonymizácii"); return; }
+                      if (resBody.message) alert(resBody.message);
                       fetchKlienti();
                     }} style={{
                       padding: "4px 8px", borderRadius: "8px", fontSize: "10px", fontWeight: "700",

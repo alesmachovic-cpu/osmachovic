@@ -26,9 +26,12 @@ export async function logAudit(entry: {
   // Akceptujeme `detail` (nový name) aj `metadata` (legacy) pre spätnú kompatibilitu.
   detail?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
-}): Promise<void> {
+}): Promise<boolean> {
+  // Vracia true ak sa záznam reálne zapísal, false pri zlyhaní. Volajúci pri
+  // MANDATORY audite (napr. GDPR erasure — fail-closed) MUSÍ návratovú hodnotu
+  // skontrolovať; bežné akcie ju môžu ignorovať (spätne kompatibilné).
   try {
-    await getSupabaseAdmin().from("audit_log").insert({
+    const { error } = await getSupabaseAdmin().from("audit_log").insert({
       user_id: entry.actor_id,
       action: entry.action,
       entity_type: entry.target_type,
@@ -43,7 +46,14 @@ export async function logAudit(entry: {
       ip: entry.ip_address,
       created_at: new Date().toISOString(),
     });
+    if (error) {
+      // Supabase insert vracia { error } — NEhádže, preto to predtým ticho prešlo.
+      console.error("[audit] Failed to log:", error.message);
+      return false;
+    }
+    return true;
   } catch (e) {
     console.error("[audit] Failed to log:", e);
+    return false;
   }
 }
