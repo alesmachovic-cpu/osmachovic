@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { STATUS_LABELS } from "@/lib/database.types";
 import { useAuth } from "@/components/AuthProvider";
-import { supabase } from "@/lib/supabase";
 import { getMaklerUuid } from "@/lib/maklerMap";
 
 interface KlientVolny {
@@ -166,7 +165,7 @@ export default function VolniKlientiPage() {
       {toast && (
         <div style={{
           position: "fixed", top: "16px", right: "16px", zIndex: 100,
-          background: toast.type === "error" ? "var(--danger)" : "var(--text-primary)",
+          background: toast.type === "error" ? "var(--danger)" : "#374151",
           color: "#fff", padding: "12px 18px", borderRadius: "var(--radius-md)",
           boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
           fontSize: "13px", fontWeight: 500,
@@ -192,7 +191,7 @@ export default function VolniKlientiPage() {
           disabled={running}
           style={{
             height: "38px", padding: "0 18px",
-            background: running ? "var(--text-muted)" : "var(--text-primary)",
+            background: running ? "var(--text-muted)" : "#374151",
             color: "#fff", border: "none", borderRadius: "var(--radius-sm)",
             fontSize: "14px", fontWeight: 600, cursor: running ? "not-allowed" : "pointer",
             display: "flex", alignItems: "center", gap: "8px",
@@ -221,9 +220,9 @@ export default function VolniKlientiPage() {
             style={{
               height: "38px", padding: "0 16px", borderRadius: "var(--radius-sm)",
               fontSize: "13px", fontWeight: 600, cursor: "pointer",
-              background: filter === f.value ? "var(--text-primary)" : "var(--bg-base)",
+              background: filter === f.value ? "#374151" : "var(--bg-base)",
               color: filter === f.value ? "#fff" : "var(--text-secondary)",
-              border: "1px solid " + (filter === f.value ? "var(--text-primary)" : "var(--border-subtle)"),
+              border: "1px solid " + (filter === f.value ? "#374151" : "var(--border-subtle)"),
             }}
           >
             {f.label}
@@ -363,7 +362,7 @@ export default function VolniKlientiPage() {
                         onClick={() => prebrat(k.id, k.meno)}
                         style={{
                           height: "34px", padding: "0 14px",
-                          background: "var(--text-primary)", color: "#fff",
+                          background: "#374151", color: "#fff",
                           border: "none", borderRadius: "var(--radius-sm)",
                           fontSize: "13px", fontWeight: 600, cursor: "pointer",
                         }}
