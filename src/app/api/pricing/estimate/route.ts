@@ -104,31 +104,72 @@ interface CmaResult {
   asking_to_realized_gap_pct: number | null;
   median_dom: number | null;
   rarity_score: number;
+  lok_level: "exact" | "city";
   active_samples: Array<{ lokalita: string; cena: number; plocha: number; izby: number | null; eur_per_m2: number }>;
   sold_samples: Array<{ lokalita: string; estimated_sale_price: number; total_days_on_market: number; estimated_discount_pct: number | null }>;
 }
 
+/**
+ * Rozparsuj surovú lokalitu na LIKE filtre tak, aby sa nemiešali mestá.
+ * Príklady vstupu: "Reality Bratislava - Ružinov 82105", "Nitra, Klokočina", "Trnava".
+ *  - strip "reality " prefix
+ *  - odstráň PSČ / koncové čísla
+ *  - zjednoť "," → "-"
+ *  - mesto = časť pred prvou pomlčkou; exact = celý reťazec ak má mestskú časť
+ * Vracia LIKE patterny (už zabalené v "%…%"), aby volajúci nemusel nič wrapovať.
+ *  - cityName: holé meno mesta (bez %)
+ *  - city: "%mesto%"
+ *  - exact: "%mesto-mestská_časť%" ak existuje MČ, inak === city
+ */
+function buildLokalitaFilters(raw: string): { exact: string; city: string; cityName: string } {
+  const cleaned = String(raw || "")
+    .replace(/^reality\s+/i, "")        // "Reality Bratislava" → "Bratislava"
+    .replace(/[,]/g, "-")               // "Nitra, Klokočina" → "Nitra- Klokočina"
+    .replace(/\b\d{3}\s?\d{2}\b/g, "")  // PSČ "821 05" / "82105"
+    .replace(/\s+\d+\s*$/g, "")         // koncové číslo
+    .replace(/\s*-\s*/g, "-")           // normalizuj okolie pomlčiek
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const cityName = (cleaned.split("-")[0] || cleaned).trim();
+  const city = `%${cityName}%`;
+  const hasMC = cleaned.includes("-") && cleaned !== cityName;
+  const exact = hasMC ? `%${cleaned}%` : city;
+  return { exact, city, cityName };
+}
+
 async function buildCMA(p: InputParams): Promise<CmaResult> {
   const sb = getSupabaseAdmin();
-  const lokFilter = p.lokalita.split(" ")[0];
+  const lok = buildLokalitaFilters(p.lokalita);
 
   // Active comparables (asking) — ±20% plocha
   const sizeMin = p.plocha * 0.8;
   const sizeMax = p.plocha * 1.2;
 
-  let activeQ = sb
-    .from("monitor_inzeraty")
-    .select("lokalita, cena, plocha, izby")
-    .eq("is_active", true)
-    .ilike("lokalita", `%${lokFilter}%`)
-    .ilike("typ", `%${p.typ}%`)
-    .gte("plocha", sizeMin)
-    .lte("plocha", sizeMax)
-    .gt("cena", 0);
-  if (p.izby != null) activeQ = activeQ.eq("izby", p.izby);
-  const { data: active } = await activeQ.limit(50);
+  // Najprv skús presný filter (mesto+MČ); ak je málo dát, rozšír na celé mesto.
+  async function runActive(lokLike: string) {
+    let activeQ = sb
+      .from("monitor_inzeraty")
+      .select("lokalita, cena, plocha, izby")
+      .eq("is_active", true)
+      .ilike("lokalita", lokLike)
+      .ilike("typ", `%${p.typ}%`)
+      .gte("plocha", sizeMin)
+      .lte("plocha", sizeMax)
+      .gt("cena", 0);
+    if (p.izby != null) activeQ = activeQ.eq("izby", p.izby);
+    const { data } = await activeQ.limit(50);
+    return data || [];
+  }
 
-  const activeRows = (active || [])
+  let lokLevel: "exact" | "city" = "exact";
+  let active = await runActive(lok.exact);
+  if (active.length < 4 && lok.exact !== lok.city) {
+    active = await runActive(lok.city);
+    lokLevel = "city";
+  }
+
+  const activeRows = active
     .map(r => ({
       lokalita: String(r.lokalita || ""),
       cena: Number(r.cena),
@@ -147,7 +188,7 @@ async function buildCMA(p: InputParams): Promise<CmaResult> {
     .gte("confidence_score", 0.6)
     .gte("disappeared_on", yearAgo)
     .not("estimated_sale_price", "is", null)
-    .ilike("monitor_inzeraty.lokalita", `%${lokFilter}%`)
+    .ilike("monitor_inzeraty.lokalita", lok.city)
     .ilike("monitor_inzeraty.typ", `%${p.typ}%`)
     .gte("monitor_inzeraty.plocha", sizeMin)
     .lte("monitor_inzeraty.plocha", sizeMax);
@@ -188,6 +229,7 @@ async function buildCMA(p: InputParams): Promise<CmaResult> {
     asking_to_realized_gap_pct: gap,
     median_dom: doms.length ? Math.round(median(doms)) : null,
     rarity_score: rarity,
+    lok_level: lokLevel,
     active_samples: activeRows.slice(0, 5),
     sold_samples: soldRows.slice(0, 5).map(s => ({
       lokalita: s.monitor_inzeraty?.lokalita || "—",
@@ -242,10 +284,10 @@ async function predictDOM(p: InputParams, askingPrice: number, cma: CmaResult): 
   // Sentiment z najnovších market_sentiments
   try {
     const sb = getSupabaseAdmin();
-    const lokFilter = p.lokalita.split(" ")[0];
+    const { city: lokFilter } = buildLokalitaFilters(p.lokalita);
     let q = sb.from("market_sentiments")
       .select("demand_index")
-      .ilike("lokalita", `%${lokFilter}%`)
+      .ilike("lokalita", lokFilter)
       .ilike("typ", `%${p.typ}%`)
       .order("sentiment_date", { ascending: false })
       .limit(1);
@@ -354,6 +396,7 @@ export async function POST(req: NextRequest) {
       realized_median_per_m2: cma.realized_median_per_m2,
       asking_to_realized_gap_pct: cma.asking_to_realized_gap_pct,
       median_dom: cma.median_dom,
+      lok_level: cma.lok_level,
       sold_samples: cma.sold_samples,
       active_samples: cma.active_samples,
     },
