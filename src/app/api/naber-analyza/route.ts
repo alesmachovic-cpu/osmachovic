@@ -93,12 +93,16 @@ export async function POST(req: NextRequest) {
 
   const supabase = getSupabaseAdmin();
 
+  // monitor_inzeraty klasifikuje rodinné domy ako "dom" (náberové listy/API používajú "rodinny_dom").
+  // Bez tohto mapovania by dotaz na monitor pre domy vrátil 0 porovnaní. Byt/pozemok sa zhodujú.
+  const monitorTyp = typ === "rodinny_dom" ? "dom" : typ;
+
   const [monitorResult, naseDResult] = await Promise.all([
     supabase
       .from("monitor_inzeraty")
       .select("cena, plocha, url, nazov, lokalita")
       .ilike("lokalita", `%${obec}%`)
-      .eq("typ_nehnutelnosti", typ)
+      .eq("typ", monitorTyp)
       .not("cena", "is", null)
       .not("plocha", "is", null)
       .limit(50),
