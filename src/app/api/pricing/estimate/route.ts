@@ -38,6 +38,37 @@ const STAV_ADJUST: Record<string, number> = {
   na_rekonstrukciu: 0.85,
 };
 
+/**
+ * Normalizuj surový stav (z user inputu aj z monitor_inzeraty) na kanonický
+ * kľúč v STAV_ADJUST. Odstráni diakritiku, zjednotí medzery a namapuje bežné
+ * synonymá. Vráti undefined, ak stav nevieme zaradiť (→ žiadna korekcia).
+ */
+function normStavKey(raw: string | undefined | null): string | undefined {
+  if (!raw) return undefined;
+  const k = String(raw)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")  // strip diakritiku
+    .replace(/\s+/g, "_")
+    .trim();
+
+  const alias: Record<string, string> = {
+    novostavba: "novostavba",
+    po_rekonstrukcii: "po_rekonstrukcii",
+    kompletna_rekonstrukcia: "po_rekonstrukcii",
+    plna_rekonstrukcia: "po_rekonstrukcii",
+    ciastocna_rekonstrukcia: "ciastocna_rekonstrukcia",
+    povodny_stav: "povodny_stav",
+    originalny_stav: "povodny_stav",
+    vyborny_stav: "po_rekonstrukcii",
+    dobry_stav: "povodny_stav",
+    zachovaly_stav: "povodny_stav",
+    na_rekonstrukciu: "na_rekonstrukciu",
+  };
+
+  return alias[k] ?? (STAV_ADJUST[k] ? k : undefined);
+}
+
 const ENERGY_ADJUST: Record<string, number> = {
   A0: 1.06, A1: 1.06,
   A2: 1.03, B: 1.03,
@@ -150,7 +181,7 @@ async function buildCMA(p: InputParams): Promise<CmaResult> {
   async function runActive(lokLike: string) {
     let activeQ = sb
       .from("monitor_inzeraty")
-      .select("lokalita, cena, plocha, izby")
+      .select("lokalita, cena, plocha, izby, stav")
       .eq("is_active", true)
       .ilike("lokalita", lokLike)
       .ilike("typ", `%${p.typ}%`)
@@ -169,14 +200,25 @@ async function buildCMA(p: InputParams): Promise<CmaResult> {
     lokLevel = "city";
   }
 
+  // Stav korekcia: každý comparable preveď na kondíciu cieľovej nehnuteľnosti,
+  // aby sa neporovnával novostavba s pôvodným stavom. rawEur × (target/comp).
+  const targetStavKey = normStavKey(p.stav);
+  const targetStavMult = targetStavKey ? STAV_ADJUST[targetStavKey] : undefined;
+
   const activeRows = active
-    .map(r => ({
-      lokalita: String(r.lokalita || ""),
-      cena: Number(r.cena),
-      plocha: Number(r.plocha),
-      izby: r.izby != null ? Number(r.izby) : null,
-      eur_per_m2: Number(r.cena) / Number(r.plocha),
-    }))
+    .map(r => {
+      const rawEur = Number(r.cena) / Number(r.plocha);
+      const compKey = normStavKey(r.stav as string | undefined | null);
+      const compMult = compKey ? STAV_ADJUST[compKey] : undefined;
+      const eur_per_m2 = (targetStavMult && compMult) ? rawEur * (targetStavMult / compMult) : rawEur;
+      return {
+        lokalita: String(r.lokalita || ""),
+        cena: Number(r.cena),
+        plocha: Number(r.plocha),
+        izby: r.izby != null ? Number(r.izby) : null,
+        eur_per_m2,
+      };
+    })
     .filter(r => Number.isFinite(r.eur_per_m2) && r.eur_per_m2 > 100 && r.eur_per_m2 < 30000);
 
   // Sold comparables (realized) — z disappearances posledných 12 mesiacov
@@ -240,10 +282,15 @@ async function buildCMA(p: InputParams): Promise<CmaResult> {
   };
 }
 
-function applyAdjustments(basePrice: number, p: InputParams): number {
+function applyAdjustments(basePrice: number, p: InputParams, applyStavHere: boolean): number {
   let mult = 1.0;
 
-  if (p.stav && STAV_ADJUST[p.stav]) mult *= STAV_ADJUST[p.stav];
+  // ANTI-DOUBLE-COUNT: stav aplikuj LEN keď CMA korekcia neprebehla (static
+  // fallback). Keď máme comparables, stav je už zarátaný v buildCMA.
+  if (applyStavHere) {
+    const stavKey = normStavKey(p.stav);
+    if (stavKey && STAV_ADJUST[stavKey]) mult *= STAV_ADJUST[stavKey];
+  }
   if (p.energy_class && ENERGY_ADJUST[p.energy_class]) mult *= ENERGY_ADJUST[p.energy_class];
 
   if (p.year_built) {
@@ -276,8 +323,9 @@ async function predictDOM(p: InputParams, askingPrice: number, cma: CmaResult): 
   }
 
   // Quality (kondícia)
-  if (p.stav) {
-    const q = STAV_ADJUST[p.stav];
+  const stavKey = normStavKey(p.stav);
+  if (stavKey) {
+    const q = STAV_ADJUST[stavKey];
     if (q) baseline = baseline / q;  // lepšia kondícia → kratší DOM
   }
 
@@ -346,7 +394,9 @@ export async function POST(req: NextRequest) {
   const basePrice = Math.round(basePerM2 * body.plocha);
 
   // 3) Adjustments (kondícia, features, vek, energy)
-  const adjustedPrice = applyAdjustments(basePrice, body);
+  // Stav aplikuj v applyAdjustments LEN pri static fallbacku; pri CMA dátach
+  // je už zarátaný v buildCMA (anti-double-count).
+  const adjustedPrice = applyAdjustments(basePrice, body, basePriceSource === "static");
 
   // 4) Confidence interval (čím viac comparables, tým užší interval)
   const totalCmps = cma.active_count + cma.sold_count;
