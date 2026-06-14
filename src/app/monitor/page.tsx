@@ -191,7 +191,7 @@ function MonitorContent() {
 
   const [viewPortal, setViewPortal] = useState("");
   const [viewTyp, setViewTyp] = useState("");
-  const [viewPonuka, setViewPonuka] = useState(""); // "" | predaj | prenajom
+  const [viewPonuka, setViewPonuka] = useState("predaj"); // "" Všetko | predaj | prenajom — default predaj (prenájom 1 klikom)
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [lenSukromni, setLenSukromni] = useState(true);  // Default: zobraz len súkromných
