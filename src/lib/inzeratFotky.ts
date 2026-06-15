@@ -7,7 +7,30 @@ export type UploadedPhoto = {
   size: number;       // bytes veľkej verzie
 };
 
-/** Resize bitmapy cez canvas. Vráti blob v požadovanej kvalite. */
+/** Canvas context s voliteľným letterSpacing (novšie prehliadače) — bez `any`. */
+type Ctx2D = CanvasRenderingContext2D & { letterSpacing?: string };
+
+/**
+ * Dokresli VIANEMA vodotlač do pravého horného rohu (branding + anti-copy).
+ * Decentná (~45 % opacity), biela, ~5 % výšky, jemný tieň pre čitateľnosť aj
+ * na svetlých fotkách. Aplikuje sa rovnako na large aj thumb (konzistencia
+ * v portfóliu). Vypálené do pixelov — bucket je verejný, overlay by sa obišiel.
+ */
+function drawWatermark(ctx: Ctx2D, w: number, h: number): void {
+  const fontPx = Math.max(11, Math.round(h * 0.05));
+  ctx.save();
+  ctx.font = `500 ${fontPx}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.letterSpacing = `${Math.round(fontPx * 0.18)}px`;
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = Math.max(1, Math.round(fontPx * 0.12));
+  ctx.fillStyle = "rgba(255,255,255,0.45)";
+  ctx.fillText("VIANEMA", w - Math.round(w * 0.04), Math.round(h * 0.05));
+  ctx.restore();
+}
+
+/** Resize bitmapy cez canvas + VIANEMA vodotlač. Vráti blob v požadovanej kvalite. */
 async function resizeToBlob(file: File, maxW: number, quality: number): Promise<Blob> {
   const img = await new Promise<HTMLImageElement>((res, rej) => {
     const el = new Image();
@@ -24,6 +47,7 @@ async function resizeToBlob(file: File, maxW: number, quality: number): Promise<
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D not supported");
   ctx.drawImage(img, 0, 0, w, h);
+  drawWatermark(ctx, w, h);
   URL.revokeObjectURL(img.src);
   return await new Promise<Blob>((res, rej) => {
     canvas.toBlob(
