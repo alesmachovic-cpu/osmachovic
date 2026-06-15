@@ -31,9 +31,11 @@ interface PricingResult {
   strategies: { aggressive: Strategy; market: Strategy; aspirational: Strategy };
   recommended_strategy: "aggressive" | "market" | "aspirational";
   rarity_score: number;
+  demand_level: "high" | "normal" | "low" | "unknown";
   cma: {
     active_count: number;
     sold_count: number;
+    realized_count: number;
     asking_median_per_m2: number;
     realized_median_per_m2: number;
     asking_to_realized_gap_pct: number | null;
@@ -41,6 +43,10 @@ interface PricingResult {
     sold_samples: Array<{ lokalita: string; estimated_sale_price: number; total_days_on_market: number; estimated_discount_pct: number | null }>;
   };
 }
+
+const DEMAND_LABEL: Record<PricingResult["demand_level"], string> = {
+  high: "vysoký", normal: "normálny", low: "nízky", unknown: "—",
+};
 
 const STAV_OPTS = [
   { value: "novostavba", label: "Novostavba" },
@@ -312,9 +318,13 @@ function Result({ result, ownerTarget, onReset }: { result: PricingResult; owner
             </div>
           )}
           <div>
-            <span style={{ color: "var(--text-muted)" }}>Rarity score: </span>
-            <strong>{result.rarity_score}/10</strong>
-            {result.rarity_score >= 7 && <span style={{ color: "var(--text-muted)" }}> (vzácna nehnuteľnosť)</span>}
+            <span style={{ color: "var(--text-muted)" }}>Dopyt v segmente: </span>
+            <strong>{DEMAND_LABEL[result.demand_level]}</strong>
+          </div>
+          <div>
+            <span style={{ color: "var(--text-muted)" }}>Porovnateľných: </span>
+            <strong>{result.cma.active_count + result.cma.realized_count}</strong>
+            {result.rarity_score >= 7 && <span style={{ color: "var(--text-muted)" }}> (málo dát — širší odhad)</span>}
           </div>
           <div>
             <span style={{ color: "var(--text-muted)" }}>Zdroj base ceny: </span>

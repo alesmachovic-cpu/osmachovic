@@ -107,6 +107,58 @@ function percentile(values: number[], p: number): number {
 }
 
 /**
+ * Q3 — MAD (Median Absolute Deviation) outlier filter, Iglewicz-Hoaglin
+ * modifikovaný z-score. Robustný pri malej vzorke. Odstráni 1 mispriced inzerát
+ * (preklep v cene, "cena dohodou 1 €", garsónka v zlej kategórii), ktorý by inak
+ * posunul medián base ceny.
+ *  - n < 4: nefiltruj (nevieš rozlíšiť outlier od signálu; medián aj tak drží).
+ *  - MAD = 0 (>50 % identických hodnôt): nemáme škálu → nefiltruj.
+ *  - bimodálna vzorka (dva zhluky): MAD nič neodstráni — správne, lebo nevieš,
+ *    ktorý zhluk je "pravda".
+ */
+function filterOutliersMAD<T>(items: T[], getVal: (t: T) => number, threshold = 3.5): T[] {
+  if (items.length < 4) return items;
+  const vals = items.map(getVal);
+  const med = median(vals);
+  const mad = median(vals.map(v => Math.abs(v - med)));
+  if (mad === 0) return items;
+  return items.filter(it => Math.abs((0.6745 * (getVal(it) - med)) / mad) <= threshold);
+}
+
+/**
+ * Q4 — vážený (lower) medián pre time-decay váženie comparables.
+ * Novší inzerát má vyššiu váhu (relevantnejšia cena).
+ */
+function weightedMedian(items: Array<{ value: number; weight: number }>): number {
+  const sorted = items.filter(i => i.weight > 0).sort((a, b) => a.value - b.value);
+  if (!sorted.length) return 0;
+  const total = sorted.reduce((s, i) => s + i.weight, 0);
+  if (total <= 0) return median(sorted.map(i => i.value));
+  let acc = 0;
+  for (const it of sorted) {
+    acc += it.weight;
+    if (acc >= total / 2) return it.value;
+  }
+  return sorted[sorted.length - 1].value;
+}
+
+/**
+ * Q4 — time-decay váha podľa veku dátumu. Exponenciálny rozpad, half-life 90 dní:
+ * kalibrované na dnešné ~7-týždňové dátové okno (efekt mierny), správne škáluje,
+ * keď cron ožije a dáta pôjdu cez viac mesiacov (staré asking dostanú menšiu váhu).
+ * Neznámy dátum → mierne znížená váha; budúci/dnešný → plná.
+ */
+const DECAY_HALF_LIFE_DAYS = 90;
+function timeDecayWeight(dateStr: string | null | undefined): number {
+  if (!dateStr) return 0.6;
+  const t = new Date(dateStr).getTime();
+  if (!Number.isFinite(t)) return 0.6;
+  const ageDays = (Date.now() - t) / 86_400_000;
+  if (ageDays <= 0) return 1;
+  return Math.pow(0.5, ageDays / DECAY_HALF_LIFE_DAYS);
+}
+
+/**
  * Zaokrúhli na psychologické cenové pásmo:
  *  < 100k → 1k
  *  100k-500k → 5k
@@ -128,6 +180,7 @@ function psychoBand(price: number): number {
 interface CmaResult {
   active_count: number;
   sold_count: number;
+  realized_count: number;          // počet realized cien, čo reálne tvoria median (≤ sold_count)
   asking_median_per_m2: number;
   realized_median_per_m2: number;
   asking_p10_per_m2: number;
@@ -136,6 +189,8 @@ interface CmaResult {
   median_dom: number | null;
   rarity_score: number;
   lok_level: "exact" | "city";
+  match_level: "exact" | "city" | "city_wide" | "city_any_rooms";  // Q5 — ako veľmi sa uvoľnili filtre
+  relaxed: boolean;                // Q5/Q6 — vzorka z uvoľnených filtrov → nižšia istota
   active_samples: Array<{ lokalita: string; cena: number; plocha: number; izby: number | null; eur_per_m2: number }>;
   sold_samples: Array<{ lokalita: string; estimated_sale_price: number; total_days_on_market: number; estimated_discount_pct: number | null }>;
 }
@@ -177,35 +232,55 @@ async function buildCMA(p: InputParams): Promise<CmaResult> {
   const sizeMin = p.plocha * 0.8;
   const sizeMax = p.plocha * 1.2;
 
-  // Najprv skús presný filter (mesto+MČ); ak je málo dát, rozšír na celé mesto.
-  async function runActive(lokLike: string) {
+  // Wider plocha pre relax kaskádu (Q5). €/m² normalizuje rozdiel veľkosti,
+  // takže väčší/menší byt zostáva porovnateľný cez €/m².
+  const wideMin = p.plocha * 0.65;
+  const wideMax = p.plocha * 1.35;
+
+  async function runActive(lokLike: string, sMin: number, sMax: number, useRooms: boolean) {
     let activeQ = sb
       .from("monitor_inzeraty")
-      .select("lokalita, cena, plocha, izby, stav")
+      .select("lokalita, cena, plocha, izby, stav, first_seen_at")
       .eq("is_active", true)
       .ilike("lokalita", lokLike)
       .ilike("typ", `%${p.typ}%`)
-      .gte("plocha", sizeMin)
-      .lte("plocha", sizeMax)
+      .gte("plocha", sMin)
+      .lte("plocha", sMax)
       .gt("cena", 0);
-    if (p.izby != null) activeQ = activeQ.eq("izby", p.izby);
+    if (useRooms && p.izby != null) activeQ = activeQ.eq("izby", p.izby);
     const { data } = await activeQ.limit(50);
     return data || [];
   }
 
-  let lokLevel: "exact" | "city" = "exact";
-  let active = await runActive(lok.exact);
-  if (active.length < 4 && lok.exact !== lok.city) {
-    active = await runActive(lok.city);
-    lokLevel = "city";
+  // Q5 — postupné uvoľňovanie filtrov namiesto skoku na statický fallback:
+  // presná lokalita+izby+±20 % → mesto → širšia plocha (±35 %) → bez izieb.
+  // Geografický "okres" zámerne vynechaný: nemáme číselník okresov a hrozí
+  // miešanie cenových hladín (BA vs Senec/Pezinok); per-mesto static benchmark
+  // je bezpečnejšia posledná kotva. Každý relax krok zníži istotu (Q6 interval).
+  const MIN_SAMPLE = 4;
+  let matchLevel: CmaResult["match_level"] = "exact";
+  let active = await runActive(lok.exact, sizeMin, sizeMax, true);
+  if (active.length < MIN_SAMPLE && lok.exact !== lok.city) {
+    active = await runActive(lok.city, sizeMin, sizeMax, true);
+    matchLevel = "city";
   }
+  if (active.length < MIN_SAMPLE) {
+    active = await runActive(lok.city, wideMin, wideMax, true);
+    matchLevel = "city_wide";
+  }
+  if (active.length < MIN_SAMPLE && p.izby != null) {
+    active = await runActive(lok.city, wideMin, wideMax, false);
+    matchLevel = "city_any_rooms";
+  }
+  const lokLevel: "exact" | "city" = matchLevel === "exact" ? "exact" : "city";
+  const relaxed = matchLevel === "city_wide" || matchLevel === "city_any_rooms";
 
   // Stav korekcia: každý comparable preveď na kondíciu cieľovej nehnuteľnosti,
   // aby sa neporovnával novostavba s pôvodným stavom. rawEur × (target/comp).
   const targetStavKey = normStavKey(p.stav);
   const targetStavMult = targetStavKey ? STAV_ADJUST[targetStavKey] : undefined;
 
-  const activeRows = active
+  const activeRowsRaw = active
     .map(r => {
       const rawEur = Number(r.cena) / Number(r.plocha);
       const compKey = normStavKey(r.stav as string | undefined | null);
@@ -217,15 +292,19 @@ async function buildCMA(p: InputParams): Promise<CmaResult> {
         plocha: Number(r.plocha),
         izby: r.izby != null ? Number(r.izby) : null,
         eur_per_m2,
+        first_seen_at: (r.first_seen_at as string | null) ?? null,
       };
     })
     .filter(r => Number.isFinite(r.eur_per_m2) && r.eur_per_m2 > 100 && r.eur_per_m2 < 30000);
+
+  // Q3 — odstráň cenové outliery (MAD) pred mediánom.
+  const activeRows = filterOutliersMAD(activeRowsRaw, r => r.eur_per_m2);
 
   // Sold comparables (realized) — z disappearances posledných 12 mesiacov
   const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   let soldQ = sb
     .from("monitor_inzeraty_disappearances")
-    .select("estimated_sale_price, last_known_eur_per_m2, total_days_on_market, estimated_discount_pct, monitor_inzeraty!inner(lokalita, typ, plocha, izby)")
+    .select("estimated_sale_price, last_known_eur_per_m2, total_days_on_market, estimated_discount_pct, disappeared_on, monitor_inzeraty!inner(lokalita, typ, plocha, izby)")
     .eq("classification", "likely_sold")
     .gte("confidence_score", 0.6)
     .gte("disappeared_on", yearAgo)
@@ -237,33 +316,43 @@ async function buildCMA(p: InputParams): Promise<CmaResult> {
   if (p.izby != null) soldQ = soldQ.eq("monitor_inzeraty.izby", p.izby);
   const { data: sold } = await soldQ.limit(50);
 
-  type SoldRow = { estimated_sale_price: number; last_known_eur_per_m2: number | null; total_days_on_market: number; estimated_discount_pct: number | null; monitor_inzeraty: { lokalita: string | null; typ: string | null; plocha: number | null; izby: number | null } };
+  type SoldRow = { estimated_sale_price: number; last_known_eur_per_m2: number | null; total_days_on_market: number; estimated_discount_pct: number | null; disappeared_on: string | null; monitor_inzeraty: { lokalita: string | null; typ: string | null; plocha: number | null; izby: number | null } };
   const soldRows = (sold || []) as unknown as SoldRow[];
 
-  const askingPerM2 = activeRows.map(r => r.eur_per_m2);
-  // Realized per m² — z asking × (1 - discount/100)
-  const realizedPerM2 = soldRows
+  // Q4 — asking comparables s time-decay váhou (novší inzerát = vyššia váha).
+  const askingWeighted = activeRows.map(r => ({ value: r.eur_per_m2, weight: timeDecayWeight(r.first_seen_at) }));
+  const askingPerM2 = activeRows.map(r => r.eur_per_m2);  // nevážené — pre percentily
+
+  // Realized per m² — z asking × (1 - discount/100); váha podľa dátumu predaja.
+  const realizedWeightedRaw = soldRows
     .map(s => {
       const a = s.last_known_eur_per_m2 ? Number(s.last_known_eur_per_m2) : null;
       const d = s.estimated_discount_pct != null ? Number(s.estimated_discount_pct) : 0;
-      if (!a || a < 100 || a > 30000) return 0;
-      return a * (1 - d / 100);
+      if (!a || a < 100 || a > 30000) return null;
+      return { value: a * (1 - d / 100), weight: timeDecayWeight(s.disappeared_on) };
     })
-    .filter(v => v > 100 && v < 30000);
+    .filter((x): x is { value: number; weight: number } => x != null && x.value > 100 && x.value < 30000);
+  // Q3 — outlier filter aj na realized cenách.
+  const realizedWeighted = filterOutliersMAD(realizedWeightedRaw, x => x.value);
   const doms = soldRows.map(s => Number(s.total_days_on_market)).filter(v => v >= 0);
 
-  const askingMed = askingPerM2.length ? median(askingPerM2) : 0;
-  const realizedMed = realizedPerM2.length ? median(realizedPerM2) : 0;
+  // Q3+Q4 — vážený medián z očistených hodnôt.
+  const askingMed = askingWeighted.length ? weightedMedian(askingWeighted) : 0;
+  const realizedMed = realizedWeighted.length ? weightedMedian(realizedWeighted) : 0;
   const gap = askingMed > 0 && realizedMed > 0
     ? Math.round(((askingMed - realizedMed) / askingMed) * 100 * 10) / 10
     : null;
 
-  const totalCmps = activeRows.length + soldRows.length;
+  const realizedCount = realizedWeighted.length;
+  // rarity_score = miera RIEDKOSTI dát (málo cenových bodov), NIE trhová vzácnosť.
+  // Q6: už neriadi cenu nahor — len signalizuje neistotu (širší interval).
+  const totalCmps = activeRows.length + realizedCount;
   const rarity = totalCmps <= 3 ? 9 : totalCmps <= 6 ? 7 : totalCmps <= 10 ? 5 : totalCmps <= 20 ? 3 : 1;
 
   return {
     active_count: activeRows.length,
     sold_count: soldRows.length,
+    realized_count: realizedCount,
     asking_median_per_m2: Math.round(askingMed),
     realized_median_per_m2: Math.round(realizedMed),
     asking_p10_per_m2: askingPerM2.length ? Math.round(percentile(askingPerM2, 10)) : 0,
@@ -272,7 +361,11 @@ async function buildCMA(p: InputParams): Promise<CmaResult> {
     median_dom: doms.length ? Math.round(median(doms)) : null,
     rarity_score: rarity,
     lok_level: lokLevel,
-    active_samples: activeRows.slice(0, 5),
+    match_level: matchLevel,
+    relaxed,
+    active_samples: activeRows.slice(0, 5).map(r => ({
+      lokalita: r.lokalita, cena: r.cena, plocha: r.plocha, izby: r.izby, eur_per_m2: r.eur_per_m2,
+    })),
     sold_samples: soldRows.slice(0, 5).map(s => ({
       lokalita: s.monitor_inzeraty?.lokalita || "—",
       estimated_sale_price: Number(s.estimated_sale_price),
@@ -379,7 +472,7 @@ export async function POST(req: NextRequest) {
   // 2) Base price — realized > asking-with-gap > static
   let basePerM2 = 0;
   let basePriceSource = "static";
-  if (cma.realized_median_per_m2 > 0 && cma.sold_count >= 3) {
+  if (cma.realized_median_per_m2 > 0 && cma.realized_count >= 3) {
     basePerM2 = cma.realized_median_per_m2;
     basePriceSource = "realized";
   } else if (cma.asking_median_per_m2 > 0 && cma.active_count >= 3) {
@@ -398,34 +491,47 @@ export async function POST(req: NextRequest) {
   // je už zarátaný v buildCMA (anti-double-count).
   const adjustedPrice = applyAdjustments(basePrice, body, basePriceSource === "static");
 
-  // 4) Confidence interval (čím viac comparables, tým užší interval)
-  const totalCmps = cma.active_count + cma.sold_count;
-  const confidence = totalCmps >= 15 ? 0.92 : totalCmps >= 10 ? 0.85 : totalCmps >= 6 ? 0.75 : totalCmps >= 3 ? 0.60 : 0.40;
+  // 4) Confidence interval (viac comparables → užší; uvoľnená vzorka → širší)
+  const totalCmps = cma.active_count + cma.realized_count;
+  let confidence = totalCmps >= 15 ? 0.92 : totalCmps >= 10 ? 0.85 : totalCmps >= 6 ? 0.75 : totalCmps >= 3 ? 0.60 : 0.40;
+  if (cma.relaxed) confidence = Math.max(0.40, confidence - 0.15);  // Q5/Q6 — uvoľnené filtre = menšia istota
   const width = (1 - confidence) * 0.15;
   const priceLow = Math.round(adjustedPrice * (1 - width));
   const priceHigh = Math.round(adjustedPrice * (1 + width));
 
-  // 5) 3 stratégie
-  const aspirationalBoost = cma.rarity_score >= 7 ? 0.10 : 0.06;
+  // 5) Dopytový signál (Q6) — z REÁLNYCH dát (DOM + asking-realized gap), NIE
+  // z počtu comparables. Málo dát = neistota (širší interval vyššie), nie dôvod
+  // pýtať viac. Aspiračnú cenu povolíme len pri dosť dátach + reálnom dopyte.
+  const enoughData = totalCmps >= 6;
+  let demandLevel: "high" | "normal" | "low" | "unknown" = "unknown";
+  if (cma.realized_count >= 3 && cma.median_dom != null) {
+    const gapPct = cma.asking_to_realized_gap_pct ?? 0;
+    if (cma.median_dom <= 45 && gapPct <= 4) demandLevel = "high";
+    else if (cma.median_dom > 120 || gapPct > 8) demandLevel = "low";
+    else demandLevel = "normal";
+  }
+
+  // 6) 3 stratégie — aspiračný boost len pri dosť dátach + silnom dopyte
+  const aspirationalBoost = (enoughData && demandLevel === "high") ? 0.08 : 0.04;
   const aggressive = psychoBand(Math.round(adjustedPrice * 0.96));
   const market = psychoBand(adjustedPrice);
   const aspirational = psychoBand(Math.round(adjustedPrice * (1 + aspirationalBoost)));
 
-  // 6) DOM predikcie per stratégia
+  // 7) DOM predikcie per stratégia
   const [domAggr, domMkt, domAsp] = await Promise.all([
     predictDOM(body, aggressive, cma),
     predictDOM(body, market, cma),
     predictDOM(body, aspirational, cma),
   ]);
 
-  // 7) Recommended strategy podľa rarity + dostupných dát
-  const recommendedStrategy = cma.rarity_score >= 7
-    ? "aspirational"
-    : cma.rarity_score >= 4
-      ? "market"
-      : "aggressive";
+  // 8) Recommended strategy — malá vzorka NIKDY neodporúča hore (aspirational).
+  const recommendedStrategy: "aggressive" | "market" | "aspirational" =
+    !enoughData ? "market"
+    : demandLevel === "high" ? "aspirational"
+    : demandLevel === "low" ? "aggressive"
+    : "market";
 
-  // 8) Persist log
+  // 9) Výstup + persist log
   const result = {
     recommended_price: market,  // primárne odporúčanie = market price
     price_low: priceLow,
@@ -439,14 +545,18 @@ export async function POST(req: NextRequest) {
     },
     recommended_strategy: recommendedStrategy,
     rarity_score: cma.rarity_score,
+    demand_level: demandLevel,
     cma: {
       active_count: cma.active_count,
       sold_count: cma.sold_count,
+      realized_count: cma.realized_count,
       asking_median_per_m2: cma.asking_median_per_m2,
       realized_median_per_m2: cma.realized_median_per_m2,
       asking_to_realized_gap_pct: cma.asking_to_realized_gap_pct,
       median_dom: cma.median_dom,
       lok_level: cma.lok_level,
+      match_level: cma.match_level,
+      relaxed: cma.relaxed,
       sold_samples: cma.sold_samples,
       active_samples: cma.active_samples,
     },
