@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Samostatná aplikácia weby/ má vlastný lint a tsconfig
+    "weby/**",
   ]),
 ]);
 
