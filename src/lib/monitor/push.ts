@@ -14,7 +14,7 @@ function ensureVapid() {
 }
 
 /** Notifikacne kategorie — per-user opt-in cez users.notification_prefs. */
-export type NotifType = "monitor" | "odklik" | "lv" | "naklady";
+export type NotifType = "monitor" | "odklik" | "lv" | "naklady" | "web_dopyt";
 
 /**
  * Generic push sender — pošle notifikáciu všetkým zariadeniam userov ktorí

@@ -43,6 +43,14 @@ No test suite is configured.
 - Mobile: `BottomTabs.tsx` (bottom navigation)
 - Dark mode supported via CSS variables in `globals.css`
 
+### Weby maklérov (`/weby`, `/web/[slug]`)
+
+- **Admin** `src/app/weby/page.tsx` — za CRM loginom. Manažér/majiteľ/super_admin spravuje všetky weby, maklér iba web s `web_sites.user_id = users.id`. Autosave draftu (PUT `/api/web/sites/[id]`), tlačidlo Publikovať kopíruje `draft` → `published`.
+- **Verejný web** `src/app/web/[slug]/page.tsx` — server-rendered z `published`, bez loginu a bez CRM chrome (`AppShell` + `isPublicPath`). Náhľad draftu `/web/nahlad/[id]` vyžaduje `crm_session` cookie (iframe v admine, povolené `frame-ancestors 'self'` v `next.config.ts`).
+- **Šablóny** `src/components/web/SiteView.tsx` (maklér = Vianema šablóna s paletami, manažér = vlastná), CSS scoped pod `.mw` v `src/lib/web/styles.ts`, dátový model `src/lib/web/types.ts`, seed `src/lib/web/defaults.ts`.
+- **Dáta**: migrácia `046_web_makleri.sql` — `web_sites`, `web_nastavenia`, `web_dopyty`, storage bucket `web-fotky`. Fotky zo seedu sú v `public/web/`.
+- **Formulár ocenenia** → POST `/api/web/dopyt` → `web_dopyty` + e‑mail (Resend) maklérovi + push priradenému userovi.
+
 ## Environment Variables
 
 ```

@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
-import Navbar from "@/components/Navbar";
-import BottomTabs from "@/components/BottomTabs";
-import SidebarOverlay from "@/components/SidebarOverlay";
 import AuthProvider from "@/components/AuthProvider";
+import AppShell from "@/components/AppShell";
 
 // Inter ako primárny font — latin-ext potrebný pre slovenské diakritiky
 // (č, š, ž, ľ, ť, á, í, é). Brand komponenty (Logo, Wordmark, Monogram,
@@ -73,32 +70,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} ${geistMono.variable} antialiased`}>
         <AuthProvider>
-          <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-            {/* Desktop sidebar */}
-            <div className="sidebar-desktop">
-              <Sidebar />
-            </div>
-            {/* Mobile sidebar overlay + drawer */}
-            <SidebarOverlay />
-            <div className="sidebar-mobile" style={{ display: "none" }}>
-              <Sidebar />
-            </div>
-
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
-              <Navbar />
-              <main
-                style={{
-                  flex: 1,
-                  overflow: "auto",
-                  background: "var(--bg-base)",
-                  padding: "24px 28px",
-                }}
-              >
-                {children}
-              </main>
-            </div>
-          </div>
-          <BottomTabs />
+          <AppShell>{children}</AppShell>
         </AuthProvider>
       </body>
     </html>

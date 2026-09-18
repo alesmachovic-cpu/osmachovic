@@ -51,6 +51,15 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: securityHeaders,
       },
+      // Náhľad webu makléra (/web/nahlad/[id]) sa zobrazuje v iframe v admine (/weby)
+      // — povoľ rámovanie z vlastného originu. Neskorší záznam prepíše rovnaké kľúče.
+      {
+        source: "/web/nahlad/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: cspDirectives.replace("frame-ancestors 'none'", "frame-ancestors 'self'") },
+        ],
+      },
     ];
   },
   async redirects() {

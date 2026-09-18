@@ -56,6 +56,7 @@ const systemNav = [
   { label: "Upozornenia",     href: "/upozornenia", icon: "🔔" },
   { label: "Tím",             href: "/tim",        icon: "👥" },
   { label: "Klientská zóna",  href: "/klientska-zona", icon: "🌐" },
+  { label: "Weby maklérov",   href: "/weby",       icon: "🏡" },
   { label: "Plán systému",    href: "/plan",       icon: "🗺️" },
   { label: "Nastavenia",      href: "/nastavenia", icon: "⚙️" },
   { label: "Notifikácie",     href: "/notifikacie", icon: "🔕", badge: 2 },

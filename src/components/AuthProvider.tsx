@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { VianemaBranded, PoweredByAMGD } from "@/components/brand";
 import PasswordInput from "@/components/PasswordInput";
+import { isPublicPath } from "@/components/AppShell";
 
 interface User {
   id: string;
@@ -279,7 +280,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     await refreshAccounts();
   }
 
-  if (checking) {
+  if (checking && !isPublicPath(pathname)) {
     return (
       <div style={{
         height: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
@@ -297,8 +298,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     );
   }
 
-  // Na /auth/callback a /reset-password sa vždy zobrazí children (login bypass)
-  const isAuthCallback = pathname?.startsWith("/auth/callback") || pathname?.startsWith("/reset-password");
+  // Na /auth/callback, /reset-password a verejných weboch (/web/...) sa vždy zobrazí children (login bypass)
+  const isAuthCallback = pathname?.startsWith("/auth/callback") || pathname?.startsWith("/reset-password") || isPublicPath(pathname);
 
   if (!user && !isAuthCallback) {
     return (
