@@ -78,6 +78,7 @@ h3{font-size:19px}
 .eyebrow{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .lede{color:var(--muted);max-width:60ch;margin:0}
 section{padding-block:56px;border-top:1px solid var(--line)}
+section,#top{scroll-margin-top:88px}
 .sec-head{display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap;margin-bottom:26px}
 .example{font-size:12px;color:var(--muted);margin-top:14px}
 .mw-header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--ground) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
@@ -129,6 +130,9 @@ section{padding-block:56px;border-top:1px solid var(--line)}
 .about p{max-width:62ch;margin:0 0 12px}
 .teamline{margin-top:18px;padding:12px 16px;border-radius:12px;background:var(--accent-soft);font-size:15px}
 .teamline a{font-weight:600}
+.partner{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+.partner h3{font-size:18px;margin-bottom:6px}
+.partner p{margin:0;font-size:15px;color:var(--muted)}
 .team{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 @media (max-width:860px){.team{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:560px){.team{grid-template-columns:1fr}}
@@ -202,6 +206,7 @@ h3{font-size:20px;font-weight:700}
 .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .eyebrow.brass{color:var(--brass)}
 section{padding-block:72px}
+section,#top{scroll-margin-top:96px}
 .sec-head{display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap;margin-bottom:30px}
 .example{font-size:12px;color:var(--muted);margin-top:14px}
 .rule{height:1px;background:var(--line)}

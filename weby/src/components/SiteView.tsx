@@ -147,6 +147,7 @@ function MaklerSite({ site, data: b, refs, nastavenia: BR, preview, dark }: Site
         <nav className="menu" aria-label="Hlavné menu">
           {sectionOn(b, "ponuky") && <a href="#ponuky">Ponuky</a>}
           {sectionOn(b, "omne") && <a href="#o-mne">O mne</a>}
+          {sectionOn(b, "partneri") && <a href="#partneri">Partneri</a>}
           {inTeam && <a href="#tim">Tím</a>}
           {sectionOn(b, "lokality") && <a href="#lokality">Lokality</a>}
           <a className="tel" href={`tel:${tel}`}>{b.phone}</a>
@@ -201,6 +202,23 @@ function MaklerSite({ site, data: b, refs, nastavenia: BR, preview, dark }: Site
               {b.bio2 && <p>{b.bio2}</p>}
               <div className="chips">{b.chips.map((c, i) => <span key={i} className="chip">{c}</span>)}</div>
               {inTeam && M && <div className="teamline">Som súčasťou tímu Vianema Bratislava. Pobočku vedie <a href={mUrl}>{M.name}</a> — <a href="#tim">celý tím</a>.</div>}
+            </div>
+          </div></section>
+        )}
+
+        {sectionOn(b, "partneri") && (
+          <section id="partneri"><div className="wrap">
+            <div className="sec-head">
+              <div><div className="eyebrow">S kým pracujem</div><h2>Celý predaj cez jedného človeka</h2></div>
+              <div className="lede" style={{ maxWidth: "40ch" }}>Odborníkov okolo predaja mám overených rokmi. Koordinujem ich ja — vy riešite jedno telefónne číslo.</div>
+            </div>
+            <div className="grid3">
+              <div className="partner"><h3>Profesionálny fotograf a dron</h3><p>Fotky a video, ktoré predávajú. Prvý dojem z inzerátu rozhoduje, či vám kupujúci vôbec zavolá.</p></div>
+              <div className="partner"><h3>Home staging</h3><p>Príprava nehnuteľnosti pred fotením a obhliadkami — vyššia cena a rýchlejší predaj.</p></div>
+              <div className="partner"><h3>Advokátska kancelária</h3><p>Kúpna zmluva, úschova kúpnej ceny a návrh na vklad do katastra. Peniaze aj papiere v poriadku skôr, než čokoľvek podpíšete.</p></div>
+              <div className="partner"><h3>Súdny znalec</h3><p>Znalecký posudok, ktorý kupujúci potrebuje k hypotéke — bez týždňov čakania, ktoré obchod zdržia.</p></div>
+              <div className="partner"><h3>Geodet</h3><p>Geometrický plán, zameranie a vytýčenie hraníc pri domoch a pozemkoch. Kataster bez prekvapení.</p></div>
+              <div className="partner"><h3>Hypotekárny špecialista</h3><p>Financovanie pre kupujúceho vybavené vopred, aby obchod nespadol na úvere v poslednej chvíli.</p></div>
             </div>
           </div></section>
         )}

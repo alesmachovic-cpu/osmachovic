@@ -27,10 +27,10 @@ export const SKIES: Record<SkyId, string> = {
   zl: "Malá Fatra (hory, Budatín)",
 };
 
-export type SectionId = "ako" | "dovera" | "ponuky" | "omne" | "tim" | "videa" | "referencie" | "predane" | "ocenenie" | "lokality";
+export type SectionId = "ako" | "dovera" | "ponuky" | "omne" | "partneri" | "tim" | "videa" | "referencie" | "predane" | "ocenenie" | "lokality";
 
 export const SECTIONS_MAKLER: Array<[SectionId, string]> = [
-  ["dovera", "Pás dôvery"], ["ponuky", "Ponuky"], ["omne", "O mne"], ["tim", "Tím"], ["videa", "Videá"],
+  ["dovera", "Pás dôvery"], ["ponuky", "Ponuky"], ["omne", "O mne"], ["partneri", "S kým pracujem"], ["tim", "Tím"], ["videa", "Videá"],
   ["referencie", "Referencie"], ["predane", "Predané"], ["ocenenie", "Ocenenie (formulár)"], ["lokality", "Lokality"],
 ];
 export const SECTIONS_MANAZER: Array<[SectionId, string]> = [
