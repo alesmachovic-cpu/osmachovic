@@ -176,9 +176,11 @@ function MaklerSite({ site, data: b, refs, nastavenia: BR, preview, dark }: Site
               </div>
             </div>
           </div>
-          <div className="trust" aria-label="Dôvera">
-            {b.trust.map((t, i) => <div key={i}><b>{t.b}</b><small>{t.s}</small></div>)}
-          </div>
+          {sectionOn(b, "dovera") && (
+            <div className="trust" aria-label="Dôvera">
+              {b.trust.map((t, i) => <div key={i}><b>{t.b}</b><small>{t.s}</small></div>)}
+            </div>
+          )}
         </div></section>
 
         {sectionOn(b, "ponuky") && (
@@ -330,9 +332,11 @@ function ManazerSite({ site, data: M, refs, nastavenia: BR, preview, dark }: Sit
             </div>
             <svg className="mark" viewBox="0 0 62.07 60.96" aria-hidden="true" style={{ fill: "currentColor" }}><use href="#am-mark" /></svg>
           </div>
-          <div className="facts" style={{ marginTop: 56 }} aria-label="Fakty">
-            {M.facts.map((f, i) => <div key={i}><b>{f.b}</b><small>{f.s}</small></div>)}
-          </div>
+          {sectionOn(M, "dovera") && (
+            <div className="facts" style={{ marginTop: 56 }} aria-label="Fakty">
+              {M.facts.map((f, i) => <div key={i}><b>{f.b}</b><small>{f.s}</small></div>)}
+            </div>
+          )}
         </div></section>
 
         {sectionOn(M, "ako") && (

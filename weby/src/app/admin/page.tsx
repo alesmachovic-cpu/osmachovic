@@ -56,10 +56,10 @@ function issuesFor(d: SiteData): { errors: string[]; off: string[] } {
   if (!d.email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)) e.push("E‑mail chýba alebo nie je platný.");
   if (d.typ === "makler") {
     if (!d.headline) e.push("Chýba hlavný titulok (hero).");
-    if (d.trust.length !== 4) e.push(`Pás dôvery má mať presne 4 položky (má ${d.trust.length}).`);
+    if (sectionOn(d, "dovera") && d.trust.length !== 4) e.push(`Pás dôvery má mať presne 4 položky (má ${d.trust.length}).`);
     if (!d.portrait) e.push("Chýba portrét.");
   } else {
-    if (d.facts.length !== 4) e.push("Fakty majú mať presne 4 položky.");
+    if (sectionOn(d, "dovera") && d.facts.length !== 4) e.push("Fakty majú mať presne 4 položky.");
     if (sectionOn(d, "ako") && d.steps.length !== 3) e.push("„Ako pracujem“ má mať 3 kroky.");
   }
   if (sectionOn(d, "ponuky")) {
@@ -336,7 +336,9 @@ function MaklerFields({ d, set, siteId }: { d: MaklerData; set: (p: Partial<Makl
       <H2>Hero</H2>
       <Field label="Hlavný titulok" value={d.headline} onChange={v => set({ headline: v })} hint="Jedna veta. Čo maklér robí inak." />
       <Field label="Podtitulok" value={d.sub} onChange={v => set({ sub: v })} area />
-      <Rows label="Pás dôvery (4 položky)" value={d.trust} onChange={v => set({ trust: v })} cols={PAIR_COLS} blank={() => ({ b: "", s: "" })} itemLabel="Položka" addLabel="Pridať položku" siteId={siteId} />
+
+      <H2 off={!sectionOn(d, "dovera")}>Pás dôvery</H2>
+      <Rows label={"Pás dôvery (4 položky)" + (sectionOn(d, "dovera") ? "" : " — sekcia vypnutá")} value={d.trust} onChange={v => set({ trust: v })} cols={PAIR_COLS} blank={() => ({ b: "", s: "" })} itemLabel="Položka" addLabel="Pridať položku" siteId={siteId} />
 
       <H2 off={!sectionOn(d, "omne")}>O mne</H2>
       <Field label="Odsek 1" value={d.bio1} onChange={v => set({ bio1: v })} area />
@@ -381,7 +383,9 @@ function ManazerFields({ d, set, siteId }: { d: ManazerData; set: (p: Partial<Ma
         <Field label="Titulok, 2. riadok (zvýraznený)" value={d.h1em} onChange={v => set({ h1em: v })} />
       </div>
       <Field label="Úvodný odsek" value={d.lede} onChange={v => set({ lede: v })} area />
-      <Rows label="Fakty (4)" value={d.facts} onChange={v => set({ facts: v })} cols={PAIR_COLS} blank={() => ({ b: "", s: "" })} itemLabel="Fakt" addLabel="Pridať fakt" siteId={siteId} />
+
+      <H2 off={!sectionOn(d, "dovera")}>Fakty</H2>
+      <Rows label={"Fakty (4)" + (sectionOn(d, "dovera") ? "" : " — sekcia vypnutá")} value={d.facts} onChange={v => set({ facts: v })} cols={PAIR_COLS} blank={() => ({ b: "", s: "" })} itemLabel="Fakt" addLabel="Pridať fakt" siteId={siteId} />
 
       <H2 off={!sectionOn(d, "ako")}>Ako pracujem</H2>
       <Field label="Nadpis sekcie" value={d.stepsTitle} onChange={v => set({ stepsTitle: v })} />
