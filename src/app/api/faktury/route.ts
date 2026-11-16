@@ -133,8 +133,25 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const { id, ...rest } = body;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  // Ručná zmena čísla faktúry / VS: nesmie byť prázdne ani duplicitné u toho istého makléra.
+  const novyCislo = typeof rest.cislo_faktury === "string" ? rest.cislo_faktury.trim() : undefined;
+  const novyVs = typeof rest.variabilny_symbol === "string" ? rest.variabilny_symbol.trim() : undefined;
+  if (rest.cislo_faktury !== undefined || rest.variabilny_symbol !== undefined) {
+    if (rest.cislo_faktury !== undefined && !novyCislo) return NextResponse.json({ error: "Číslo faktúry nesmie byť prázdne" }, { status: 400 });
+    if (rest.variabilny_symbol !== undefined && !novyVs) return NextResponse.json({ error: "Variabilný symbol nesmie byť prázdny" }, { status: 400 });
+    const { data: povodna } = await sb.from("faktury").select("user_id").eq("id", id).single();
+    if (!povodna) return NextResponse.json({ error: "Faktúra neexistuje" }, { status: 404 });
+    for (const [pole, hodnota] of [["cislo_faktury", novyCislo], ["variabilny_symbol", novyVs]] as const) {
+      if (!hodnota) continue;
+      const { data: dup } = await sb.from("faktury").select("id").eq("user_id", povodna.user_id).eq(pole, hodnota).neq("id", id).limit(1);
+      if (dup && dup.length) return NextResponse.json({ error: `${pole === "cislo_faktury" ? "Číslo faktúry" : "Variabilný symbol"} ${hodnota} už existuje` }, { status: 409 });
+    }
+    if (novyCislo !== undefined) rest.cislo_faktury = novyCislo;
+    if (novyVs !== undefined) rest.variabilny_symbol = novyVs;
+  }
   const { data, error } = await sb.from("faktury").update(rest).eq("id", id).select().single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: error.message }, { status: error.code === "23505" ? 409 : 500 });
+  if (novyCislo) await sb.from("prehlad_zaznamy").update({ popis: `Faktúra ${novyCislo}` }).eq("faktura_id", id);
   // sync prehlad
   if (rest.zaplatene !== undefined) {
     await sb.from("prehlad_zaznamy").update({ zaplatene: rest.zaplatene }).eq("faktura_id", id);

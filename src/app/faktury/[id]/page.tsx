@@ -27,6 +27,24 @@ export default function FakturaDetail() {
   const { user } = useAuth();
   const [f, setF] = useState<Faktura | null>(null);
   const [DODAVATEL, setDodavatel] = useState<DodavatelSettings>(DEFAULT_DODAVATEL);
+  const [uprava, setUprava] = useState(false);
+  const [noveCislo, setNoveCislo] = useState("");
+  const [novyVs, setNovyVs] = useState("");
+  const [chyba, setChyba] = useState("");
+
+  async function ulozCislo() {
+    if (!f) return;
+    setChyba("");
+    const r = await fetch("/api/faktury", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: f.id, cislo_faktury: noveCislo, variabilny_symbol: novyVs }),
+    });
+    const j = await r.json();
+    if (!r.ok) { setChyba(j.error || "Nepodarilo sa uložiť"); return; }
+    setF({ ...f, cislo_faktury: j.cislo_faktury, variabilny_symbol: j.variabilny_symbol });
+    setUprava(false);
+  }
 
   useEffect(() => {
     fetch(`/api/faktury?id=${params.id}`).then((r) => r.json()).then(setF);
@@ -40,6 +58,9 @@ export default function FakturaDetail() {
       <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <Link href="/faktury" style={{ fontSize: "13px", color: "var(--text-secondary)", textDecoration: "none" }}>← Späť na faktúry</Link>
         <div style={{ display: "flex", gap: "8px" }}>
+          <button onClick={() => { setNoveCislo(f.cislo_faktury); setNovyVs(f.variabilny_symbol); setChyba(""); setUprava(true); }} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-primary)", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
+            Upraviť číslo
+          </button>
           <button onClick={() => window.print()} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-primary)", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
             Tlačiť
           </button>
@@ -48,6 +69,20 @@ export default function FakturaDetail() {
           </a>
         </div>
       </div>
+
+      {uprava && (
+        <div className="no-print" style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: "14px", padding: "16px", marginBottom: "16px", display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
+          <label style={{ fontSize: "12px", color: "#374151" }}>Číslo faktúry<br />
+            <input value={noveCislo} onChange={(e) => setNoveCislo(e.target.value)} style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 10px", fontSize: "14px", color: "#1d1d1f", background: "#fff" }} />
+          </label>
+          <label style={{ fontSize: "12px", color: "#374151" }}>Variabilný symbol<br />
+            <input value={novyVs} onChange={(e) => setNovyVs(e.target.value)} style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 10px", fontSize: "14px", color: "#1d1d1f", background: "#fff" }} />
+          </label>
+          <button onClick={ulozCislo} style={{ background: "#374151", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>Uložiť</button>
+          <button onClick={() => setUprava(false)} style={{ background: "#fff", color: "#374151", border: "1px solid var(--border)", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>Zrušiť</button>
+          {chyba && <div style={{ color: "#b91c1c", fontSize: "13px", width: "100%" }}>{chyba}</div>}
+        </div>
+      )}
 
       <div id="faktura-print" style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: "14px", padding: "40px", color: "#1d1d1f" }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "32px" }}>
