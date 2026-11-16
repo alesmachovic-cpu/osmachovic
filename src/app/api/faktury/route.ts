@@ -213,11 +213,84 @@ export async function PATCH(req: NextRequest) {
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
   const { data: existing } = await sb
     .from("faktury")
-    .select("id, company_id, cislo_faktury")
+    .select("id, company_id, user_id, cislo_faktury, variabilny_symbol, zrusena_at")
     .eq("id", id)
     .maybeSingle();
   if (!existing || existing.company_id !== scope.company_id) {
     return NextResponse.json({ error: "Faktúra nenájdená" }, { status: 404 });
+  }
+
+  // 🔒 Oprava ČÍSLA faktúry (výnimka, 16.11.2026, schválil Aleš Machovič): len
+  // pre faktúru, ktorá ešte nebola odoslaná klientovi (potvrdenie užívateľa),
+  // nie je zrušená, po zadaní hesla, s kontrolou duplicity a záznamom do auditu.
+  // Samostatná požiadavka — nemieša sa s ostatnými poľami.
+  if (rest.cislo_faktury !== undefined || rest.variabilny_symbol !== undefined) {
+    const inePole = Object.keys(rest).filter(
+      k => !["cislo_faktury", "variabilny_symbol", "potvrd_neodoslana", "confirm_password", "confirm_code"].includes(k),
+    );
+    if (inePole.length > 0) {
+      return NextResponse.json({ error: "Číslo faktúry sa mení samostatne, bez iných polí." }, { status: 400 });
+    }
+    if (rest.potvrd_neodoslana !== true) {
+      return NextResponse.json({
+        error: "Číslo sa dá zmeniť len u faktúry, ktorá ešte nebola odoslaná klientovi. Potvrď to.",
+        code: "CONFIRM_NOT_SENT",
+      }, { status: 400 });
+    }
+    if (existing.zrusena_at) {
+      return NextResponse.json({ error: "Zrušenej faktúre sa číslo meniť nedá." }, { status: 409 });
+    }
+    const reAuth = await requireReAuth({
+      userId: auth.user.id,
+      password: typeof rest.confirm_password === "string" ? rest.confirm_password : undefined,
+      code: typeof rest.confirm_code === "string" ? rest.confirm_code : undefined,
+    });
+    if (!reAuth.ok) {
+      return NextResponse.json({ error: reAuth.error, code: "RE_AUTH_REQUIRED" }, { status: reAuth.status });
+    }
+    const zmeny: Record<string, string> = {};
+    for (const pole of ["cislo_faktury", "variabilny_symbol"] as const) {
+      if (rest[pole] === undefined) continue;
+      const hodnota = String(rest[pole]).trim();
+      if (!hodnota || hodnota.length > 40 || !/^[A-Za-z0-9\-\/]+$/.test(hodnota)) {
+        return NextResponse.json({ error: "Neplatný formát (písmená, čísla, - a /, max 40 znakov)." }, { status: 400 });
+      }
+      if (hodnota === existing[pole]) continue;
+      const { data: dup } = await sb
+        .from("faktury")
+        .select("id")
+        .eq("user_id", existing.user_id)
+        .eq(pole, hodnota)
+        .neq("id", id)
+        .limit(1);
+      if (dup && dup.length) {
+        return NextResponse.json({
+          error: `${pole === "cislo_faktury" ? "Číslo faktúry" : "Variabilný symbol"} ${hodnota} už existuje.`,
+        }, { status: 409 });
+      }
+      zmeny[pole] = hodnota;
+    }
+    if (Object.keys(zmeny).length === 0) return NextResponse.json({ error: "Nič sa nemení." }, { status: 400 });
+    const { data: zmenena, error: zErr } = await sb.from("faktury").update(zmeny).eq("id", id).select().single();
+    if (zErr) return NextResponse.json({ error: zErr.message }, { status: zErr.code === "23505" ? 409 : 500 });
+    if (zmeny.cislo_faktury) {
+      await sb.from("prehlad_zaznamy").update({ popis: `Faktúra ${zmeny.cislo_faktury}` }).eq("faktura_id", id);
+    }
+    await logAudit({
+      action: "faktura.update",
+      actor_id: auth.user.id,
+      actor_name: auth.user.name,
+      target_id: id,
+      target_type: "faktura",
+      detail: {
+        oprava_cisla: true,
+        pred: { cislo_faktury: existing.cislo_faktury, variabilny_symbol: existing.variabilny_symbol },
+        po: zmeny,
+        potvrdene_neodoslana: true,
+      },
+      ip_address: req.headers.get("x-forwarded-for") || undefined,
+    });
+    return NextResponse.json(zmenena);
   }
 
   // 🔒 F3: vystavená faktúra je nemenný účtovný doklad (zákon o DPH 222/2004
