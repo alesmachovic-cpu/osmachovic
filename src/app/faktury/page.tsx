@@ -14,6 +14,8 @@ type Faktura = {
   suma_celkom: number;
   zaplatene: boolean;
   odberatel_snapshot: { nazov?: string } | null;
+  zrusena_at?: string | null;
+  zrusena_dovod?: string | null;
 };
 
 export default function FakturyPage() {
@@ -21,11 +23,12 @@ export default function FakturyPage() {
   const reAuth = useReAuth();
   const [list, setList] = useState<Faktura[]>([]);
   const [loading, setLoading] = useState(true);
+  const [zobrazZrusene, setZobrazZrusene] = useState(true);
 
   const load = useCallback(async () => {
     if (!user?.id) { setList([]); setLoading(false); return; }
     setLoading(true);
-    const r = await fetch(`/api/faktury?user_id=${user.id}`);
+    const r = await fetch(`/api/faktury?user_id=${user.id}&includeZrusene=1`);
     const d = await r.json();
     setList(Array.isArray(d) ? d : []);
     setLoading(false);
@@ -71,8 +74,10 @@ export default function FakturyPage() {
     load();
   }
 
-  const total = list.reduce((s, f) => s + Number(f.suma_celkom || 0), 0);
-  const zaplatene = list.filter((f) => f.zaplatene).reduce((s, f) => s + Number(f.suma_celkom || 0), 0);
+  // Zrušené faktúry sa do súčtov nepočítajú, v zozname sú len ako archív čísel.
+  const aktivne = list.filter((f) => !f.zrusena_at);
+  const total = aktivne.reduce((s, f) => s + Number(f.suma_celkom || 0), 0);
+  const zaplatene = aktivne.filter((f) => f.zaplatene).reduce((s, f) => s + Number(f.suma_celkom || 0), 0);
   const nezaplatene = total - zaplatene;
 
   return (
@@ -95,6 +100,10 @@ export default function FakturyPage() {
         <StatCard title="Zaplatené" value={`${zaplatene.toFixed(2)} €`} color="var(--success)" />
         <StatCard title="Nezaplatené" value={`${nezaplatene.toFixed(2)} €`} color="var(--warning)" />
       </div>
+
+      <label style={{ display: "block", fontSize: "13px", color: "var(--text-secondary)", marginBottom: "10px" }}>
+        <input type="checkbox" checked={zobrazZrusene} onChange={(e) => setZobrazZrusene(e.target.checked)} /> Zobraziť zrušené faktúry
+      </label>
 
       <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "14px", overflow: "hidden" }}>
         <div className="table-header" style={{
@@ -122,7 +131,27 @@ export default function FakturyPage() {
         ) : list.length === 0 ? (
           <div style={{ padding: "32px", textAlign: "center", color: "var(--text-secondary)" }}>Žiadne faktúry. Vytvor prvú.</div>
         ) : (
-          list.map((f) => (
+          list.filter((f) => zobrazZrusene || !f.zrusena_at).map((f) => (
+            f.zrusena_at ? (
+            <div key={f.id} className="table-row" style={{
+              display: "grid",
+              gridTemplateColumns: "1.2fr 2fr 1fr 1fr 1fr 1fr auto",
+              gap: "12px",
+              padding: "14px 16px",
+              borderTop: "1px solid var(--border-subtle)",
+              fontSize: "13px",
+              alignItems: "center",
+              opacity: 0.6,
+            }}>
+              <div style={{ fontWeight: 600, color: "#374151", textDecoration: "line-through" }}>{f.cislo_faktury}</div>
+              <div className="table-cell-hide">{f.odberatel_snapshot?.nazov || "—"}</div>
+              <div className="table-cell-hide">{f.datum_vystavenia}</div>
+              <div className="table-cell-hide">{f.datum_splatnosti || "—"}</div>
+              <div style={{ fontWeight: 600 }}>{Number(f.suma_celkom).toFixed(2)} €</div>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-secondary)" }}>ZRUŠENÁ{f.zrusena_dovod ? ` — ${f.zrusena_dovod}` : ""}</div>
+              <div></div>
+            </div>
+            ) : (
             <div key={f.id} className="table-row" style={{
               display: "grid",
               gridTemplateColumns: "1.2fr 2fr 1fr 1fr 1fr 1fr auto",
@@ -159,6 +188,7 @@ export default function FakturyPage() {
                 <button onClick={() => remove(f.id)} style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: "8px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", color: "var(--danger)" }}>×</button>
               </div>
             </div>
+            )
           ))
         )}
       </div>
