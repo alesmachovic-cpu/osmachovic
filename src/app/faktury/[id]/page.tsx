@@ -30,6 +30,7 @@ export default function FakturaDetail() {
   const [uprava, setUprava] = useState(false);
   const [noveCislo, setNoveCislo] = useState("");
   const [novyVs, setNovyVs] = useState("");
+  const [novaSuma, setNovaSuma] = useState("");
   const [neodoslana, setNeodoslana] = useState(false);
   const [heslo, setHeslo] = useState("");
   const [chyba, setChyba] = useState("");
@@ -37,20 +38,43 @@ export default function FakturaDetail() {
   async function ulozCislo() {
     if (!f) return;
     setChyba("");
-    const r = await fetch("/api/faktury", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: f.id,
-        cislo_faktury: noveCislo,
-        variabilny_symbol: novyVs,
-        potvrd_neodoslana: neodoslana,
-        confirm_password: heslo,
-      }),
-    });
-    const j = await r.json();
-    if (!r.ok) { setChyba(j.error || "Nepodarilo sa uložiť"); return; }
-    setF({ ...f, cislo_faktury: j.cislo_faktury, variabilny_symbol: j.variabilny_symbol });
+    let aktualna = f;
+    const sumaZadana = novaSuma.trim() !== "" && Number(novaSuma.replace(",", ".")) !== Number(f.suma_celkom);
+    const cisloZmenene = noveCislo !== f.cislo_faktury || novyVs !== f.variabilny_symbol;
+    if (cisloZmenene) {
+      const r = await fetch("/api/faktury", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: f.id,
+          cislo_faktury: noveCislo,
+          variabilny_symbol: novyVs,
+          potvrd_neodoslana: neodoslana,
+          confirm_password: heslo,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setChyba(j.error || "Nepodarilo sa uložiť číslo"); return; }
+      aktualna = { ...aktualna, cislo_faktury: j.cislo_faktury, variabilny_symbol: j.variabilny_symbol };
+      setF(aktualna);
+    }
+    if (sumaZadana) {
+      const r = await fetch("/api/faktury", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: f.id,
+          suma_celkom: Number(novaSuma.replace(",", ".")),
+          potvrd_neodoslana: neodoslana,
+          confirm_password: heslo,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) { setChyba(j.error || "Nepodarilo sa uložiť sumu"); return; }
+      // načítaj znova, aby sa ukázali aj prepočítané položky
+      const r2 = await fetch(`/api/faktury?id=${f.id}`);
+      if (r2.ok) setF(await r2.json());
+    }
     setHeslo("");
     setUprava(false);
   }
@@ -78,7 +102,7 @@ export default function FakturaDetail() {
       <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <Link href="/faktury" style={{ fontSize: "13px", color: "var(--text-secondary)", textDecoration: "none" }}>← Späť na faktúry</Link>
         <div style={{ display: "flex", gap: "8px" }}>
-          <button onClick={() => { setNoveCislo(f.cislo_faktury); setNovyVs(f.variabilny_symbol); setNeodoslana(false); setHeslo(""); setChyba(""); setUprava(true); }} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-primary)", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={() => { setNoveCislo(f.cislo_faktury); setNovyVs(f.variabilny_symbol); setNovaSuma(String(Number(f.suma_celkom).toFixed(2))); setNeodoslana(false); setHeslo(""); setChyba(""); setUprava(true); }} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-primary)", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
             Upraviť číslo
           </button>
           <button onClick={() => window.print()} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-primary)", borderRadius: "10px", padding: "10px 18px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
@@ -97,6 +121,9 @@ export default function FakturaDetail() {
           </label>
           <label style={{ fontSize: "12px" }}>Variabilný symbol<br />
             <input value={novyVs} onChange={(e) => setNovyVs(e.target.value)} style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 10px", fontSize: "14px", color: "#1d1d1f", background: "#fff" }} />
+          </label>
+          <label style={{ fontSize: "12px" }}>Suma celkom s DPH (€)<br />
+            <input value={novaSuma} onChange={(e) => setNovaSuma(e.target.value)} inputMode="decimal" style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 10px", fontSize: "14px", color: "#1d1d1f", background: "#fff" }} />
           </label>
           <label style={{ fontSize: "12px" }}>Tvoje heslo<br />
             <input type="password" value={heslo} onChange={(e) => setHeslo(e.target.value)} style={{ border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 10px", fontSize: "14px", color: "#1d1d1f", background: "#fff" }} />

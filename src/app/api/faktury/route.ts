@@ -213,11 +213,89 @@ export async function PATCH(req: NextRequest) {
   if (!scope) return NextResponse.json({ error: "Neznámy užívateľ" }, { status: 401 });
   const { data: existing } = await sb
     .from("faktury")
-    .select("id, company_id, user_id, cislo_faktury, variabilny_symbol, zrusena_at")
+    .select("id, company_id, user_id, cislo_faktury, variabilny_symbol, zrusena_at, suma_bez_dph, dph, suma_celkom")
     .eq("id", id)
     .maybeSingle();
   if (!existing || existing.company_id !== scope.company_id) {
     return NextResponse.json({ error: "Faktúra nenájdená" }, { status: 404 });
+  }
+
+  // 🔒 Oprava SUMY faktúry (výnimka, 17.11.2026, schválil Aleš Machovič po 🔴):
+  // len pre faktúru, ktorá ešte nebola odoslaná klientovi (potvrdenie
+  // užívateľa), nie je zrušená, po zadaní hesla, s auditom pred → po.
+  // Zadáva sa suma CELKOM s DPH; základ a DPH sa dopočítajú podľa pôvodného
+  // pomeru, položka sa prepíše (len faktúra s jednou položkou, množstvo 1).
+  if (rest.suma_celkom !== undefined) {
+    const inePole = Object.keys(rest).filter(k => !["suma_celkom", "potvrd_neodoslana", "confirm_password", "confirm_code"].includes(k));
+    if (inePole.length > 0) {
+      return NextResponse.json({ error: "Suma sa mení samostatne, bez iných polí." }, { status: 400 });
+    }
+    if (rest.potvrd_neodoslana !== true) {
+      return NextResponse.json({
+        error: "Sumu sa dá zmeniť len u faktúry, ktorá ešte nebola odoslaná klientovi. Potvrď to.",
+        code: "CONFIRM_NOT_SENT",
+      }, { status: 400 });
+    }
+    if (existing.zrusena_at) {
+      return NextResponse.json({ error: "Zrušenej faktúre sa suma meniť nedá." }, { status: 409 });
+    }
+    const reAuth = await requireReAuth({
+      userId: auth.user.id,
+      password: typeof rest.confirm_password === "string" ? rest.confirm_password : undefined,
+      code: typeof rest.confirm_code === "string" ? rest.confirm_code : undefined,
+    });
+    if (!reAuth.ok) {
+      return NextResponse.json({ error: reAuth.error, code: "RE_AUTH_REQUIRED" }, { status: reAuth.status });
+    }
+    const nova = Math.round(Number(rest.suma_celkom) * 100) / 100;
+    if (!Number.isFinite(nova) || nova <= 0 || nova > 10_000_000) {
+      return NextResponse.json({ error: "Neplatná suma." }, { status: 400 });
+    }
+    const staraCelkom = Number(existing.suma_celkom) || 0;
+    if (nova === staraCelkom) return NextResponse.json({ error: "Nič sa nemení." }, { status: 400 });
+    const staryBez = Number(existing.suma_bez_dph) || 0;
+    const staraDph = Number(existing.dph) || 0;
+    let novyBez = nova;
+    let novaDph = 0;
+    if (staraDph > 0 && staryBez > 0) {
+      novyBez = Math.round((nova / (1 + staraDph / staryBez)) * 100) / 100;
+      novaDph = Math.round((nova - novyBez) * 100) / 100;
+    }
+    const { data: poloz } = await sb.from("faktura_polozky").select("id, mnozstvo, cena_jednotka, spolu").eq("faktura_id", id);
+    if (!poloz || poloz.length !== 1 || Number(poloz[0].mnozstvo) !== 1) {
+      return NextResponse.json({
+        error: "Sumu sa dá opraviť len u faktúry s jednou položkou a množstvom 1. Inak je potrebné storno a nová faktúra.",
+      }, { status: 409 });
+    }
+    const { data: zmenena, error: zErr } = await sb
+      .from("faktury")
+      .update({ suma_bez_dph: novyBez, dph: novaDph, suma_celkom: nova })
+      .eq("id", id)
+      .select()
+      .single();
+    if (zErr) return NextResponse.json({ error: zErr.message }, { status: 500 });
+    const { error: pErr } = await sb.from("faktura_polozky").update({ cena_jednotka: novyBez, spolu: novyBez }).eq("id", poloz[0].id);
+    if (pErr) {
+      await sb.from("faktury").update({ suma_bez_dph: staryBez, dph: staraDph, suma_celkom: staraCelkom }).eq("id", id);
+      return NextResponse.json({ error: "Položku sa nepodarilo upraviť, zmena sumy bola vrátená." }, { status: 500 });
+    }
+    await sb.from("prehlad_zaznamy").update({ suma: nova }).eq("faktura_id", id);
+    await logAudit({
+      action: "faktura.update",
+      actor_id: auth.user.id,
+      actor_name: auth.user.name,
+      target_id: id,
+      target_type: "faktura",
+      detail: {
+        oprava_sumy: true,
+        cislo_faktury: existing.cislo_faktury,
+        pred: { suma_bez_dph: staryBez, dph: staraDph, suma_celkom: staraCelkom, polozka_spolu: Number(poloz[0].spolu) },
+        po: { suma_bez_dph: novyBez, dph: novaDph, suma_celkom: nova },
+        potvrdene_neodoslana: true,
+      },
+      ip_address: req.headers.get("x-forwarded-for") || undefined,
+    });
+    return NextResponse.json(zmenena);
   }
 
   // 🔒 Oprava ČÍSLA faktúry (výnimka, 16.11.2026, schválil Aleš Machovič): len
